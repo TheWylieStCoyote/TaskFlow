@@ -14,7 +14,7 @@ use taskflow::app::{
     update, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
     TimeMessage, UiMessage,
 };
-use taskflow::config::{Action, Keybindings, Settings};
+use taskflow::config::{Action, Keybindings, Settings, Theme};
 use taskflow::storage::BackendType;
 use taskflow::ui::{view, InputMode};
 
@@ -86,8 +86,9 @@ fn main() -> anyhow::Result<()> {
     model.default_priority = settings.default_priority();
     model.refresh_visible_tasks();
 
-    // Load keybindings
+    // Load keybindings and theme
     let keybindings = Keybindings::load();
+    let theme = Theme::load(&settings.theme);
 
     // Setup terminal
     enable_raw_mode()?;
@@ -97,7 +98,7 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run the app
-    let result = run_app(&mut terminal, &mut model, &keybindings, &settings);
+    let result = run_app(&mut terminal, &mut model, &keybindings, &settings, &theme);
 
     // Save before exit if storage is configured
     if model.has_storage() && model.dirty {
@@ -127,6 +128,7 @@ fn run_app(
     model: &mut Model,
     keybindings: &Keybindings,
     settings: &Settings,
+    theme: &Theme,
 ) -> anyhow::Result<()> {
     use std::time::Instant;
 
@@ -139,7 +141,7 @@ fn run_app(
 
     loop {
         // Draw UI
-        terminal.draw(|frame| view(model, frame))?;
+        terminal.draw(|frame| view(model, frame, theme))?;
 
         // Check if quitting
         if model.running == RunningState::Quitting {

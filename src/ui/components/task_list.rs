@@ -6,7 +6,10 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
 
+// Note: Color is still used for highlight_style background
+
 use crate::app::Model;
+use crate::config::Theme;
 use crate::domain::{Priority, Task, TaskId, TaskStatus};
 
 /// Task list widget
@@ -15,10 +18,11 @@ pub struct TaskList<'a> {
     selected: usize,
     active_tracking: Option<&'a TaskId>,
     time_for_tasks: Vec<u32>,
+    theme: &'a Theme,
 }
 
 impl<'a> TaskList<'a> {
-    pub fn new(model: &'a Model) -> Self {
+    pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
         let tasks: Vec<&Task> = model
             .visible_tasks
             .iter()
@@ -38,12 +42,14 @@ impl<'a> TaskList<'a> {
             selected: model.selected_index,
             active_tracking,
             time_for_tasks,
+            theme,
         }
     }
 }
 
 impl Widget for TaskList<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = self.theme;
         let items: Vec<ListItem> = self
             .tasks
             .iter()
@@ -52,7 +58,7 @@ impl Widget for TaskList<'_> {
                 let is_selected = i == self.selected;
                 let is_tracking = self.active_tracking == Some(&task.id);
                 let time_spent = self.time_for_tasks.get(i).copied().unwrap_or(0);
-                task_to_list_item(task, is_selected, is_tracking, time_spent)
+                task_to_list_item(task, is_selected, is_tracking, time_spent, theme)
             })
             .collect();
 
@@ -61,7 +67,7 @@ impl Widget for TaskList<'_> {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Tasks ")
-                    .border_style(Style::default().fg(Color::Blue)),
+                    .border_style(Style::default().fg(theme.colors.border.to_color())),
             )
             .highlight_style(
                 Style::default()
@@ -81,20 +87,29 @@ fn task_to_list_item(
     is_selected: bool,
     is_tracking: bool,
     time_spent: u32,
+    theme: &Theme,
 ) -> ListItem<'static> {
     let status_style = match task.status {
-        TaskStatus::Done => Style::default().fg(Color::Green),
-        TaskStatus::InProgress => Style::default().fg(Color::Yellow),
-        TaskStatus::Blocked => Style::default().fg(Color::Red),
-        TaskStatus::Cancelled => Style::default().fg(Color::DarkGray),
-        TaskStatus::Todo => Style::default().fg(Color::White),
+        TaskStatus::Done => Style::default().fg(theme.status.done.to_color()),
+        TaskStatus::InProgress => Style::default().fg(theme.status.in_progress.to_color()),
+        TaskStatus::Blocked => Style::default().fg(theme.colors.danger.to_color()),
+        TaskStatus::Cancelled => Style::default().fg(theme.status.cancelled.to_color()),
+        TaskStatus::Todo => Style::default().fg(theme.status.pending.to_color()),
     };
 
     let priority_span = match task.priority {
-        Priority::Urgent => Span::styled("!!!! ", Style::default().fg(Color::Red)),
-        Priority::High => Span::styled("!!!  ", Style::default().fg(Color::LightRed)),
-        Priority::Medium => Span::styled("!!   ", Style::default().fg(Color::Yellow)),
-        Priority::Low => Span::styled("!    ", Style::default().fg(Color::Green)),
+        Priority::Urgent => Span::styled(
+            "!!!! ",
+            Style::default().fg(theme.priority.urgent.to_color()),
+        ),
+        Priority::High => {
+            Span::styled("!!!  ", Style::default().fg(theme.priority.high.to_color()))
+        }
+        Priority::Medium => Span::styled(
+            "!!   ",
+            Style::default().fg(theme.priority.medium.to_color()),
+        ),
+        Priority::Low => Span::styled("!    ", Style::default().fg(theme.priority.low.to_color())),
         Priority::None => Span::raw("     "),
     };
 
@@ -103,7 +118,7 @@ fn task_to_list_item(
         Span::styled(
             "● ",
             Style::default()
-                .fg(Color::Red)
+                .fg(theme.colors.danger.to_color())
                 .add_modifier(Modifier::SLOW_BLINK),
         )
     } else {
@@ -114,7 +129,7 @@ fn task_to_list_item(
 
     let title_style = if task.status.is_complete() {
         Style::default()
-            .fg(Color::DarkGray)
+            .fg(theme.colors.muted.to_color())
             .add_modifier(Modifier::CROSSED_OUT)
     } else if is_selected {
         Style::default().add_modifier(Modifier::BOLD)
@@ -128,11 +143,11 @@ fn task_to_list_item(
     let due_span = if let Some(due) = task.due_date {
         let today = chrono::Utc::now().date_naive();
         let style = if due < today {
-            Style::default().fg(Color::Red) // Overdue
+            Style::default().fg(theme.colors.danger.to_color()) // Overdue
         } else if due == today {
-            Style::default().fg(Color::Yellow) // Due today
+            Style::default().fg(theme.colors.warning.to_color()) // Due today
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.colors.muted.to_color())
         };
         Span::styled(format!(" [{}]", due.format("%m/%d")), style)
     } else {
@@ -148,7 +163,10 @@ fn task_to_list_item(
         } else {
             format!(" ({}m)", mins)
         };
-        Span::styled(time_str, Style::default().fg(Color::Cyan))
+        Span::styled(
+            time_str,
+            Style::default().fg(theme.colors.accent.to_color()),
+        )
     } else {
         Span::raw("")
     };

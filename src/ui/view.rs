@@ -1,19 +1,20 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
 use crate::app::Model;
+use crate::config::Theme;
 
 use super::components::{
     centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, Sidebar, TaskList,
 };
 
 /// Main view function - renders the entire UI based on model state
-pub fn view(model: &Model, frame: &mut Frame) {
+pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     let area = frame.area();
 
     // Main layout: header, content, footer
@@ -27,13 +28,13 @@ pub fn view(model: &Model, frame: &mut Frame) {
         .split(area);
 
     // Render header
-    render_header(frame, chunks[0]);
+    render_header(frame, chunks[0], theme);
 
     // Render main content
-    render_content(model, frame, chunks[1]);
+    render_content(model, frame, chunks[1], theme);
 
     // Render footer
-    render_footer(model, frame, chunks[2]);
+    render_footer(model, frame, chunks[2], theme);
 
     // Render popups
     if model.show_help {
@@ -64,21 +65,24 @@ pub fn view(model: &Model, frame: &mut Frame) {
     }
 }
 
-fn render_header(frame: &mut Frame, area: Rect) {
+fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
     let title = Paragraph::new(Line::from(vec![
-        Span::styled(" TaskFlow ", Style::default().fg(Color::Cyan)),
+        Span::styled(
+            " TaskFlow ",
+            Style::default().fg(theme.colors.accent.to_color()),
+        ),
         Span::raw("- Project Management TUI"),
     ]))
     .block(
         Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Blue)),
+            .border_style(Style::default().fg(theme.colors.border.to_color())),
     );
 
     frame.render_widget(title, area);
 }
 
-fn render_content(model: &Model, frame: &mut Frame, area: Rect) {
+fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     if model.show_sidebar {
         // Split into sidebar and main content
         let chunks = Layout::default()
@@ -90,19 +94,19 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect) {
             .split(area);
 
         // Render sidebar
-        frame.render_widget(Sidebar::new(model), chunks[0]);
+        frame.render_widget(Sidebar::new(model, theme), chunks[0]);
 
         // Render task list in main area
-        let task_list = TaskList::new(model);
+        let task_list = TaskList::new(model, theme);
         frame.render_widget(task_list, chunks[1]);
     } else {
         // No sidebar, full width task list
-        let task_list = TaskList::new(model);
+        let task_list = TaskList::new(model, theme);
         frame.render_widget(task_list, area);
     }
 }
 
-fn render_footer(model: &Model, frame: &mut Frame, area: Rect) {
+fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     let task_count = model.visible_tasks.len();
     let completed = model
         .tasks
@@ -121,7 +125,7 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect) {
         }
     );
 
-    let footer = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
+    let footer = Paragraph::new(status).style(Style::default().fg(theme.colors.muted.to_color()));
 
     frame.render_widget(footer, area);
 }

@@ -20,32 +20,28 @@ impl<'a> Sidebar<'a> {
 
 impl Widget for Sidebar<'_> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
-        let mut items = Vec::new();
-
         // Navigation views
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled("📋 ", Style::default()),
-            styled_view_name("All Tasks", ViewId::TaskList, &self.model.current_view),
-        ])));
-
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled("📅 ", Style::default()),
-            styled_view_name("Today", ViewId::Today, &self.model.current_view),
-        ])));
-
-        items.push(ListItem::new(Line::from(vec![
-            Span::styled("📆 ", Style::default()),
-            styled_view_name("Upcoming", ViewId::Upcoming, &self.model.current_view),
-        ])));
-
-        // Separator
-        items.push(ListItem::new(Line::from("───────────")));
-
-        // Projects section
-        items.push(ListItem::new(Line::from(Span::styled(
-            "Projects",
-            Style::default().fg(Color::DarkGray),
-        ))));
+        let mut items = vec![
+            ListItem::new(Line::from(vec![
+                Span::styled("📋 ", Style::default()),
+                styled_view_name("All Tasks", ViewId::TaskList, &self.model.current_view),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📅 ", Style::default()),
+                styled_view_name("Today", ViewId::Today, &self.model.current_view),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📆 ", Style::default()),
+                styled_view_name("Upcoming", ViewId::Upcoming, &self.model.current_view),
+            ])),
+            // Separator
+            ListItem::new(Line::from("───────────")),
+            // Projects section
+            ListItem::new(Line::from(Span::styled(
+                "Projects",
+                Style::default().fg(Color::DarkGray),
+            ))),
+        ];
 
         // List projects
         for project in self.model.projects.values() {

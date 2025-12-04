@@ -3,8 +3,10 @@
 //! These tests verify cross-component behavior and ensure
 //! all backends produce consistent results.
 
-use taskflow::domain::{Priority, Task, TaskStatus, Tag, Project, TimeEntry, Filter, TagFilterMode};
-use taskflow::storage::{BackendType, StorageBackend, create_backend};
+use taskflow::domain::{
+    Filter, Priority, Project, Tag, TagFilterMode, Task, TaskStatus, TimeEntry,
+};
+use taskflow::storage::{create_backend, BackendType, StorageBackend};
 use tempfile::tempdir;
 
 /// Helper to create all backend types for testing
@@ -42,39 +44,57 @@ fn test_all_backends_same_crud_behavior() {
     for (backend_name, mut backend) in create_all_backends() {
         // Create
         let task = Task::new("Test task").with_priority(Priority::High);
-        backend.create_task(&task).unwrap_or_else(|e| {
-            panic!("{}: create_task failed: {}", backend_name, e)
-        });
+        backend
+            .create_task(&task)
+            .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
 
         // Read
-        let retrieved = backend.get_task(&task.id).unwrap_or_else(|e| {
-            panic!("{}: get_task failed: {}", backend_name, e)
-        });
+        let retrieved = backend
+            .get_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: get_task failed: {}", backend_name, e));
         assert!(
             retrieved.is_some(),
             "{}: task should exist after create",
             backend_name
         );
         let retrieved = retrieved.unwrap();
-        assert_eq!(retrieved.title, "Test task", "{}: title mismatch", backend_name);
-        assert_eq!(retrieved.priority, Priority::High, "{}: priority mismatch", backend_name);
+        assert_eq!(
+            retrieved.title, "Test task",
+            "{}: title mismatch",
+            backend_name
+        );
+        assert_eq!(
+            retrieved.priority,
+            Priority::High,
+            "{}: priority mismatch",
+            backend_name
+        );
 
         // Update
         let mut updated = retrieved.clone();
         updated.title = "Updated task".to_string();
         updated.status = TaskStatus::InProgress;
-        backend.update_task(&updated).unwrap_or_else(|e| {
-            panic!("{}: update_task failed: {}", backend_name, e)
-        });
+        backend
+            .update_task(&updated)
+            .unwrap_or_else(|e| panic!("{}: update_task failed: {}", backend_name, e));
 
         let retrieved = backend.get_task(&task.id).unwrap().unwrap();
-        assert_eq!(retrieved.title, "Updated task", "{}: title not updated", backend_name);
-        assert_eq!(retrieved.status, TaskStatus::InProgress, "{}: status not updated", backend_name);
+        assert_eq!(
+            retrieved.title, "Updated task",
+            "{}: title not updated",
+            backend_name
+        );
+        assert_eq!(
+            retrieved.status,
+            TaskStatus::InProgress,
+            "{}: status not updated",
+            backend_name
+        );
 
         // Delete
-        backend.delete_task(&task.id).unwrap_or_else(|e| {
-            panic!("{}: delete_task failed: {}", backend_name, e)
-        });
+        backend
+            .delete_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: delete_task failed: {}", backend_name, e));
         assert!(
             backend.get_task(&task.id).unwrap().is_none(),
             "{}: task should not exist after delete",

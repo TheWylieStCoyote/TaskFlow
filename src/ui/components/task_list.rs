@@ -50,7 +50,7 @@ impl Widget for TaskList<'_> {
             .enumerate()
             .map(|(i, task)| {
                 let is_selected = i == self.selected;
-                let is_tracking = self.active_tracking.map_or(false, |id| id == &task.id);
+                let is_tracking = self.active_tracking == Some(&task.id);
                 let time_spent = self.time_for_tasks.get(i).copied().unwrap_or(0);
                 task_to_list_item(task, is_selected, is_tracking, time_spent)
             })
@@ -76,7 +76,12 @@ impl Widget for TaskList<'_> {
     }
 }
 
-fn task_to_list_item(task: &Task, is_selected: bool, is_tracking: bool, time_spent: u32) -> ListItem<'static> {
+fn task_to_list_item(
+    task: &Task,
+    is_selected: bool,
+    is_tracking: bool,
+    time_spent: u32,
+) -> ListItem<'static> {
     let status_style = match task.status {
         TaskStatus::Done => Style::default().fg(Color::Green),
         TaskStatus::InProgress => Style::default().fg(Color::Yellow),
@@ -95,15 +100,17 @@ fn task_to_list_item(task: &Task, is_selected: bool, is_tracking: bool, time_spe
 
     // Time tracking indicator
     let tracking_span = if is_tracking {
-        Span::styled("● ", Style::default().fg(Color::Red).add_modifier(Modifier::SLOW_BLINK))
+        Span::styled(
+            "● ",
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::SLOW_BLINK),
+        )
     } else {
         Span::raw("  ")
     };
 
-    let status_span = Span::styled(
-        format!("{} ", task.status.symbol()),
-        status_style,
-    );
+    let status_span = Span::styled(format!("{} ", task.status.symbol()), status_style);
 
     let title_style = if task.status.is_complete() {
         Style::default()
@@ -146,7 +153,14 @@ fn task_to_list_item(task: &Task, is_selected: bool, is_tracking: bool, time_spe
         Span::raw("")
     };
 
-    let line = Line::from(vec![tracking_span, priority_span, status_span, title_span, due_span, time_span]);
+    let line = Line::from(vec![
+        tracking_span,
+        priority_span,
+        status_span,
+        title_span,
+        due_span,
+        time_span,
+    ]);
 
     ListItem::new(line)
 }

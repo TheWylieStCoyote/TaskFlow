@@ -11,7 +11,8 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use taskflow::app::{
-    update, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage, TimeMessage, UiMessage,
+    update, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
+    TimeMessage, UiMessage,
 };
 use taskflow::config::Settings;
 use taskflow::storage::BackendType;
@@ -49,10 +50,13 @@ fn main() -> anyhow::Result<()> {
     };
 
     // Determine data path (CLI > config > default)
-    let data_path = args.data.clone().unwrap_or_else(|| settings.get_data_path());
+    let data_path = args
+        .data
+        .clone()
+        .unwrap_or_else(|| settings.get_data_path());
 
     // Parse backend type
-    let backend_type = BackendType::from_str(backend_str).unwrap_or_default();
+    let backend_type = BackendType::parse(backend_str).unwrap_or_default();
 
     // Create app state
     let mut model = if args.demo {

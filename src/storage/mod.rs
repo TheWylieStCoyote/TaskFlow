@@ -1,6 +1,6 @@
+pub mod backends;
 mod error;
 mod repository;
-pub mod backends;
 
 pub use error::*;
 pub use repository::*;
@@ -18,7 +18,7 @@ pub enum BackendType {
 }
 
 impl BackendType {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "json" => Some(Self::Json),
             "yaml" | "yml" => Some(Self::Yaml),

@@ -8,7 +8,9 @@ use ratatui::{
 
 use crate::app::Model;
 
-use super::components::{centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, Sidebar, TaskList};
+use super::components::{
+    centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, Sidebar, TaskList,
+};
 
 /// Main view function - renders the entire UI based on model state
 pub fn view(model: &Model, frame: &mut Frame) {
@@ -64,10 +66,7 @@ pub fn view(model: &Model, frame: &mut Frame) {
 
 fn render_header(frame: &mut Frame, area: Rect) {
     let title = Paragraph::new(Line::from(vec![
-        Span::styled(
-            " TaskFlow ",
-            Style::default().fg(Color::Cyan),
-        ),
+        Span::styled(" TaskFlow ", Style::default().fg(Color::Cyan)),
         Span::raw("- Project Management TUI"),
     ]))
     .block(
@@ -105,17 +104,24 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect) {
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect) {
     let task_count = model.visible_tasks.len();
-    let completed = model.tasks.values().filter(|t| t.status.is_complete()).count();
+    let completed = model
+        .tasks
+        .values()
+        .filter(|t| t.status.is_complete())
+        .count();
 
     let status = format!(
         " {} tasks ({} completed) | {} | Press ? for help ",
         task_count,
         completed,
-        if model.show_completed { "showing all" } else { "hiding completed" }
+        if model.show_completed {
+            "showing all"
+        } else {
+            "hiding completed"
+        }
     );
 
-    let footer = Paragraph::new(status)
-        .style(Style::default().fg(Color::DarkGray));
+    let footer = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
 
     frame.render_widget(footer, area);
 }

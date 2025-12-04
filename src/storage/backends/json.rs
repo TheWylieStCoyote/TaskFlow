@@ -28,8 +28,8 @@ impl JsonBackend {
 
     fn load(&mut self) -> StorageResult<()> {
         if self.path.exists() {
-            let content = fs::read_to_string(&self.path)
-                .map_err(|e| StorageError::io(&self.path, e))?;
+            let content =
+                fs::read_to_string(&self.path).map_err(|e| StorageError::io(&self.path, e))?;
             self.data = serde_json::from_str(&content)?;
         }
         self.dirty = false;
@@ -43,15 +43,13 @@ impl JsonBackend {
 
         // Ensure parent directory exists
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| StorageError::io(parent, e))?;
+            fs::create_dir_all(parent).map_err(|e| StorageError::io(parent, e))?;
         }
 
         let content = serde_json::to_string_pretty(&self.data)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
 
-        fs::write(&self.path, content)
-            .map_err(|e| StorageError::io(&self.path, e))?;
+        fs::write(&self.path, content).map_err(|e| StorageError::io(&self.path, e))?;
 
         self.dirty = false;
         Ok(())
@@ -101,85 +99,91 @@ impl TaskRepository for JsonBackend {
     }
 
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
-        let tasks = self.data.tasks.iter().filter(|task| {
-            // Filter by status
-            if let Some(ref statuses) = filter.status {
-                if !statuses.contains(&task.status) {
-                    return false;
-                }
-            }
-
-            // Filter by priority
-            if let Some(ref priorities) = filter.priority {
-                if !priorities.contains(&task.priority) {
-                    return false;
-                }
-            }
-
-            // Filter by project
-            if let Some(ref project_id) = filter.project_id {
-                if task.project_id.as_ref() != Some(project_id) {
-                    return false;
-                }
-            }
-
-            // Filter by tags
-            if let Some(ref tags) = filter.tags {
-                let has_tags = match filter.tags_mode {
-                    crate::domain::TagFilterMode::Any => {
-                        tags.iter().any(|t| task.tags.contains(t))
-                    }
-                    crate::domain::TagFilterMode::All => {
-                        tags.iter().all(|t| task.tags.contains(t))
-                    }
-                };
-                if !has_tags && !tags.is_empty() {
-                    return false;
-                }
-            }
-
-            // Filter by due date
-            if let Some(due_before) = filter.due_before {
-                if let Some(due) = task.due_date {
-                    if due >= due_before {
+        let tasks = self
+            .data
+            .tasks
+            .iter()
+            .filter(|task| {
+                // Filter by status
+                if let Some(ref statuses) = filter.status {
+                    if !statuses.contains(&task.status) {
                         return false;
                     }
-                } else {
-                    return false;
                 }
-            }
 
-            if let Some(due_after) = filter.due_after {
-                if let Some(due) = task.due_date {
-                    if due <= due_after {
+                // Filter by priority
+                if let Some(ref priorities) = filter.priority {
+                    if !priorities.contains(&task.priority) {
                         return false;
                     }
-                } else {
+                }
+
+                // Filter by project
+                if let Some(ref project_id) = filter.project_id {
+                    if task.project_id.as_ref() != Some(project_id) {
+                        return false;
+                    }
+                }
+
+                // Filter by tags
+                if let Some(ref tags) = filter.tags {
+                    let has_tags = match filter.tags_mode {
+                        crate::domain::TagFilterMode::Any => {
+                            tags.iter().any(|t| task.tags.contains(t))
+                        }
+                        crate::domain::TagFilterMode::All => {
+                            tags.iter().all(|t| task.tags.contains(t))
+                        }
+                    };
+                    if !has_tags && !tags.is_empty() {
+                        return false;
+                    }
+                }
+
+                // Filter by due date
+                if let Some(due_before) = filter.due_before {
+                    if let Some(due) = task.due_date {
+                        if due >= due_before {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(due_after) = filter.due_after {
+                    if let Some(due) = task.due_date {
+                        if due <= due_after {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                // Filter by search text
+                if let Some(ref search) = filter.search_text {
+                    let search_lower = search.to_lowercase();
+                    let title_matches = task.title.to_lowercase().contains(&search_lower);
+                    let desc_matches = task
+                        .description
+                        .as_ref()
+                        .map(|d| d.to_lowercase().contains(&search_lower))
+                        .unwrap_or(false);
+                    if !title_matches && !desc_matches {
+                        return false;
+                    }
+                }
+
+                // Filter completed tasks
+                if !filter.include_completed && task.status.is_complete() {
                     return false;
                 }
-            }
 
-            // Filter by search text
-            if let Some(ref search) = filter.search_text {
-                let search_lower = search.to_lowercase();
-                let title_matches = task.title.to_lowercase().contains(&search_lower);
-                let desc_matches = task
-                    .description
-                    .as_ref()
-                    .map(|d| d.to_lowercase().contains(&search_lower))
-                    .unwrap_or(false);
-                if !title_matches && !desc_matches {
-                    return false;
-                }
-            }
-
-            // Filter completed tasks
-            if !filter.include_completed && task.status.is_complete() {
-                return false;
-            }
-
-            true
-        }).cloned().collect();
+                true
+            })
+            .cloned()
+            .collect();
 
         Ok(tasks)
     }
@@ -208,7 +212,10 @@ impl TaskRepository for JsonBackend {
 impl ProjectRepository for JsonBackend {
     fn create_project(&mut self, project: &Project) -> StorageResult<()> {
         if self.data.projects.iter().any(|p| p.id == project.id) {
-            return Err(StorageError::already_exists("Project", project.id.to_string()));
+            return Err(StorageError::already_exists(
+                "Project",
+                project.id.to_string(),
+            ));
         }
         self.data.projects.push(project.clone());
         self.mark_dirty();
@@ -287,7 +294,10 @@ impl TagRepository for JsonBackend {
 impl TimeEntryRepository for JsonBackend {
     fn create_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()> {
         if self.data.time_entries.iter().any(|e| e.id == entry.id) {
-            return Err(StorageError::already_exists("TimeEntry", entry.id.0.to_string()));
+            return Err(StorageError::already_exists(
+                "TimeEntry",
+                entry.id.0.to_string(),
+            ));
         }
         self.data.time_entries.push(entry.clone());
         self.mark_dirty();
@@ -329,7 +339,12 @@ impl TimeEntryRepository for JsonBackend {
     }
 
     fn get_active_entry(&self) -> StorageResult<Option<TimeEntry>> {
-        Ok(self.data.time_entries.iter().find(|e| e.is_running()).cloned())
+        Ok(self
+            .data
+            .time_entries
+            .iter()
+            .find(|e| e.is_running())
+            .cloned())
     }
 }
 
@@ -489,7 +504,8 @@ mod tests {
 
         let task1 = Task::new("Task with rust").with_tags(vec!["rust".to_string()]);
         let task2 = Task::new("Task with python").with_tags(vec!["python".to_string()]);
-        let task3 = Task::new("Task with both").with_tags(vec!["rust".to_string(), "python".to_string()]);
+        let task3 =
+            Task::new("Task with both").with_tags(vec!["rust".to_string(), "python".to_string()]);
         backend.create_task(&task1).unwrap();
         backend.create_task(&task2).unwrap();
         backend.create_task(&task3).unwrap();
@@ -507,7 +523,8 @@ mod tests {
         let (_dir, mut backend) = create_test_backend();
 
         let task1 = Task::new("Task with rust").with_tags(vec!["rust".to_string()]);
-        let task2 = Task::new("Task with both").with_tags(vec!["rust".to_string(), "important".to_string()]);
+        let task2 = Task::new("Task with both")
+            .with_tags(vec!["rust".to_string(), "important".to_string()]);
         backend.create_task(&task1).unwrap();
         backend.create_task(&task2).unwrap();
 

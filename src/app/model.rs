@@ -84,7 +84,11 @@ impl Model {
     }
 
     /// Load data from a storage backend
-    pub fn with_storage(mut self, backend_type: BackendType, path: PathBuf) -> anyhow::Result<Self> {
+    pub fn with_storage(
+        mut self,
+        backend_type: BackendType,
+        path: PathBuf,
+    ) -> anyhow::Result<Self> {
         let mut backend = storage::create_backend(backend_type, &path)?;
 
         // Load tasks from storage
@@ -149,17 +153,13 @@ impl Model {
             Task::new("Create TEA architecture")
                 .with_status(TaskStatus::InProgress)
                 .with_priority(Priority::High),
-            Task::new("Build task list UI")
-                .with_priority(Priority::Medium),
+            Task::new("Build task list UI").with_priority(Priority::Medium),
             Task::new("Add storage backends")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium),
-            Task::new("Implement keybinding config")
-                .with_priority(Priority::Low),
-            Task::new("Add theme support")
-                .with_priority(Priority::Low),
-            Task::new("Write documentation")
-                .with_priority(Priority::None),
+            Task::new("Implement keybinding config").with_priority(Priority::Low),
+            Task::new("Add theme support").with_priority(Priority::Low),
+            Task::new("Write documentation").with_priority(Priority::None),
             Task::new("Review and fix bugs")
                 .with_due_date(NaiveDate::from_ymd_opt(2025, 12, 10).unwrap())
                 .with_priority(Priority::Urgent),
@@ -209,8 +209,26 @@ impl Model {
             return false;
         }
 
-        // Add more filter logic as needed
-        true
+        // Filter by current view
+        match self.current_view {
+            ViewId::TaskList => true, // Show all tasks
+            ViewId::Today => {
+                // Show tasks due today
+                task.due_date
+                    .map(|d| d == chrono::Utc::now().date_naive())
+                    .unwrap_or(false)
+            }
+            ViewId::Upcoming => {
+                // Show tasks with future due dates
+                task.due_date
+                    .map(|d| d > chrono::Utc::now().date_naive())
+                    .unwrap_or(false)
+            }
+            ViewId::Projects => {
+                // Show tasks that belong to a project
+                task.project_id.is_some()
+            }
+        }
     }
 
     /// Get the currently selected task
@@ -562,5 +580,111 @@ mod tests {
     fn test_running_state_default() {
         let state = RunningState::default();
         assert_eq!(state, RunningState::Running);
+    }
+
+    #[test]
+    fn test_view_tasklist_shows_all() {
+        let mut model = Model::new();
+        model.current_view = ViewId::TaskList;
+
+        // Create tasks with various due dates and project associations
+        let task_no_date = Task::new("No due date");
+        let task_with_date = Task::new("Has date")
+            .with_due_date(chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap());
+        let task_with_project =
+            Task::new("Has project").with_project(crate::domain::ProjectId::new());
+
+        model.tasks.insert(task_no_date.id.clone(), task_no_date);
+        model
+            .tasks
+            .insert(task_with_date.id.clone(), task_with_date);
+        model
+            .tasks
+            .insert(task_with_project.id.clone(), task_with_project);
+
+        model.refresh_visible_tasks();
+
+        // TaskList view should show all tasks
+        assert_eq!(model.visible_tasks.len(), 3);
+    }
+
+    #[test]
+    fn test_view_today_filters_due_today() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Today;
+
+        let today = chrono::Utc::now().date_naive();
+        let tomorrow = today + chrono::Duration::days(1);
+
+        let task_today = Task::new("Due today").with_due_date(today);
+        let task_tomorrow = Task::new("Due tomorrow").with_due_date(tomorrow);
+        let task_no_date = Task::new("No due date");
+
+        model
+            .tasks
+            .insert(task_today.id.clone(), task_today.clone());
+        model.tasks.insert(task_tomorrow.id.clone(), task_tomorrow);
+        model.tasks.insert(task_no_date.id.clone(), task_no_date);
+
+        model.refresh_visible_tasks();
+
+        // Only today's task should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_today.id);
+    }
+
+    #[test]
+    fn test_view_upcoming_filters_future() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Upcoming;
+
+        let today = chrono::Utc::now().date_naive();
+        let tomorrow = today + chrono::Duration::days(1);
+        let next_week = today + chrono::Duration::days(7);
+
+        let task_today = Task::new("Due today").with_due_date(today);
+        let task_tomorrow = Task::new("Due tomorrow").with_due_date(tomorrow);
+        let task_next_week = Task::new("Due next week").with_due_date(next_week);
+        let task_no_date = Task::new("No due date");
+
+        model.tasks.insert(task_today.id.clone(), task_today);
+        model
+            .tasks
+            .insert(task_tomorrow.id.clone(), task_tomorrow.clone());
+        model
+            .tasks
+            .insert(task_next_week.id.clone(), task_next_week.clone());
+        model.tasks.insert(task_no_date.id.clone(), task_no_date);
+
+        model.refresh_visible_tasks();
+
+        // Only future tasks should be visible (not today, not tasks without dates)
+        assert_eq!(model.visible_tasks.len(), 2);
+        assert!(model.visible_tasks.contains(&task_tomorrow.id));
+        assert!(model.visible_tasks.contains(&task_next_week.id));
+    }
+
+    #[test]
+    fn test_view_projects_filters_with_project() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+
+        let project_id = crate::domain::ProjectId::new();
+
+        let task_with_project = Task::new("Has project").with_project(project_id);
+        let task_no_project = Task::new("No project");
+
+        model
+            .tasks
+            .insert(task_with_project.id.clone(), task_with_project.clone());
+        model
+            .tasks
+            .insert(task_no_project.id.clone(), task_no_project);
+
+        model.refresh_visible_tasks();
+
+        // Only tasks with projects should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_with_project.id);
     }
 }

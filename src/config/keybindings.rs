@@ -33,19 +33,14 @@ pub enum Action {
 }
 
 /// Key modifier
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Modifier {
+    #[default]
     None,
     Ctrl,
     Alt,
     Shift,
-}
-
-impl Default for Modifier {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// A key combination

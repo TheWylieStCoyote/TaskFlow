@@ -1,9 +1,9 @@
-mod task_list;
 mod help;
-mod sidebar;
 mod input;
+mod sidebar;
+mod task_list;
 
-pub use task_list::*;
 pub use help::*;
-pub use sidebar::*;
 pub use input::*;
+pub use sidebar::*;
+pub use task_list::*;

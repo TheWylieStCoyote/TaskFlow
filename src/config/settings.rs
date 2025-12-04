@@ -93,7 +93,7 @@ impl Settings {
 
     /// Get the backend type
     pub fn backend_type(&self) -> BackendType {
-        BackendType::from_str(&self.backend).unwrap_or_default()
+        BackendType::parse(&self.backend).unwrap_or_default()
     }
 
     /// Get the data path, using defaults if not set

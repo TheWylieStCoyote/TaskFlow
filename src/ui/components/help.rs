@@ -27,9 +27,10 @@ impl Widget for HelpPopup {
         Clear.render(area, buf);
 
         let help_text = vec![
-            Line::from(vec![
-                Span::styled("Navigation", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "Navigation",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("j/↓", Style::default().fg(Color::Cyan)),
@@ -56,9 +57,10 @@ impl Widget for HelpPopup {
                 Span::raw("  Page down"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("Actions", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "Actions",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("a", Style::default().fg(Color::Cyan)),
@@ -85,9 +87,10 @@ impl Widget for HelpPopup {
                 Span::raw("       Toggle sidebar"),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled("General", Style::default().add_modifier(Modifier::BOLD)),
-            ]),
+            Line::from(vec![Span::styled(
+                "General",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),

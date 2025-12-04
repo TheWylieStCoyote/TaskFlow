@@ -1,6 +1,9 @@
 use crate::ui::InputMode;
 
-use super::{Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage, TimeMessage, UiMessage};
+use super::{
+    Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage, TimeMessage,
+    UiMessage,
+};
 
 /// Main update function - heart of TEA pattern
 pub fn update(model: &mut Model, message: Message) {
@@ -58,10 +61,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
     match msg {
         TaskMessage::ToggleComplete => {
             // Get the task id first to avoid borrow issues
-            let task_id = model
-                .visible_tasks
-                .get(model.selected_index)
-                .cloned();
+            let task_id = model.visible_tasks.get(model.selected_index).cloned();
 
             if let Some(id) = task_id {
                 if let Some(task) = model.tasks.get_mut(&id) {
@@ -342,7 +342,10 @@ mod tests {
         let mut model = create_test_model_with_tasks();
         model.selected_index = 0;
 
-        update(&mut model, Message::Navigation(NavigationMessage::Select(3)));
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::Select(3)),
+        );
 
         assert_eq!(model.selected_index, 3);
     }
@@ -352,7 +355,10 @@ mod tests {
         let mut model = create_test_model_with_tasks();
         model.selected_index = 2;
 
-        update(&mut model, Message::Navigation(NavigationMessage::Select(100)));
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::Select(100)),
+        );
 
         assert_eq!(model.selected_index, 2); // unchanged
     }
@@ -393,7 +399,10 @@ mod tests {
 
         update(
             &mut model,
-            Message::Task(TaskMessage::SetStatus(task_id.clone(), TaskStatus::InProgress)),
+            Message::Task(TaskMessage::SetStatus(
+                task_id.clone(),
+                TaskStatus::InProgress,
+            )),
         );
 
         assert_eq!(
@@ -439,7 +448,10 @@ mod tests {
         let task_id = model.visible_tasks[0].clone();
         let initial_count = model.tasks.len();
 
-        update(&mut model, Message::Task(TaskMessage::Delete(task_id.clone())));
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Delete(task_id.clone())),
+        );
 
         assert_eq!(model.tasks.len(), initial_count - 1);
         assert!(model.tasks.get(&task_id).is_none());

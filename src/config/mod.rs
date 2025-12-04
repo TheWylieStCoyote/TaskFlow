@@ -1,7 +1,7 @@
-mod settings;
 mod keybindings;
+mod settings;
 mod theme;
 
-pub use settings::*;
 pub use keybindings::*;
+pub use settings::*;
 pub use theme::*;

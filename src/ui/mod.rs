@@ -1,5 +1,5 @@
-mod view;
 mod components;
+mod view;
 
-pub use view::*;
 pub use components::*;
+pub use view::*;

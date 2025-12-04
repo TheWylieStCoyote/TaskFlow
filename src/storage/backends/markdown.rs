@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{
-    Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId,
-};
+use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId};
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
     TaskRepository, TimeEntryRepository,
@@ -53,8 +51,7 @@ impl MarkdownBackend {
     }
 
     fn ensure_dirs(&self) -> StorageResult<()> {
-        fs::create_dir_all(&self.tasks_dir)
-            .map_err(|e| StorageError::io(&self.tasks_dir, e))?;
+        fs::create_dir_all(&self.tasks_dir).map_err(|e| StorageError::io(&self.tasks_dir, e))?;
         fs::create_dir_all(&self.projects_dir)
             .map_err(|e| StorageError::io(&self.projects_dir, e))?;
         Ok(())
@@ -67,8 +64,8 @@ impl MarkdownBackend {
             return Ok(());
         }
 
-        for entry in fs::read_dir(&self.tasks_dir)
-            .map_err(|e| StorageError::io(&self.tasks_dir, e))?
+        for entry in
+            fs::read_dir(&self.tasks_dir).map_err(|e| StorageError::io(&self.tasks_dir, e))?
         {
             let entry = entry.map_err(|e| StorageError::io(&self.tasks_dir, e))?;
             let path = entry.path();
@@ -90,8 +87,8 @@ impl MarkdownBackend {
             return Ok(());
         }
 
-        for entry in fs::read_dir(&self.projects_dir)
-            .map_err(|e| StorageError::io(&self.projects_dir, e))?
+        for entry in
+            fs::read_dir(&self.projects_dir).map_err(|e| StorageError::io(&self.projects_dir, e))?
         {
             let entry = entry.map_err(|e| StorageError::io(&self.projects_dir, e))?;
             let path = entry.path();
@@ -109,8 +106,8 @@ impl MarkdownBackend {
     fn load_tags(&mut self) -> StorageResult<()> {
         let tags_file = self.base_path.join("tags.yaml");
         if tags_file.exists() {
-            let content = fs::read_to_string(&tags_file)
-                .map_err(|e| StorageError::io(&tags_file, e))?;
+            let content =
+                fs::read_to_string(&tags_file).map_err(|e| StorageError::io(&tags_file, e))?;
             self.tags = serde_yaml::from_str(&content).unwrap_or_default();
         }
         Ok(())
@@ -130,8 +127,7 @@ impl MarkdownBackend {
         let tags_file = self.base_path.join("tags.yaml");
         let content = serde_yaml::to_string(&self.tags)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&tags_file, content)
-            .map_err(|e| StorageError::io(&tags_file, e))?;
+        fs::write(&tags_file, content).map_err(|e| StorageError::io(&tags_file, e))?;
         Ok(())
     }
 
@@ -139,14 +135,12 @@ impl MarkdownBackend {
         let entries_file = self.base_path.join("time_entries.yaml");
         let content = serde_yaml::to_string(&self.time_entries)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&entries_file, content)
-            .map_err(|e| StorageError::io(&entries_file, e))?;
+        fs::write(&entries_file, content).map_err(|e| StorageError::io(&entries_file, e))?;
         Ok(())
     }
 
     fn parse_task_file(&self, path: &Path) -> StorageResult<Task> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| StorageError::io(path, e))?;
+        let content = fs::read_to_string(path).map_err(|e| StorageError::io(path, e))?;
 
         // Parse frontmatter and body
         let (frontmatter, body) = self.parse_frontmatter(&content)?;
@@ -165,8 +159,7 @@ impl MarkdownBackend {
     }
 
     fn parse_project_file(&self, path: &Path) -> StorageResult<Project> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| StorageError::io(path, e))?;
+        let content = fs::read_to_string(path).map_err(|e| StorageError::io(path, e))?;
 
         let (frontmatter, body) = self.parse_frontmatter(&content)?;
 
@@ -221,8 +214,7 @@ impl MarkdownBackend {
             content.push('\n');
         }
 
-        fs::write(&path, content)
-            .map_err(|e| StorageError::io(&path, e))?;
+        fs::write(&path, content).map_err(|e| StorageError::io(&path, e))?;
 
         Ok(())
     }
@@ -244,8 +236,7 @@ impl MarkdownBackend {
             content.push('\n');
         }
 
-        fs::write(&path, content)
-            .map_err(|e| StorageError::io(&path, e))?;
+        fs::write(&path, content).map_err(|e| StorageError::io(&path, e))?;
 
         Ok(())
     }
@@ -253,8 +244,7 @@ impl MarkdownBackend {
     fn delete_task_file(&self, id: &TaskId) -> StorageResult<()> {
         let path = self.tasks_dir.join(format!("{}.md", id.0));
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| StorageError::io(&path, e))?;
+            fs::remove_file(&path).map_err(|e| StorageError::io(&path, e))?;
         }
         Ok(())
     }
@@ -262,8 +252,7 @@ impl MarkdownBackend {
     fn delete_project_file(&self, id: &ProjectId) -> StorageResult<()> {
         let path = self.projects_dir.join(format!("{}.md", id.0));
         if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| StorageError::io(&path, e))?;
+            fs::remove_file(&path).map_err(|e| StorageError::io(&path, e))?;
         }
         Ok(())
     }
@@ -311,33 +300,38 @@ impl TaskRepository for MarkdownBackend {
     }
 
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
-        let tasks = self.tasks_cache.values().filter(|task| {
-            if let Some(ref statuses) = filter.status {
-                if !statuses.contains(&task.status) {
+        let tasks = self
+            .tasks_cache
+            .values()
+            .filter(|task| {
+                if let Some(ref statuses) = filter.status {
+                    if !statuses.contains(&task.status) {
+                        return false;
+                    }
+                }
+                if let Some(ref priorities) = filter.priority {
+                    if !priorities.contains(&task.priority) {
+                        return false;
+                    }
+                }
+                if let Some(ref project_id) = filter.project_id {
+                    if task.project_id.as_ref() != Some(project_id) {
+                        return false;
+                    }
+                }
+                if !filter.include_completed && task.status.is_complete() {
                     return false;
                 }
-            }
-            if let Some(ref priorities) = filter.priority {
-                if !priorities.contains(&task.priority) {
-                    return false;
+                if let Some(ref search) = filter.search_text {
+                    let search_lower = search.to_lowercase();
+                    if !task.title.to_lowercase().contains(&search_lower) {
+                        return false;
+                    }
                 }
-            }
-            if let Some(ref project_id) = filter.project_id {
-                if task.project_id.as_ref() != Some(project_id) {
-                    return false;
-                }
-            }
-            if !filter.include_completed && task.status.is_complete() {
-                return false;
-            }
-            if let Some(ref search) = filter.search_text {
-                let search_lower = search.to_lowercase();
-                if !task.title.to_lowercase().contains(&search_lower) {
-                    return false;
-                }
-            }
-            true
-        }).cloned().collect();
+                true
+            })
+            .cloned()
+            .collect();
         Ok(tasks)
     }
 
@@ -363,10 +357,14 @@ impl TaskRepository for MarkdownBackend {
 impl ProjectRepository for MarkdownBackend {
     fn create_project(&mut self, project: &Project) -> StorageResult<()> {
         if self.projects_cache.contains_key(&project.id) {
-            return Err(StorageError::already_exists("Project", project.id.to_string()));
+            return Err(StorageError::already_exists(
+                "Project",
+                project.id.to_string(),
+            ));
         }
         self.write_project_file(project)?;
-        self.projects_cache.insert(project.id.clone(), project.clone());
+        self.projects_cache
+            .insert(project.id.clone(), project.clone());
         Ok(())
     }
 
@@ -379,7 +377,8 @@ impl ProjectRepository for MarkdownBackend {
             return Err(StorageError::not_found("Project", project.id.to_string()));
         }
         self.write_project_file(project)?;
-        self.projects_cache.insert(project.id.clone(), project.clone());
+        self.projects_cache
+            .insert(project.id.clone(), project.clone());
         Ok(())
     }
 
@@ -439,7 +438,10 @@ impl TagRepository for MarkdownBackend {
 impl TimeEntryRepository for MarkdownBackend {
     fn create_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()> {
         if self.time_entries.iter().any(|e| e.id == entry.id) {
-            return Err(StorageError::already_exists("TimeEntry", entry.id.0.to_string()));
+            return Err(StorageError::already_exists(
+                "TimeEntry",
+                entry.id.0.to_string(),
+            ));
         }
         self.time_entries.push(entry.clone());
         self.save_time_entries()?;

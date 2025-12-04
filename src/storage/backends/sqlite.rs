@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, ProjectStatus, Tag, Task, TaskId, TaskStatus,
-    TimeEntry, TimeEntryId,
+    Filter, Priority, Project, ProjectId, ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry,
+    TimeEntryId,
 };
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
@@ -29,9 +29,7 @@ impl SqliteBackend {
     }
 
     fn conn(&self) -> StorageResult<&Connection> {
-        self.conn
-            .as_ref()
-            .ok_or(StorageError::NotInitialized)
+        self.conn.as_ref().ok_or(StorageError::NotInitialized)
     }
 
     fn create_tables(&self) -> StorageResult<()> {
@@ -122,7 +120,9 @@ impl SqliteBackend {
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .ok()
                     }),
-                    duration_minutes: row.get::<_, Option<i32>>("duration_minutes")?.map(|m| m as u32),
+                    duration_minutes: row
+                        .get::<_, Option<i32>>("duration_minutes")?
+                        .map(|m| m as u32),
                 })
             })?
             .filter_map(|r| r.ok())
@@ -164,8 +164,10 @@ impl SqliteBackend {
                 "urgent" => Priority::Urgent,
                 _ => Priority::None,
             },
-            project_id: project_id.map(|s| ProjectId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
-            parent_task_id: parent_task_id.map(|s| TaskId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
+            project_id: project_id
+                .map(|s| ProjectId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
+            parent_task_id: parent_task_id
+                .map(|s| TaskId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
             tags: serde_json::from_str(&tags_json).unwrap_or_default(),
             dependencies: serde_json::from_str::<Vec<String>>(&deps_json)
                 .unwrap_or_default()
@@ -179,7 +181,8 @@ impl SqliteBackend {
                 .map(|dt| dt.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
             due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-            scheduled_date: scheduled_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+            scheduled_date: scheduled_date
+                .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
             completed_at: completed_at.and_then(|s| {
                 chrono::DateTime::parse_from_rfc3339(&s)
                     .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -222,7 +225,8 @@ impl SqliteBackend {
             updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
                 .map(|dt| dt.with_timezone(&chrono::Utc))
                 .unwrap_or_else(|_| chrono::Utc::now()),
-            start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+            start_date: start_date
+                .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
             due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
             default_tags: serde_json::from_str(&default_tags_json).unwrap_or_default(),
             custom_fields: serde_json::from_str(&custom_fields_json).unwrap_or_default(),
@@ -290,12 +294,22 @@ impl TaskRepository for SqliteBackend {
                 task.project_id.as_ref().map(|p| p.0.to_string()),
                 task.parent_task_id.as_ref().map(|t| t.0.to_string()),
                 serde_json::to_string(&task.tags).unwrap_or_default(),
-                serde_json::to_string(&task.dependencies.iter().map(|d| d.0.to_string()).collect::<Vec<_>>()).unwrap_or_default(),
+                serde_json::to_string(
+                    &task
+                        .dependencies
+                        .iter()
+                        .map(|d| d.0.to_string())
+                        .collect::<Vec<_>>()
+                )
+                .unwrap_or_default(),
                 task.updated_at.to_rfc3339(),
                 task.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
-                task.scheduled_date.map(|d| d.format("%Y-%m-%d").to_string()),
+                task.scheduled_date
+                    .map(|d| d.format("%Y-%m-%d").to_string()),
                 task.completed_at.map(|d| d.to_rfc3339()),
-                task.recurrence.as_ref().and_then(|r| serde_json::to_string(r).ok()),
+                task.recurrence
+                    .as_ref()
+                    .and_then(|r| serde_json::to_string(r).ok()),
                 task.estimated_minutes.map(|m| m as i32),
                 task.actual_minutes as i32,
                 serde_json::to_string(&task.custom_fields).unwrap_or_default(),
@@ -449,7 +463,10 @@ impl ProjectRepository for SqliteBackend {
 
     fn delete_project(&mut self, id: &ProjectId) -> StorageResult<()> {
         let conn = self.conn()?;
-        let rows = conn.execute("DELETE FROM projects WHERE id = ?1", params![id.0.to_string()])?;
+        let rows = conn.execute(
+            "DELETE FROM projects WHERE id = ?1",
+            params![id.0.to_string()],
+        )?;
         if rows == 0 {
             return Err(StorageError::not_found("Project", id.to_string()));
         }
@@ -567,7 +584,9 @@ impl TimeEntryRepository for SqliteBackend {
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .ok()
                     }),
-                    duration_minutes: row.get::<_, Option<i32>>("duration_minutes")?.map(|m| m as u32),
+                    duration_minutes: row
+                        .get::<_, Option<i32>>("duration_minutes")?
+                        .map(|m| m as u32),
                 })
             })
             .optional()?;
@@ -597,7 +616,10 @@ impl TimeEntryRepository for SqliteBackend {
 
     fn delete_time_entry(&mut self, id: &TimeEntryId) -> StorageResult<()> {
         let conn = self.conn()?;
-        let rows = conn.execute("DELETE FROM time_entries WHERE id = ?1", params![id.0.to_string()])?;
+        let rows = conn.execute(
+            "DELETE FROM time_entries WHERE id = ?1",
+            params![id.0.to_string()],
+        )?;
         if rows == 0 {
             return Err(StorageError::not_found("TimeEntry", id.0.to_string()));
         }
@@ -625,7 +647,9 @@ impl TimeEntryRepository for SqliteBackend {
                             .map(|dt| dt.with_timezone(&chrono::Utc))
                             .ok()
                     }),
-                    duration_minutes: row.get::<_, Option<i32>>("duration_minutes")?.map(|m| m as u32),
+                    duration_minutes: row
+                        .get::<_, Option<i32>>("duration_minutes")?
+                        .map(|m| m as u32),
                 })
             })?
             .filter_map(|r| r.ok())
@@ -660,8 +684,7 @@ impl TimeEntryRepository for SqliteBackend {
 impl StorageBackend for SqliteBackend {
     fn initialize(&mut self) -> StorageResult<()> {
         if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| StorageError::io(parent, e))?;
+            std::fs::create_dir_all(parent).map_err(|e| StorageError::io(parent, e))?;
         }
         self.conn = Some(Connection::open(&self.path)?);
         self.create_tables()
@@ -687,7 +710,7 @@ impl StorageBackend for SqliteBackend {
 
         // Clear existing data
         conn.execute_batch(
-            "DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags;"
+            "DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags;",
         )?;
 
         // Import data

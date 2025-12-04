@@ -5,6 +5,7 @@ use crate::domain::{Priority, ProjectId, TaskId, TaskStatus};
 pub enum Message {
     Navigation(NavigationMessage),
     Task(TaskMessage),
+    Time(TimeMessage),
     Ui(UiMessage),
     System(SystemMessage),
     None,
@@ -44,6 +45,14 @@ pub enum TaskMessage {
     MoveToProject(TaskId, Option<ProjectId>),
 }
 
+/// Time tracking messages
+#[derive(Debug, Clone)]
+pub enum TimeMessage {
+    StartTracking,
+    StopTracking,
+    ToggleTracking,
+}
+
 /// UI messages
 #[derive(Debug, Clone)]
 pub enum UiMessage {
@@ -51,12 +60,28 @@ pub enum UiMessage {
     ToggleSidebar,
     ShowHelp,
     HideHelp,
+    // Input mode
+    StartCreateTask,
+    CancelInput,
+    SubmitInput,
+    InputChar(char),
+    InputBackspace,
+    InputDelete,
+    InputCursorLeft,
+    InputCursorRight,
+    InputCursorStart,
+    InputCursorEnd,
+    // Delete confirmation
+    ShowDeleteConfirm,
+    ConfirmDelete,
+    CancelDelete,
 }
 
 /// System messages
 #[derive(Debug, Clone)]
 pub enum SystemMessage {
     Quit,
+    Save,
     Resize { width: u16, height: u16 },
     Tick,
 }
@@ -82,5 +107,11 @@ impl From<UiMessage> for Message {
 impl From<SystemMessage> for Message {
     fn from(msg: SystemMessage) -> Self {
         Message::System(msg)
+    }
+}
+
+impl From<TimeMessage> for Message {
+    fn from(msg: TimeMessage) -> Self {
+        Message::Time(msg)
     }
 }

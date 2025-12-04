@@ -1,6 +1,10 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
-use crate::domain::{Filter, Project, ProjectId, SortSpec, Task, TaskId};
+use crate::domain::{Filter, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId};
+#[allow(unused_imports)]
+use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
+use crate::ui::InputMode;
 
 use super::ViewId;
 
@@ -20,6 +24,8 @@ pub struct Model {
     // Data
     pub tasks: HashMap<TaskId, Task>,
     pub projects: HashMap<ProjectId, Project>,
+    pub time_entries: HashMap<TimeEntryId, TimeEntry>,
+    pub active_time_entry: Option<TimeEntryId>,
 
     // Navigation
     pub current_view: ViewId,
@@ -37,6 +43,17 @@ pub struct Model {
     pub show_sidebar: bool,
     pub show_help: bool,
     pub terminal_size: (u16, u16),
+
+    // Input state
+    pub input_mode: InputMode,
+    pub input_buffer: String,
+    pub cursor_position: usize,
+    pub show_confirm_delete: bool,
+
+    // Storage
+    storage: Option<Box<dyn StorageBackend>>,
+    pub data_path: Option<PathBuf>,
+    pub dirty: bool,
 }
 
 impl Model {
@@ -45,6 +62,8 @@ impl Model {
             running: RunningState::default(),
             tasks: HashMap::new(),
             projects: HashMap::new(),
+            time_entries: HashMap::new(),
+            active_time_entry: None,
             current_view: ViewId::default(),
             selected_index: 0,
             visible_tasks: Vec::new(),
@@ -54,6 +73,64 @@ impl Model {
             show_sidebar: true,
             show_help: false,
             terminal_size: (80, 24),
+            input_mode: InputMode::Normal,
+            input_buffer: String::new(),
+            cursor_position: 0,
+            show_confirm_delete: false,
+            storage: None,
+            data_path: None,
+            dirty: false,
+        }
+    }
+
+    /// Load data from a storage backend
+    pub fn with_storage(mut self, backend_type: BackendType, path: PathBuf) -> anyhow::Result<Self> {
+        let mut backend = storage::create_backend(backend_type, &path)?;
+
+        // Load tasks from storage
+        let tasks = backend.list_tasks()?;
+        for task in tasks {
+            self.tasks.insert(task.id.clone(), task);
+        }
+
+        // Load projects from storage
+        let projects = storage::ProjectRepository::list_projects(backend.as_mut())?;
+        for project in projects {
+            self.projects.insert(project.id.clone(), project);
+        }
+
+        self.storage = Some(backend);
+        self.data_path = Some(path);
+        self.refresh_visible_tasks();
+
+        Ok(self)
+    }
+
+    /// Save current state to storage
+    pub fn save(&mut self) -> anyhow::Result<()> {
+        if let Some(ref mut backend) = self.storage {
+            backend.flush()?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+
+    /// Sync a task change to storage
+    pub fn sync_task(&mut self, task: &Task) {
+        if let Some(ref mut backend) = self.storage {
+            // Try update first, if not found, create
+            if backend.update_task(task).is_err() {
+                let _ = backend.create_task(task);
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Delete a task from storage
+    pub fn delete_task_from_storage(&mut self, id: &TaskId) {
+        if let Some(ref mut backend) = self.storage {
+            let _ = backend.delete_task(id);
+            self.dirty = true;
         }
     }
 
@@ -75,6 +152,7 @@ impl Model {
             Task::new("Build task list UI")
                 .with_priority(Priority::Medium),
             Task::new("Add storage backends")
+                .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium),
             Task::new("Implement keybinding config")
                 .with_priority(Priority::Low),
@@ -146,6 +224,58 @@ impl Model {
     pub fn selected_task_mut(&mut self) -> Option<&mut Task> {
         let id = self.visible_tasks.get(self.selected_index)?.clone();
         self.tasks.get_mut(&id)
+    }
+
+    /// Check if storage is configured
+    pub fn has_storage(&self) -> bool {
+        self.storage.is_some()
+    }
+
+    /// Start time tracking for a task
+    pub fn start_time_tracking(&mut self, task_id: TaskId) {
+        // Stop any currently running timer
+        self.stop_time_tracking();
+
+        // Start new timer
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id.clone();
+        self.time_entries.insert(entry_id.clone(), entry);
+        self.active_time_entry = Some(entry_id);
+        self.dirty = true;
+    }
+
+    /// Stop the currently active time tracking
+    pub fn stop_time_tracking(&mut self) {
+        if let Some(ref entry_id) = self.active_time_entry.clone() {
+            if let Some(entry) = self.time_entries.get_mut(entry_id) {
+                entry.stop();
+                self.dirty = true;
+            }
+            self.active_time_entry = None;
+        }
+    }
+
+    /// Get the active time entry
+    pub fn active_time_entry(&self) -> Option<&TimeEntry> {
+        self.active_time_entry
+            .as_ref()
+            .and_then(|id| self.time_entries.get(id))
+    }
+
+    /// Check if time is being tracked for a specific task
+    pub fn is_tracking_task(&self, task_id: &TaskId) -> bool {
+        self.active_time_entry()
+            .map(|e| &e.task_id == task_id)
+            .unwrap_or(false)
+    }
+
+    /// Get total time tracked for a task
+    pub fn total_time_for_task(&self, task_id: &TaskId) -> u32 {
+        self.time_entries
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .map(|e| e.calculated_duration_minutes())
+            .sum()
     }
 }
 

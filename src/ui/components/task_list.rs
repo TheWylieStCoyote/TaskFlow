@@ -7,12 +7,14 @@ use ratatui::{
 };
 
 use crate::app::Model;
-use crate::domain::{Priority, Task, TaskStatus};
+use crate::domain::{Priority, Task, TaskId, TaskStatus};
 
 /// Task list widget
 pub struct TaskList<'a> {
     tasks: Vec<&'a Task>,
     selected: usize,
+    active_tracking: Option<&'a TaskId>,
+    time_for_tasks: Vec<u32>,
 }
 
 impl<'a> TaskList<'a> {
@@ -23,9 +25,19 @@ impl<'a> TaskList<'a> {
             .filter_map(|id| model.tasks.get(id))
             .collect();
 
+        let active_tracking = model.active_time_entry().map(|e| &e.task_id);
+
+        let time_for_tasks: Vec<u32> = model
+            .visible_tasks
+            .iter()
+            .map(|id| model.total_time_for_task(id))
+            .collect();
+
         Self {
             tasks,
             selected: model.selected_index,
+            active_tracking,
+            time_for_tasks,
         }
     }
 }
@@ -38,7 +50,9 @@ impl Widget for TaskList<'_> {
             .enumerate()
             .map(|(i, task)| {
                 let is_selected = i == self.selected;
-                task_to_list_item(task, is_selected)
+                let is_tracking = self.active_tracking.map_or(false, |id| id == &task.id);
+                let time_spent = self.time_for_tasks.get(i).copied().unwrap_or(0);
+                task_to_list_item(task, is_selected, is_tracking, time_spent)
             })
             .collect();
 
@@ -62,7 +76,7 @@ impl Widget for TaskList<'_> {
     }
 }
 
-fn task_to_list_item(task: &Task, is_selected: bool) -> ListItem<'static> {
+fn task_to_list_item(task: &Task, is_selected: bool, is_tracking: bool, time_spent: u32) -> ListItem<'static> {
     let status_style = match task.status {
         TaskStatus::Done => Style::default().fg(Color::Green),
         TaskStatus::InProgress => Style::default().fg(Color::Yellow),
@@ -77,6 +91,13 @@ fn task_to_list_item(task: &Task, is_selected: bool) -> ListItem<'static> {
         Priority::Medium => Span::styled("!!   ", Style::default().fg(Color::Yellow)),
         Priority::Low => Span::styled("!    ", Style::default().fg(Color::Green)),
         Priority::None => Span::raw("     "),
+    };
+
+    // Time tracking indicator
+    let tracking_span = if is_tracking {
+        Span::styled("● ", Style::default().fg(Color::Red).add_modifier(Modifier::SLOW_BLINK))
+    } else {
+        Span::raw("  ")
     };
 
     let status_span = Span::styled(
@@ -111,7 +132,21 @@ fn task_to_list_item(task: &Task, is_selected: bool) -> ListItem<'static> {
         Span::raw("")
     };
 
-    let line = Line::from(vec![priority_span, status_span, title_span, due_span]);
+    // Time spent indicator
+    let time_span = if time_spent > 0 {
+        let hours = time_spent / 60;
+        let mins = time_spent % 60;
+        let time_str = if hours > 0 {
+            format!(" ({}h {}m)", hours, mins)
+        } else {
+            format!(" ({}m)", mins)
+        };
+        Span::styled(time_str, Style::default().fg(Color::Cyan))
+    } else {
+        Span::raw("")
+    };
+
+    let line = Line::from(vec![tracking_span, priority_span, status_span, title_span, due_span, time_span]);
 
     ListItem::new(line)
 }

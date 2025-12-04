@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::app::Model;
 
-use super::components::{centered_rect, HelpPopup, TaskList};
+use super::components::{centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, Sidebar, TaskList};
 
 /// Main view function - renders the entire UI based on model state
 pub fn view(model: &Model, frame: &mut Frame) {
@@ -33,10 +33,32 @@ pub fn view(model: &Model, frame: &mut Frame) {
     // Render footer
     render_footer(model, frame, chunks[2]);
 
-    // Render help popup if visible
+    // Render popups
     if model.show_help {
         let popup_area = centered_rect(50, 70, area);
         frame.render_widget(HelpPopup::new(), popup_area);
+    }
+
+    // Render input dialog if in editing mode
+    if model.input_mode == InputMode::Editing {
+        let input_area = centered_rect(60, 3, area);
+        frame.render_widget(
+            InputDialog::new("New Task", &model.input_buffer, model.cursor_position),
+            input_area,
+        );
+    }
+
+    // Render delete confirmation dialog
+    if model.show_confirm_delete {
+        let confirm_area = centered_rect(40, 5, area);
+        let task_name = model
+            .selected_task()
+            .map(|t| t.title.as_str())
+            .unwrap_or("this task");
+        frame.render_widget(
+            ConfirmDialog::new("Delete Task", &format!("Delete \"{}\"?", task_name)),
+            confirm_area,
+        );
     }
 }
 
@@ -58,8 +80,27 @@ fn render_header(frame: &mut Frame, area: Rect) {
 }
 
 fn render_content(model: &Model, frame: &mut Frame, area: Rect) {
-    let task_list = TaskList::new(model);
-    frame.render_widget(task_list, area);
+    if model.show_sidebar {
+        // Split into sidebar and main content
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(25), // Sidebar
+                Constraint::Min(0),     // Main content
+            ])
+            .split(area);
+
+        // Render sidebar
+        frame.render_widget(Sidebar::new(model), chunks[0]);
+
+        // Render task list in main area
+        let task_list = TaskList::new(model);
+        frame.render_widget(task_list, chunks[1]);
+    } else {
+        // No sidebar, full width task list
+        let task_list = TaskList::new(model);
+        frame.render_widget(task_list, area);
+    }
 }
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect) {

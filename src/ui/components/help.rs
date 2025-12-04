@@ -61,18 +61,38 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![
+                Span::styled("a", Style::default().fg(Color::Cyan)),
+                Span::raw("       Add new task"),
+            ]),
+            Line::from(vec![
                 Span::styled("x/Space", Style::default().fg(Color::Cyan)),
                 Span::raw(" Toggle complete"),
             ]),
             Line::from(vec![
+                Span::styled("D", Style::default().fg(Color::Cyan)),
+                Span::raw("       Delete task"),
+            ]),
+            Line::from(vec![
+                Span::styled("t", Style::default().fg(Color::Cyan)),
+                Span::raw("       Toggle time tracking"),
+            ]),
+            Line::from(vec![
                 Span::styled("c", Style::default().fg(Color::Cyan)),
                 Span::raw("       Toggle show completed"),
+            ]),
+            Line::from(vec![
+                Span::styled("b", Style::default().fg(Color::Cyan)),
+                Span::raw("       Toggle sidebar"),
             ]),
             Line::from(""),
             Line::from(vec![
                 Span::styled("General", Style::default().add_modifier(Modifier::BOLD)),
             ]),
             Line::from(""),
+            Line::from(vec![
+                Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),
+                Span::raw("  Save"),
+            ]),
             Line::from(vec![
                 Span::styled("?", Style::default().fg(Color::Cyan)),
                 Span::raw("       Show/hide help"),

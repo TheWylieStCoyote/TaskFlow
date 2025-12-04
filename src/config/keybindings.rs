@@ -22,6 +22,9 @@ pub enum Action {
     CreateTask,
     DeleteTask,
 
+    // Time tracking
+    ToggleTimeTracking,
+
     // UI actions
     ToggleSidebar,
     ToggleShowCompleted,
@@ -106,6 +109,9 @@ impl Default for Keybindings {
         bindings.insert("space".to_string(), Action::ToggleComplete);
         bindings.insert("a".to_string(), Action::CreateTask);
         bindings.insert("d".to_string(), Action::DeleteTask);
+
+        // Time tracking
+        bindings.insert("t".to_string(), Action::ToggleTimeTracking);
 
         // UI actions
         bindings.insert("b".to_string(), Action::ToggleSidebar);
@@ -198,6 +204,7 @@ mod tests {
         assert_eq!(kb.get_action("space"), Some(&Action::ToggleComplete));
         assert_eq!(kb.get_action("a"), Some(&Action::CreateTask));
         assert_eq!(kb.get_action("d"), Some(&Action::DeleteTask));
+        assert_eq!(kb.get_action("t"), Some(&Action::ToggleTimeTracking));
     }
 
     #[test]

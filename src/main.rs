@@ -212,11 +212,6 @@ fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindin
         return action_to_message(action);
     }
 
-    // Time tracking (not in keybindings yet)
-    if key.code == KeyCode::Char('t') {
-        return Message::Time(TimeMessage::ToggleTracking);
-    }
-
     Message::None
 }
 
@@ -274,6 +269,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::ToggleComplete => Message::Task(TaskMessage::ToggleComplete),
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
+        Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
         Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),

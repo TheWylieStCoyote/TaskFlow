@@ -76,3 +76,89 @@ impl TimeEntry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_time_entry_start() {
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id.clone());
+
+        assert_eq!(entry.task_id, task_id);
+        assert!(entry.ended_at.is_none());
+        assert!(entry.duration_minutes.is_none());
+        assert!(entry.is_running());
+    }
+
+    #[test]
+    fn test_time_entry_stop() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+
+        entry.stop();
+
+        assert!(entry.ended_at.is_some());
+        assert!(entry.duration_minutes.is_some());
+        assert!(!entry.is_running());
+    }
+
+    #[test]
+    fn test_time_entry_is_running() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+
+        assert!(entry.is_running());
+
+        entry.stop();
+
+        assert!(!entry.is_running());
+    }
+
+    #[test]
+    fn test_time_entry_calculated_duration() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+
+        // Set explicit duration
+        entry.duration_minutes = Some(45);
+        assert_eq!(entry.calculated_duration_minutes(), 45);
+
+        // When duration_minutes is None but ended_at is set, it calculates
+        entry.duration_minutes = None;
+        entry.ended_at = Some(entry.started_at + chrono::Duration::minutes(30));
+        assert_eq!(entry.calculated_duration_minutes(), 30);
+    }
+
+    #[test]
+    fn test_time_entry_formatted_duration_hours() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+        entry.duration_minutes = Some(90); // 1h 30m
+
+        assert_eq!(entry.formatted_duration(), "1h 30m");
+    }
+
+    #[test]
+    fn test_time_entry_formatted_duration_minutes_only() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+        entry.duration_minutes = Some(45);
+
+        assert_eq!(entry.formatted_duration(), "45m");
+    }
+
+    #[test]
+    fn test_time_entry_duration_never_negative() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+
+        // Set ended_at before started_at (edge case)
+        entry.ended_at = Some(entry.started_at - chrono::Duration::minutes(10));
+        entry.duration_minutes = None;
+
+        // Should return 0, not negative
+        assert_eq!(entry.calculated_duration_minutes(), 0);
+    }
+}

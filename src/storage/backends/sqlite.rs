@@ -711,3 +711,305 @@ impl StorageBackend for SqliteBackend {
         "sqlite"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn create_test_backend() -> (tempfile::TempDir, SqliteBackend) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let mut backend = SqliteBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+        (dir, backend)
+    }
+
+    #[test]
+    fn test_sqlite_initialize_creates_tables() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let mut backend = SqliteBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+
+        let conn = backend.conn().unwrap();
+
+        // Check tables exist
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert!(tables.contains(&"tasks".to_string()));
+        assert!(tables.contains(&"projects".to_string()));
+        assert!(tables.contains(&"tags".to_string()));
+        assert!(tables.contains(&"time_entries".to_string()));
+    }
+
+    #[test]
+    fn test_sqlite_task_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create
+        let task = Task::new("Test task");
+        backend.create_task(&task).unwrap();
+
+        // Read
+        let retrieved = backend.get_task(&task.id).unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().title, "Test task");
+
+        // Update
+        let mut updated_task = task.clone();
+        updated_task.title = "Updated task".to_string();
+        backend.update_task(&updated_task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.title, "Updated task");
+
+        // Delete
+        backend.delete_task(&task.id).unwrap();
+        assert!(backend.get_task(&task.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_sqlite_uuid_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("UUID test");
+        let original_id = task.id.clone();
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&original_id).unwrap().unwrap();
+        assert_eq!(retrieved.id, original_id);
+    }
+
+    #[test]
+    fn test_sqlite_datetime_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("DateTime test");
+        let original_created = task.created_at;
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        // Compare timestamps at second precision (RFC3339 may lose subseconds)
+        assert_eq!(
+            retrieved.created_at.timestamp(),
+            original_created.timestamp()
+        );
+    }
+
+    #[test]
+    fn test_sqlite_enum_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Enum test")
+            .with_priority(Priority::Urgent)
+            .with_status(TaskStatus::InProgress);
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.priority, Priority::Urgent);
+        assert_eq!(retrieved.status, TaskStatus::InProgress);
+    }
+
+    #[test]
+    fn test_sqlite_json_fields_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("JSON test").with_tags(vec!["tag1".to_string(), "tag2".to_string()]);
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.tags.len(), 2);
+        assert!(retrieved.tags.contains(&"tag1".to_string()));
+        assert!(retrieved.tags.contains(&"tag2".to_string()));
+    }
+
+    #[test]
+    fn test_sqlite_null_optional_fields() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Null fields test");
+        // task has None for: description, project_id, parent_task_id, due_date, etc.
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert!(retrieved.description.is_none());
+        assert!(retrieved.project_id.is_none());
+        assert!(retrieved.due_date.is_none());
+        assert!(retrieved.completed_at.is_none());
+    }
+
+    #[test]
+    fn test_sqlite_project_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let project = Project::new("Test project");
+        backend.create_project(&project).unwrap();
+
+        let retrieved = backend.get_project(&project.id).unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "Test project");
+
+        backend.delete_project(&project.id).unwrap();
+        assert!(backend.get_project(&project.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_sqlite_tag_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let tag = Tag {
+            name: "test-tag".to_string(),
+            color: Some("#ff0000".to_string()),
+            description: Some("A test tag".to_string()),
+        };
+
+        backend.save_tag(&tag).unwrap();
+
+        let retrieved = backend.get_tag("test-tag").unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.color, Some("#ff0000".to_string()));
+        assert_eq!(retrieved.description, Some("A test tag".to_string()));
+
+        backend.delete_tag("test-tag").unwrap();
+        assert!(backend.get_tag("test-tag").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_sqlite_time_entry_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Task for time entry");
+        backend.create_task(&task).unwrap();
+
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        let retrieved = backend.get_time_entry(&entry.id).unwrap();
+        assert!(retrieved.is_some());
+        assert!(retrieved.unwrap().is_running());
+
+        backend.delete_time_entry(&entry.id).unwrap();
+        assert!(backend.get_time_entry(&entry.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_sqlite_get_tasks_by_project() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let project = Project::new("Test project");
+        backend.create_project(&project).unwrap();
+
+        let task1 = Task::new("Task 1").with_project(project.id.clone());
+        let task2 = Task::new("Task 2").with_project(project.id.clone());
+        let task3 = Task::new("Task 3"); // No project
+
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+
+        let project_tasks = backend.get_tasks_by_project(&project.id).unwrap();
+        assert_eq!(project_tasks.len(), 2);
+    }
+
+    #[test]
+    fn test_sqlite_get_active_entry() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Task");
+        backend.create_task(&task).unwrap();
+
+        // No active entry initially
+        assert!(backend.get_active_entry().unwrap().is_none());
+
+        // Start an entry
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        // Now there's an active entry
+        let active = backend.get_active_entry().unwrap();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().id, entry.id);
+    }
+
+    #[test]
+    fn test_sqlite_export_import_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create sample data
+        let task = Task::new("Test task").with_priority(Priority::High);
+        let project = Project::new("Test project");
+        let tag = Tag {
+            name: "important".to_string(),
+            color: Some("#ff0000".to_string()),
+            description: None,
+        };
+
+        backend.create_task(&task).unwrap();
+        backend.create_project(&project).unwrap();
+        backend.save_tag(&tag).unwrap();
+
+        // Export
+        let exported = backend.export_all().unwrap();
+
+        // Create new backend and import
+        let dir2 = tempdir().unwrap();
+        let path2 = dir2.path().join("import.db");
+        let mut backend2 = SqliteBackend::new(&path2).unwrap();
+        backend2.initialize().unwrap();
+        backend2.import_all(&exported).unwrap();
+
+        // Verify
+        assert_eq!(backend2.list_tasks().unwrap().len(), 1);
+        assert_eq!(backend2.list_projects().unwrap().len(), 1);
+        assert_eq!(backend2.list_tags().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_sqlite_backend_type() {
+        let (_dir, backend) = create_test_backend();
+        assert_eq!(backend.backend_type(), "sqlite");
+    }
+
+    #[test]
+    fn test_sqlite_update_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Non-existent");
+        let result = backend.update_task(&task);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sqlite_delete_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task_id = TaskId::new();
+        let result = backend.delete_task(&task_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sqlite_subprojects() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let parent = Project::new("Parent");
+        backend.create_project(&parent).unwrap();
+
+        let child1 = Project::new("Child 1").with_parent(parent.id.clone());
+        let child2 = Project::new("Child 2").with_parent(parent.id.clone());
+
+        backend.create_project(&child1).unwrap();
+        backend.create_project(&child2).unwrap();
+
+        let subprojects = backend.get_subprojects(&parent.id).unwrap();
+        assert_eq!(subprojects.len(), 2);
+    }
+}

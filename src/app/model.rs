@@ -284,3 +284,283 @@ impl Default for Model {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Priority, TaskStatus};
+
+    #[test]
+    fn test_model_new_defaults() {
+        let model = Model::new();
+
+        assert_eq!(model.running, RunningState::Running);
+        assert!(model.tasks.is_empty());
+        assert!(model.projects.is_empty());
+        assert!(model.time_entries.is_empty());
+        assert!(model.active_time_entry.is_none());
+        assert_eq!(model.selected_index, 0);
+        assert!(model.visible_tasks.is_empty());
+        assert!(!model.show_completed);
+        assert!(model.show_sidebar);
+        assert!(!model.show_help);
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert!(model.input_buffer.is_empty());
+        assert!(!model.dirty);
+    }
+
+    #[test]
+    fn test_model_with_sample_data() {
+        let model = Model::new().with_sample_data();
+
+        // Sample data creates 9 tasks
+        assert_eq!(model.tasks.len(), 9);
+        // Some are completed, so visible should be less
+        assert!(model.visible_tasks.len() < 9);
+    }
+
+    #[test]
+    fn test_model_refresh_visible_tasks_sorts_by_priority() {
+        let mut model = Model::new();
+
+        // Add tasks with different priorities
+        let urgent = Task::new("Urgent").with_priority(Priority::Urgent);
+        let low = Task::new("Low").with_priority(Priority::Low);
+        let high = Task::new("High").with_priority(Priority::High);
+
+        model.tasks.insert(low.id.clone(), low.clone());
+        model.tasks.insert(urgent.id.clone(), urgent.clone());
+        model.tasks.insert(high.id.clone(), high.clone());
+
+        model.refresh_visible_tasks();
+
+        // Order should be: Urgent, High, Low
+        assert_eq!(model.visible_tasks.len(), 3);
+        assert_eq!(model.visible_tasks[0], urgent.id);
+        assert_eq!(model.visible_tasks[1], high.id);
+        assert_eq!(model.visible_tasks[2], low.id);
+    }
+
+    #[test]
+    fn test_model_refresh_visible_tasks_hides_completed() {
+        let mut model = Model::new();
+        model.show_completed = false;
+
+        let todo = Task::new("Todo");
+        let done = Task::new("Done").with_status(TaskStatus::Done);
+        let cancelled = Task::new("Cancelled").with_status(TaskStatus::Cancelled);
+
+        model.tasks.insert(todo.id.clone(), todo);
+        model.tasks.insert(done.id.clone(), done);
+        model.tasks.insert(cancelled.id.clone(), cancelled);
+
+        model.refresh_visible_tasks();
+
+        // Only non-completed tasks should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_model_refresh_visible_tasks_shows_completed() {
+        let mut model = Model::new();
+        model.show_completed = true;
+
+        let todo = Task::new("Todo");
+        let done = Task::new("Done").with_status(TaskStatus::Done);
+        let cancelled = Task::new("Cancelled").with_status(TaskStatus::Cancelled);
+
+        model.tasks.insert(todo.id.clone(), todo);
+        model.tasks.insert(done.id.clone(), done);
+        model.tasks.insert(cancelled.id.clone(), cancelled);
+
+        model.refresh_visible_tasks();
+
+        // All tasks should be visible
+        assert_eq!(model.visible_tasks.len(), 3);
+    }
+
+    #[test]
+    fn test_model_selected_task_returns_correct() {
+        let mut model = Model::new();
+
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+
+        model.tasks.insert(task1.id.clone(), task1.clone());
+        model.tasks.insert(task2.id.clone(), task2.clone());
+        model.refresh_visible_tasks();
+
+        // Select first task
+        model.selected_index = 0;
+        let selected = model.selected_task().unwrap();
+        assert_eq!(selected.id, model.visible_tasks[0]);
+
+        // Select second task
+        model.selected_index = 1;
+        let selected = model.selected_task().unwrap();
+        assert_eq!(selected.id, model.visible_tasks[1]);
+    }
+
+    #[test]
+    fn test_model_selected_task_empty_list() {
+        let model = Model::new();
+
+        assert!(model.selected_task().is_none());
+    }
+
+    #[test]
+    fn test_model_selected_index_adjustment() {
+        let mut model = Model::new();
+
+        // Add 3 tasks
+        for i in 0..3 {
+            let task = Task::new(format!("Task {}", i));
+            model.tasks.insert(task.id.clone(), task);
+        }
+        model.refresh_visible_tasks();
+
+        // Select last item
+        model.selected_index = 2;
+
+        // Remove all tasks except one
+        let ids: Vec<_> = model.tasks.keys().skip(1).cloned().collect();
+        for id in ids {
+            model.tasks.remove(&id);
+        }
+
+        model.refresh_visible_tasks();
+
+        // Selection should be adjusted to valid range
+        assert!(model.selected_index < model.visible_tasks.len());
+    }
+
+    #[test]
+    fn test_model_start_time_tracking() {
+        let mut model = Model::new();
+
+        let task = Task::new("Task");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        model.start_time_tracking(task.id.clone());
+
+        assert!(model.active_time_entry.is_some());
+        assert!(model.time_entries.len() == 1);
+        assert!(model.dirty);
+
+        let entry = model.active_time_entry().unwrap();
+        assert_eq!(entry.task_id, task.id);
+        assert!(entry.is_running());
+    }
+
+    #[test]
+    fn test_model_stop_time_tracking() {
+        let mut model = Model::new();
+
+        let task = Task::new("Task");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        model.start_time_tracking(task.id.clone());
+        model.stop_time_tracking();
+
+        assert!(model.active_time_entry.is_none());
+
+        // Entry should still exist but be stopped
+        let entry = model.time_entries.values().next().unwrap();
+        assert!(!entry.is_running());
+    }
+
+    #[test]
+    fn test_model_start_stops_previous() {
+        let mut model = Model::new();
+
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        model.tasks.insert(task1.id.clone(), task1.clone());
+        model.tasks.insert(task2.id.clone(), task2.clone());
+
+        // Start tracking task1
+        model.start_time_tracking(task1.id.clone());
+        let first_entry_id = model.active_time_entry.clone().unwrap();
+
+        // Start tracking task2 (should stop task1)
+        model.start_time_tracking(task2.id.clone());
+
+        // Two entries total
+        assert_eq!(model.time_entries.len(), 2);
+
+        // First entry should be stopped
+        let first_entry = model.time_entries.get(&first_entry_id).unwrap();
+        assert!(!first_entry.is_running());
+
+        // Active entry should be for task2
+        let active = model.active_time_entry().unwrap();
+        assert_eq!(active.task_id, task2.id);
+    }
+
+    #[test]
+    fn test_model_is_tracking_task() {
+        let mut model = Model::new();
+
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        model.tasks.insert(task1.id.clone(), task1.clone());
+        model.tasks.insert(task2.id.clone(), task2.clone());
+
+        // Not tracking anything initially
+        assert!(!model.is_tracking_task(&task1.id));
+        assert!(!model.is_tracking_task(&task2.id));
+
+        // Start tracking task1
+        model.start_time_tracking(task1.id.clone());
+
+        assert!(model.is_tracking_task(&task1.id));
+        assert!(!model.is_tracking_task(&task2.id));
+    }
+
+    #[test]
+    fn test_model_total_time_for_task() {
+        let mut model = Model::new();
+
+        let task = Task::new("Task");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        // Add multiple completed time entries
+        let mut entry1 = TimeEntry::start(task.id.clone());
+        entry1.duration_minutes = Some(30);
+        entry1.ended_at = Some(chrono::Utc::now());
+
+        let mut entry2 = TimeEntry::start(task.id.clone());
+        entry2.duration_minutes = Some(45);
+        entry2.ended_at = Some(chrono::Utc::now());
+
+        model.time_entries.insert(entry1.id.clone(), entry1);
+        model.time_entries.insert(entry2.id.clone(), entry2);
+
+        let total = model.total_time_for_task(&task.id);
+        assert_eq!(total, 75); // 30 + 45
+    }
+
+    #[test]
+    fn test_model_dirty_flag() {
+        let mut model = Model::new();
+        assert!(!model.dirty);
+
+        let task = Task::new("Task");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        model.start_time_tracking(task.id.clone());
+        assert!(model.dirty);
+    }
+
+    #[test]
+    fn test_model_has_storage() {
+        let model = Model::new();
+        assert!(!model.has_storage());
+    }
+
+    #[test]
+    fn test_running_state_default() {
+        let state = RunningState::default();
+        assert_eq!(state, RunningState::Running);
+    }
+}

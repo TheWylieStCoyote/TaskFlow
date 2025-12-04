@@ -221,3 +221,149 @@ impl Task {
         self.updated_at = Utc::now();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_task_new_creates_unique_id() {
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        assert_ne!(task1.id, task2.id);
+    }
+
+    #[test]
+    fn test_task_new_sets_defaults() {
+        let task = Task::new("Test task");
+        assert_eq!(task.title, "Test task");
+        assert_eq!(task.status, TaskStatus::Todo);
+        assert_eq!(task.priority, Priority::None);
+        assert!(task.description.is_none());
+        assert!(task.due_date.is_none());
+        assert!(task.completed_at.is_none());
+        assert!(task.tags.is_empty());
+    }
+
+    #[test]
+    fn test_task_with_priority() {
+        let task = Task::new("Test").with_priority(Priority::High);
+        assert_eq!(task.priority, Priority::High);
+    }
+
+    #[test]
+    fn test_task_with_status_sets_completion() {
+        let task = Task::new("Test").with_status(TaskStatus::Done);
+        assert_eq!(task.status, TaskStatus::Done);
+        assert!(task.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_task_with_due_date() {
+        let date = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+        let task = Task::new("Test").with_due_date(date);
+        assert_eq!(task.due_date, Some(date));
+    }
+
+    #[test]
+    fn test_task_toggle_complete_todo_to_done() {
+        let mut task = Task::new("Test");
+        assert_eq!(task.status, TaskStatus::Todo);
+        assert!(task.completed_at.is_none());
+
+        task.toggle_complete();
+
+        assert_eq!(task.status, TaskStatus::Done);
+        assert!(task.completed_at.is_some());
+    }
+
+    #[test]
+    fn test_task_toggle_complete_done_to_todo() {
+        let mut task = Task::new("Test").with_status(TaskStatus::Done);
+        assert_eq!(task.status, TaskStatus::Done);
+        assert!(task.completed_at.is_some());
+
+        task.toggle_complete();
+
+        assert_eq!(task.status, TaskStatus::Todo);
+        assert!(task.completed_at.is_none());
+    }
+
+    #[test]
+    fn test_task_is_overdue_no_due_date() {
+        let task = Task::new("Test");
+        assert!(!task.is_overdue());
+    }
+
+    #[test]
+    fn test_task_is_overdue_past_date() {
+        let past_date = NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
+        let task = Task::new("Test").with_due_date(past_date);
+        assert!(task.is_overdue());
+    }
+
+    #[test]
+    fn test_task_is_overdue_completed() {
+        let past_date = NaiveDate::from_ymd_opt(2020, 1, 1).unwrap();
+        let task = Task::new("Test")
+            .with_due_date(past_date)
+            .with_status(TaskStatus::Done);
+        assert!(!task.is_overdue());
+    }
+
+    #[test]
+    fn test_task_is_due_today() {
+        let today = Utc::now().date_naive();
+        let task = Task::new("Test").with_due_date(today);
+        assert!(task.is_due_today());
+
+        let yesterday = today - chrono::Duration::days(1);
+        let task2 = Task::new("Test").with_due_date(yesterday);
+        assert!(!task2.is_due_today());
+    }
+
+    #[test]
+    fn test_priority_as_str() {
+        assert_eq!(Priority::None.as_str(), "none");
+        assert_eq!(Priority::Low.as_str(), "low");
+        assert_eq!(Priority::Medium.as_str(), "medium");
+        assert_eq!(Priority::High.as_str(), "high");
+        assert_eq!(Priority::Urgent.as_str(), "urgent");
+    }
+
+    #[test]
+    fn test_priority_symbol() {
+        assert_eq!(Priority::None.symbol(), " ");
+        assert_eq!(Priority::Low.symbol(), "!");
+        assert_eq!(Priority::Medium.symbol(), "!!");
+        assert_eq!(Priority::High.symbol(), "!!!");
+        assert_eq!(Priority::Urgent.symbol(), "!!!!");
+    }
+
+    #[test]
+    fn test_task_status_as_str() {
+        assert_eq!(TaskStatus::Todo.as_str(), "todo");
+        assert_eq!(TaskStatus::InProgress.as_str(), "in_progress");
+        assert_eq!(TaskStatus::Blocked.as_str(), "blocked");
+        assert_eq!(TaskStatus::Done.as_str(), "done");
+        assert_eq!(TaskStatus::Cancelled.as_str(), "cancelled");
+    }
+
+    #[test]
+    fn test_task_status_symbol() {
+        assert_eq!(TaskStatus::Todo.symbol(), "[ ]");
+        assert_eq!(TaskStatus::InProgress.symbol(), "[~]");
+        assert_eq!(TaskStatus::Blocked.symbol(), "[!]");
+        assert_eq!(TaskStatus::Done.symbol(), "[x]");
+        assert_eq!(TaskStatus::Cancelled.symbol(), "[-]");
+    }
+
+    #[test]
+    fn test_task_status_is_complete() {
+        assert!(!TaskStatus::Todo.is_complete());
+        assert!(!TaskStatus::InProgress.is_complete());
+        assert!(!TaskStatus::Blocked.is_complete());
+        assert!(TaskStatus::Done.is_complete());
+        assert!(TaskStatus::Cancelled.is_complete());
+    }
+}

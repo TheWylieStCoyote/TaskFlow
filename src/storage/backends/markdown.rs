@@ -548,3 +548,282 @@ impl StorageBackend for MarkdownBackend {
         "markdown"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::Priority;
+    use tempfile::tempdir;
+
+    fn create_test_backend() -> (tempfile::TempDir, MarkdownBackend) {
+        let dir = tempdir().unwrap();
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        backend.initialize().unwrap();
+        (dir, backend)
+    }
+
+    #[test]
+    fn test_markdown_ensure_dirs() {
+        let dir = tempdir().unwrap();
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        backend.initialize().unwrap();
+
+        assert!(dir.path().join("tasks").exists());
+        assert!(dir.path().join("projects").exists());
+    }
+
+    #[test]
+    fn test_markdown_write_task_file() {
+        let (dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Test task");
+        backend.create_task(&task).unwrap();
+
+        let file_path = dir.path().join("tasks").join(format!("{}.md", task.id.0));
+        assert!(file_path.exists());
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert!(content.starts_with("---\n"));
+        assert!(content.contains("title: Test task"));
+    }
+
+    #[test]
+    fn test_markdown_parse_frontmatter() {
+        let (_dir, backend) = create_test_backend();
+
+        let content = "---\ntitle: Test\nstatus: todo\n---\n\nDescription here.";
+        let (frontmatter, body) = backend.parse_frontmatter(content).unwrap();
+
+        assert!(frontmatter.contains("title: Test"));
+        assert!(body.contains("Description here"));
+    }
+
+    #[test]
+    fn test_markdown_task_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create
+        let task = Task::new("Test task");
+        backend.create_task(&task).unwrap();
+
+        // Read
+        let retrieved = backend.get_task(&task.id).unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().title, "Test task");
+
+        // Update
+        let mut updated_task = task.clone();
+        updated_task.title = "Updated task".to_string();
+        backend.update_task(&updated_task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.title, "Updated task");
+
+        // Delete
+        backend.delete_task(&task.id).unwrap();
+        assert!(backend.get_task(&task.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_markdown_project_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let project = Project::new("Test project");
+        backend.create_project(&project).unwrap();
+
+        let retrieved = backend.get_project(&project.id).unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "Test project");
+
+        backend.delete_project(&project.id).unwrap();
+        assert!(backend.get_project(&project.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_markdown_tags_yaml() {
+        let (dir, mut backend) = create_test_backend();
+
+        let tag = Tag {
+            name: "test-tag".to_string(),
+            color: Some("#ff0000".to_string()),
+            description: None,
+        };
+
+        backend.save_tag(&tag).unwrap();
+
+        // Verify tags.yaml exists
+        let tags_file = dir.path().join("tags.yaml");
+        assert!(tags_file.exists());
+
+        let content = fs::read_to_string(&tags_file).unwrap();
+        assert!(content.contains("test-tag"));
+
+        // Retrieve
+        let retrieved = backend.get_tag("test-tag").unwrap();
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn test_markdown_time_entries_yaml() {
+        let (dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Task");
+        backend.create_task(&task).unwrap();
+
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        // Verify time_entries.yaml exists
+        let entries_file = dir.path().join("time_entries.yaml");
+        assert!(entries_file.exists());
+
+        let content = fs::read_to_string(&entries_file).unwrap();
+        assert!(content.contains(&task.id.0.to_string()));
+    }
+
+    #[test]
+    fn test_markdown_description_in_body() {
+        let (dir, mut backend) = create_test_backend();
+
+        let mut task = Task::new("Task with description");
+        task.description = Some("This is the description\nwith multiple lines.".to_string());
+        backend.create_task(&task).unwrap();
+
+        // Read file directly
+        let file_path = dir.path().join("tasks").join(format!("{}.md", task.id.0));
+        let content = fs::read_to_string(&file_path).unwrap();
+
+        // Description should be in body, not frontmatter
+        assert!(content.contains("This is the description"));
+        // After the closing ---
+        let parts: Vec<&str> = content.split("---").collect();
+        assert!(parts.len() >= 3); // Start ---, frontmatter, closing ---
+        assert!(parts[2].contains("This is the description"));
+    }
+
+    #[test]
+    fn test_markdown_missing_frontmatter_error() {
+        let (_dir, backend) = create_test_backend();
+
+        let content = "Just some text without frontmatter";
+        let result = backend.parse_frontmatter(content);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_markdown_persistence() {
+        let dir = tempdir().unwrap();
+
+        // Create and save
+        {
+            let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+            backend.initialize().unwrap();
+
+            let task = Task::new("Persistent task");
+            backend.create_task(&task).unwrap();
+            backend.flush().unwrap();
+        }
+
+        // Load and verify
+        {
+            let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+            backend.initialize().unwrap();
+
+            let tasks = backend.list_tasks().unwrap();
+            assert_eq!(tasks.len(), 1);
+            assert_eq!(tasks[0].title, "Persistent task");
+        }
+    }
+
+    #[test]
+    fn test_markdown_export_import_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create sample data
+        let task = Task::new("Test task").with_priority(Priority::High);
+        let project = Project::new("Test project");
+        let tag = Tag {
+            name: "important".to_string(),
+            color: Some("#ff0000".to_string()),
+            description: None,
+        };
+
+        backend.create_task(&task).unwrap();
+        backend.create_project(&project).unwrap();
+        backend.save_tag(&tag).unwrap();
+
+        // Export
+        let exported = backend.export_all().unwrap();
+
+        // Create new backend and import
+        let dir2 = tempdir().unwrap();
+        let mut backend2 = MarkdownBackend::new(dir2.path()).unwrap();
+        backend2.initialize().unwrap();
+        backend2.import_all(&exported).unwrap();
+
+        // Verify
+        assert_eq!(backend2.list_tasks().unwrap().len(), 1);
+        assert_eq!(backend2.list_projects().unwrap().len(), 1);
+        assert_eq!(backend2.list_tags().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_markdown_backend_type() {
+        let (_dir, backend) = create_test_backend();
+        assert_eq!(backend.backend_type(), "markdown");
+    }
+
+    #[test]
+    fn test_markdown_get_active_entry() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Task");
+        backend.create_task(&task).unwrap();
+
+        // No active entry initially
+        assert!(backend.get_active_entry().unwrap().is_none());
+
+        // Start an entry
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        // Now there's an active entry
+        let active = backend.get_active_entry().unwrap();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().id, entry.id);
+    }
+
+    #[test]
+    fn test_markdown_create_task_duplicate_id_fails() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Original");
+        backend.create_task(&task).unwrap();
+
+        let duplicate = Task {
+            id: task.id.clone(),
+            ..Task::new("Duplicate")
+        };
+
+        let result = backend.create_task(&duplicate);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_markdown_update_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Non-existent");
+        let result = backend.update_task(&task);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_markdown_delete_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task_id = TaskId::new();
+        let result = backend.delete_task(&task_id);
+        assert!(result.is_err());
+    }
+}

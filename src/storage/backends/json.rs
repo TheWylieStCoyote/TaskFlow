@@ -360,14 +360,20 @@ impl StorageBackend for JsonBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{Priority, TagFilterMode, TaskStatus};
     use tempfile::tempdir;
 
-    #[test]
-    fn test_create_and_get_task() {
+    fn create_test_backend() -> (tempfile::TempDir, JsonBackend) {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test.json");
         let mut backend = JsonBackend::new(&path).unwrap();
         backend.initialize().unwrap();
+        (dir, backend)
+    }
+
+    #[test]
+    fn test_create_and_get_task() {
+        let (_dir, mut backend) = create_test_backend();
 
         let task = Task::new("Test task");
         backend.create_task(&task).unwrap();
@@ -399,5 +405,352 @@ mod tests {
             assert_eq!(tasks.len(), 1);
             assert_eq!(tasks[0].title, "Persistent task");
         }
+    }
+
+    #[test]
+    fn test_create_task_duplicate_id_fails() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Original");
+        backend.create_task(&task).unwrap();
+
+        // Try to create another task with the same ID
+        let mut duplicate = Task::new("Duplicate");
+        duplicate.id = task.id.clone();
+
+        let result = backend.create_task(&duplicate);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Non-existent");
+        let result = backend.update_task(&task);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delete_task_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task_id = TaskId::new();
+        let result = backend.delete_task(&task_id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_tasks_empty() {
+        let (_dir, backend) = create_test_backend();
+
+        let tasks = backend.list_tasks().unwrap();
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn test_list_tasks_filtered_by_status() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Todo task");
+        let task2 = Task::new("Done task").with_status(TaskStatus::Done);
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let mut filter = Filter::default();
+        filter.status = Some(vec![TaskStatus::Todo]);
+        filter.include_completed = true;
+
+        let tasks = backend.list_tasks_filtered(&filter).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Todo task");
+    }
+
+    #[test]
+    fn test_list_tasks_filtered_by_priority() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("High priority").with_priority(Priority::High);
+        let task2 = Task::new("Low priority").with_priority(Priority::Low);
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let mut filter = Filter::default();
+        filter.priority = Some(vec![Priority::High]);
+
+        let tasks = backend.list_tasks_filtered(&filter).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "High priority");
+    }
+
+    #[test]
+    fn test_list_tasks_filtered_by_tags_any() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Task with rust").with_tags(vec!["rust".to_string()]);
+        let task2 = Task::new("Task with python").with_tags(vec!["python".to_string()]);
+        let task3 = Task::new("Task with both").with_tags(vec!["rust".to_string(), "python".to_string()]);
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+
+        let mut filter = Filter::default();
+        filter.tags = Some(vec!["rust".to_string()]);
+        filter.tags_mode = TagFilterMode::Any;
+
+        let tasks = backend.list_tasks_filtered(&filter).unwrap();
+        assert_eq!(tasks.len(), 2);
+    }
+
+    #[test]
+    fn test_list_tasks_filtered_by_tags_all() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Task with rust").with_tags(vec!["rust".to_string()]);
+        let task2 = Task::new("Task with both").with_tags(vec!["rust".to_string(), "important".to_string()]);
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let mut filter = Filter::default();
+        filter.tags = Some(vec!["rust".to_string(), "important".to_string()]);
+        filter.tags_mode = TagFilterMode::All;
+
+        let tasks = backend.list_tasks_filtered(&filter).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Task with both");
+    }
+
+    #[test]
+    fn test_get_tasks_by_project() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let project = Project::new("Test project");
+        backend.create_project(&project).unwrap();
+
+        let task1 = Task::new("In project").with_project(project.id.clone());
+        let task2 = Task::new("Not in project");
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let tasks = backend.get_tasks_by_project(&project.id).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "In project");
+    }
+
+    #[test]
+    fn test_get_tasks_by_tag() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Tagged").with_tags(vec!["important".to_string()]);
+        let task2 = Task::new("Not tagged");
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let tasks = backend.get_tasks_by_tag("important").unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Tagged");
+    }
+
+    #[test]
+    fn test_project_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create
+        let project = Project::new("Test project");
+        backend.create_project(&project).unwrap();
+
+        // Read
+        let retrieved = backend.get_project(&project.id).unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "Test project");
+
+        // Update
+        let mut updated = project.clone();
+        updated.name = "Updated project".to_string();
+        backend.update_project(&updated).unwrap();
+
+        let retrieved = backend.get_project(&project.id).unwrap().unwrap();
+        assert_eq!(retrieved.name, "Updated project");
+
+        // Delete
+        backend.delete_project(&project.id).unwrap();
+        let retrieved = backend.get_project(&project.id).unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[test]
+    fn test_tag_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create (save_tag is upsert)
+        let tag = Tag::new("rust");
+        backend.save_tag(&tag).unwrap();
+
+        // Read
+        let retrieved = backend.get_tag("rust").unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "rust");
+
+        // Update (upsert with same name)
+        let mut updated = tag.clone();
+        updated.color = Some("#ff0000".to_string());
+        backend.save_tag(&updated).unwrap();
+
+        let retrieved = backend.get_tag("rust").unwrap().unwrap();
+        assert_eq!(retrieved.color, Some("#ff0000".to_string()));
+
+        // Delete
+        backend.delete_tag("rust").unwrap();
+        let retrieved = backend.get_tag("rust").unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[test]
+    fn test_time_entry_crud() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Test task");
+        backend.create_task(&task).unwrap();
+
+        // Create
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        // Read
+        let retrieved = backend.get_time_entry(&entry.id).unwrap();
+        assert!(retrieved.is_some());
+
+        // Update
+        let mut updated = entry.clone();
+        updated.stop();
+        backend.update_time_entry(&updated).unwrap();
+
+        let retrieved = backend.get_time_entry(&entry.id).unwrap().unwrap();
+        assert!(retrieved.ended_at.is_some());
+
+        // Delete
+        backend.delete_time_entry(&entry.id).unwrap();
+        let retrieved = backend.get_time_entry(&entry.id).unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[test]
+    fn test_get_active_entry() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Test task");
+        backend.create_task(&task).unwrap();
+
+        // No active entry initially
+        let active = backend.get_active_entry().unwrap();
+        assert!(active.is_none());
+
+        // Create running entry
+        let entry = TimeEntry::start(task.id.clone());
+        backend.create_time_entry(&entry).unwrap();
+
+        let active = backend.get_active_entry().unwrap();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().id, entry.id);
+
+        // Stop entry
+        let mut stopped = entry.clone();
+        stopped.stop();
+        backend.update_time_entry(&stopped).unwrap();
+
+        let active = backend.get_active_entry().unwrap();
+        assert!(active.is_none());
+    }
+
+    #[test]
+    fn test_get_entries_for_task() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+
+        let mut entry1 = TimeEntry::start(task1.id.clone());
+        entry1.stop();
+        let mut entry2 = TimeEntry::start(task1.id.clone());
+        entry2.stop();
+        let mut entry3 = TimeEntry::start(task2.id.clone());
+        entry3.stop();
+
+        backend.create_time_entry(&entry1).unwrap();
+        backend.create_time_entry(&entry2).unwrap();
+        backend.create_time_entry(&entry3).unwrap();
+
+        let entries = backend.get_entries_for_task(&task1.id).unwrap();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn test_export_import_roundtrip() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create some data
+        let task = Task::new("Test task");
+        let project = Project::new("Test project");
+        let tag = Tag::new("test");
+        backend.create_task(&task).unwrap();
+        backend.create_project(&project).unwrap();
+        backend.save_tag(&tag).unwrap();
+
+        // Export
+        let exported = backend.export_all().unwrap();
+        assert_eq!(exported.tasks.len(), 1);
+        assert_eq!(exported.projects.len(), 1);
+        assert_eq!(exported.tags.len(), 1);
+
+        // Create new backend and import
+        let dir2 = tempdir().unwrap();
+        let path2 = dir2.path().join("test2.json");
+        let mut backend2 = JsonBackend::new(&path2).unwrap();
+        backend2.initialize().unwrap();
+
+        backend2.import_all(&exported).unwrap();
+
+        assert_eq!(backend2.list_tasks().unwrap().len(), 1);
+        assert_eq!(backend2.list_projects().unwrap().len(), 1);
+        assert_eq!(backend2.list_tags().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_flush_creates_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("new_file.json");
+
+        assert!(!path.exists());
+
+        let mut backend = JsonBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+        let task = Task::new("Test");
+        backend.create_task(&task).unwrap();
+        backend.flush().unwrap();
+
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_initialize_loads_existing() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+
+        // Create file manually with some data
+        let data = ExportData {
+            tasks: vec![Task::new("Pre-existing task")],
+            ..Default::default()
+        };
+        std::fs::write(&path, serde_json::to_string(&data).unwrap()).unwrap();
+
+        // Initialize should load existing data
+        let mut backend = JsonBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+
+        let tasks = backend.list_tasks().unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "Pre-existing task");
     }
 }

@@ -156,3 +156,113 @@ impl Keybindings {
         self.bindings.get(key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_keybinding_new() {
+        let kb = KeyBinding::new("j");
+        assert_eq!(kb.key, "j");
+        assert_eq!(kb.modifier, Modifier::None);
+    }
+
+    #[test]
+    fn test_keybinding_with_ctrl() {
+        let kb = KeyBinding::with_ctrl("s");
+        assert_eq!(kb.key, "s");
+        assert_eq!(kb.modifier, Modifier::Ctrl);
+    }
+
+    #[test]
+    fn test_keybinding_with_shift() {
+        let kb = KeyBinding::with_shift("G");
+        assert_eq!(kb.key, "G");
+        assert_eq!(kb.modifier, Modifier::Shift);
+    }
+
+    #[test]
+    fn test_keybindings_default_navigation() {
+        let kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("k"), Some(&Action::MoveUp));
+        assert_eq!(kb.get_action("up"), Some(&Action::MoveUp));
+        assert_eq!(kb.get_action("down"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("g"), Some(&Action::MoveFirst));
+        assert_eq!(kb.get_action("G"), Some(&Action::MoveLast));
+    }
+
+    #[test]
+    fn test_keybindings_default_tasks() {
+        let kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("x"), Some(&Action::ToggleComplete));
+        assert_eq!(kb.get_action("space"), Some(&Action::ToggleComplete));
+        assert_eq!(kb.get_action("a"), Some(&Action::CreateTask));
+        assert_eq!(kb.get_action("d"), Some(&Action::DeleteTask));
+    }
+
+    #[test]
+    fn test_keybindings_default_system() {
+        let kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("q"), Some(&Action::Quit));
+        assert_eq!(kb.get_action("esc"), Some(&Action::Quit));
+        assert_eq!(kb.get_action("ctrl+s"), Some(&Action::Save));
+    }
+
+    #[test]
+    fn test_keybindings_get_action() {
+        let kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("?"), Some(&Action::ShowHelp));
+    }
+
+    #[test]
+    fn test_keybindings_get_action_unknown() {
+        let kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("unknown_key"), None);
+    }
+
+    #[test]
+    fn test_keybindings_load_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("nonexistent.toml");
+
+        let kb = Keybindings::load_from_path(path);
+
+        // Should return defaults
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+    }
+
+    #[test]
+    fn test_keybindings_load_custom() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("keybindings.toml");
+
+        let content = r#"
+[bindings]
+j = "move_down"
+k = "move_up"
+z = "quit"
+"#;
+        std::fs::write(&path, content).unwrap();
+
+        let kb = Keybindings::load_from_path(path);
+
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("k"), Some(&Action::MoveUp));
+        assert_eq!(kb.get_action("z"), Some(&Action::Quit));
+    }
+
+    #[test]
+    fn test_modifier_default() {
+        let modifier = Modifier::default();
+        assert_eq!(modifier, Modifier::None);
+    }
+}

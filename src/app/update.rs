@@ -239,3 +239,386 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Priority, Task, TaskStatus};
+
+    fn create_test_model_with_tasks() -> Model {
+        let mut model = Model::new();
+
+        for i in 0..5 {
+            let task = Task::new(format!("Task {}", i));
+            model.tasks.insert(task.id.clone(), task);
+        }
+        model.refresh_visible_tasks();
+        model
+    }
+
+    // Navigation tests
+    #[test]
+    fn test_navigation_up() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 2;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+
+        assert_eq!(model.selected_index, 1);
+    }
+
+    #[test]
+    fn test_navigation_up_stops_at_zero() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 0;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+
+        assert_eq!(model.selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigation_down() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 2;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+
+        assert_eq!(model.selected_index, 3);
+    }
+
+    #[test]
+    fn test_navigation_down_stops_at_max() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 4;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+
+        assert_eq!(model.selected_index, 4);
+    }
+
+    #[test]
+    fn test_navigation_first() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 3;
+
+        update(&mut model, Message::Navigation(NavigationMessage::First));
+
+        assert_eq!(model.selected_index, 0);
+    }
+
+    #[test]
+    fn test_navigation_last() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 0;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Last));
+
+        assert_eq!(model.selected_index, 4);
+    }
+
+    #[test]
+    fn test_navigation_page_up() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 4;
+
+        update(&mut model, Message::Navigation(NavigationMessage::PageUp));
+
+        assert_eq!(model.selected_index, 0); // saturating_sub from 4 - 10
+    }
+
+    #[test]
+    fn test_navigation_page_down() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 0;
+
+        update(&mut model, Message::Navigation(NavigationMessage::PageDown));
+
+        assert_eq!(model.selected_index, 4); // capped at max
+    }
+
+    #[test]
+    fn test_navigation_select() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 0;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Select(3)));
+
+        assert_eq!(model.selected_index, 3);
+    }
+
+    #[test]
+    fn test_navigation_select_invalid_ignored() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 2;
+
+        update(&mut model, Message::Navigation(NavigationMessage::Select(100)));
+
+        assert_eq!(model.selected_index, 2); // unchanged
+    }
+
+    #[test]
+    fn test_navigation_go_to_view() {
+        let mut model = create_test_model_with_tasks();
+        model.selected_index = 3;
+        model.current_view = super::super::ViewId::TaskList;
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::GoToView(super::super::ViewId::Today)),
+        );
+
+        assert_eq!(model.current_view, super::super::ViewId::Today);
+        assert_eq!(model.selected_index, 0); // reset to 0
+    }
+
+    // Task tests
+    #[test]
+    fn test_task_toggle_complete() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Task should be Todo initially
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
+
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
+    }
+
+    #[test]
+    fn test_task_set_status() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        update(
+            &mut model,
+            Message::Task(TaskMessage::SetStatus(task_id.clone(), TaskStatus::InProgress)),
+        );
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().status,
+            TaskStatus::InProgress
+        );
+    }
+
+    #[test]
+    fn test_task_set_priority() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        update(
+            &mut model,
+            Message::Task(TaskMessage::SetPriority(task_id.clone(), Priority::Urgent)),
+        );
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().priority,
+            Priority::Urgent
+        );
+    }
+
+    #[test]
+    fn test_task_create() {
+        let mut model = Model::new();
+        assert!(model.tasks.is_empty());
+
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("New task".to_string())),
+        );
+
+        assert_eq!(model.tasks.len(), 1);
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "New task");
+    }
+
+    #[test]
+    fn test_task_delete() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let initial_count = model.tasks.len();
+
+        update(&mut model, Message::Task(TaskMessage::Delete(task_id.clone())));
+
+        assert_eq!(model.tasks.len(), initial_count - 1);
+        assert!(model.tasks.get(&task_id).is_none());
+    }
+
+    // Time tests
+    #[test]
+    fn test_time_toggle_tracking_start() {
+        let mut model = create_test_model_with_tasks();
+        assert!(model.active_time_entry.is_none());
+
+        update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+
+        assert!(model.active_time_entry.is_some());
+    }
+
+    #[test]
+    fn test_time_toggle_tracking_stop() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        model.start_time_tracking(task_id);
+
+        update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+
+        assert!(model.active_time_entry.is_none());
+    }
+
+    // UI tests
+    #[test]
+    fn test_ui_toggle_show_completed() {
+        let mut model = Model::new();
+        assert!(!model.show_completed);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleShowCompleted));
+
+        assert!(model.show_completed);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleShowCompleted));
+
+        assert!(!model.show_completed);
+    }
+
+    #[test]
+    fn test_ui_toggle_sidebar() {
+        let mut model = Model::new();
+        assert!(model.show_sidebar);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleSidebar));
+
+        assert!(!model.show_sidebar);
+    }
+
+    #[test]
+    fn test_ui_input_char() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+
+        update(&mut model, Message::Ui(UiMessage::InputChar('H')));
+        update(&mut model, Message::Ui(UiMessage::InputChar('i')));
+
+        assert_eq!(model.input_buffer, "Hi");
+        assert_eq!(model.cursor_position, 2);
+    }
+
+    #[test]
+    fn test_ui_input_backspace() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "Hello".to_string();
+        model.cursor_position = 5;
+
+        update(&mut model, Message::Ui(UiMessage::InputBackspace));
+
+        assert_eq!(model.input_buffer, "Hell");
+        assert_eq!(model.cursor_position, 4);
+    }
+
+    #[test]
+    fn test_ui_input_cursor_movement() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "Hello".to_string();
+        model.cursor_position = 3;
+
+        update(&mut model, Message::Ui(UiMessage::InputCursorLeft));
+        assert_eq!(model.cursor_position, 2);
+
+        update(&mut model, Message::Ui(UiMessage::InputCursorRight));
+        assert_eq!(model.cursor_position, 3);
+
+        update(&mut model, Message::Ui(UiMessage::InputCursorStart));
+        assert_eq!(model.cursor_position, 0);
+
+        update(&mut model, Message::Ui(UiMessage::InputCursorEnd));
+        assert_eq!(model.cursor_position, 5);
+    }
+
+    #[test]
+    fn test_ui_submit_input_creates_task() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "New task from input".to_string();
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert!(model.input_buffer.is_empty());
+        assert_eq!(model.tasks.len(), 1);
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "New task from input");
+    }
+
+    #[test]
+    fn test_ui_submit_input_empty_ignored() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "   ".to_string(); // whitespace only
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert!(model.tasks.is_empty()); // no task created
+    }
+
+    #[test]
+    fn test_ui_cancel_input() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "Some text".to_string();
+        model.cursor_position = 5;
+
+        update(&mut model, Message::Ui(UiMessage::CancelInput));
+
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert!(model.input_buffer.is_empty());
+        assert_eq!(model.cursor_position, 0);
+    }
+
+    // System tests
+    #[test]
+    fn test_system_quit_stops_timer() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        model.start_time_tracking(task_id);
+
+        assert!(model.active_time_entry.is_some());
+
+        update(&mut model, Message::System(SystemMessage::Quit));
+
+        assert!(model.active_time_entry.is_none());
+        assert_eq!(model.running, RunningState::Quitting);
+    }
+
+    #[test]
+    fn test_system_resize() {
+        let mut model = Model::new();
+
+        update(
+            &mut model,
+            Message::System(SystemMessage::Resize {
+                width: 120,
+                height: 40,
+            }),
+        );
+
+        assert_eq!(model.terminal_size, (120, 40));
+    }
+
+    #[test]
+    fn test_show_help() {
+        let mut model = Model::new();
+        assert!(!model.show_help);
+
+        update(&mut model, Message::Ui(UiMessage::ShowHelp));
+
+        assert!(model.show_help);
+
+        update(&mut model, Message::Ui(UiMessage::HideHelp));
+
+        assert!(!model.show_help);
+    }
+}

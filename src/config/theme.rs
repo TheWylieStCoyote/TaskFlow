@@ -220,3 +220,140 @@ impl Theme {
         Settings::config_dir().join("themes")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_color_spec_named() {
+        let color = ColorSpec::Named("red".to_string());
+        assert_eq!(color.to_color(), Color::Red);
+
+        let color = ColorSpec::Named("cyan".to_string());
+        assert_eq!(color.to_color(), Color::Cyan);
+
+        let color = ColorSpec::Named("white".to_string());
+        assert_eq!(color.to_color(), Color::White);
+    }
+
+    #[test]
+    fn test_color_spec_hex() {
+        let color = ColorSpec::Hex("#ff0000".to_string());
+        assert_eq!(color.to_color(), Color::Rgb(255, 0, 0));
+
+        let color = ColorSpec::Hex("#00ff00".to_string());
+        assert_eq!(color.to_color(), Color::Rgb(0, 255, 0));
+
+        let color = ColorSpec::Hex("#0000ff".to_string());
+        assert_eq!(color.to_color(), Color::Rgb(0, 0, 255));
+    }
+
+    #[test]
+    fn test_color_spec_hex_invalid() {
+        let color = ColorSpec::Hex("#fff".to_string()); // Too short
+        assert_eq!(color.to_color(), Color::Reset);
+    }
+
+    #[test]
+    fn test_color_spec_rgb() {
+        let color = ColorSpec::Rgb {
+            r: 128,
+            g: 64,
+            b: 32,
+        };
+        assert_eq!(color.to_color(), Color::Rgb(128, 64, 32));
+    }
+
+    #[test]
+    fn test_theme_default() {
+        let theme = Theme::default();
+
+        assert_eq!(theme.name, "default");
+        assert_eq!(theme.colors.accent.to_color(), Color::Cyan);
+        assert_eq!(theme.priority.urgent.to_color(), Color::Red);
+        assert_eq!(theme.status.done.to_color(), Color::Green);
+    }
+
+    #[test]
+    fn test_theme_load_default_name() {
+        let theme = Theme::load("default");
+        assert_eq!(theme.name, "default");
+    }
+
+    #[test]
+    fn test_theme_load_missing_file() {
+        let theme = Theme::load("nonexistent_theme");
+        // Should return default theme
+        assert_eq!(theme.name, "default");
+    }
+
+    #[test]
+    fn test_theme_load_from_path() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("custom.toml");
+
+        let content = r##"
+name = "custom"
+
+[colors]
+accent = "magenta"
+
+[priority]
+urgent = "#ff0000"
+
+[status]
+done = { r = 0, g = 255, b = 0 }
+"##;
+        std::fs::write(&path, content).unwrap();
+
+        let theme = Theme::load_from_path(path);
+
+        assert_eq!(theme.name, "custom");
+        assert_eq!(theme.colors.accent.to_color(), Color::Magenta);
+    }
+
+    #[test]
+    fn test_priority_colors_default() {
+        let priority = PriorityColors::default();
+
+        assert_eq!(priority.urgent.to_color(), Color::Red);
+        assert_eq!(priority.high.to_color(), Color::Yellow);
+        assert_eq!(priority.medium.to_color(), Color::Cyan);
+        assert_eq!(priority.low.to_color(), Color::Green);
+        assert_eq!(priority.none.to_color(), Color::DarkGray);
+    }
+
+    #[test]
+    fn test_status_colors_default() {
+        let status = StatusColors::default();
+
+        assert_eq!(status.pending.to_color(), Color::White);
+        assert_eq!(status.in_progress.to_color(), Color::Yellow);
+        assert_eq!(status.done.to_color(), Color::Green);
+        assert_eq!(status.cancelled.to_color(), Color::DarkGray);
+    }
+
+    #[test]
+    fn test_color_spec_default() {
+        let color = ColorSpec::default();
+        assert_eq!(color.to_color(), Color::Reset);
+    }
+
+    #[test]
+    fn test_color_spec_named_unknown() {
+        let color = ColorSpec::Named("unknowncolor".to_string());
+        assert_eq!(color.to_color(), Color::Reset);
+    }
+
+    #[test]
+    fn test_theme_colors_default() {
+        let colors = ThemeColors::default();
+
+        assert_eq!(colors.foreground.to_color(), Color::White);
+        assert_eq!(colors.border.to_color(), Color::Blue);
+        assert_eq!(colors.danger.to_color(), Color::Red);
+        assert_eq!(colors.success.to_color(), Color::Green);
+    }
+}

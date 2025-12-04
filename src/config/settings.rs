@@ -108,3 +108,116 @@ impl Settings {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_settings_default() {
+        let settings = Settings::default();
+
+        assert_eq!(settings.backend, "json");
+        assert!(settings.data_path.is_none());
+        assert_eq!(settings.theme, "default");
+        assert!(settings.show_sidebar);
+        assert!(!settings.show_completed);
+        assert_eq!(settings.auto_save_interval, 300);
+        assert_eq!(settings.default_priority, "none");
+    }
+
+    #[test]
+    fn test_settings_load_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("nonexistent.toml");
+
+        let settings = Settings::load_from_path(path);
+
+        // Should return defaults
+        assert_eq!(settings.backend, "json");
+    }
+
+    #[test]
+    fn test_settings_load_invalid_toml() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("invalid.toml");
+
+        std::fs::write(&path, "this is not { valid toml").unwrap();
+
+        let settings = Settings::load_from_path(path);
+
+        // Should return defaults on parse error
+        assert_eq!(settings.backend, "json");
+    }
+
+    #[test]
+    fn test_settings_save_creates_dirs() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("subdir").join("nested").join("config.toml");
+
+        let settings = Settings::default();
+        settings.save_to_path(path.clone()).unwrap();
+
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_settings_roundtrip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let mut settings = Settings::default();
+        settings.backend = "yaml".to_string();
+        settings.show_completed = true;
+        settings.auto_save_interval = 600;
+
+        settings.save_to_path(path.clone()).unwrap();
+
+        let loaded = Settings::load_from_path(path);
+
+        assert_eq!(loaded.backend, "yaml");
+        assert!(loaded.show_completed);
+        assert_eq!(loaded.auto_save_interval, 600);
+    }
+
+    #[test]
+    fn test_settings_backend_type() {
+        let mut settings = Settings::default();
+
+        settings.backend = "json".to_string();
+        assert_eq!(settings.backend_type(), BackendType::Json);
+
+        settings.backend = "yaml".to_string();
+        assert_eq!(settings.backend_type(), BackendType::Yaml);
+
+        settings.backend = "sqlite".to_string();
+        assert_eq!(settings.backend_type(), BackendType::Sqlite);
+
+        settings.backend = "markdown".to_string();
+        assert_eq!(settings.backend_type(), BackendType::Markdown);
+    }
+
+    #[test]
+    fn test_settings_get_data_path_explicit() {
+        let mut settings = Settings::default();
+        settings.data_path = Some(PathBuf::from("/custom/path/data.json"));
+
+        let path = settings.get_data_path();
+        assert_eq!(path, PathBuf::from("/custom/path/data.json"));
+    }
+
+    #[test]
+    fn test_settings_get_data_path_default_uses_backend_extension() {
+        let mut settings = Settings::default();
+        settings.data_path = None;
+
+        settings.backend = "yaml".to_string();
+        let path = settings.get_data_path();
+        assert!(path.to_string_lossy().ends_with("tasks.yaml"));
+
+        settings.backend = "sqlite".to_string();
+        let path = settings.get_data_path();
+        assert!(path.to_string_lossy().ends_with("tasks.db"));
+    }
+}

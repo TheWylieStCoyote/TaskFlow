@@ -110,3 +110,56 @@ impl Project {
         self.status == ProjectStatus::Active
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_new_creates_unique_id() {
+        let project1 = Project::new("Project 1");
+        let project2 = Project::new("Project 2");
+        assert_ne!(project1.id, project2.id);
+    }
+
+    #[test]
+    fn test_project_new_sets_defaults() {
+        let project = Project::new("Test project");
+        assert_eq!(project.name, "Test project");
+        assert_eq!(project.status, ProjectStatus::Active);
+        assert!(project.parent_id.is_none());
+        assert!(project.color.is_none());
+        assert!(project.description.is_none());
+    }
+
+    #[test]
+    fn test_project_with_color() {
+        let project = Project::new("Test").with_color("#ff0000");
+        assert_eq!(project.color, Some("#ff0000".to_string()));
+    }
+
+    #[test]
+    fn test_project_with_parent() {
+        let parent = Project::new("Parent");
+        let child = Project::new("Child").with_parent(parent.id.clone());
+        assert_eq!(child.parent_id, Some(parent.id));
+    }
+
+    #[test]
+    fn test_project_is_active() {
+        let active = Project::new("Active");
+        assert!(active.is_active());
+
+        let mut on_hold = Project::new("On Hold");
+        on_hold.status = ProjectStatus::OnHold;
+        assert!(!on_hold.is_active());
+
+        let mut completed = Project::new("Completed");
+        completed.status = ProjectStatus::Completed;
+        assert!(!completed.is_active());
+
+        let mut archived = Project::new("Archived");
+        archived.status = ProjectStatus::Archived;
+        assert!(!archived.is_active());
+    }
+}

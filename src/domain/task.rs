@@ -50,6 +50,17 @@ impl Priority {
         }
     }
 
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "none" => Some(Priority::None),
+            "low" => Some(Priority::Low),
+            "medium" | "med" => Some(Priority::Medium),
+            "high" => Some(Priority::High),
+            "urgent" => Some(Priority::Urgent),
+            _ => None,
+        }
+    }
+
     pub fn symbol(&self) -> &'static str {
         match self {
             Priority::None => " ",
@@ -338,6 +349,22 @@ mod tests {
         assert_eq!(Priority::Medium.symbol(), "!!");
         assert_eq!(Priority::High.symbol(), "!!!");
         assert_eq!(Priority::Urgent.symbol(), "!!!!");
+    }
+
+    #[test]
+    fn test_priority_parse() {
+        assert_eq!(Priority::parse("none"), Some(Priority::None));
+        assert_eq!(Priority::parse("low"), Some(Priority::Low));
+        assert_eq!(Priority::parse("medium"), Some(Priority::Medium));
+        assert_eq!(Priority::parse("med"), Some(Priority::Medium));
+        assert_eq!(Priority::parse("high"), Some(Priority::High));
+        assert_eq!(Priority::parse("urgent"), Some(Priority::Urgent));
+        // Case insensitive
+        assert_eq!(Priority::parse("HIGH"), Some(Priority::High));
+        assert_eq!(Priority::parse("Low"), Some(Priority::Low));
+        // Invalid
+        assert_eq!(Priority::parse("invalid"), None);
+        assert_eq!(Priority::parse(""), None);
     }
 
     #[test]

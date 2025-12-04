@@ -14,7 +14,7 @@ use taskflow::app::{
     update, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
     TimeMessage, UiMessage,
 };
-use taskflow::config::Settings;
+use taskflow::config::{Action, Keybindings, Settings};
 use taskflow::storage::BackendType;
 use taskflow::ui::{view, InputMode};
 
@@ -83,7 +83,11 @@ fn main() -> anyhow::Result<()> {
     // Apply settings to model
     model.show_sidebar = settings.show_sidebar;
     model.show_completed = settings.show_completed;
+    model.default_priority = settings.default_priority();
     model.refresh_visible_tasks();
+
+    // Load keybindings
+    let keybindings = Keybindings::load();
 
     // Setup terminal
     enable_raw_mode()?;
@@ -93,7 +97,7 @@ fn main() -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run the app
-    let result = run_app(&mut terminal, &mut model);
+    let result = run_app(&mut terminal, &mut model, &keybindings, &settings);
 
     // Save before exit if storage is configured
     if model.has_storage() && model.dirty {
@@ -121,7 +125,18 @@ fn main() -> anyhow::Result<()> {
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     model: &mut Model,
+    keybindings: &Keybindings,
+    settings: &Settings,
 ) -> anyhow::Result<()> {
+    use std::time::Instant;
+
+    let auto_save_interval = if settings.auto_save_interval > 0 {
+        Some(Duration::from_secs(settings.auto_save_interval))
+    } else {
+        None
+    };
+    let mut last_save = Instant::now();
+
     loop {
         // Draw UI
         terminal.draw(|frame| view(model, frame))?;
@@ -131,10 +146,18 @@ fn run_app(
             break;
         }
 
+        // Auto-save if interval has passed and there are unsaved changes
+        if let Some(interval) = auto_save_interval {
+            if model.dirty && model.has_storage() && last_save.elapsed() >= interval {
+                let _ = model.save();
+                last_save = Instant::now();
+            }
+        }
+
         // Handle events with timeout for potential async operations
         if event::poll(Duration::from_millis(100))? {
             let message = match event::read()? {
-                Event::Key(key) => handle_key_event(key, model),
+                Event::Key(key) => handle_key_event(key, model, keybindings),
                 Event::Resize(width, height) => {
                     Message::System(SystemMessage::Resize { width, height })
                 }
@@ -148,7 +171,7 @@ fn run_app(
     Ok(())
 }
 
-fn handle_key_event(key: event::KeyEvent, model: &Model) -> Message {
+fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindings) -> Message {
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
@@ -181,44 +204,80 @@ fn handle_key_event(key: event::KeyEvent, model: &Model) -> Message {
         return Message::Ui(UiMessage::HideHelp);
     }
 
-    match (key.code, key.modifiers) {
-        // Quit
-        (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => Message::System(SystemMessage::Quit),
+    // Convert key event to string for lookup
+    let key_str = key_event_to_string(&key);
 
-        // Help
-        (KeyCode::Char('?'), _) => Message::Ui(UiMessage::ShowHelp),
+    // Look up action in keybindings
+    if let Some(action) = keybindings.get_action(&key_str) {
+        return action_to_message(action);
+    }
 
-        // Save
-        (KeyCode::Char('s'), KeyModifiers::CONTROL) => Message::System(SystemMessage::Save),
+    // Time tracking (not in keybindings yet)
+    if key.code == KeyCode::Char('t') {
+        return Message::Time(TimeMessage::ToggleTracking);
+    }
 
-        // Navigation
-        (KeyCode::Char('j'), _) | (KeyCode::Down, _) => {
-            Message::Navigation(NavigationMessage::Down)
-        }
-        (KeyCode::Char('k'), _) | (KeyCode::Up, _) => Message::Navigation(NavigationMessage::Up),
-        (KeyCode::Char('g'), _) => Message::Navigation(NavigationMessage::First),
-        (KeyCode::Char('G'), _) => Message::Navigation(NavigationMessage::Last),
-        (KeyCode::Char('u'), KeyModifiers::CONTROL) | (KeyCode::PageUp, _) => {
-            Message::Navigation(NavigationMessage::PageUp)
-        }
-        (KeyCode::Char('d'), KeyModifiers::CONTROL) | (KeyCode::PageDown, _) => {
-            Message::Navigation(NavigationMessage::PageDown)
-        }
+    Message::None
+}
 
-        // Task actions
-        (KeyCode::Char('x'), _) | (KeyCode::Char(' '), _) => {
-            Message::Task(TaskMessage::ToggleComplete)
-        }
-        (KeyCode::Char('a'), _) => Message::Ui(UiMessage::StartCreateTask),
-        (KeyCode::Char('D'), _) => Message::Ui(UiMessage::ShowDeleteConfirm),
+/// Convert a key event to the string format used in keybindings
+fn key_event_to_string(key: &event::KeyEvent) -> String {
+    let mut parts = Vec::new();
 
-        // Time tracking
-        (KeyCode::Char('t'), _) => Message::Time(TimeMessage::ToggleTracking),
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        parts.push("ctrl");
+    }
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        parts.push("alt");
+    }
+    if key.modifiers.contains(KeyModifiers::SHIFT) && !matches!(key.code, KeyCode::Char(_)) {
+        parts.push("shift");
+    }
 
-        // UI toggles
-        (KeyCode::Char('c'), _) => Message::Ui(UiMessage::ToggleShowCompleted),
-        (KeyCode::Char('b'), _) => Message::Ui(UiMessage::ToggleSidebar),
+    let key_name = match key.code {
+        KeyCode::Char(' ') => "space".to_string(),
+        KeyCode::Char(c) => c.to_string(),
+        KeyCode::Enter => "enter".to_string(),
+        KeyCode::Esc => "esc".to_string(),
+        KeyCode::Backspace => "backspace".to_string(),
+        KeyCode::Delete => "delete".to_string(),
+        KeyCode::Up => "up".to_string(),
+        KeyCode::Down => "down".to_string(),
+        KeyCode::Left => "left".to_string(),
+        KeyCode::Right => "right".to_string(),
+        KeyCode::Home => "home".to_string(),
+        KeyCode::End => "end".to_string(),
+        KeyCode::PageUp => "pageup".to_string(),
+        KeyCode::PageDown => "pagedown".to_string(),
+        KeyCode::Tab => "tab".to_string(),
+        KeyCode::F(n) => format!("f{}", n),
+        _ => return String::new(),
+    };
 
-        _ => Message::None,
+    if parts.is_empty() {
+        key_name
+    } else {
+        parts.push(&key_name);
+        parts.join("+")
+    }
+}
+
+/// Convert an Action to a Message
+fn action_to_message(action: &Action) -> Message {
+    match action {
+        Action::MoveUp => Message::Navigation(NavigationMessage::Up),
+        Action::MoveDown => Message::Navigation(NavigationMessage::Down),
+        Action::MoveFirst => Message::Navigation(NavigationMessage::First),
+        Action::MoveLast => Message::Navigation(NavigationMessage::Last),
+        Action::PageUp => Message::Navigation(NavigationMessage::PageUp),
+        Action::PageDown => Message::Navigation(NavigationMessage::PageDown),
+        Action::ToggleComplete => Message::Task(TaskMessage::ToggleComplete),
+        Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
+        Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
+        Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
+        Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
+        Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),
+        Action::Save => Message::System(SystemMessage::Save),
+        Action::Quit => Message::System(SystemMessage::Quit),
     }
 }

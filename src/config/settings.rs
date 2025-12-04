@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::Priority;
 use crate::storage::BackendType;
 
 /// Main application settings
@@ -106,6 +107,11 @@ impl Settings {
             let ext = self.backend_type().file_extension();
             data_dir.join(format!("tasks.{}", ext))
         })
+    }
+
+    /// Get the default priority for new tasks
+    pub fn default_priority(&self) -> Priority {
+        Priority::parse(&self.default_priority).unwrap_or_default()
     }
 }
 
@@ -219,5 +225,27 @@ mod tests {
         settings.backend = "sqlite".to_string();
         let path = settings.get_data_path();
         assert!(path.to_string_lossy().ends_with("tasks.db"));
+    }
+
+    #[test]
+    fn test_settings_default_priority() {
+        let mut settings = Settings::default();
+
+        // Default is "none"
+        assert_eq!(settings.default_priority(), Priority::None);
+
+        // Valid priorities
+        settings.default_priority = "low".to_string();
+        assert_eq!(settings.default_priority(), Priority::Low);
+
+        settings.default_priority = "high".to_string();
+        assert_eq!(settings.default_priority(), Priority::High);
+
+        settings.default_priority = "urgent".to_string();
+        assert_eq!(settings.default_priority(), Priority::Urgent);
+
+        // Invalid falls back to None
+        settings.default_priority = "invalid".to_string();
+        assert_eq!(settings.default_priority(), Priority::None);
     }
 }

@@ -91,7 +91,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             model.refresh_visible_tasks();
         }
         TaskMessage::Create(title) => {
-            let task = crate::domain::Task::new(title);
+            let task = crate::domain::Task::new(title).with_priority(model.default_priority);
             model.sync_task(&task);
             model.tasks.insert(task.id.clone(), task);
             model.refresh_visible_tasks();
@@ -141,7 +141,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::SubmitInput => {
             if !model.input_buffer.trim().is_empty() {
                 let title = model.input_buffer.clone();
-                let task = crate::domain::Task::new(title);
+                let task = crate::domain::Task::new(title).with_priority(model.default_priority);
                 model.sync_task(&task);
                 model.tasks.insert(task.id.clone(), task);
                 model.refresh_visible_tasks();
@@ -632,5 +632,34 @@ mod tests {
         update(&mut model, Message::Ui(UiMessage::HideHelp));
 
         assert!(!model.show_help);
+    }
+
+    #[test]
+    fn test_task_create_uses_default_priority() {
+        let mut model = Model::new();
+        model.default_priority = Priority::High;
+
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("High priority task".to_string())),
+        );
+
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "High priority task");
+        assert_eq!(task.priority, Priority::High);
+    }
+
+    #[test]
+    fn test_submit_input_uses_default_priority() {
+        let mut model = Model::new();
+        model.input_mode = InputMode::Editing;
+        model.input_buffer = "Task via input".to_string();
+        model.default_priority = Priority::Urgent;
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "Task via input");
+        assert_eq!(task.priority, Priority::Urgent);
     }
 }

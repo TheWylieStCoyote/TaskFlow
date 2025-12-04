@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::domain::{Filter, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{
+    Filter, Priority, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId,
+};
 #[allow(unused_imports)]
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::InputMode;
@@ -54,6 +56,9 @@ pub struct Model {
     storage: Option<Box<dyn StorageBackend>>,
     pub data_path: Option<PathBuf>,
     pub dirty: bool,
+
+    // Configuration
+    pub default_priority: Priority,
 }
 
 impl Model {
@@ -80,6 +85,7 @@ impl Model {
             storage: None,
             data_path: None,
             dirty: false,
+            default_priority: Priority::default(),
         }
     }
 

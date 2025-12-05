@@ -37,6 +37,10 @@ pub enum Action {
     FocusSidebar,
     FocusTaskList,
     Select,
+    Search,
+    ClearSearch,
+    CycleSortField,
+    ToggleSortOrder,
 
     // System
     Save,
@@ -135,6 +139,10 @@ impl Default for Keybindings {
         bindings.insert("left".to_string(), Action::FocusSidebar);
         bindings.insert("right".to_string(), Action::FocusTaskList);
         bindings.insert("enter".to_string(), Action::Select);
+        bindings.insert("/".to_string(), Action::Search);
+        bindings.insert("ctrl+l".to_string(), Action::ClearSearch);
+        bindings.insert("s".to_string(), Action::CycleSortField);
+        bindings.insert("S".to_string(), Action::ToggleSortOrder);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

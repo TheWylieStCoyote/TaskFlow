@@ -283,6 +283,10 @@ fn action_to_message(action: &Action) -> Message {
         Action::FocusSidebar => Message::Navigation(NavigationMessage::FocusSidebar),
         Action::FocusTaskList => Message::Navigation(NavigationMessage::FocusTaskList),
         Action::Select => Message::Navigation(NavigationMessage::SelectSidebarItem),
+        Action::Search => Message::Ui(UiMessage::StartSearch),
+        Action::ClearSearch => Message::Ui(UiMessage::ClearSearch),
+        Action::CycleSortField => Message::Ui(UiMessage::CycleSortField),
+        Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Quit => Message::System(SystemMessage::Quit),
     }

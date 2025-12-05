@@ -23,6 +23,7 @@ pub enum InputTarget {
     EditDueDate(TaskId),
     EditTags(TaskId),
     Project,
+    Search,
 }
 
 /// Input dialog for creating/editing items

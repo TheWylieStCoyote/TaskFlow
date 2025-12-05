@@ -51,6 +51,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::Project => "New Project",
+            InputTarget::Search => "Search (Ctrl+L to clear)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),

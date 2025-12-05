@@ -206,24 +206,58 @@ impl Model {
 
     /// Recalculate visible tasks based on filter and sort
     pub fn refresh_visible_tasks(&mut self) {
+        use crate::domain::{SortField, SortOrder};
+
         let mut tasks: Vec<_> = self
             .tasks
             .values()
             .filter(|task| self.task_matches_filter(task))
             .collect();
 
-        // Sort by priority (descending) then by created_at
+        // Sort based on SortSpec
+        let sort_field = self.sort.field;
+        let sort_order = self.sort.order;
+
         tasks.sort_by(|a, b| {
-            let priority_order = |p: &crate::domain::Priority| match p {
-                crate::domain::Priority::Urgent => 0,
-                crate::domain::Priority::High => 1,
-                crate::domain::Priority::Medium => 2,
-                crate::domain::Priority::Low => 3,
-                crate::domain::Priority::None => 4,
+            let cmp = match sort_field {
+                SortField::CreatedAt => a.created_at.cmp(&b.created_at),
+                SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+                SortField::DueDate => {
+                    // Tasks with no due date go last
+                    match (a.due_date, b.due_date) {
+                        (Some(da), Some(db)) => da.cmp(&db),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => std::cmp::Ordering::Equal,
+                    }
+                }
+                SortField::Priority => {
+                    let priority_order = |p: &crate::domain::Priority| match p {
+                        crate::domain::Priority::Urgent => 0,
+                        crate::domain::Priority::High => 1,
+                        crate::domain::Priority::Medium => 2,
+                        crate::domain::Priority::Low => 3,
+                        crate::domain::Priority::None => 4,
+                    };
+                    priority_order(&a.priority).cmp(&priority_order(&b.priority))
+                }
+                SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                SortField::Status => {
+                    let status_order = |s: &crate::domain::TaskStatus| match s {
+                        crate::domain::TaskStatus::InProgress => 0,
+                        crate::domain::TaskStatus::Todo => 1,
+                        crate::domain::TaskStatus::Blocked => 2,
+                        crate::domain::TaskStatus::Done => 3,
+                        crate::domain::TaskStatus::Cancelled => 4,
+                    };
+                    status_order(&a.status).cmp(&status_order(&b.status))
+                }
             };
-            priority_order(&a.priority)
-                .cmp(&priority_order(&b.priority))
-                .then_with(|| b.created_at.cmp(&a.created_at))
+
+            match sort_order {
+                SortOrder::Ascending => cmp,
+                SortOrder::Descending => cmp.reverse(),
+            }
         });
 
         self.visible_tasks = tasks.into_iter().map(|t| t.id.clone()).collect();
@@ -238,6 +272,19 @@ impl Model {
         // Filter out completed tasks unless show_completed is true
         if !self.show_completed && task.status.is_complete() {
             return false;
+        }
+
+        // Filter by search text (case-insensitive, matches title or tags)
+        if let Some(ref search) = self.filter.search_text {
+            let search_lower = search.to_lowercase();
+            let title_matches = task.title.to_lowercase().contains(&search_lower);
+            let tags_match = task
+                .tags
+                .iter()
+                .any(|t| t.to_lowercase().contains(&search_lower));
+            if !title_matches && !tags_match {
+                return false;
+            }
         }
 
         // Filter by selected project if any
@@ -377,6 +424,8 @@ mod tests {
 
     #[test]
     fn test_model_refresh_visible_tasks_sorts_by_priority() {
+        use crate::domain::{SortField, SortOrder};
+
         let mut model = Model::new();
 
         // Add tasks with different priorities
@@ -388,6 +437,11 @@ mod tests {
         model.tasks.insert(urgent.id.clone(), urgent.clone());
         model.tasks.insert(high.id.clone(), high.clone());
 
+        // Set sort to priority (default is CreatedAt)
+        model.sort = SortSpec {
+            field: SortField::Priority,
+            order: SortOrder::Ascending,
+        };
         model.refresh_visible_tasks();
 
         // Order should be: Urgent, High, Low
@@ -724,5 +778,235 @@ mod tests {
         // Only tasks with projects should be visible
         assert_eq!(model.visible_tasks.len(), 1);
         assert_eq!(model.visible_tasks[0], task_with_project.id);
+    }
+
+    #[test]
+    fn test_search_filter_matches_title() {
+        let mut model = Model::new();
+
+        let task_match = Task::new("Build the feature");
+        let task_no_match = Task::new("Fix the bug");
+
+        model
+            .tasks
+            .insert(task_match.id.clone(), task_match.clone());
+        model.tasks.insert(task_no_match.id.clone(), task_no_match);
+
+        model.filter.search_text = Some("build".to_string());
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_match.id);
+    }
+
+    #[test]
+    fn test_search_filter_case_insensitive() {
+        let mut model = Model::new();
+
+        let task = Task::new("Build Feature");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        // Search with different cases
+        model.filter.search_text = Some("BUILD".to_string());
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 1);
+
+        model.filter.search_text = Some("feature".to_string());
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_search_filter_matches_tags() {
+        let mut model = Model::new();
+
+        let task_with_tag = Task::new("Some task").with_tags(vec!["urgent".to_string()]);
+        let task_no_tag = Task::new("Other task");
+
+        model
+            .tasks
+            .insert(task_with_tag.id.clone(), task_with_tag.clone());
+        model.tasks.insert(task_no_tag.id.clone(), task_no_tag);
+
+        model.filter.search_text = Some("urgent".to_string());
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_with_tag.id);
+    }
+
+    #[test]
+    fn test_search_filter_partial_match() {
+        let mut model = Model::new();
+
+        let task = Task::new("Implement authentication");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        model.filter.search_text = Some("auth".to_string());
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_search_filter_empty_clears() {
+        let mut model = Model::new();
+
+        let task1 = Task::new("Task one");
+        let task2 = Task::new("Task two");
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+
+        // With filter
+        model.filter.search_text = Some("one".to_string());
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 1);
+
+        // Without filter
+        model.filter.search_text = None;
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 2);
+    }
+
+    #[test]
+    fn test_sort_by_title() {
+        use crate::domain::{SortField, SortOrder};
+
+        let mut model = Model::new();
+
+        let task_b = Task::new("Banana");
+        let task_a = Task::new("Apple");
+        let task_c = Task::new("Cherry");
+
+        model.tasks.insert(task_b.id.clone(), task_b.clone());
+        model.tasks.insert(task_a.id.clone(), task_a.clone());
+        model.tasks.insert(task_c.id.clone(), task_c.clone());
+
+        model.sort = SortSpec {
+            field: SortField::Title,
+            order: SortOrder::Ascending,
+        };
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks[0], task_a.id);
+        assert_eq!(model.visible_tasks[1], task_b.id);
+        assert_eq!(model.visible_tasks[2], task_c.id);
+    }
+
+    #[test]
+    fn test_sort_by_title_descending() {
+        use crate::domain::{SortField, SortOrder};
+
+        let mut model = Model::new();
+
+        let task_b = Task::new("Banana");
+        let task_a = Task::new("Apple");
+        let task_c = Task::new("Cherry");
+
+        model.tasks.insert(task_b.id.clone(), task_b.clone());
+        model.tasks.insert(task_a.id.clone(), task_a.clone());
+        model.tasks.insert(task_c.id.clone(), task_c.clone());
+
+        model.sort = SortSpec {
+            field: SortField::Title,
+            order: SortOrder::Descending,
+        };
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks[0], task_c.id);
+        assert_eq!(model.visible_tasks[1], task_b.id);
+        assert_eq!(model.visible_tasks[2], task_a.id);
+    }
+
+    #[test]
+    fn test_sort_by_due_date() {
+        use crate::domain::{SortField, SortOrder};
+
+        let mut model = Model::new();
+
+        let today = chrono::Utc::now().date_naive();
+        let tomorrow = today + chrono::Duration::days(1);
+        let next_week = today + chrono::Duration::days(7);
+
+        let task_soon = Task::new("Soon").with_due_date(tomorrow);
+        let task_later = Task::new("Later").with_due_date(next_week);
+        let task_no_date = Task::new("No date");
+
+        model
+            .tasks
+            .insert(task_later.id.clone(), task_later.clone());
+        model.tasks.insert(task_soon.id.clone(), task_soon.clone());
+        model
+            .tasks
+            .insert(task_no_date.id.clone(), task_no_date.clone());
+
+        model.sort = SortSpec {
+            field: SortField::DueDate,
+            order: SortOrder::Ascending,
+        };
+        model.refresh_visible_tasks();
+
+        // Tasks with dates come first, then tasks without dates
+        assert_eq!(model.visible_tasks[0], task_soon.id);
+        assert_eq!(model.visible_tasks[1], task_later.id);
+        assert_eq!(model.visible_tasks[2], task_no_date.id);
+    }
+
+    #[test]
+    fn test_sort_by_status() {
+        use crate::domain::{SortField, SortOrder};
+
+        let mut model = Model::new();
+        model.show_completed = true; // Show completed for this test
+
+        let task_todo = Task::new("Todo").with_status(TaskStatus::Todo);
+        let task_in_progress = Task::new("In Progress").with_status(TaskStatus::InProgress);
+        let task_done = Task::new("Done").with_status(TaskStatus::Done);
+
+        model.tasks.insert(task_done.id.clone(), task_done.clone());
+        model.tasks.insert(task_todo.id.clone(), task_todo.clone());
+        model
+            .tasks
+            .insert(task_in_progress.id.clone(), task_in_progress.clone());
+
+        model.sort = SortSpec {
+            field: SortField::Status,
+            order: SortOrder::Ascending,
+        };
+        model.refresh_visible_tasks();
+
+        // Order: InProgress, Todo, Blocked, Done, Cancelled
+        assert_eq!(model.visible_tasks[0], task_in_progress.id);
+        assert_eq!(model.visible_tasks[1], task_todo.id);
+        assert_eq!(model.visible_tasks[2], task_done.id);
+    }
+
+    #[test]
+    fn test_sort_order_toggle() {
+        use crate::domain::{SortField, SortOrder};
+
+        let mut model = Model::new();
+
+        let task_high = Task::new("High").with_priority(Priority::High);
+        let task_low = Task::new("Low").with_priority(Priority::Low);
+
+        model.tasks.insert(task_high.id.clone(), task_high.clone());
+        model.tasks.insert(task_low.id.clone(), task_low.clone());
+
+        // Ascending: High first (lower priority number)
+        model.sort = SortSpec {
+            field: SortField::Priority,
+            order: SortOrder::Ascending,
+        };
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks[0], task_high.id);
+        assert_eq!(model.visible_tasks[1], task_low.id);
+
+        // Descending: Low first
+        model.sort.order = SortOrder::Descending;
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks[0], task_low.id);
+        assert_eq!(model.visible_tasks[1], task_high.id);
     }
 }

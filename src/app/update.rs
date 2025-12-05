@@ -305,6 +305,37 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::StartSearch => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Search;
+            // Pre-fill with existing search text if any
+            model.input_buffer = model.filter.search_text.clone().unwrap_or_default();
+            model.cursor_position = model.input_buffer.len();
+        }
+        UiMessage::ClearSearch => {
+            model.filter.search_text = None;
+            model.refresh_visible_tasks();
+        }
+        UiMessage::CycleSortField => {
+            use crate::domain::SortField;
+            model.sort.field = match model.sort.field {
+                SortField::CreatedAt => SortField::Priority,
+                SortField::Priority => SortField::DueDate,
+                SortField::DueDate => SortField::Title,
+                SortField::Title => SortField::Status,
+                SortField::Status => SortField::UpdatedAt,
+                SortField::UpdatedAt => SortField::CreatedAt,
+            };
+            model.refresh_visible_tasks();
+        }
+        UiMessage::ToggleSortOrder => {
+            use crate::domain::SortOrder;
+            model.sort.order = match model.sort.order {
+                SortOrder::Ascending => SortOrder::Descending,
+                SortOrder::Descending => SortOrder::Ascending,
+            };
+            model.refresh_visible_tasks();
+        }
         UiMessage::CancelInput => {
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -370,6 +401,14 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         model.sync_project(&project);
                         model.projects.insert(project.id.clone(), project);
                     }
+                }
+                InputTarget::Search => {
+                    if input.is_empty() {
+                        model.filter.search_text = None;
+                    } else {
+                        model.filter.search_text = Some(input);
+                    }
+                    model.refresh_visible_tasks();
                 }
             }
             model.input_mode = InputMode::Normal;

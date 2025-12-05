@@ -52,6 +52,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::Project => "New Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",
+            InputTarget::MoveToProject(_) => "Move to Project (enter number)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),

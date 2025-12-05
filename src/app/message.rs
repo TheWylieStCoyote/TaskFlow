@@ -79,6 +79,7 @@ pub enum UiMessage {
     StartEditTask,
     StartEditDueDate,
     StartEditTags,
+    StartMoveToProject,
     StartSearch,
     ClearSearch,
     CycleSortField,

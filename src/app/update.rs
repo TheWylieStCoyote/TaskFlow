@@ -278,6 +278,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     after: Box::new(after),
                 });
             }
+            model.refresh_visible_tasks();
         }
     }
 }
@@ -341,6 +342,22 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.input_target = InputTarget::EditTags(task_id);
                     // Pre-fill with existing tags as comma-separated
                     model.input_buffer = task.tags.join(", ");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartMoveToProject => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::MoveToProject(task_id);
+                    // Build project list string for display in input buffer
+                    // Format: "0: None, 1: ProjectA, 2: ProjectB, ..."
+                    let mut options = vec!["0: (none)".to_string()];
+                    for (i, project) in model.projects.values().enumerate() {
+                        options.push(format!("{}: {}", i + 1, project.name));
+                    }
+                    model.input_buffer = options.join(", ");
                     model.cursor_position = model.input_buffer.len();
                 }
             }
@@ -470,6 +487,30 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         model.filter.search_text = Some(input);
                     }
                     model.refresh_visible_tasks();
+                }
+                InputTarget::MoveToProject(task_id) => {
+                    // Parse the number input to select a project
+                    if let Ok(choice) = input.parse::<usize>() {
+                        if let Some(task) = model.tasks.get_mut(task_id) {
+                            let before = task.clone();
+                            let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                            if choice == 0 {
+                                // Remove from project
+                                task.project_id = None;
+                            } else if let Some(project_id) = project_ids.get(choice - 1) {
+                                // Move to selected project
+                                task.project_id = Some(project_id.clone());
+                            }
+                            task.updated_at = chrono::Utc::now();
+                            let after = task.clone();
+                            model.sync_task(&after);
+                            model.undo_stack.push(UndoAction::TaskModified {
+                                before: Box::new(before),
+                                after: Box::new(after),
+                            });
+                            model.refresh_visible_tasks();
+                        }
+                    }
                 }
             }
             model.input_mode = InputMode::Normal;
@@ -1566,6 +1607,171 @@ mod tests {
         let task = model.tasks.get(&task_id).unwrap();
         assert_eq!(task.tags, original_tags);
         assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    // Move to project tests
+    #[test]
+    fn test_start_move_to_project() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let _task_id = model.visible_tasks[0].clone();
+
+        // Add some projects
+        let project1 = Project::new("Project Alpha");
+        let project2 = Project::new("Project Beta");
+        model.projects.insert(project1.id.clone(), project1);
+        model.projects.insert(project2.id.clone(), project2);
+
+        // Start move to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(model.input_target, InputTarget::MoveToProject(_)));
+        // Input buffer should contain project list
+        assert!(model.input_buffer.contains("0: (none)"));
+    }
+
+    #[test]
+    fn test_move_to_project_assign() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Initially no project
+        assert!(model.tasks.get(&task_id).unwrap().project_id.is_none());
+
+        // Add a project
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project.id.clone(), project);
+
+        // Start move to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+
+        // Type "1" to select the first project
+        model.input_buffer = "1".to_string();
+        model.cursor_position = 1;
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Task should now belong to the project
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.project_id, Some(project_id));
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_move_to_project_remove() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Add a project and assign task to it
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project.id.clone(), project);
+        model.tasks.get_mut(&task_id).unwrap().project_id = Some(project_id);
+
+        // Start move to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+
+        // Type "0" to remove from project
+        model.input_buffer = "0".to_string();
+        model.cursor_position = 1;
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Task should no longer belong to any project
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.project_id.is_none());
+    }
+
+    #[test]
+    fn test_move_to_project_undo() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Add a project
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project.id.clone(), project);
+
+        // Move task to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+        model.input_buffer = "1".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Verify task is in project
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().project_id,
+            Some(project_id)
+        );
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        // Task should no longer be in project
+        assert!(model.tasks.get(&task_id).unwrap().project_id.is_none());
+    }
+
+    #[test]
+    fn test_move_to_project_invalid_input_ignored() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Add a project
+        let project = Project::new("Test Project");
+        model.projects.insert(project.id.clone(), project);
+
+        // Start move to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+
+        // Type invalid input
+        model.input_buffer = "abc".to_string();
+        model.cursor_position = 3;
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Task should not have changed
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.project_id.is_none());
+    }
+
+    #[test]
+    fn test_move_to_project_out_of_range_ignored() {
+        use crate::domain::Project;
+
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Add one project
+        let project = Project::new("Test Project");
+        model.projects.insert(project.id.clone(), project);
+
+        // Start move to project
+        update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
+
+        // Type index out of range (99)
+        model.input_buffer = "99".to_string();
+        model.cursor_position = 2;
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Task should not have changed (out of range index is ignored)
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.project_id.is_none());
     }
 
     // Undo tests

@@ -71,8 +71,20 @@ impl Widget for HelpPopup {
                 Span::raw(" Toggle complete"),
             ]),
             Line::from(vec![
-                Span::styled("D", Style::default().fg(Color::Cyan)),
+                Span::styled("d", Style::default().fg(Color::Cyan)),
                 Span::raw("       Delete task"),
+            ]),
+            Line::from(vec![
+                Span::styled("e", Style::default().fg(Color::Cyan)),
+                Span::raw("       Edit task title"),
+            ]),
+            Line::from(vec![
+                Span::styled("p", Style::default().fg(Color::Cyan)),
+                Span::raw("       Cycle priority"),
+            ]),
+            Line::from(vec![
+                Span::styled("m", Style::default().fg(Color::Cyan)),
+                Span::raw("       Move to project"),
             ]),
             Line::from(vec![
                 Span::styled("t", Style::default().fg(Color::Cyan)),

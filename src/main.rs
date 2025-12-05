@@ -276,6 +276,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::EditTags => Message::Ui(UiMessage::StartEditTags),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
         Action::CyclePriority => Message::Task(TaskMessage::CyclePriority),
+        Action::MoveToProject => Message::Ui(UiMessage::StartMoveToProject),
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),

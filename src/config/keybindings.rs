@@ -77,6 +77,20 @@ pub enum Action {
     // Export
     ExportCsv,
     ExportIcs,
+
+    // Macros
+    RecordMacro,
+    StopRecordMacro,
+    PlayMacro0,
+    PlayMacro1,
+    PlayMacro2,
+    PlayMacro3,
+    PlayMacro4,
+    PlayMacro5,
+    PlayMacro6,
+    PlayMacro7,
+    PlayMacro8,
+    PlayMacro9,
 }
 
 /// Key modifier
@@ -208,6 +222,20 @@ impl Default for Keybindings {
         // Export
         bindings.insert("ctrl+e".to_string(), Action::ExportCsv);
         bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
+
+        // Macros - q to record, Q to stop, @0-9 to play
+        bindings.insert("ctrl+q".to_string(), Action::RecordMacro);
+        bindings.insert("ctrl+Q".to_string(), Action::StopRecordMacro);
+        bindings.insert("@0".to_string(), Action::PlayMacro0);
+        bindings.insert("@1".to_string(), Action::PlayMacro1);
+        bindings.insert("@2".to_string(), Action::PlayMacro2);
+        bindings.insert("@3".to_string(), Action::PlayMacro3);
+        bindings.insert("@4".to_string(), Action::PlayMacro4);
+        bindings.insert("@5".to_string(), Action::PlayMacro5);
+        bindings.insert("@6".to_string(), Action::PlayMacro6);
+        bindings.insert("@7".to_string(), Action::PlayMacro7);
+        bindings.insert("@8".to_string(), Action::PlayMacro8);
+        bindings.insert("@9".to_string(), Action::PlayMacro9);
 
         Self { bindings }
     }

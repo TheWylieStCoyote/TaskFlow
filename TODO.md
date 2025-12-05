@@ -20,5 +20,5 @@ Potential features to implement in future versions:
 - [x] **Calendar View** - Monthly grid with task indicators (select Calendar from sidebar, `<`/`>` for months)
 - [x] **Statistics Dashboard** - Dashboard view with completion rates, time tracking stats, project progress, status distribution
 - [x] **Export Formats** - Export tasks to CSV (`Ctrl+E`) or ICS/iCalendar (`Ctrl+I`) formats
-- [ ] **Keyboard Macros** - Record and replay sequences of actions
+- [x] **Keyboard Macros** - Record (`Ctrl+Q` + 0-9) and replay (`@0-9`) action sequences with 10 slots
 - [ ] **Task Templates** - Create new tasks from predefined templates

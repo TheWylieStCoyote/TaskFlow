@@ -166,14 +166,30 @@ fn run_app(
                 _ => Message::None,
             };
 
+            // Check if this is a PlayMacro message and handle playback
+            let playback_messages = if let Message::Ui(UiMessage::PlayMacro(slot)) = &message {
+                model.macro_state.get_playback_messages(*slot)
+            } else {
+                None
+            };
+
             update(model, message);
+
+            // If we got playback messages, replay them
+            if let Some(messages) = playback_messages {
+                model.macro_state.playing = true;
+                for msg in messages {
+                    update(model, msg);
+                }
+                model.macro_state.playing = false;
+            }
         }
     }
 
     Ok(())
 }
 
-fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindings) -> Message {
+fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybindings) -> Message {
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
@@ -221,6 +237,29 @@ fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindin
             KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
             KeyCode::Char('l') => return Message::Ui(UiMessage::CalendarNextDay),
             _ => {}
+        }
+    }
+
+    // Handle macro slot selection if pending
+    if model.pending_macro_slot.is_some() {
+        if let KeyCode::Char(c) = key.code {
+            if let Some(digit) = c.to_digit(10) {
+                let slot = digit as usize;
+                model.pending_macro_slot = Some(slot);
+                if model.macro_state.is_recording() {
+                    // Stop recording and save to this slot
+                    return Message::Ui(UiMessage::StopRecordMacro);
+                } else {
+                    // Start recording to this slot
+                    return Message::Ui(UiMessage::StartRecordMacro);
+                }
+            }
+        }
+        // Escape cancels macro slot selection
+        if key.code == KeyCode::Esc {
+            model.pending_macro_slot = None;
+            model.status_message = Some("Macro cancelled".to_string());
+            return Message::None;
         }
     }
 
@@ -329,5 +368,17 @@ fn action_to_message(action: &Action) -> Message {
         Action::Quit => Message::System(SystemMessage::Quit),
         Action::ExportCsv => Message::System(SystemMessage::ExportCsv),
         Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
+        Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),
+        Action::StopRecordMacro => Message::Ui(UiMessage::StopRecordMacro),
+        Action::PlayMacro0 => Message::Ui(UiMessage::PlayMacro(0)),
+        Action::PlayMacro1 => Message::Ui(UiMessage::PlayMacro(1)),
+        Action::PlayMacro2 => Message::Ui(UiMessage::PlayMacro(2)),
+        Action::PlayMacro3 => Message::Ui(UiMessage::PlayMacro(3)),
+        Action::PlayMacro4 => Message::Ui(UiMessage::PlayMacro(4)),
+        Action::PlayMacro5 => Message::Ui(UiMessage::PlayMacro(5)),
+        Action::PlayMacro6 => Message::Ui(UiMessage::PlayMacro(6)),
+        Action::PlayMacro7 => Message::Ui(UiMessage::PlayMacro(7)),
+        Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
+        Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
     }
 }

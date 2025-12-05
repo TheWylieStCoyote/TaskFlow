@@ -220,6 +220,19 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Macros",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("Ctrl+q", Style::default().fg(Color::Cyan)),
+                Span::raw("    Record macro (press 0-9 for slot)"),
+            ]),
+            Line::from(vec![
+                Span::styled("@0-9", Style::default().fg(Color::Cyan)),
+                Span::raw("      Play macro from slot"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

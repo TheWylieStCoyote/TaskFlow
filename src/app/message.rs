@@ -122,6 +122,10 @@ pub enum UiMessage {
     // Calendar
     CalendarPrevDay,
     CalendarNextDay,
+    // Macros
+    StartRecordMacro,
+    StopRecordMacro,
+    PlayMacro(usize),
 }
 
 /// System messages

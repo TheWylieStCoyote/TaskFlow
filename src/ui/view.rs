@@ -148,6 +148,8 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     // Show status message if available, otherwise show normal footer
     let footer_text = if let Some(ref msg) = model.status_message {
         msg.clone()
+    } else if model.macro_state.is_recording() {
+        " [REC] Recording macro... Press Ctrl+Q then 0-9 to save ".to_string()
     } else {
         let task_count = model.visible_tasks.len();
         let completed = model
@@ -170,6 +172,8 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
 
     let footer_style = if model.status_message.is_some() {
         Style::default().fg(theme.colors.accent.to_color())
+    } else if model.macro_state.is_recording() {
+        Style::default().fg(theme.colors.danger.to_color())
     } else {
         Style::default().fg(theme.colors.muted.to_color())
     };

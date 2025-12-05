@@ -184,6 +184,21 @@ The Calendar view shows a monthly grid with tasks displayed for each day. Days w
 | `Ctrl+e` | Export tasks to CSV |
 | `Ctrl+i` | Export tasks to ICS (iCalendar) |
 
+#### Macros
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+q` | Start/stop macro recording (then press 0-9 for slot) |
+| `@0`-`@9` | Play macro from slot 0-9 |
+
+Record a sequence of actions and replay them later:
+1. Press `Ctrl+q` to start recording, then press a digit (0-9) to select the slot
+2. Perform any actions you want to record
+3. Press `Ctrl+q` again, then the same digit to save the macro
+4. Press `@` followed by the digit to replay the macro
+
+The footer shows `[REC]` when recording is active.
+
 #### General
 
 | Key | Action |

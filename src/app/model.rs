@@ -10,7 +10,7 @@ use crate::domain::{
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::{InputMode, InputTarget};
 
-use super::{FocusPane, UndoStack, ViewId};
+use super::{FocusPane, MacroState, UndoStack, ViewId};
 
 /// Calendar state for the calendar view
 #[derive(Debug, Clone)]
@@ -97,6 +97,11 @@ pub struct Model {
 
     // Status message for user feedback
     pub status_message: Option<String>,
+
+    // Macro recording/playback state
+    pub macro_state: MacroState,
+    // Pending macro slot for recording start
+    pub pending_macro_slot: Option<usize>,
 }
 
 impl Model {
@@ -133,6 +138,8 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             status_message: None,
+            macro_state: MacroState::new(),
+            pending_macro_slot: None,
         }
     }
 

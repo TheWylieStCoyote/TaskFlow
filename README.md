@@ -6,7 +6,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 
 ## Features
 
-- **Task Management**: Create, edit, and track tasks with priorities, due dates, and status
+- **Task Management**: Create, edit, and track tasks with priorities, due dates, status, and subtasks
 - **Project Organization**: Group related tasks under projects with sidebar navigation
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer
@@ -35,6 +35,44 @@ cargo build --release
 
 - Rust 1.70 or later
 - A terminal with UTF-8 support
+
+### Shell Completions
+
+TaskFlow supports shell completion for Bash, Zsh, and Fish. Generate and install completions:
+
+**Bash:**
+```bash
+# Generate and install
+taskflow completion bash > ~/.local/share/bash-completion/completions/taskflow
+
+# Or system-wide (requires sudo)
+sudo taskflow completion bash > /etc/bash_completion.d/taskflow
+
+# Reload (or restart terminal)
+source ~/.local/share/bash-completion/completions/taskflow
+```
+
+**Zsh:**
+```bash
+# Create completions directory if needed
+mkdir -p ~/.zsh/completions
+
+# Generate completions
+taskflow completion zsh > ~/.zsh/completions/_taskflow
+
+# Add to ~/.zshrc (if not already present):
+# fpath=(~/.zsh/completions $fpath)
+# autoload -Uz compinit && compinit
+
+# Reload
+source ~/.zshrc
+```
+
+**Fish:**
+```bash
+# Generate and install (Fish loads automatically)
+taskflow completion fish > ~/.config/fish/completions/taskflow.fish
+```
 
 ## Quick Start
 
@@ -102,12 +140,14 @@ Each task shows:
 | Key | Action |
 |-----|--------|
 | `a` | Add new task |
+| `A` | Add subtask under selected task |
 | `e` | Edit task title |
 | `d` | Delete task (with confirmation) |
 | `x` or `Space` | Toggle task completion |
 | `p` | Cycle priority (None → Low → Medium → High → Urgent) |
 | `D` | Edit due date (YYYY-MM-DD format) |
 | `T` | Edit tags (comma-separated) |
+| `n` | Edit description/notes |
 | `m` | Move task to project |
 | `t` | Toggle time tracking |
 
@@ -135,6 +175,89 @@ Each task shows:
 | `b` | Toggle sidebar |
 | `c` | Toggle showing completed tasks |
 | `?` | Show/hide help popup |
+
+#### Multi-Select (Bulk Operations)
+
+| Key | Action |
+|-----|--------|
+| `v` | Toggle multi-select mode |
+| `V` | Select all visible tasks |
+| `Space` | Toggle selection of current task (in multi-select mode) |
+| `Ctrl+v` | Clear selection and exit multi-select |
+
+When in multi-select mode, selected tasks show a `●` indicator. After selecting tasks, you can delete them with `d` or perform other operations.
+
+#### Dependencies & Recurrence
+
+| Key | Action |
+|-----|--------|
+| `B` | Edit dependencies (set which tasks block this one) |
+| `R` | Set task recurrence pattern |
+
+Tasks with dependencies show a `[B]` indicator. Recurring tasks show a `↻` indicator.
+
+**Recurrence patterns:**
+- `d` - Daily (repeats every day)
+- `w` - Weekly (repeats on same day of week)
+- `m` - Monthly (repeats on same day of month)
+- `y` - Yearly (repeats on same date each year)
+- `0` - Clear recurrence (make non-recurring)
+
+When you complete a recurring task, a new task is automatically created with the next due date.
+
+#### Calendar View
+
+| Key | Action |
+|-----|--------|
+| `←`/`→` or `h`/`l` | Navigate days |
+| `↑`/`↓` or `j`/`k` | Navigate weeks |
+| `<`/`>` | Previous/Next month |
+
+The Calendar view shows a monthly grid with tasks displayed for each day. Days with tasks show a dot indicator, and the selected day's tasks are listed in a panel on the right.
+
+#### Export
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+e` | Export tasks to CSV |
+| `Ctrl+i` | Export tasks to ICS (iCalendar) |
+
+#### Macros
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+q` | Start/stop macro recording (then press 0-9 for slot) |
+| `@0`-`@9` | Play macro from slot 0-9 |
+
+Record a sequence of actions and replay them later:
+1. Press `Ctrl+q` to start recording, then press a digit (0-9) to select the slot
+2. Perform any actions you want to record
+3. Press `Ctrl+q` again, then the same digit to save the macro
+4. Press `@` followed by the digit to replay the macro
+
+The footer shows `[REC]` when recording is active.
+
+#### Templates
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+n` | Show template picker |
+| `0`-`9` | Select template by number (in picker) |
+| `j`/`k` | Navigate template list (in picker) |
+| `Enter` | Create task from selected template |
+| `Esc` | Cancel template picker |
+
+Templates allow quickly creating common task types with preset fields:
+- **Bug Fix**: High priority with #bug tag and structured description
+- **Feature**: Medium priority with #feature tag
+- **Review**: Medium priority, due tomorrow
+- **Meeting Notes**: Low priority with attendee/agenda template
+- **Daily Task**: Low priority, due today
+- **Weekly Task**: Low priority, due in 7 days
+- **Urgent**: Urgent priority, due today
+- **Research**: Low priority with research template
+
+After selecting a template, the task is created and you can edit the title.
 
 #### General
 
@@ -175,7 +298,21 @@ Tasks can have one of five priority levels:
 | Today | Tasks due today |
 | Upcoming | Tasks with future due dates |
 | Overdue | Tasks past their due date |
+| Calendar | Monthly calendar view with task indicators |
+| Dashboard | Statistics overview with completion rates and time tracking |
 | Projects | Tasks assigned to a project |
+
+### Dashboard View
+
+The Dashboard provides an overview of your task statistics:
+
+- **Completion Panel**: Overall completion rate, overdue count, and completion by priority
+- **Time Tracking Panel**: Total time tracked, average time per task, current tracking status
+- **Projects Panel**: Per-project completion percentages
+- **Status Distribution**: Bar chart showing task counts by status (Todo, In Progress, Blocked, Done, Cancelled)
+- **This Week Panel**: Tasks created and completed this week, active tasks count
+
+Access the Dashboard by selecting it from the sidebar navigation.
 
 ### Due Dates
 
@@ -314,6 +451,33 @@ tags:
 
 Task description and notes go here...
 ```
+
+## Export Formats
+
+TaskFlow can export tasks to external formats for use with other tools:
+
+### CSV Export (`Ctrl+e`)
+
+Exports all tasks to a CSV file with columns:
+- ID, Title, Status, Priority, Due Date, Tags, Project ID, Description, Created, Completed
+
+CSV files can be opened in spreadsheet applications like Excel, Google Sheets, or LibreOffice Calc.
+
+### ICS Export (`Ctrl+i`)
+
+Exports tasks as iCalendar (ICS) format VTODO items, compatible with:
+- Apple Calendar/Reminders
+- Google Calendar
+- Microsoft Outlook
+- Any calendar application supporting the iCalendar standard
+
+Each task becomes a VTODO component with:
+- Summary (title)
+- Description
+- Due date
+- Priority (mapped to iCalendar priority 1-9)
+- Status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)
+- Categories (tags)
 
 ## Contributing
 

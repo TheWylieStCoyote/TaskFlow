@@ -20,10 +20,12 @@ pub enum Action {
     // Task actions
     ToggleComplete,
     CreateTask,
+    CreateSubtask,
     CreateProject,
     EditTask,
     EditDueDate,
     EditTags,
+    EditDescription,
     DeleteTask,
     CyclePriority,
     MoveToProject,
@@ -45,11 +47,53 @@ pub enum Action {
     CycleSortField,
     ToggleSortOrder,
 
+    // Multi-select / Bulk operations
+    ToggleMultiSelect,
+    ToggleTaskSelection,
+    SelectAll,
+    ClearSelection,
+    BulkDelete,
+    BulkMoveToProject,
+    BulkSetStatus,
+
+    // Dependencies
+    EditDependencies,
+
+    // Recurrence
+    EditRecurrence,
+
+    // Calendar navigation
+    CalendarPrevMonth,
+    CalendarNextMonth,
+    CalendarPrevDay,
+    CalendarNextDay,
+
     // System
     Save,
     Undo,
     Redo,
     Quit,
+
+    // Export
+    ExportCsv,
+    ExportIcs,
+
+    // Macros
+    RecordMacro,
+    StopRecordMacro,
+    PlayMacro0,
+    PlayMacro1,
+    PlayMacro2,
+    PlayMacro3,
+    PlayMacro4,
+    PlayMacro5,
+    PlayMacro6,
+    PlayMacro7,
+    PlayMacro8,
+    PlayMacro9,
+
+    // Templates
+    ShowTemplates,
 }
 
 /// Key modifier
@@ -125,10 +169,12 @@ impl Default for Keybindings {
         bindings.insert("x".to_string(), Action::ToggleComplete);
         bindings.insert("space".to_string(), Action::ToggleComplete);
         bindings.insert("a".to_string(), Action::CreateTask);
+        bindings.insert("A".to_string(), Action::CreateSubtask);
         bindings.insert("P".to_string(), Action::CreateProject);
         bindings.insert("e".to_string(), Action::EditTask);
         bindings.insert("D".to_string(), Action::EditDueDate);
         bindings.insert("T".to_string(), Action::EditTags);
+        bindings.insert("n".to_string(), Action::EditDescription);
         bindings.insert("d".to_string(), Action::DeleteTask);
         bindings.insert("p".to_string(), Action::CyclePriority);
         bindings.insert("m".to_string(), Action::MoveToProject);
@@ -152,6 +198,21 @@ impl Default for Keybindings {
         bindings.insert("s".to_string(), Action::CycleSortField);
         bindings.insert("S".to_string(), Action::ToggleSortOrder);
 
+        // Multi-select / Bulk operations
+        bindings.insert("v".to_string(), Action::ToggleMultiSelect);
+        bindings.insert("V".to_string(), Action::SelectAll);
+        bindings.insert("ctrl+v".to_string(), Action::ClearSelection);
+
+        // Dependencies
+        bindings.insert("B".to_string(), Action::EditDependencies);
+
+        // Recurrence
+        bindings.insert("R".to_string(), Action::EditRecurrence);
+
+        // Calendar navigation
+        bindings.insert("<".to_string(), Action::CalendarPrevMonth);
+        bindings.insert(">".to_string(), Action::CalendarNextMonth);
+
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);
         bindings.insert("u".to_string(), Action::Undo);
@@ -160,6 +221,27 @@ impl Default for Keybindings {
         bindings.insert("U".to_string(), Action::Redo);
         bindings.insert("q".to_string(), Action::Quit);
         bindings.insert("esc".to_string(), Action::Quit);
+
+        // Export
+        bindings.insert("ctrl+e".to_string(), Action::ExportCsv);
+        bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
+
+        // Macros - q to record, Q to stop, @0-9 to play
+        bindings.insert("ctrl+q".to_string(), Action::RecordMacro);
+        bindings.insert("ctrl+Q".to_string(), Action::StopRecordMacro);
+        bindings.insert("@0".to_string(), Action::PlayMacro0);
+        bindings.insert("@1".to_string(), Action::PlayMacro1);
+        bindings.insert("@2".to_string(), Action::PlayMacro2);
+        bindings.insert("@3".to_string(), Action::PlayMacro3);
+        bindings.insert("@4".to_string(), Action::PlayMacro4);
+        bindings.insert("@5".to_string(), Action::PlayMacro5);
+        bindings.insert("@6".to_string(), Action::PlayMacro6);
+        bindings.insert("@7".to_string(), Action::PlayMacro7);
+        bindings.insert("@8".to_string(), Action::PlayMacro8);
+        bindings.insert("@9".to_string(), Action::PlayMacro9);
+
+        // Templates
+        bindings.insert("ctrl+n".to_string(), Action::ShowTemplates);
 
         Self { bindings }
     }

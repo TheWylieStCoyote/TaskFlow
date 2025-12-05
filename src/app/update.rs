@@ -7,6 +7,11 @@ use super::{
 
 /// Main update function - heart of TEA pattern
 pub fn update(model: &mut Model, message: Message) {
+    // Record message if we're recording a macro
+    if model.macro_state.is_recording() {
+        model.macro_state.record(&message);
+    }
+
     match message {
         Message::Navigation(msg) => handle_navigation(model, msg),
         Message::Task(msg) => handle_task(model, msg),
@@ -21,23 +26,29 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
     match msg {
         NavigationMessage::Up => match model.focus_pane {
             FocusPane::TaskList => {
-                if model.selected_index > 0 {
+                if model.current_view == ViewId::Calendar {
+                    // In calendar view, up moves to previous week (or wraps)
+                    handle_calendar_up(model);
+                } else if model.selected_index > 0 {
                     model.selected_index -= 1;
                 }
             }
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 4)
-                    if model.sidebar_selected == 4 {
-                        model.sidebar_selected = 3;
+                    // Skip separator (index 6)
+                    if model.sidebar_selected == 6 {
+                        model.sidebar_selected = 5;
                     }
                 }
             }
         },
         NavigationMessage::Down => match model.focus_pane {
             FocusPane::TaskList => {
-                if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
+                if model.current_view == ViewId::Calendar {
+                    // In calendar view, down moves to next week (or wraps)
+                    handle_calendar_down(model);
+                } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
                 }
             }
@@ -45,9 +56,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 4)
-                    if model.sidebar_selected == 4 {
-                        model.sidebar_selected = 5;
+                    // Skip separator (index 6)
+                    if model.sidebar_selected == 6 {
+                        model.sidebar_selected = 7;
                     }
                 }
             }
@@ -106,6 +117,110 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::SelectSidebarItem => {
             handle_sidebar_selection(model);
         }
+        NavigationMessage::CalendarPrevMonth => {
+            if model.calendar_state.month == 1 {
+                model.calendar_state.month = 12;
+                model.calendar_state.year -= 1;
+            } else {
+                model.calendar_state.month -= 1;
+            }
+            // Adjust selected day if it exceeds days in new month
+            let days_in_month =
+                days_in_month(model.calendar_state.year, model.calendar_state.month);
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > days_in_month {
+                    model.calendar_state.selected_day = Some(days_in_month);
+                }
+            }
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarNextMonth => {
+            if model.calendar_state.month == 12 {
+                model.calendar_state.month = 1;
+                model.calendar_state.year += 1;
+            } else {
+                model.calendar_state.month += 1;
+            }
+            // Adjust selected day if it exceeds days in new month
+            let days_in_month =
+                days_in_month(model.calendar_state.year, model.calendar_state.month);
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > days_in_month {
+                    model.calendar_state.selected_day = Some(days_in_month);
+                }
+            }
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarSelectDay(day) => {
+            model.calendar_state.selected_day = Some(day);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+    }
+}
+
+/// Helper to get days in a month
+fn days_in_month(year: i32, month: u32) -> u32 {
+    use chrono::{Datelike, NaiveDate};
+    if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .and_then(|d| d.pred_opt())
+    .map(|d| d.day())
+    .unwrap_or(28)
+}
+
+/// Handle calendar up navigation (move to previous week)
+fn handle_calendar_up(model: &mut Model) {
+    if let Some(day) = model.calendar_state.selected_day {
+        if day > 7 {
+            model.calendar_state.selected_day = Some(day - 7);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        } else {
+            // Move to previous month, last row
+            if model.calendar_state.month == 1 {
+                model.calendar_state.month = 12;
+                model.calendar_state.year -= 1;
+            } else {
+                model.calendar_state.month -= 1;
+            }
+            let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+            // Try to land on same weekday in last week
+            let new_day = days - (7 - day);
+            model.calendar_state.selected_day = Some(new_day.max(1));
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+    }
+}
+
+/// Handle calendar down navigation (move to next week)
+fn handle_calendar_down(model: &mut Model) {
+    if let Some(day) = model.calendar_state.selected_day {
+        let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+        if day + 7 <= days {
+            model.calendar_state.selected_day = Some(day + 7);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        } else {
+            // Move to next month, first row
+            if model.calendar_state.month == 12 {
+                model.calendar_state.month = 1;
+                model.calendar_state.year += 1;
+            } else {
+                model.calendar_state.month += 1;
+            }
+            // Try to land on same weekday in first week
+            let new_day = (day + 7) - days;
+            model.calendar_state.selected_day = Some(new_day.min(7));
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
     }
 }
 
@@ -117,9 +232,11 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 1: Today
     // 2: Upcoming
     // 3: Overdue
-    // 4: Separator (skip)
-    // 5: "Projects" header (skip or go to Projects view)
-    // 6+: Individual projects
+    // 4: Calendar
+    // 5: Dashboard
+    // 6: Separator (skip)
+    // 7: "Projects" header (skip or go to Projects view)
+    // 8+: Individual projects
 
     match selected {
         0 => {
@@ -150,8 +267,22 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        4 => {} // Separator, do nothing
+        4 => {
+            model.current_view = ViewId::Calendar;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
         5 => {
+            model.current_view = ViewId::Dashboard;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        6 => {} // Separator, do nothing
+        7 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -159,9 +290,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 6 => {
+        n if n >= 8 => {
             // Select a specific project
-            let project_index = n - 6;
+            let project_index = n - 8;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -182,6 +313,18 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             let task_id = model.visible_tasks.get(model.selected_index).cloned();
 
             if let Some(id) = task_id {
+                // Check if completing a recurring task
+                let next_task = if let Some(task) = model.tasks.get(&id) {
+                    if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
+                        // Create next occurrence
+                        Some(create_next_recurring_task(task))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -191,6 +334,15 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         before: Box::new(before),
                         after: Box::new(after),
                     });
+                }
+
+                // Add the next recurring task if one was created
+                if let Some(new_task) = next_task {
+                    model.sync_task(&new_task);
+                    model
+                        .undo_stack
+                        .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
+                    model.tasks.insert(new_task.id.clone(), new_task);
                 }
             }
             model.refresh_visible_tasks();
@@ -305,6 +457,17 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
+        UiMessage::StartCreateSubtask => {
+            // Create a subtask under the currently selected task
+            if let Some(parent_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&parent_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::Subtask(parent_id);
+                    model.input_buffer.clear();
+                    model.cursor_position = 0;
+                }
+            }
+        }
         UiMessage::StartCreateProject => {
             model.input_mode = InputMode::Editing;
             model.input_target = InputTarget::Project;
@@ -342,6 +505,17 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.input_target = InputTarget::EditTags(task_id);
                     // Pre-fill with existing tags as comma-separated
                     model.input_buffer = task.tags.join(", ");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditDescription => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDescription(task_id);
+                    // Pre-fill with existing description
+                    model.input_buffer = task.description.clone().unwrap_or_default();
                     model.cursor_position = model.input_buffer.len();
                 }
             }
@@ -443,6 +617,19 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         model.refresh_visible_tasks();
                     }
                 }
+                InputTarget::Subtask(parent_id) => {
+                    if !input.is_empty() {
+                        let task = crate::domain::Task::new(input)
+                            .with_priority(model.default_priority)
+                            .with_parent(parent_id.clone());
+                        model.sync_task(&task);
+                        model
+                            .undo_stack
+                            .push(UndoAction::TaskCreated(Box::new(task.clone())));
+                        model.tasks.insert(task.id.clone(), task);
+                        model.refresh_visible_tasks();
+                    }
+                }
                 InputTarget::EditTask(task_id) => {
                     if !input.is_empty() {
                         if let Some(task) = model.tasks.get_mut(task_id) {
@@ -489,6 +676,21 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             .map(|s| s.trim().to_string())
                             .filter(|s| !s.is_empty())
                             .collect();
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::EditDescription(task_id) => {
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        // Empty input clears the description
+                        task.description = if input.is_empty() { None } else { Some(input) };
                         task.updated_at = chrono::Utc::now();
                         let after = task.clone();
                         model.sync_task(&after);
@@ -560,6 +762,136 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                     model.refresh_visible_tasks();
                 }
+                InputTarget::BulkMoveToProject => {
+                    if let Ok(choice) = input.parse::<usize>() {
+                        let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                        let target_project = if choice == 0 {
+                            None
+                        } else {
+                            project_ids.get(choice - 1).cloned()
+                        };
+
+                        // Move all selected tasks
+                        let tasks_to_move: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                        for task_id in tasks_to_move {
+                            if let Some(task) = model.tasks.get_mut(&task_id) {
+                                let before = task.clone();
+                                task.project_id = target_project.clone();
+                                task.updated_at = chrono::Utc::now();
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                        model.selected_tasks.clear();
+                        model.multi_select_mode = false;
+                        model.refresh_visible_tasks();
+                    }
+                }
+                InputTarget::BulkSetStatus => {
+                    use crate::domain::TaskStatus;
+                    let status = match input.parse::<usize>() {
+                        Ok(1) => Some(TaskStatus::Todo),
+                        Ok(2) => Some(TaskStatus::InProgress),
+                        Ok(3) => Some(TaskStatus::Blocked),
+                        Ok(4) => Some(TaskStatus::Done),
+                        Ok(5) => Some(TaskStatus::Cancelled),
+                        _ => None,
+                    };
+
+                    if let Some(new_status) = status {
+                        let tasks_to_update: Vec<_> =
+                            model.selected_tasks.iter().cloned().collect();
+                        for task_id in tasks_to_update {
+                            if let Some(task) = model.tasks.get_mut(&task_id) {
+                                let before = task.clone();
+                                task.status = new_status;
+                                task.updated_at = chrono::Utc::now();
+                                if new_status.is_complete() && task.completed_at.is_none() {
+                                    task.completed_at = Some(chrono::Utc::now());
+                                } else if !new_status.is_complete() {
+                                    task.completed_at = None;
+                                }
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                        model.selected_tasks.clear();
+                        model.multi_select_mode = false;
+                        model.refresh_visible_tasks();
+                    }
+                }
+                InputTarget::EditDependencies(task_id) => {
+                    // Parse task numbers from input
+                    let dep_indices: Vec<usize> = input
+                        .split(|c: char| !c.is_ascii_digit())
+                        .filter_map(|s| s.parse::<usize>().ok())
+                        .collect();
+
+                    // Convert indices to task IDs
+                    let new_deps: Vec<_> = dep_indices
+                        .iter()
+                        .filter_map(|i| model.visible_tasks.get(i.saturating_sub(1)).cloned())
+                        .filter(|id| id != task_id) // Can't depend on self
+                        .collect();
+
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        task.dependencies = new_deps;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::EditRecurrence(task_id) => {
+                    use crate::domain::Recurrence;
+                    use chrono::Datelike;
+                    // Parse recurrence from input (first char: d, w, m, y, 0)
+                    let first_char = input.chars().next().unwrap_or('0');
+                    let new_recurrence = match first_char {
+                        'd' | 'D' => Some(Recurrence::Daily),
+                        'w' | 'W' => Some(Recurrence::Weekly {
+                            days: vec![], // Default to all days
+                        }),
+                        'm' | 'M' => Some(Recurrence::Monthly {
+                            day: chrono::Utc::now().date_naive().day(),
+                        }),
+                        'y' | 'Y' => {
+                            let today = chrono::Utc::now().date_naive();
+                            Some(Recurrence::Yearly {
+                                month: today.month(),
+                                day: today.day(),
+                            })
+                        }
+                        '0' | 'n' | 'N' => None,
+                        _ => None, // Invalid input clears recurrence
+                    };
+
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        task.recurrence = new_recurrence;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -616,7 +948,341 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::CancelDelete => {
             model.show_confirm_delete = false;
         }
+        // Multi-select / Bulk operations
+        UiMessage::ToggleMultiSelect => {
+            model.multi_select_mode = !model.multi_select_mode;
+            if !model.multi_select_mode {
+                // Exiting multi-select mode clears selection
+                model.selected_tasks.clear();
+            }
+        }
+        UiMessage::ToggleTaskSelection => {
+            if model.multi_select_mode {
+                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                    if model.selected_tasks.contains(&task_id) {
+                        model.selected_tasks.remove(&task_id);
+                    } else {
+                        model.selected_tasks.insert(task_id);
+                    }
+                }
+            }
+        }
+        UiMessage::SelectAll => {
+            model.multi_select_mode = true;
+            model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+        }
+        UiMessage::ClearSelection => {
+            model.selected_tasks.clear();
+            model.multi_select_mode = false;
+        }
+        UiMessage::BulkDelete => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                // Delete all selected tasks
+                let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                for task_id in tasks_to_delete {
+                    if let Some(task) = model.tasks.remove(&task_id) {
+                        model.delete_task_from_storage(&task_id);
+                        model
+                            .undo_stack
+                            .push(UndoAction::TaskDeleted(Box::new(task)));
+                    }
+                }
+                model.selected_tasks.clear();
+                model.multi_select_mode = false;
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::StartBulkMoveToProject => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkMoveToProject;
+                // Build project list string
+                let mut options = vec!["0: (none)".to_string()];
+                for (i, project) in model.projects.values().enumerate() {
+                    options.push(format!("{}: {}", i + 1, project.name));
+                }
+                model.input_buffer = options.join(", ");
+                model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartBulkSetStatus => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkSetStatus;
+                model.input_buffer =
+                    "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
+                model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartEditDependencies => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDependencies(task_id.clone());
+                    // Build list of available tasks with numbers
+                    let mut buffer = String::new();
+                    for (i, id) in model.visible_tasks.iter().enumerate() {
+                        if *id != task.id {
+                            if let Some(t) = model.tasks.get(id) {
+                                let is_dep = task.dependencies.contains(id);
+                                let marker = if is_dep { "*" } else { "" };
+                                buffer.push_str(&format!("{}{}: {}, ", marker, i + 1, t.title));
+                            }
+                        }
+                    }
+                    if buffer.ends_with(", ") {
+                        buffer.truncate(buffer.len() - 2);
+                    }
+                    model.input_buffer = buffer;
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditRecurrence => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditRecurrence(task_id);
+                    // Show current recurrence setting
+                    let current = match &task.recurrence {
+                        Some(crate::domain::Recurrence::Daily) => "d (daily)",
+                        Some(crate::domain::Recurrence::Weekly { .. }) => "w (weekly)",
+                        Some(crate::domain::Recurrence::Monthly { .. }) => "m (monthly)",
+                        Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
+                        None => "0 (none)",
+                    };
+                    model.input_buffer = format!("Current: {}", current);
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        // Calendar navigation - delegated to helper
+        UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
+            handle_ui_calendar(model, msg);
+        }
+        // Macro recording/playback - delegated to helper
+        UiMessage::StartRecordMacro | UiMessage::StopRecordMacro | UiMessage::PlayMacro(_) => {
+            handle_ui_macros(model, msg);
+        }
+        // Template picker - delegated to helper
+        UiMessage::ShowTemplates | UiMessage::HideTemplates | UiMessage::SelectTemplate(_) => {
+            handle_ui_templates(model, msg);
+        }
     }
+}
+
+/// Handle calendar navigation messages
+fn handle_ui_calendar(model: &mut Model, msg: UiMessage) {
+    if model.current_view != ViewId::Calendar {
+        return;
+    }
+
+    match msg {
+        UiMessage::CalendarPrevDay => {
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > 1 {
+                    model.calendar_state.selected_day = Some(day - 1);
+                } else {
+                    // Go to previous month's last day
+                    if model.calendar_state.month == 1 {
+                        model.calendar_state.month = 12;
+                        model.calendar_state.year -= 1;
+                    } else {
+                        model.calendar_state.month -= 1;
+                    }
+                    let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+                    model.calendar_state.selected_day = Some(days);
+                }
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::CalendarNextDay => {
+            if let Some(day) = model.calendar_state.selected_day {
+                let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+                if day < days {
+                    model.calendar_state.selected_day = Some(day + 1);
+                } else {
+                    // Go to next month's first day
+                    if model.calendar_state.month == 12 {
+                        model.calendar_state.month = 1;
+                        model.calendar_state.year += 1;
+                    } else {
+                        model.calendar_state.month += 1;
+                    }
+                    model.calendar_state.selected_day = Some(1);
+                }
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle macro recording and playback messages
+fn handle_ui_macros(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::StartRecordMacro => {
+            if model.macro_state.is_recording() {
+                // Already recording - treat as entering slot number mode
+                model.pending_macro_slot = Some(0); // Will be set by digit input
+                model.status_message = Some("Press 0-9 to select macro slot".to_string());
+            } else if let Some(slot) = model.pending_macro_slot.take() {
+                // We have a pending slot, start recording
+                if model.macro_state.start_recording(slot) {
+                    model.status_message = Some(format!("Recording macro {slot}..."));
+                }
+            } else {
+                // First press - prompt for slot
+                model.pending_macro_slot = Some(0);
+                model.status_message = Some("Press 0-9 to start recording macro".to_string());
+            }
+        }
+        UiMessage::StopRecordMacro => {
+            if let Some(slot) = model.pending_macro_slot.take() {
+                if model.macro_state.is_recording() {
+                    if model.macro_state.stop_recording(slot) {
+                        model.status_message = Some(format!("Macro {slot} saved"));
+                    } else {
+                        model.status_message = Some("Macro was empty, not saved".to_string());
+                    }
+                }
+            } else if model.macro_state.is_recording() {
+                // No slot specified, cancel recording
+                model.macro_state.cancel_recording();
+                model.status_message = Some("Recording cancelled".to_string());
+            }
+        }
+        UiMessage::PlayMacro(slot) => {
+            // Playback is handled in main.rs by dispatching stored messages
+            if model.macro_state.has_macro(slot) {
+                model.status_message = Some(format!("Playing macro {slot}..."));
+            } else {
+                model.status_message = Some(format!("No macro in slot {slot}"));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle template picker messages
+fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::ShowTemplates => {
+            model.show_templates = true;
+            model.template_selected = 0;
+        }
+        UiMessage::HideTemplates => {
+            model.show_templates = false;
+        }
+        UiMessage::SelectTemplate(index) => {
+            if let Some(template) = model.template_manager.get(index) {
+                // Create a new task from the template
+                let mut task = template.create_task();
+
+                // Apply default priority from settings if template has none
+                if task.priority == crate::domain::Priority::None {
+                    task.priority = model.default_priority;
+                }
+
+                // Push undo action
+                model
+                    .undo_stack
+                    .push(UndoAction::TaskCreated(Box::new(task.clone())));
+
+                // Store the task
+                model.sync_task(&task);
+                model.tasks.insert(task.id.clone(), task.clone());
+
+                // Start editing the task title
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::EditTask(task.id);
+                model.input_buffer = task.title;
+                model.cursor_position = model.input_buffer.len();
+
+                model.show_templates = false;
+                model.refresh_visible_tasks();
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Create the next occurrence of a recurring task
+fn create_next_recurring_task(task: &crate::domain::Task) -> crate::domain::Task {
+    use crate::domain::Recurrence;
+    use chrono::{Datelike, Duration, NaiveDate, Utc};
+
+    let today = Utc::now().date_naive();
+    let base_date = task.due_date.unwrap_or(today);
+
+    let next_due = match &task.recurrence {
+        Some(Recurrence::Daily) => base_date + Duration::days(1),
+        Some(Recurrence::Weekly { days }) => {
+            if days.is_empty() {
+                // Default: same day next week
+                base_date + Duration::weeks(1)
+            } else {
+                // Find next day in the list after today
+                let current_weekday = today.weekday();
+                let mut min_days = 7i64;
+                for day in days {
+                    let days_until = (day.num_days_from_monday() as i64
+                        - current_weekday.num_days_from_monday() as i64
+                        + 7)
+                        % 7;
+                    let days_until = if days_until == 0 { 7 } else { days_until };
+                    if days_until < min_days {
+                        min_days = days_until;
+                    }
+                }
+                today + Duration::days(min_days)
+            }
+        }
+        Some(Recurrence::Monthly { day }) => {
+            let next_month = if base_date.month() == 12 {
+                NaiveDate::from_ymd_opt(base_date.year() + 1, 1, *day)
+            } else {
+                NaiveDate::from_ymd_opt(base_date.year(), base_date.month() + 1, *day)
+            };
+            // Handle invalid dates (e.g., Feb 30) by using last day of month
+            next_month.unwrap_or_else(|| {
+                let year = if base_date.month() == 12 {
+                    base_date.year() + 1
+                } else {
+                    base_date.year()
+                };
+                let month = if base_date.month() == 12 {
+                    1
+                } else {
+                    base_date.month() + 1
+                };
+                // Get last day of the target month
+                NaiveDate::from_ymd_opt(
+                    if month == 12 { year + 1 } else { year },
+                    if month == 12 { 1 } else { month + 1 },
+                    1,
+                )
+                .unwrap()
+                    - Duration::days(1)
+            })
+        }
+        Some(Recurrence::Yearly { month, day }) => {
+            let next_year = base_date.year() + 1;
+            NaiveDate::from_ymd_opt(next_year, *month, *day)
+                .unwrap_or_else(|| NaiveDate::from_ymd_opt(next_year, *month, 28).unwrap())
+        }
+        None => today + Duration::days(1), // Shouldn't happen
+    };
+
+    crate::domain::Task::new(&task.title)
+        .with_priority(task.priority)
+        .with_due_date(next_due)
+        .with_tags(task.tags.clone())
+        .with_recurrence(task.recurrence.clone())
+        .with_project_opt(task.project_id.clone())
+        .with_description_opt(task.description.clone())
 }
 
 fn handle_time(model: &mut Model, msg: TimeMessage) {
@@ -710,6 +1376,78 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::Tick => {
             // Handle periodic updates (e.g., timer display)
+            // Clear status message after a tick
+            model.status_message = None;
+        }
+        SystemMessage::ExportCsv => {
+            handle_export_csv(model);
+        }
+        SystemMessage::ExportIcs => {
+            handle_export_ics(model);
+        }
+    }
+}
+
+fn handle_export_csv(model: &mut Model) {
+    use crate::storage::{export_to_string, ExportFormat};
+
+    let tasks = model.tasks_for_export();
+    match export_to_string(&tasks, ExportFormat::Csv) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("csv"))
+                .unwrap_or_else(|| std::path::PathBuf::from("tasks.csv"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported {} tasks to {}",
+                        tasks.len(),
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {}", e));
+        }
+    }
+}
+
+fn handle_export_ics(model: &mut Model) {
+    use crate::storage::{export_to_string, ExportFormat};
+
+    let tasks = model.tasks_for_export();
+    match export_to_string(&tasks, ExportFormat::Ics) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("ics"))
+                .unwrap_or_else(|| std::path::PathBuf::from("tasks.ics"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported {} tasks to {}",
+                        tasks.len(),
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {}", e));
         }
     }
 }
@@ -1187,15 +1925,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 3; // Overdue (before separator at 4)
+        model.sidebar_selected = 5; // Dashboard (before separator at 6)
 
-        // Move down should skip separator (4) and go to Projects header (5)
+        // Move down should skip separator (6) and go to Projects header (7)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 5);
+        assert_eq!(model.sidebar_selected, 7);
 
-        // Move up should skip separator and go back to Overdue (3)
+        // Move up should skip separator and go back to Dashboard (5)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 3);
+        assert_eq!(model.sidebar_selected, 5);
     }
 
     #[test]
@@ -1252,7 +1990,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 6; // First project (index 6 = after header items)
+        model.sidebar_selected = 8; // First project (index 8 = after header items including Dashboard)
 
         update(
             &mut model,
@@ -1655,6 +2393,112 @@ mod tests {
         let task = model.tasks.get(&task_id).unwrap();
         assert_eq!(task.tags, original_tags);
         assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    // Description editing tests
+    #[test]
+    fn test_start_edit_description_enters_edit_mode() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Task starts with no description
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
+
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::EditDescription(_)
+        ));
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_start_edit_description_prefills_existing() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set existing description
+        model.tasks.get_mut(&task_id).unwrap().description =
+            Some("Existing notes here".to_string());
+
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        assert_eq!(model.input_buffer, "Existing notes here");
+    }
+
+    #[test]
+    fn test_edit_description_add_new() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing description
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        // Type new description
+        model.input_buffer = "This is a detailed task description".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Description should be set
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(
+            task.description,
+            Some("This is a detailed task description".to_string())
+        );
+    }
+
+    #[test]
+    fn test_edit_description_clear() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial description
+        model.tasks.get_mut(&task_id).unwrap().description = Some("Old description".to_string());
+
+        // Start editing
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        // Clear input
+        model.input_buffer.clear();
+        model.cursor_position = 0;
+
+        // Submit empty
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Description should be cleared
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.description.is_none());
+    }
+
+    #[test]
+    fn test_edit_description_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start with no description
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
+
+        // Add a description
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+        model.input_buffer = "New description".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Verify description was set
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().description,
+            Some("New description".to_string())
+        );
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        // Description should be gone
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
     }
 
     // Move to project tests
@@ -2334,5 +3178,369 @@ mod tests {
         // Redo with empty stack should do nothing
         update(&mut model, Message::System(SystemMessage::Redo));
         assert!(model.tasks.is_empty());
+    }
+
+    // Subtask tests
+    #[test]
+    fn test_start_create_subtask() {
+        let mut model = create_test_model_with_tasks();
+        let _parent_id = model.visible_tasks[0].clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(model.input_target, InputTarget::Subtask(_)));
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_start_create_subtask_no_selection() {
+        let mut model = Model::new();
+        // No tasks, so no selection
+
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+        // Should remain in normal mode since there's no parent task
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_submit_subtask_creates_with_parent() {
+        let mut model = create_test_model_with_tasks();
+        let parent_id = model.visible_tasks[0].clone();
+        let initial_count = model.tasks.len();
+
+        // Start creating subtask
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+        // Type subtask name
+        model.input_buffer = "My subtask".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should have one more task
+        assert_eq!(model.tasks.len(), initial_count + 1);
+
+        // Find the new subtask
+        let subtask = model
+            .tasks
+            .values()
+            .find(|t| t.title == "My subtask")
+            .expect("Subtask should exist");
+
+        // Should have parent_task_id set
+        assert_eq!(subtask.parent_task_id, Some(parent_id));
+    }
+
+    #[test]
+    fn test_subtask_inherits_default_priority() {
+        let mut model = create_test_model_with_tasks();
+        model.default_priority = Priority::High;
+
+        // Start creating subtask
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+        model.input_buffer = "Priority subtask".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let subtask = model
+            .tasks
+            .values()
+            .find(|t| t.title == "Priority subtask")
+            .expect("Subtask should exist");
+
+        assert_eq!(subtask.priority, Priority::High);
+    }
+
+    #[test]
+    fn test_cancel_subtask_creation() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Start creating subtask
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+        // Type something
+        model.input_buffer = "Will be cancelled".to_string();
+
+        // Cancel
+        update(&mut model, Message::Ui(UiMessage::CancelInput));
+
+        // No new task should be created
+        assert_eq!(model.tasks.len(), initial_count);
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_subtask_empty_name_not_created() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Start creating subtask
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+        // Submit with empty name
+        model.input_buffer = "   ".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // No new task should be created
+        assert_eq!(model.tasks.len(), initial_count);
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_subtask_undo() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Create subtask
+        update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+        model.input_buffer = "Subtask to undo".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.tasks.len(), initial_count + 1);
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(model.tasks.len(), initial_count);
+        assert!(!model.tasks.values().any(|t| t.title == "Subtask to undo"));
+    }
+
+    // Bulk operation tests
+    #[test]
+    fn test_toggle_multi_select() {
+        let mut model = create_test_model_with_tasks();
+
+        assert!(!model.multi_select_mode);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+        assert!(model.multi_select_mode);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+        assert!(!model.multi_select_mode);
+    }
+
+    #[test]
+    fn test_toggle_task_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        let task_id = model.visible_tasks[0].clone();
+
+        assert!(!model.selected_tasks.contains(&task_id));
+
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+        assert!(model.selected_tasks.contains(&task_id));
+
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+        assert!(!model.selected_tasks.contains(&task_id));
+    }
+
+    #[test]
+    fn test_toggle_task_selection_not_in_multi_mode() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Not in multi-select mode
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+
+        // Should not select anything
+        assert!(!model.selected_tasks.contains(&task_id));
+    }
+
+    #[test]
+    fn test_select_all() {
+        let mut model = create_test_model_with_tasks();
+        let task_count = model.visible_tasks.len();
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+
+        update(&mut model, Message::Ui(UiMessage::SelectAll));
+
+        assert!(model.multi_select_mode);
+        assert_eq!(model.selected_tasks.len(), task_count);
+    }
+
+    #[test]
+    fn test_clear_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+
+        update(&mut model, Message::Ui(UiMessage::ClearSelection));
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+    }
+
+    #[test]
+    fn test_bulk_delete() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Select first two tasks
+        model.multi_select_mode = true;
+        let task1 = model.visible_tasks[0].clone();
+        let task2 = model.visible_tasks[1].clone();
+        model.selected_tasks.insert(task1);
+        model.selected_tasks.insert(task2);
+
+        update(&mut model, Message::Ui(UiMessage::BulkDelete));
+
+        assert_eq!(model.tasks.len(), initial_count - 2);
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+    }
+
+    #[test]
+    fn test_bulk_delete_not_in_multi_mode() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Not in multi-select mode
+        update(&mut model, Message::Ui(UiMessage::BulkDelete));
+
+        // Nothing should be deleted
+        assert_eq!(model.tasks.len(), initial_count);
+    }
+
+    #[test]
+    fn test_exiting_multi_select_clears_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+
+        // Exit multi-select mode
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+    }
+
+    // Recurrence tests
+    #[test]
+    fn test_set_recurrence_daily() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing recurrence
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        assert_eq!(model.input_mode, InputMode::Editing);
+
+        // Set to daily
+        model.input_buffer = "d".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(matches!(
+            task.recurrence,
+            Some(crate::domain::Recurrence::Daily)
+        ));
+    }
+
+    #[test]
+    fn test_set_recurrence_weekly() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "w".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(matches!(
+            task.recurrence,
+            Some(crate::domain::Recurrence::Weekly { .. })
+        ));
+    }
+
+    #[test]
+    fn test_clear_recurrence() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // First set recurrence
+        if let Some(task) = model.tasks.get_mut(&task_id) {
+            task.recurrence = Some(crate::domain::Recurrence::Daily);
+        }
+
+        // Now clear it
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "0".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.recurrence.is_none());
+    }
+
+    #[test]
+    fn test_completing_recurring_task_creates_next() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let initial_count = model.tasks.len();
+
+        // Set task as recurring with a due date
+        if let Some(task) = model.tasks.get_mut(&task_id) {
+            task.recurrence = Some(crate::domain::Recurrence::Daily);
+            task.due_date = Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap());
+        }
+        model.refresh_visible_tasks();
+
+        // Complete the task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Should have created a new task
+        assert_eq!(model.tasks.len(), initial_count + 1);
+
+        // The new task should have the same title and be recurring
+        let new_tasks: Vec<_> = model
+            .tasks
+            .values()
+            .filter(|t| t.id != task_id && t.recurrence.is_some())
+            .collect();
+        assert_eq!(new_tasks.len(), 1);
+        let new_task = new_tasks[0];
+        assert!(new_task.recurrence.is_some());
+        assert!(new_task.due_date.is_some());
+    }
+
+    #[test]
+    fn test_completing_non_recurring_task_no_new_task() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Complete a non-recurring task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Should NOT create a new task
+        assert_eq!(model.tasks.len(), initial_count);
+    }
+
+    #[test]
+    fn test_recurrence_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set recurrence
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "d".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert!(model.tasks.get(&task_id).unwrap().recurrence.is_some());
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.tasks.get(&task_id).unwrap().recurrence.is_none());
     }
 }

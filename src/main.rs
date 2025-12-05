@@ -2,7 +2,8 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -22,44 +23,70 @@ use taskflow::ui::{view, InputMode};
 #[derive(Parser, Debug)]
 #[command(name = "taskflow")]
 #[command(author, version, about, long_about = None)]
-struct Args {
+struct Cli {
     /// Path to data file or directory
-    #[arg(short, long)]
+    #[arg(short, long, global = true, value_hint = ValueHint::AnyPath)]
     data: Option<PathBuf>,
 
-    /// Storage backend type (json, yaml, sqlite, markdown)
-    #[arg(short, long, default_value = "json")]
-    backend: String,
+    /// Storage backend type
+    #[arg(short, long, default_value = "json", global = true, value_enum)]
+    backend: BackendType,
 
     /// Use sample data instead of loading from storage
-    #[arg(long)]
+    #[arg(long, global = true)]
     demo: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Generate shell completion scripts
+    Completion {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let cli = Cli::parse();
 
+    // Handle completion subcommand
+    if let Some(Commands::Completion { shell }) = cli.command {
+        print_completions(shell);
+        return Ok(());
+    }
+
+    // No subcommand - run the TUI
+    run_tui(cli)
+}
+
+/// Generate shell completion scripts and print to stdout
+fn print_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    let name = cmd.get_name().to_string();
+    generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+/// Run the TUI application
+fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Load settings from config file
     let settings = Settings::load();
 
     // CLI args override config file settings
-    let backend_str = if args.backend != "json" {
-        &args.backend
+    let backend_type = if cli.backend != BackendType::Json {
+        cli.backend
     } else {
-        &settings.backend
+        BackendType::parse(&settings.backend).unwrap_or_default()
     };
 
     // Determine data path (CLI > config > default)
-    let data_path = args
-        .data
-        .clone()
-        .unwrap_or_else(|| settings.get_data_path());
-
-    // Parse backend type
-    let backend_type = BackendType::parse(backend_str).unwrap_or_default();
+    let data_path = cli.data.unwrap_or_else(|| settings.get_data_path());
 
     // Create app state
-    let mut model = if args.demo {
+    let mut model = if cli.demo {
         Model::new().with_sample_data()
     } else {
         // Try to load from storage, fall back to sample data on error
@@ -166,14 +193,30 @@ fn run_app(
                 _ => Message::None,
             };
 
+            // Check if this is a PlayMacro message and handle playback
+            let playback_messages = if let Message::Ui(UiMessage::PlayMacro(slot)) = &message {
+                model.macro_state.get_playback_messages(*slot)
+            } else {
+                None
+            };
+
             update(model, message);
+
+            // If we got playback messages, replay them
+            if let Some(messages) = playback_messages {
+                model.macro_state.playing = true;
+                for msg in messages {
+                    update(model, msg);
+                }
+                model.macro_state.playing = false;
+            }
         }
     }
 
     Ok(())
 }
 
-fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindings) -> Message {
+fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybindings) -> Message {
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
@@ -204,6 +247,77 @@ fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindin
     // If help is showing, any key closes it
     if model.show_help {
         return Message::Ui(UiMessage::HideHelp);
+    }
+
+    // If template picker is showing, handle navigation and selection
+    if model.show_templates {
+        return match key.code {
+            KeyCode::Esc => Message::Ui(UiMessage::HideTemplates),
+            KeyCode::Enter => Message::Ui(UiMessage::SelectTemplate(model.template_selected)),
+            KeyCode::Up | KeyCode::Char('k') => {
+                if model.template_selected > 0 {
+                    model.template_selected -= 1;
+                }
+                Message::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = model.template_manager.len().saturating_sub(1);
+                if model.template_selected < max {
+                    model.template_selected += 1;
+                }
+                Message::None
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let index = c.to_digit(10).unwrap() as usize;
+                if index < model.template_manager.len() {
+                    Message::Ui(UiMessage::SelectTemplate(index))
+                } else {
+                    Message::None
+                }
+            }
+            _ => Message::None,
+        };
+    }
+
+    // In multi-select mode, Space toggles task selection
+    if model.multi_select_mode && key.code == KeyCode::Char(' ') {
+        return Message::Ui(UiMessage::ToggleTaskSelection);
+    }
+
+    // In calendar view, arrow keys navigate days/weeks
+    if model.current_view == taskflow::app::ViewId::Calendar
+        && model.focus_pane == taskflow::app::FocusPane::TaskList
+    {
+        match key.code {
+            KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
+            KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
+            KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
+            KeyCode::Char('l') => return Message::Ui(UiMessage::CalendarNextDay),
+            _ => {}
+        }
+    }
+
+    // Handle macro slot selection if pending
+    if model.pending_macro_slot.is_some() {
+        if let KeyCode::Char(c) = key.code {
+            if let Some(digit) = c.to_digit(10) {
+                let slot = digit as usize;
+                model.pending_macro_slot = Some(slot);
+                if model.macro_state.is_recording() {
+                    // Stop recording and save to this slot
+                    return Message::Ui(UiMessage::StopRecordMacro);
+                } else {
+                    // Start recording to this slot
+                    return Message::Ui(UiMessage::StartRecordMacro);
+                }
+            }
+        }
+        // Escape cancels macro slot selection
+        if key.code == KeyCode::Esc {
+            model.pending_macro_slot = None;
+            model.status_message = Some("Macro cancelled".to_string());
+            return Message::None;
+        }
     }
 
     // Convert key event to string for lookup
@@ -270,10 +384,12 @@ fn action_to_message(action: &Action) -> Message {
         Action::PageDown => Message::Navigation(NavigationMessage::PageDown),
         Action::ToggleComplete => Message::Task(TaskMessage::ToggleComplete),
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
+        Action::CreateSubtask => Message::Ui(UiMessage::StartCreateSubtask),
         Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
         Action::EditTask => Message::Ui(UiMessage::StartEditTask),
         Action::EditDueDate => Message::Ui(UiMessage::StartEditDueDate),
         Action::EditTags => Message::Ui(UiMessage::StartEditTags),
+        Action::EditDescription => Message::Ui(UiMessage::StartEditDescription),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
         Action::CyclePriority => Message::Task(TaskMessage::CyclePriority),
         Action::MoveToProject => Message::Ui(UiMessage::StartMoveToProject),
@@ -290,9 +406,158 @@ fn action_to_message(action: &Action) -> Message {
         Action::ClearTagFilter => Message::Ui(UiMessage::ClearTagFilter),
         Action::CycleSortField => Message::Ui(UiMessage::CycleSortField),
         Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
+        Action::ToggleMultiSelect => Message::Ui(UiMessage::ToggleMultiSelect),
+        Action::ToggleTaskSelection => Message::Ui(UiMessage::ToggleTaskSelection),
+        Action::SelectAll => Message::Ui(UiMessage::SelectAll),
+        Action::ClearSelection => Message::Ui(UiMessage::ClearSelection),
+        Action::BulkDelete => Message::Ui(UiMessage::BulkDelete),
+        Action::BulkMoveToProject => Message::Ui(UiMessage::StartBulkMoveToProject),
+        Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
+        Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
+        Action::EditRecurrence => Message::Ui(UiMessage::StartEditRecurrence),
+        Action::CalendarPrevMonth => Message::Navigation(NavigationMessage::CalendarPrevMonth),
+        Action::CalendarNextMonth => Message::Navigation(NavigationMessage::CalendarNextMonth),
+        Action::CalendarPrevDay => Message::Ui(UiMessage::CalendarPrevDay),
+        Action::CalendarNextDay => Message::Ui(UiMessage::CalendarNextDay),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),
         Action::Quit => Message::System(SystemMessage::Quit),
+        Action::ExportCsv => Message::System(SystemMessage::ExportCsv),
+        Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
+        Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),
+        Action::StopRecordMacro => Message::Ui(UiMessage::StopRecordMacro),
+        Action::PlayMacro0 => Message::Ui(UiMessage::PlayMacro(0)),
+        Action::PlayMacro1 => Message::Ui(UiMessage::PlayMacro(1)),
+        Action::PlayMacro2 => Message::Ui(UiMessage::PlayMacro(2)),
+        Action::PlayMacro3 => Message::Ui(UiMessage::PlayMacro(3)),
+        Action::PlayMacro4 => Message::Ui(UiMessage::PlayMacro(4)),
+        Action::PlayMacro5 => Message::Ui(UiMessage::PlayMacro(5)),
+        Action::PlayMacro6 => Message::Ui(UiMessage::PlayMacro(6)),
+        Action::PlayMacro7 => Message::Ui(UiMessage::PlayMacro(7)),
+        Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
+        Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
+        Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli() {
+        // Validates the CLI configuration is correct
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn test_parse_no_subcommand() {
+        let cli = Cli::try_parse_from(["taskflow"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.backend, BackendType::Json);
+        assert!(!cli.demo);
+    }
+
+    #[test]
+    fn test_parse_completion_bash() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Bash })
+        ));
+    }
+
+    #[test]
+    fn test_parse_completion_zsh() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "zsh"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Zsh })
+        ));
+    }
+
+    #[test]
+    fn test_parse_completion_fish() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "fish"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Fish })
+        ));
+    }
+
+    #[test]
+    fn test_parse_with_backend() {
+        let cli = Cli::try_parse_from(["taskflow", "--backend", "yaml"]).unwrap();
+        assert_eq!(cli.backend, BackendType::Yaml);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn test_parse_with_data_path() {
+        let cli = Cli::try_parse_from(["taskflow", "--data", "/tmp/tasks.json"]).unwrap();
+        assert_eq!(cli.data, Some(PathBuf::from("/tmp/tasks.json")));
+    }
+
+    #[test]
+    fn test_parse_with_demo() {
+        let cli = Cli::try_parse_from(["taskflow", "--demo"]).unwrap();
+        assert!(cli.demo);
+    }
+
+    #[test]
+    fn test_parse_all_backends() {
+        for backend in ["json", "yaml", "sqlite", "markdown"] {
+            let cli = Cli::try_parse_from(["taskflow", "--backend", backend]).unwrap();
+            let expected = BackendType::parse(backend).unwrap();
+            assert_eq!(cli.backend, expected);
+        }
+    }
+
+    #[test]
+    fn test_completion_output_bash() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Bash, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("_taskflow"));
+        assert!(output.contains("--backend"));
+        assert!(output.contains("--data"));
+        assert!(output.contains("completion"));
+    }
+
+    #[test]
+    fn test_completion_output_zsh() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Zsh, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("#compdef taskflow"));
+        assert!(output.contains("--backend"));
+    }
+
+    #[test]
+    fn test_completion_output_fish() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Fish, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("complete -c taskflow"));
+    }
+
+    #[test]
+    fn test_invalid_backend_rejected() {
+        let result = Cli::try_parse_from(["taskflow", "--backend", "invalid"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_shell_rejected() {
+        let result = Cli::try_parse_from(["taskflow", "completion", "invalid"]);
+        assert!(result.is_err());
     }
 }

@@ -371,3 +371,133 @@ fn test_backend_persistence_survives_reload() {
         assert_eq!(project.unwrap().name, "Persistent project");
     }
 }
+
+// Shell completion integration tests
+mod completion_tests {
+    use std::process::Command;
+
+    #[test]
+    fn test_completion_bash_command() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "completion", "bash"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "completion bash should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("_taskflow"),
+            "bash completion should contain _taskflow function"
+        );
+        assert!(
+            stdout.contains("--backend"),
+            "bash completion should include --backend option"
+        );
+    }
+
+    #[test]
+    fn test_completion_zsh_command() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "completion", "zsh"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "completion zsh should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("#compdef taskflow"),
+            "zsh completion should contain #compdef"
+        );
+    }
+
+    #[test]
+    fn test_completion_fish_command() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "completion", "fish"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "completion fish should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("complete -c taskflow"),
+            "fish completion should contain complete -c taskflow"
+        );
+    }
+
+    #[test]
+    fn test_completion_invalid_shell_fails() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "completion", "invalid"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            !output.status.success(),
+            "completion with invalid shell should fail"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("invalid") || stderr.contains("possible values"),
+            "error should mention invalid value or possible values"
+        );
+    }
+
+    #[test]
+    fn test_help_shows_completion_subcommand() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "--help"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(output.status.success(), "help should succeed");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("completion"),
+            "help should show completion subcommand"
+        );
+        assert!(
+            stdout.contains("Generate shell completion"),
+            "help should describe completion"
+        );
+    }
+
+    #[test]
+    fn test_backend_values_in_completion() {
+        let output = Command::new("cargo")
+            .args(["run", "--quiet", "--", "completion", "bash"])
+            .output()
+            .expect("Failed to execute command");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // The completion should contain the backend values
+        assert!(
+            stdout.contains("json"),
+            "completion should include json backend"
+        );
+        assert!(
+            stdout.contains("yaml"),
+            "completion should include yaml backend"
+        );
+        assert!(
+            stdout.contains("sqlite"),
+            "completion should include sqlite backend"
+        );
+        assert!(
+            stdout.contains("markdown"),
+            "completion should include markdown backend"
+        );
+    }
+}

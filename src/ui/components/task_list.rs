@@ -18,6 +18,10 @@ enum ListEntry<'a> {
         task: &'a Task,
         index: usize, // Index in visible_tasks for selection tracking
         time_spent: u32,
+        is_subtask: bool,
+        is_multi_selected: bool,
+        has_dependencies: bool,
+        is_recurring: bool,
     },
     ProjectHeader {
         name: String,
@@ -55,10 +59,18 @@ impl<'a> TaskList<'a> {
         for (idx, task_id) in model.visible_tasks.iter().enumerate() {
             if let Some(task) = model.tasks.get(task_id) {
                 let time_spent = model.total_time_for_task(task_id);
+                let is_subtask = task.parent_task_id.is_some();
+                let is_multi_selected = model.selected_tasks.contains(task_id);
+                let has_dependencies = !task.dependencies.is_empty();
+                let is_recurring = task.recurrence.is_some();
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
                     time_spent,
+                    is_subtask,
+                    is_multi_selected,
+                    has_dependencies,
+                    is_recurring,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -101,10 +113,18 @@ impl<'a> TaskList<'a> {
                         .position(|id| id == &task_id)
                         .unwrap_or(0);
                     let time_spent = model.total_time_for_task(&task_id);
+                    let is_subtask = task.parent_task_id.is_some();
+                    let is_multi_selected = model.selected_tasks.contains(&task_id);
+                    let has_dependencies = !task.dependencies.is_empty();
+                    let is_recurring = task.recurrence.is_some();
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
                         time_spent,
+                        is_subtask,
+                        is_multi_selected,
+                        has_dependencies,
+                        is_recurring,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -142,10 +162,23 @@ impl Widget for TaskList<'_> {
                     task,
                     index,
                     time_spent,
+                    is_subtask,
+                    is_multi_selected,
+                    has_dependencies,
+                    is_recurring,
                 } => {
-                    let is_selected = *index == self.selected;
-                    let is_tracking = self.active_tracking == Some(&task.id);
-                    task_to_list_item(task, is_selected, is_tracking, *time_spent, theme)
+                    let ctx = TaskItemContext {
+                        task,
+                        is_selected: *index == self.selected,
+                        is_tracking: self.active_tracking == Some(&task.id),
+                        time_spent: *time_spent,
+                        is_subtask: *is_subtask,
+                        is_multi_selected: *is_multi_selected,
+                        has_dependencies: *has_dependencies,
+                        is_recurring: *is_recurring,
+                        theme,
+                    };
+                    task_to_list_item(&ctx)
                 }
                 ListEntry::ProjectHeader { name, task_count } => {
                     project_header_to_list_item(name, *task_count, theme)
@@ -179,6 +212,19 @@ impl Widget for TaskList<'_> {
     }
 }
 
+/// Context for rendering a task item
+struct TaskItemContext<'a> {
+    task: &'a Task,
+    is_selected: bool,
+    is_tracking: bool,
+    time_spent: u32,
+    is_subtask: bool,
+    is_multi_selected: bool,
+    has_dependencies: bool,
+    is_recurring: bool,
+    theme: &'a Theme,
+}
+
 fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> ListItem<'static> {
     let header_style = Style::default()
         .fg(theme.colors.accent.to_color())
@@ -196,13 +242,24 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
     ListItem::new(line)
 }
 
-fn task_to_list_item(
-    task: &Task,
-    is_selected: bool,
-    is_tracking: bool,
-    time_spent: u32,
-    theme: &Theme,
-) -> ListItem<'static> {
+fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
+    let task = ctx.task;
+    let theme = ctx.theme;
+
+    // Multi-select indicator
+    let select_span = if ctx.is_multi_selected {
+        Span::styled("● ", Style::default().fg(theme.colors.accent.to_color()))
+    } else {
+        Span::raw("  ")
+    };
+
+    // Subtask indentation prefix
+    let indent_span = if ctx.is_subtask {
+        Span::styled("└─ ", Style::default().fg(theme.colors.muted.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let status_style = match task.status {
         TaskStatus::Done => Style::default().fg(theme.status.done.to_color()),
         TaskStatus::InProgress => Style::default().fg(theme.status.in_progress.to_color()),
@@ -228,7 +285,7 @@ fn task_to_list_item(
     };
 
     // Time tracking indicator
-    let tracking_span = if is_tracking {
+    let tracking_span = if ctx.is_tracking {
         Span::styled(
             "● ",
             Style::default()
@@ -245,7 +302,7 @@ fn task_to_list_item(
         Style::default()
             .fg(theme.colors.muted.to_color())
             .add_modifier(Modifier::CROSSED_OUT)
-    } else if is_selected {
+    } else if ctx.is_selected {
         Style::default().add_modifier(Modifier::BOLD)
     } else {
         Style::default()
@@ -269,9 +326,9 @@ fn task_to_list_item(
     };
 
     // Time spent indicator
-    let time_span = if time_spent > 0 {
-        let hours = time_spent / 60;
-        let mins = time_spent % 60;
+    let time_span = if ctx.time_spent > 0 {
+        let hours = ctx.time_spent / 60;
+        let mins = ctx.time_spent % 60;
         let time_str = if hours > 0 {
             format!(" ({}h {}m)", hours, mins)
         } else {
@@ -301,15 +358,267 @@ fn task_to_list_item(
         Span::raw("")
     };
 
+    // Description indicator (shows if task has a note)
+    let desc_span = if task.description.is_some() {
+        Span::styled(" [+]", Style::default().fg(theme.colors.muted.to_color()))
+    } else {
+        Span::raw("")
+    };
+
+    // Dependency indicator (shows if task is blocked by other tasks)
+    let dep_span = if ctx.has_dependencies {
+        Span::styled(" [B]", Style::default().fg(theme.colors.warning.to_color()))
+    } else {
+        Span::raw("")
+    };
+
+    // Recurrence indicator
+    let recur_span = if ctx.is_recurring {
+        Span::styled(" ↻", Style::default().fg(theme.colors.accent.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
+        select_span,
+        indent_span,
         tracking_span,
         priority_span,
         status_span,
         title_span,
+        desc_span,
+        dep_span,
+        recur_span,
         due_span,
         time_span,
         tags_span,
     ]);
 
     ListItem::new(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::{Priority, Task, TaskStatus};
+
+    /// Helper to render a widget into a buffer
+    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+        buffer
+    }
+
+    /// Extract text content from buffer
+    fn buffer_content(buffer: &Buffer) -> String {
+        let mut content = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                content.push(
+                    buffer
+                        .cell((x, y))
+                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+                );
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    #[test]
+    fn test_task_list_renders_title() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Tasks"),
+            "Task list title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_empty_list() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+
+        // Should render without panic
+        let _ = buffer_content(&buffer);
+    }
+
+    #[test]
+    fn test_task_list_renders_task_titles() {
+        let mut model = Model::new();
+        let task = Task::new("Test Task Title");
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Test Task Title"),
+            "Task title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_priority_indicator() {
+        let mut model = Model::new();
+        let task = Task::new("Urgent Task").with_priority(Priority::Urgent);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+        let content = buffer_content(&buffer);
+
+        // Urgent tasks show "!!!!"
+        assert!(
+            content.contains("!!!!") || content.contains("Urgent"),
+            "Priority indicator should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_completed_task() {
+        let mut model = Model::new();
+        let task = Task::new("Completed Task").with_status(TaskStatus::Done);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+        model.show_completed = true;
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Completed Task"),
+            "Completed task title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_status_symbol() {
+        let mut model = Model::new();
+        let task = Task::new("In Progress Task").with_status(TaskStatus::InProgress);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 60, 20);
+        let content = buffer_content(&buffer);
+
+        // Should have status symbol (varies by status)
+        assert!(
+            content.contains("In Progress Task"),
+            "Task with status should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_tags() {
+        let mut model = Model::new();
+        let task = Task::new("Tagged Task").with_tags(vec!["rust".into(), "test".into()]);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 80, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("#rust") || content.contains("#test"),
+            "Tags should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_renders_due_date() {
+        let mut model = Model::new();
+        let today = chrono::Utc::now().date_naive();
+        let task = Task::new("Due Task").with_due_date(today);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 80, 20);
+        let content = buffer_content(&buffer);
+
+        // Due date shown in format [MM/DD]
+        assert!(content.contains('['), "Due date bracket should be visible");
+    }
+
+    #[test]
+    fn test_task_list_renders_with_sample_data() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 80, 30);
+        let content = buffer_content(&buffer);
+
+        // Sample data contains various tasks
+        assert!(
+            content.contains("Tasks"),
+            "Task list title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_grouped_view() {
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Projects;
+        model.refresh_visible_tasks();
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 80, 30);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("by Project"),
+            "Grouped title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_task_list_description_indicator() {
+        let mut model = Model::new();
+        let task =
+            Task::new("Task with Notes").with_description("Some important notes".to_string());
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+        model.visible_tasks.push(task_id);
+
+        let theme = Theme::default();
+        let task_list = TaskList::new(&model, &theme);
+        let buffer = render_widget(task_list, 80, 20);
+        let content = buffer_content(&buffer);
+
+        // [+] indicator for tasks with descriptions
+        assert!(
+            content.contains("[+]"),
+            "Description indicator should be visible"
+        );
+    }
 }

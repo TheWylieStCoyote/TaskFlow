@@ -33,6 +33,10 @@ pub enum NavigationMessage {
     FocusSidebar,
     FocusTaskList,
     SelectSidebarItem,
+    // Calendar navigation
+    CalendarPrevMonth,
+    CalendarNextMonth,
+    CalendarSelectDay(u32),
 }
 
 /// View identifiers
@@ -43,6 +47,8 @@ pub enum ViewId {
     Today,
     Upcoming,
     Overdue,
+    Calendar,
+    Dashboard,
     Projects,
 }
 
@@ -75,10 +81,12 @@ pub enum UiMessage {
     HideHelp,
     // Input mode
     StartCreateTask,
+    StartCreateSubtask,
     StartCreateProject,
     StartEditTask,
     StartEditDueDate,
     StartEditTags,
+    StartEditDescription,
     StartMoveToProject,
     StartSearch,
     ClearSearch,
@@ -99,6 +107,29 @@ pub enum UiMessage {
     ShowDeleteConfirm,
     ConfirmDelete,
     CancelDelete,
+    // Multi-select / Bulk operations
+    ToggleMultiSelect,
+    ToggleTaskSelection,
+    SelectAll,
+    ClearSelection,
+    BulkDelete,
+    StartBulkMoveToProject,
+    StartBulkSetStatus,
+    // Dependencies
+    StartEditDependencies,
+    // Recurrence
+    StartEditRecurrence,
+    // Calendar
+    CalendarPrevDay,
+    CalendarNextDay,
+    // Macros
+    StartRecordMacro,
+    StopRecordMacro,
+    PlayMacro(usize),
+    // Templates
+    ShowTemplates,
+    HideTemplates,
+    SelectTemplate(usize),
 }
 
 /// System messages
@@ -110,34 +141,36 @@ pub enum SystemMessage {
     Redo,
     Resize { width: u16, height: u16 },
     Tick,
+    ExportCsv,
+    ExportIcs,
 }
 
 impl From<NavigationMessage> for Message {
     fn from(msg: NavigationMessage) -> Self {
-        Message::Navigation(msg)
+        Self::Navigation(msg)
     }
 }
 
 impl From<TaskMessage> for Message {
     fn from(msg: TaskMessage) -> Self {
-        Message::Task(msg)
+        Self::Task(msg)
     }
 }
 
 impl From<UiMessage> for Message {
     fn from(msg: UiMessage) -> Self {
-        Message::Ui(msg)
+        Self::Ui(msg)
     }
 }
 
 impl From<SystemMessage> for Message {
     fn from(msg: SystemMessage) -> Self {
-        Message::System(msg)
+        Self::System(msg)
     }
 }
 
 impl From<TimeMessage> for Message {
     fn from(msg: TimeMessage) -> Self {
-        Message::Time(msg)
+        Self::Time(msg)
     }
 }

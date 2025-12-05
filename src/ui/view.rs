@@ -9,9 +9,11 @@ use ratatui::{
 use crate::app::Model;
 use crate::config::Theme;
 
+use crate::app::ViewId;
+
 use super::components::{
-    centered_rect, centered_rect_fixed_height, ConfirmDialog, HelpPopup, InputDialog, InputMode,
-    InputTarget, Sidebar, TaskList,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, HelpPopup,
+    InputDialog, InputMode, InputTarget, Sidebar, TaskList, TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -49,13 +51,21 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let input_area = centered_rect_fixed_height(60, 3, area);
         let title = match &model.input_target {
             InputTarget::Task => "New Task",
+            InputTarget::Subtask(_) => "New Subtask",
             InputTarget::EditTask(_) => "Edit Task",
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
+            InputTarget::EditDescription(_) => "Description (empty to clear)",
             InputTarget::Project => "New Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",
             InputTarget::MoveToProject(_) => "Move to Project (enter number)",
             InputTarget::FilterByTag => "Filter by Tag (comma-separated, Ctrl+T to clear)",
+            InputTarget::BulkMoveToProject => "Move Selected to Project (enter number)",
+            InputTarget::BulkSetStatus => "Set Status for Selected (enter number)",
+            InputTarget::EditDependencies(_) => "Blocked by (task numbers, comma-separated)",
+            InputTarget::EditRecurrence(_) => {
+                "Recurrence (d=daily, w=weekly, m=monthly, y=yearly, 0=none)"
+            }
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -74,6 +84,17 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         frame.render_widget(
             ConfirmDialog::new("Delete Task", &format!("Delete \"{}\"?", task_name)),
             confirm_area,
+        );
+    }
+
+    // Render template picker
+    if model.show_templates {
+        // Height depends on number of templates, min 4, max 15
+        let height = (model.template_manager.len() as u16 + 2).clamp(4, 15);
+        let picker_area = centered_rect_fixed_height(60, height, area);
+        frame.render_widget(
+            TemplatePicker::new(&model.template_manager, model.template_selected, theme),
+            picker_area,
         );
     }
 }
@@ -109,36 +130,66 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
         // Render sidebar
         frame.render_widget(Sidebar::new(model, theme), chunks[0]);
 
-        // Render task list in main area
-        let task_list = TaskList::new(model, theme);
-        frame.render_widget(task_list, chunks[1]);
+        // Render main content based on current view
+        render_main_content(model, frame, chunks[1], theme);
     } else {
-        // No sidebar, full width task list
-        let task_list = TaskList::new(model, theme);
-        frame.render_widget(task_list, area);
+        // No sidebar, full width content
+        render_main_content(model, frame, area, theme);
+    }
+}
+
+fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+    match model.current_view {
+        ViewId::Calendar => {
+            let calendar = Calendar::new(model, theme);
+            frame.render_widget(calendar, area);
+        }
+        ViewId::Dashboard => {
+            let dashboard = Dashboard::new(model, theme);
+            frame.render_widget(dashboard, area);
+        }
+        _ => {
+            let task_list = TaskList::new(model, theme);
+            frame.render_widget(task_list, area);
+        }
     }
 }
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
-    let task_count = model.visible_tasks.len();
-    let completed = model
-        .tasks
-        .values()
-        .filter(|t| t.status.is_complete())
-        .count();
+    // Show status message if available, otherwise show normal footer
+    let footer_text = if let Some(ref msg) = model.status_message {
+        msg.clone()
+    } else if model.macro_state.is_recording() {
+        " [REC] Recording macro... Press Ctrl+Q then 0-9 to save ".to_string()
+    } else {
+        let task_count = model.visible_tasks.len();
+        let completed = model
+            .tasks
+            .values()
+            .filter(|t| t.status.is_complete())
+            .count();
 
-    let status = format!(
-        " {} tasks ({} completed) | {} | Press ? for help ",
-        task_count,
-        completed,
-        if model.show_completed {
-            "showing all"
-        } else {
-            "hiding completed"
-        }
-    );
+        format!(
+            " {} tasks ({} completed) | {} | Press ? for help ",
+            task_count,
+            completed,
+            if model.show_completed {
+                "showing all"
+            } else {
+                "hiding completed"
+            }
+        )
+    };
 
-    let footer = Paragraph::new(status).style(Style::default().fg(theme.colors.muted.to_color()));
+    let footer_style = if model.status_message.is_some() {
+        Style::default().fg(theme.colors.accent.to_color())
+    } else if model.macro_state.is_recording() {
+        Style::default().fg(theme.colors.danger.to_color())
+    } else {
+        Style::default().fg(theme.colors.muted.to_color())
+    };
+
+    let footer = Paragraph::new(footer_text).style(footer_style);
 
     frame.render_widget(footer, area);
 }

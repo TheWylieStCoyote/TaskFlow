@@ -6,19 +6,14 @@ Potential features to implement in future versions:
 
 - [x] **Dedicated Tag Filter UI** - Filter by specific tags (`#` to open, `Ctrl+T` to clear)
 - [x] **Projects View Grouping** - Group tasks by project name with headers in Projects view
-
-## Medium Priority
-
-- [ ] **Task Notes/Descriptions** - Add multi-line notes or descriptions to tasks
-- [ ] **Subtasks/Checklists** - Nested subtasks or checklist items within a task
-- [ ] **Bulk Operations** - Multi-select tasks for bulk delete, move, or status change
-- [ ] **Task Dependencies** - Mark tasks as blocked by other tasks
-
-## Low Priority
-
-- [ ] **Recurring Tasks** - Tasks that repeat on a schedule (daily, weekly, monthly)
-- [ ] **Calendar View** - View tasks in a calendar layout by due date
-- [ ] **Statistics Dashboard** - Show completion rates, time tracked, overdue counts
-- [ ] **Export Formats** - Export tasks to CSV, ICS (calendar), or other formats
-- [ ] **Keyboard Macros** - Record and replay sequences of actions
-- [ ] **Task Templates** - Create new tasks from predefined templates
+- [x] **Task Notes/Descriptions** - Add descriptions to tasks (`n` to edit, `[+]` indicator)
+- [x] **Subtasks/Checklists** - Create subtasks under any task (`A` to add subtask, indented display)
+- [x] **Bulk Operations** - Multi-select tasks (`v` toggle, `V` select all, `Space` toggle) for bulk delete
+- [x] **Task Dependencies** - Mark tasks as blocked by other tasks (`B` to edit, `[B]` indicator)
+- [x] **Recurring Tasks** - Set recurrence patterns (`R` to edit, `↻` indicator, auto-creates next occurrence)
+- [x] **Calendar View** - Monthly grid with task indicators (select Calendar from sidebar, `<`/`>` for months)
+- [x] **Statistics Dashboard** - Dashboard view with completion rates, time tracking stats, project progress, status distribution
+- [x] **Export Formats** - Export tasks to CSV (`Ctrl+E`) or ICS/iCalendar (`Ctrl+I`) formats
+- [x] **Keyboard Macros** - Record (`Ctrl+Q` + 0-9) and replay (`@0-9`) action sequences with 10 slots
+- [x] **Task Templates** - Create tasks from 8 built-in templates (`Ctrl+N`) with presets for bugs, features, reviews, meetings, etc.
+- [x] **Shell Completions** - Generate shell completions for Bash, Zsh, and Fish (`taskflow completion <shell>`)

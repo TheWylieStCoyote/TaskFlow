@@ -6,13 +6,16 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 
 ## Features
 
-- **Task Management**: Create, organize, and track tasks with priorities, due dates, and status
-- **Project Organization**: Group related tasks under projects
+- **Task Management**: Create, edit, and track tasks with priorities, due dates, and status
+- **Project Organization**: Group related tasks under projects with sidebar navigation
 - **Tagging System**: Categorize tasks with flexible tags
-- **Time Tracking**: Track time spent on tasks (coming soon)
+- **Time Tracking**: Track time spent on tasks with start/stop timer
+- **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
+- **Sorting**: Sort tasks by priority, due date, title, status, or creation date
+- **Undo Support**: Undo task and project operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
-- **Multiple Storage Backends**: Save data as Markdown, YAML, JSON, or SQLite (coming soon)
-- **Customizable**: Themes, keybindings, and custom views via config files (coming soon)
+- **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown
+- **Customizable**: Themes, keybindings, and settings via config files
 
 ## Installation
 
@@ -36,11 +39,16 @@ cargo build --release
 ## Quick Start
 
 ```bash
-# Run TaskFlow
+# Run TaskFlow with default settings (JSON storage)
 cargo run
 
-# Or if installed
-taskflow
+# Run with a specific backend
+cargo run -- --backend yaml --data ~/tasks.yaml
+cargo run -- --backend sqlite --data ~/tasks.db
+cargo run -- --backend markdown --data ~/tasks/
+
+# Run with demo data
+cargo run -- --demo
 ```
 
 ## Usage
@@ -50,17 +58,16 @@ taskflow
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ TaskFlow - Project Management TUI                           │
-├─────────────────────────────────────────────────────────────┤
-│ !!!! [!] Review and fix bugs                      [12/10]   │
-│ !!!  [~] Create TEA architecture                            │
-│ !!   [ ] Build task list UI                                 │
-│ !!   [ ] Add storage backends                               │
-│ !    [ ] Implement keybinding config                        │
-│ !    [ ] Add theme support                                  │
-│      [ ] Write documentation                                │
-│      [x] Set up project structure                           │
-│      [x] Implement domain types                             │
-├─────────────────────────────────────────────────────────────┤
+├──────────────┬──────────────────────────────────────────────┤
+│ All Tasks    │ !!!! [!] Review and fix bugs       [12/10]   │
+│ Today        │ !!!  [~] Create TEA architecture   #rust     │
+│ Upcoming     │ !!   [ ] Build task list UI                  │
+│              │ !!   [ ] Add storage backends                │
+│ ── Projects ─│ !    [ ] Implement keybinding config         │
+│ Backend      │ !    [ ] Add theme support                   │
+│ Frontend     │      [ ] Write documentation                 │
+│              │      [x] Set up project structure            │
+├──────────────┴──────────────────────────────────────────────┤
 │ 7 tasks (2 completed) | hiding completed | Press ? for help │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -71,6 +78,7 @@ Each task shows:
 - **Priority indicator** (left): `!!!!` (urgent), `!!!` (high), `!!` (medium), `!` (low), or blank (none)
 - **Status symbol**: `[ ]` (todo), `[~]` (in progress), `[!]` (blocked), `[x]` (done), `[-]` (cancelled)
 - **Task title**
+- **Tags**: Displayed as `#tagname` after the title
 - **Due date** (if set): Shown in brackets, colored red if overdue, yellow if due today
 
 ### Keyboard Shortcuts
@@ -85,24 +93,47 @@ Each task shows:
 | `G` | Go to last task |
 | `Ctrl+u` or `Page Up` | Page up (10 items) |
 | `Ctrl+d` or `Page Down` | Page down (10 items) |
+| `h` or `←` | Focus sidebar |
+| `l` or `→` | Focus task list |
+| `Enter` | Select sidebar item |
 
 #### Task Actions
 
 | Key | Action |
 |-----|--------|
+| `a` | Add new task |
+| `e` | Edit task title |
+| `d` | Delete task (with confirmation) |
 | `x` or `Space` | Toggle task completion |
+| `p` | Cycle priority (None → Low → Medium → High → Urgent) |
+| `D` | Edit due date (YYYY-MM-DD format) |
+| `T` | Edit tags (comma-separated) |
+| `t` | Toggle time tracking |
+
+#### Search & Sort
+
+| Key | Action |
+|-----|--------|
+| `/` | Search tasks (by title or tags) |
+| `Ctrl+L` | Clear search |
+| `s` | Cycle sort field (Created → Priority → Due Date → Title → Status) |
+| `S` | Toggle sort order (Ascending/Descending) |
 
 #### View Controls
 
 | Key | Action |
 |-----|--------|
+| `b` | Toggle sidebar |
 | `c` | Toggle showing completed tasks |
+| `P` | Create new project |
 | `?` | Show/hide help popup |
 
 #### General
 
 | Key | Action |
 |-----|--------|
+| `u` or `Ctrl+Z` | Undo last action |
+| `Ctrl+S` | Save |
 | `q` or `Esc` | Quit TaskFlow |
 
 ### Task Priorities
@@ -117,8 +148,6 @@ Tasks can have one of five priority levels:
 | Low | `!` | Green |
 | None | (blank) | - |
 
-Tasks are automatically sorted by priority (highest first), then by creation date.
-
 ### Task Statuses
 
 | Status | Symbol | Description |
@@ -129,12 +158,64 @@ Tasks are automatically sorted by priority (highest first), then by creation dat
 | Done | `[x]` | Completed |
 | Cancelled | `[-]` | No longer needed |
 
+### Views
+
+| View | Description |
+|------|-------------|
+| All Tasks | Shows all tasks (default) |
+| Today | Tasks due today |
+| Upcoming | Tasks with future due dates |
+| Projects | Tasks assigned to a project |
+
 ### Due Dates
 
 Due dates are displayed with color coding:
 - **Red**: Task is overdue
 - **Yellow**: Task is due today
 - **Gray**: Task is due in the future
+
+## Configuration
+
+TaskFlow stores configuration in `~/.config/taskflow/`:
+
+```
+~/.config/taskflow/
+├── config.toml        # General settings
+├── keybindings.toml   # Custom key mappings
+└── themes/
+    └── default.toml   # Color themes
+```
+
+### Settings (config.toml)
+
+```toml
+# Storage backend: json, yaml, sqlite, markdown
+backend = "json"
+
+# Data file path (relative to config dir or absolute)
+data_path = "tasks.json"
+
+# UI defaults
+show_sidebar = true
+show_completed = false
+default_priority = "none"
+
+# Auto-save interval in seconds (0 to disable)
+auto_save_interval = 300
+
+# Theme name
+theme = "default"
+```
+
+### Keybindings (keybindings.toml)
+
+```toml
+[bindings]
+j = "move_down"
+k = "move_up"
+q = "quit"
+# ... customize as needed
+```
 
 ## Architecture
 
@@ -177,49 +258,51 @@ taskflow/
 │   ├── app/              # TEA architecture
 │   │   ├── model.rs      # Application state
 │   │   ├── message.rs    # Event types
-│   │   └── update.rs     # State transitions
+│   │   ├── update.rs     # State transitions
+│   │   └── undo.rs       # Undo stack
+│   ├── config/           # Configuration
+│   │   ├── settings.rs   # App settings
+│   │   ├── keybindings.rs# Key mappings
+│   │   └── theme.rs      # Color themes
+│   ├── storage/          # Persistence
+│   │   └── backends/     # JSON, YAML, SQLite, Markdown
 │   └── ui/               # User interface
 │       ├── view.rs       # Main renderer
 │       └── components/   # UI widgets
+├── tests/
+│   └── integration.rs    # Integration tests
 ├── Cargo.toml
 └── README.md
 ```
 
-## Roadmap
+## Storage Backends
 
-### Current (v0.1)
-- [x] Basic task list display
-- [x] Vim-style navigation
-- [x] Task completion toggle
-- [x] Priority and status indicators
-- [x] Due date display
-- [x] Help popup
+TaskFlow supports multiple storage backends:
 
-### Planned (v0.2)
-- [ ] Task creation and editing
-- [ ] Project sidebar
-- [ ] Tag filtering
-- [ ] Search functionality
+| Backend | File Format | Best For |
+|---------|-------------|----------|
+| JSON | `.json` | Default, fast, compact |
+| YAML | `.yaml` | Human-readable, easy to edit |
+| SQLite | `.db` | Large datasets, queries |
+| Markdown | directory | Integration with other tools |
 
-### Future
-- [ ] Multiple storage backends (YAML, JSON, SQLite, Markdown)
-- [ ] Configuration files for themes and keybindings
-- [ ] Time tracking with start/stop timer
-- [ ] Task dependencies
-- [ ] Custom views
-- [ ] Undo/redo
+### Markdown Backend
 
-## Configuration (Coming Soon)
+The Markdown backend stores each task as a separate `.md` file with YAML frontmatter:
 
-TaskFlow will support configuration via TOML files:
+```markdown
+---
+id: "550e8400-e29b-41d4-a716-446655440000"
+title: "Implement feature X"
+status: todo
+priority: high
+due_date: 2025-01-15
+tags:
+  - rust
+  - backend
+---
 
-```
-~/.config/taskflow/
-├── config.toml        # General settings
-├── keybindings.toml   # Custom key mappings
-├── themes/
-│   └── default.toml   # Color themes
-└── views.toml         # Custom filtered views
+Task description and notes go here...
 ```
 
 ## Contributing

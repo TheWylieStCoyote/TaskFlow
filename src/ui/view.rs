@@ -52,6 +52,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditTask(_) => "Edit Task",
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
+            InputTarget::EditDescription(_) => "Description (empty to clear)",
             InputTarget::Project => "New Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",
             InputTarget::MoveToProject(_) => "Move to Project (enter number)",

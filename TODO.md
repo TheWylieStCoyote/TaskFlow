@@ -9,7 +9,7 @@ Potential features to implement in future versions:
 
 ## Medium Priority
 
-- [ ] **Task Notes/Descriptions** - Add multi-line notes or descriptions to tasks
+- [x] **Task Notes/Descriptions** - Add descriptions to tasks (`n` to edit, `[+]` indicator)
 - [ ] **Subtasks/Checklists** - Nested subtasks or checklist items within a task
 - [ ] **Bulk Operations** - Multi-select tasks for bulk delete, move, or status change
 - [ ] **Task Dependencies** - Mark tasks as blocked by other tasks

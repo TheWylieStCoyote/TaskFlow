@@ -346,6 +346,17 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::StartEditDescription => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDescription(task_id);
+                    // Pre-fill with existing description
+                    model.input_buffer = task.description.clone().unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
         UiMessage::StartMoveToProject => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if model.tasks.contains_key(&task_id) {
@@ -489,6 +500,21 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             .map(|s| s.trim().to_string())
                             .filter(|s| !s.is_empty())
                             .collect();
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::EditDescription(task_id) => {
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        // Empty input clears the description
+                        task.description = if input.is_empty() { None } else { Some(input) };
                         task.updated_at = chrono::Utc::now();
                         let after = task.clone();
                         model.sync_task(&after);
@@ -1655,6 +1681,112 @@ mod tests {
         let task = model.tasks.get(&task_id).unwrap();
         assert_eq!(task.tags, original_tags);
         assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    // Description editing tests
+    #[test]
+    fn test_start_edit_description_enters_edit_mode() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Task starts with no description
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
+
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::EditDescription(_)
+        ));
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_start_edit_description_prefills_existing() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set existing description
+        model.tasks.get_mut(&task_id).unwrap().description =
+            Some("Existing notes here".to_string());
+
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        assert_eq!(model.input_buffer, "Existing notes here");
+    }
+
+    #[test]
+    fn test_edit_description_add_new() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing description
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        // Type new description
+        model.input_buffer = "This is a detailed task description".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Description should be set
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(
+            task.description,
+            Some("This is a detailed task description".to_string())
+        );
+    }
+
+    #[test]
+    fn test_edit_description_clear() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial description
+        model.tasks.get_mut(&task_id).unwrap().description = Some("Old description".to_string());
+
+        // Start editing
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+
+        // Clear input
+        model.input_buffer.clear();
+        model.cursor_position = 0;
+
+        // Submit empty
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Description should be cleared
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.description.is_none());
+    }
+
+    #[test]
+    fn test_edit_description_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start with no description
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
+
+        // Add a description
+        update(&mut model, Message::Ui(UiMessage::StartEditDescription));
+        model.input_buffer = "New description".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Verify description was set
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().description,
+            Some("New description".to_string())
+        );
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        // Description should be gone
+        assert!(model.tasks.get(&task_id).unwrap().description.is_none());
     }
 
     // Move to project tests

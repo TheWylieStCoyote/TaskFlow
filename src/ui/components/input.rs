@@ -22,6 +22,7 @@ pub enum InputTarget {
     EditTask(TaskId),
     EditDueDate(TaskId),
     EditTags(TaskId),
+    EditDescription(TaskId),
     Project,
     Search,
     MoveToProject(TaskId),

@@ -301,11 +301,19 @@ fn task_to_list_item(
         Span::raw("")
     };
 
+    // Description indicator (shows if task has a note)
+    let desc_span = if task.description.is_some() {
+        Span::styled(" [+]", Style::default().fg(theme.colors.muted.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         tracking_span,
         priority_span,
         status_span,
         title_span,
+        desc_span,
         due_span,
         time_span,
         tags_span,

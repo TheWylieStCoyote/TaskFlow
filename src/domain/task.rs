@@ -207,6 +207,11 @@ impl Task {
         self
     }
 
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
             return due < Utc::now().date_naive() && !self.status.is_complete();

@@ -79,6 +79,7 @@ pub enum UiMessage {
     StartEditTask,
     StartEditDueDate,
     StartEditTags,
+    StartEditDescription,
     StartMoveToProject,
     StartSearch,
     ClearSearch,

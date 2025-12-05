@@ -93,6 +93,10 @@ impl Widget for HelpPopup {
                 Span::raw("         Edit tags"),
             ]),
             Line::from(vec![
+                Span::styled("n", Style::default().fg(Color::Cyan)),
+                Span::raw("         Edit description/notes"),
+            ]),
+            Line::from(vec![
                 Span::styled("m", Style::default().fg(Color::Cyan)),
                 Span::raw("         Move to project"),
             ]),

@@ -108,6 +108,7 @@ Each task shows:
 | `p` | Cycle priority (None → Low → Medium → High → Urgent) |
 | `D` | Edit due date (YYYY-MM-DD format) |
 | `T` | Edit tags (comma-separated) |
+| `n` | Edit description/notes |
 | `m` | Move task to project |
 | `t` | Toggle time tracking |
 

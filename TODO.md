@@ -4,5 +4,5 @@ Potential features to implement in future versions:
 
 ## Low Priority
 
-- [ ] **Dedicated Tag Filter UI** - Filter by specific tags (search matches tags, but no dedicated UI)
+- [x] **Dedicated Tag Filter UI** - Filter by specific tags (`#` to open, `Ctrl+T` to clear)
 - [ ] **Projects View Grouping** - Group tasks by project name with headers in Projects view

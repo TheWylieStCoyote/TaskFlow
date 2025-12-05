@@ -40,6 +40,8 @@ pub enum Action {
     Select,
     Search,
     ClearSearch,
+    FilterByTag,
+    ClearTagFilter,
     CycleSortField,
     ToggleSortOrder,
 
@@ -145,6 +147,8 @@ impl Default for Keybindings {
         bindings.insert("enter".to_string(), Action::Select);
         bindings.insert("/".to_string(), Action::Search);
         bindings.insert("ctrl+l".to_string(), Action::ClearSearch);
+        bindings.insert("#".to_string(), Action::FilterByTag);
+        bindings.insert("ctrl+t".to_string(), Action::ClearTagFilter);
         bindings.insert("s".to_string(), Action::CycleSortField);
         bindings.insert("S".to_string(), Action::ToggleSortOrder);
 

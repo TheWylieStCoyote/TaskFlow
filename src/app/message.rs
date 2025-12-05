@@ -82,6 +82,8 @@ pub enum UiMessage {
     StartMoveToProject,
     StartSearch,
     ClearSearch,
+    StartFilterByTag,
+    ClearTagFilter,
     CycleSortField,
     ToggleSortOrder,
     CancelInput,

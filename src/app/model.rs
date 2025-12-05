@@ -291,6 +291,32 @@ impl Model {
             }
         }
 
+        // Filter by tags (if set)
+        if let Some(ref filter_tags) = self.filter.tags {
+            use crate::domain::TagFilterMode;
+            let has_tags = match self.filter.tags_mode {
+                TagFilterMode::Any => {
+                    // Task must have at least one of the filter tags
+                    filter_tags.iter().any(|ft| {
+                        task.tags
+                            .iter()
+                            .any(|t| t.to_lowercase() == ft.to_lowercase())
+                    })
+                }
+                TagFilterMode::All => {
+                    // Task must have all of the filter tags
+                    filter_tags.iter().all(|ft| {
+                        task.tags
+                            .iter()
+                            .any(|t| t.to_lowercase() == ft.to_lowercase())
+                    })
+                }
+            };
+            if !has_tags {
+                return false;
+            }
+        }
+
         // Filter by selected project if any
         if let Some(ref project_id) = self.selected_project {
             if task.project_id.as_ref() != Some(project_id) {
@@ -941,6 +967,127 @@ mod tests {
         model.filter.search_text = None;
         model.refresh_visible_tasks();
         assert_eq!(model.visible_tasks.len(), 2);
+    }
+
+    #[test]
+    fn test_tag_filter_any_mode() {
+        use crate::domain::TagFilterMode;
+
+        let mut model = Model::new();
+
+        let task_rust = Task::new("Task Rust").with_tags(vec!["rust".to_string()]);
+        let task_python = Task::new("Task Python").with_tags(vec!["python".to_string()]);
+        let task_both =
+            Task::new("Task Both").with_tags(vec!["rust".to_string(), "python".to_string()]);
+        let task_none = Task::new("Task None");
+
+        model.tasks.insert(task_rust.id.clone(), task_rust.clone());
+        model
+            .tasks
+            .insert(task_python.id.clone(), task_python.clone());
+        model.tasks.insert(task_both.id.clone(), task_both.clone());
+        model.tasks.insert(task_none.id.clone(), task_none);
+
+        // Filter by "rust" tag (Any mode - default)
+        model.filter.tags = Some(vec!["rust".to_string()]);
+        model.filter.tags_mode = TagFilterMode::Any;
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks.len(), 2);
+        assert!(model.visible_tasks.contains(&task_rust.id));
+        assert!(model.visible_tasks.contains(&task_both.id));
+    }
+
+    #[test]
+    fn test_tag_filter_all_mode() {
+        use crate::domain::TagFilterMode;
+
+        let mut model = Model::new();
+
+        let task_rust = Task::new("Task Rust").with_tags(vec!["rust".to_string()]);
+        let task_both =
+            Task::new("Task Both").with_tags(vec!["rust".to_string(), "python".to_string()]);
+        let task_none = Task::new("Task None");
+
+        model.tasks.insert(task_rust.id.clone(), task_rust.clone());
+        model.tasks.insert(task_both.id.clone(), task_both.clone());
+        model.tasks.insert(task_none.id.clone(), task_none);
+
+        // Filter by "rust" AND "python" tags (All mode)
+        model.filter.tags = Some(vec!["rust".to_string(), "python".to_string()]);
+        model.filter.tags_mode = TagFilterMode::All;
+        model.refresh_visible_tasks();
+
+        // Only task_both has both tags
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert!(model.visible_tasks.contains(&task_both.id));
+    }
+
+    #[test]
+    fn test_tag_filter_case_insensitive() {
+        let mut model = Model::new();
+
+        let task = Task::new("Task").with_tags(vec!["Rust".to_string()]);
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        // Filter with different case
+        model.filter.tags = Some(vec!["rust".to_string()]);
+        model.refresh_visible_tasks();
+
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert!(model.visible_tasks.contains(&task.id));
+    }
+
+    #[test]
+    fn test_tag_filter_clear() {
+        let mut model = Model::new();
+
+        let task_tagged = Task::new("Tagged").with_tags(vec!["work".to_string()]);
+        let task_untagged = Task::new("Untagged");
+
+        model
+            .tasks
+            .insert(task_tagged.id.clone(), task_tagged.clone());
+        model.tasks.insert(task_untagged.id.clone(), task_untagged);
+
+        // With filter
+        model.filter.tags = Some(vec!["work".to_string()]);
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 1);
+
+        // Clear filter
+        model.filter.tags = None;
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 2);
+    }
+
+    #[test]
+    fn test_tag_filter_with_search() {
+        let mut model = Model::new();
+
+        let task_match =
+            Task::new("Important Task").with_tags(vec!["work".to_string(), "urgent".to_string()]);
+        let task_wrong_tag = Task::new("Important Other").with_tags(vec!["home".to_string()]);
+        let task_wrong_title = Task::new("Regular Task").with_tags(vec!["work".to_string()]);
+
+        model
+            .tasks
+            .insert(task_match.id.clone(), task_match.clone());
+        model
+            .tasks
+            .insert(task_wrong_tag.id.clone(), task_wrong_tag);
+        model
+            .tasks
+            .insert(task_wrong_title.id.clone(), task_wrong_title);
+
+        // Both search and tag filter
+        model.filter.search_text = Some("Important".to_string());
+        model.filter.tags = Some(vec!["work".to_string()]);
+        model.refresh_visible_tasks();
+
+        // Only task_match matches both criteria
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert!(model.visible_tasks.contains(&task_match.id));
     }
 
     #[test]

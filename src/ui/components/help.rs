@@ -98,6 +98,18 @@ impl Widget for HelpPopup {
                 Span::styled("b", Style::default().fg(Color::Cyan)),
                 Span::raw("       Toggle sidebar"),
             ]),
+            Line::from(vec![
+                Span::styled("/", Style::default().fg(Color::Cyan)),
+                Span::raw("       Search tasks"),
+            ]),
+            Line::from(vec![
+                Span::styled("#", Style::default().fg(Color::Cyan)),
+                Span::raw("       Filter by tag"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+t", Style::default().fg(Color::Cyan)),
+                Span::raw("  Clear tag filter"),
+            ]),
             Line::from(""),
             Line::from(vec![Span::styled(
                 "General",

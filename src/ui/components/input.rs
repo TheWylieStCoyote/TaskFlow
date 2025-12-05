@@ -25,6 +25,7 @@ pub enum InputTarget {
     Project,
     Search,
     MoveToProject(TaskId),
+    FilterByTag,
 }
 
 /// Input dialog for creating/editing items

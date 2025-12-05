@@ -286,6 +286,8 @@ fn action_to_message(action: &Action) -> Message {
         Action::Select => Message::Navigation(NavigationMessage::SelectSidebarItem),
         Action::Search => Message::Ui(UiMessage::StartSearch),
         Action::ClearSearch => Message::Ui(UiMessage::ClearSearch),
+        Action::FilterByTag => Message::Ui(UiMessage::StartFilterByTag),
+        Action::ClearTagFilter => Message::Ui(UiMessage::ClearTagFilter),
         Action::CycleSortField => Message::Ui(UiMessage::CycleSortField),
         Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
         Action::Save => Message::System(SystemMessage::Save),

@@ -67,6 +67,10 @@ impl Widget for HelpPopup {
                 Span::raw("       Add new task"),
             ]),
             Line::from(vec![
+                Span::styled("P", Style::default().fg(Color::Cyan)),
+                Span::raw("       Create new project"),
+            ]),
+            Line::from(vec![
                 Span::styled("x/Space", Style::default().fg(Color::Cyan)),
                 Span::raw(" Toggle complete"),
             ]),

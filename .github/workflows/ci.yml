@@ -88,3 +88,10 @@ jobs:
         run: cargo doc --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: -D warnings
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: target/doc
+          retention-days: 14

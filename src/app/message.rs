@@ -103,6 +103,7 @@ pub enum SystemMessage {
     Quit,
     Save,
     Undo,
+    Redo,
     Resize { width: u16, height: u16 },
     Tick,
 }

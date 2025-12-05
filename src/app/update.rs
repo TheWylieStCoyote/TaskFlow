@@ -555,7 +555,7 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
             let _ = model.save();
         }
         SystemMessage::Undo => {
-            if let Some(action) = model.undo_stack.pop() {
+            if let Some(action) = model.undo_stack.pop_for_undo() {
                 match action {
                     UndoAction::TaskCreated(task) => {
                         // Undo create by deleting the task
@@ -575,9 +575,34 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
                     UndoAction::ProjectCreated(project) => {
                         // Undo project create by removing it
                         model.projects.remove(&project.id);
-                        // Note: Project deletion from storage would need a delete_project_from_storage method
-                        // For now, projects are only removed from in-memory state
                         model.dirty = true;
+                    }
+                }
+                model.refresh_visible_tasks();
+            }
+        }
+        SystemMessage::Redo => {
+            if let Some(action) = model.undo_stack.pop_for_redo() {
+                match action {
+                    UndoAction::TaskCreated(task) => {
+                        // Redo create by restoring the task
+                        model.sync_task(&task);
+                        model.tasks.insert(task.id.clone(), *task);
+                    }
+                    UndoAction::TaskDeleted(task) => {
+                        // Redo delete by removing the task
+                        model.delete_task_from_storage(&task.id);
+                        model.tasks.remove(&task.id);
+                    }
+                    UndoAction::TaskModified { before, after: _ } => {
+                        // Redo modify: the redo stack holds the inverse, so "before" is the state we want
+                        model.sync_task(&before);
+                        model.tasks.insert(before.id.clone(), *before);
+                    }
+                    UndoAction::ProjectCreated(project) => {
+                        // Redo project create by restoring it
+                        model.sync_project(&project);
+                        model.projects.insert(project.id.clone(), *project);
                     }
                 }
                 model.refresh_visible_tasks();
@@ -1734,5 +1759,159 @@ mod tests {
             model.tasks.get(&task_id).unwrap().tags,
             vec!["original".to_string()]
         );
+    }
+
+    // Redo tests
+    #[test]
+    fn test_redo_task_create() {
+        let mut model = Model::new();
+
+        // Create a task
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("New task".to_string())),
+        );
+        let task_id = model.visible_tasks[0].clone();
+        assert_eq!(model.tasks.len(), 1);
+
+        // Undo should remove the task
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert!(model.tasks.is_empty());
+        assert!(model.undo_stack.can_redo());
+
+        // Redo should restore the task
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.tasks.len(), 1);
+        assert!(model.tasks.contains_key(&task_id));
+        assert!(!model.undo_stack.can_redo());
+    }
+
+    #[test]
+    fn test_redo_task_delete() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Delete the task
+        model.selected_index = 0;
+        update(&mut model, Message::Ui(UiMessage::ShowDeleteConfirm));
+        update(&mut model, Message::Ui(UiMessage::ConfirmDelete));
+        assert_eq!(model.tasks.len(), initial_count - 1);
+
+        // Undo should restore the task
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.tasks.len(), initial_count);
+
+        // Redo should delete it again
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.tasks.len(), initial_count - 1);
+        assert!(model.tasks.get(&task_id).is_none());
+    }
+
+    #[test]
+    fn test_redo_task_modify() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+        // Edit the title
+        update(&mut model, Message::Ui(UiMessage::StartEditTask));
+        model.input_buffer = "New Title".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, "New Title");
+
+        // Undo should restore original
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, original_title);
+
+        // Redo should apply the change again
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, "New Title");
+    }
+
+    #[test]
+    fn test_redo_project_create() {
+        let mut model = Model::new();
+
+        // Create a project
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+        for c in "My Project".chars() {
+            update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+        }
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+        assert_eq!(model.projects.len(), 1);
+        let project_id = model.projects.keys().next().unwrap().clone();
+
+        // Undo should remove the project
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert!(model.projects.is_empty());
+
+        // Redo should restore the project
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.projects.len(), 1);
+        assert!(model.projects.contains_key(&project_id));
+    }
+
+    #[test]
+    fn test_new_action_clears_redo() {
+        let mut model = Model::new();
+
+        // Create and undo a task
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("Task 1".to_string())),
+        );
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert!(model.undo_stack.can_redo());
+
+        // New action should clear redo
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("Task 2".to_string())),
+        );
+        assert!(!model.undo_stack.can_redo());
+    }
+
+    #[test]
+    fn test_multiple_undo_redo() {
+        let mut model = Model::new();
+
+        // Create 3 tasks
+        for i in 1..=3 {
+            update(
+                &mut model,
+                Message::Task(TaskMessage::Create(format!("Task {}", i))),
+            );
+        }
+        assert_eq!(model.tasks.len(), 3);
+
+        // Undo all 3
+        update(&mut model, Message::System(SystemMessage::Undo));
+        update(&mut model, Message::System(SystemMessage::Undo));
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert!(model.tasks.is_empty());
+        assert_eq!(model.undo_stack.redo_len(), 3);
+
+        // Redo 2
+        update(&mut model, Message::System(SystemMessage::Redo));
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.tasks.len(), 2);
+        assert_eq!(model.undo_stack.redo_len(), 1);
+
+        // Undo 1
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.tasks.len(), 1);
+        assert_eq!(model.undo_stack.redo_len(), 2);
+    }
+
+    #[test]
+    fn test_redo_empty_does_nothing() {
+        let mut model = Model::new();
+        assert!(!model.undo_stack.can_redo());
+
+        // Redo with empty stack should do nothing
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert!(model.tasks.is_empty());
     }
 }

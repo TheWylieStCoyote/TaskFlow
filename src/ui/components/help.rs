@@ -97,6 +97,10 @@ impl Widget for HelpPopup {
                 Span::raw(" Undo last action"),
             ]),
             Line::from(vec![
+                Span::styled("U/Ctrl+r", Style::default().fg(Color::Cyan)),
+                Span::raw(" Redo last action"),
+            ]),
+            Line::from(vec![
                 Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),
                 Span::raw("   Save"),
             ]),

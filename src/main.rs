@@ -289,6 +289,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
+        Action::Redo => Message::System(SystemMessage::Redo),
         Action::Quit => Message::System(SystemMessage::Quit),
     }
 }

@@ -108,14 +108,23 @@ Each task shows:
 | `p` | Cycle priority (None → Low → Medium → High → Urgent) |
 | `D` | Edit due date (YYYY-MM-DD format) |
 | `T` | Edit tags (comma-separated) |
+| `m` | Move task to project |
 | `t` | Toggle time tracking |
 
-#### Search & Sort
+#### Project Actions
+
+| Key | Action |
+|-----|--------|
+| `P` | Create new project |
+
+#### Search & Filter
 
 | Key | Action |
 |-----|--------|
 | `/` | Search tasks (by title or tags) |
-| `Ctrl+L` | Clear search |
+| `Ctrl+l` | Clear search |
+| `#` | Filter by tag (comma-separated) |
+| `Ctrl+t` | Clear tag filter |
 | `s` | Cycle sort field (Created → Priority → Due Date → Title → Status) |
 | `S` | Toggle sort order (Ascending/Descending) |
 
@@ -125,15 +134,15 @@ Each task shows:
 |-----|--------|
 | `b` | Toggle sidebar |
 | `c` | Toggle showing completed tasks |
-| `P` | Create new project |
 | `?` | Show/hide help popup |
 
 #### General
 
 | Key | Action |
 |-----|--------|
-| `u` or `Ctrl+Z` | Undo last action |
-| `Ctrl+S` | Save |
+| `u` or `Ctrl+z` | Undo last action |
+| `U` or `Ctrl+r` | Redo last action |
+| `Ctrl+s` | Save |
 | `q` or `Esc` | Quit TaskFlow |
 
 ### Task Priorities
@@ -165,6 +174,7 @@ Tasks can have one of five priority levels:
 | All Tasks | Shows all tasks (default) |
 | Today | Tasks due today |
 | Upcoming | Tasks with future due dates |
+| Overdue | Tasks past their due date |
 | Projects | Tasks assigned to a project |
 
 ### Due Dates

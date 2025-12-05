@@ -18,6 +18,7 @@ pub struct TaskTemplate {
 }
 
 impl TaskTemplate {
+    #[must_use]
     pub fn new(name: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -29,34 +30,39 @@ impl TaskTemplate {
         }
     }
 
-    pub fn with_priority(mut self, priority: Priority) -> Self {
+    #[must_use]
+    pub const fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
 
+    #[must_use]
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
 
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    pub fn with_due_days(mut self, days: i64) -> Self {
+    #[must_use]
+    pub const fn with_due_days(mut self, days: i64) -> Self {
         self.due_days = Some(days);
         self
     }
 
     /// Create a task from this template
+    #[must_use]
     pub fn create_task(&self) -> Task {
         use chrono::{Duration, Utc};
 
         let mut task = Task::new(&self.title);
         task.priority = self.priority;
-        task.tags = self.tags.clone();
-        task.description = self.description.clone();
+        task.tags.clone_from(&self.tags);
+        task.description.clone_from(&self.description);
 
         if let Some(days) = self.due_days {
             let due = (Utc::now() + Duration::days(days)).date_naive();
@@ -75,6 +81,7 @@ pub struct TemplateManager {
 }
 
 impl TemplateManager {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             templates: Self::default_templates(),
@@ -117,17 +124,20 @@ impl TemplateManager {
     }
 
     /// Get template by index
+    #[must_use]
     pub fn get(&self, index: usize) -> Option<&TaskTemplate> {
         self.templates.get(index)
     }
 
     /// Get number of templates
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.templates.len()
     }
 
     /// Check if empty
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.templates.is_empty()
     }
 
@@ -137,6 +147,7 @@ impl TemplateManager {
     }
 
     /// Get template names for display
+    #[must_use]
     pub fn template_names(&self) -> Vec<&str> {
         self.templates.iter().map(|t| t.name.as_str()).collect()
     }

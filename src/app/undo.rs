@@ -18,37 +18,39 @@ pub enum UndoAction {
 
 impl UndoAction {
     /// Get a human-readable description of the action
+    #[must_use]
     pub fn description(&self) -> String {
         match self {
-            UndoAction::TaskCreated(task) => {
+            Self::TaskCreated(task) => {
                 format!("Create task \"{}\"", truncate(&task.title, 20))
             }
-            UndoAction::TaskDeleted(task) => {
+            Self::TaskDeleted(task) => {
                 format!("Delete task \"{}\"", truncate(&task.title, 20))
             }
-            UndoAction::TaskModified { before, .. } => {
+            Self::TaskModified { before, .. } => {
                 format!("Modify task \"{}\"", truncate(&before.title, 20))
             }
-            UndoAction::ProjectCreated(project) => {
+            Self::ProjectCreated(project) => {
                 format!("Create project \"{}\"", truncate(&project.name, 20))
             }
         }
     }
 
     /// Get the inverse action for redo
-    pub fn inverse(&self) -> UndoAction {
+    #[must_use]
+    pub fn inverse(&self) -> Self {
         match self {
             // Undo create = delete, so redo = create again
-            UndoAction::TaskCreated(task) => UndoAction::TaskCreated(task.clone()),
+            Self::TaskCreated(task) => Self::TaskCreated(task.clone()),
             // Undo delete = restore, so redo = delete again
-            UndoAction::TaskDeleted(task) => UndoAction::TaskDeleted(task.clone()),
+            Self::TaskDeleted(task) => Self::TaskDeleted(task.clone()),
             // Undo modify swaps before/after, so redo swaps them back
-            UndoAction::TaskModified { before, after } => UndoAction::TaskModified {
+            Self::TaskModified { before, after } => Self::TaskModified {
                 before: after.clone(),
                 after: before.clone(),
             },
             // Undo project create = delete, so redo = create again
-            UndoAction::ProjectCreated(project) => UndoAction::ProjectCreated(project.clone()),
+            Self::ProjectCreated(project) => Self::ProjectCreated(project.clone()),
         }
     }
 }
@@ -70,6 +72,7 @@ pub struct UndoStack {
 }
 
 impl UndoStack {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             undo_actions: Vec::new(),
@@ -120,31 +123,37 @@ impl UndoStack {
     }
 
     /// Check if there are any actions to undo
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.undo_actions.is_empty()
     }
 
     /// Check if there are any actions to redo
-    pub fn can_redo(&self) -> bool {
+    #[must_use]
+    pub const fn can_redo(&self) -> bool {
         !self.redo_actions.is_empty()
     }
 
     /// Get the number of undo actions in the stack
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.undo_actions.len()
     }
 
     /// Get the number of redo actions in the stack
-    pub fn redo_len(&self) -> usize {
+    #[must_use]
+    pub const fn redo_len(&self) -> usize {
         self.redo_actions.len()
     }
 
     /// Peek at the most recent undo action without removing it
+    #[must_use]
     pub fn peek(&self) -> Option<&UndoAction> {
         self.undo_actions.last()
     }
 
     /// Peek at the most recent redo action without removing it
+    #[must_use]
     pub fn peek_redo(&self) -> Option<&UndoAction> {
         self.redo_actions.last()
     }

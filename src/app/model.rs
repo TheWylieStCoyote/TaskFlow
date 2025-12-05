@@ -112,6 +112,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             running: RunningState::default(),
@@ -154,17 +155,20 @@ impl Model {
     }
 
     /// Get all tasks as a vector for export
+    #[must_use]
     pub fn tasks_for_export(&self) -> Vec<Task> {
         self.tasks.values().cloned().collect()
     }
 
     /// Get the number of sidebar items (views + separator + projects header + projects)
+    #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
         // 6 views (All Tasks, Today, Upcoming, Overdue, Calendar, Dashboard) + 1 separator + 1 "Projects" header + projects count
         8 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Get tasks for a specific day in the calendar
+    #[must_use]
     pub fn tasks_for_day(&self, date: NaiveDate) -> Vec<&Task> {
         self.tasks
             .values()
@@ -173,6 +177,7 @@ impl Model {
     }
 
     /// Get the number of tasks for a specific day
+    #[must_use]
     pub fn task_count_for_day(&self, date: NaiveDate) -> usize {
         self.tasks
             .values()
@@ -183,6 +188,7 @@ impl Model {
     }
 
     /// Check if any task on a given day is overdue
+    #[must_use]
     pub fn has_overdue_on_day(&self, date: NaiveDate) -> bool {
         let today = Utc::now().date_naive();
         date < today
@@ -193,6 +199,10 @@ impl Model {
     }
 
     /// Load data from a storage backend
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend fails to initialize or load data.
     pub fn with_storage(
         mut self,
         backend_type: BackendType,
@@ -220,6 +230,10 @@ impl Model {
     }
 
     /// Save current state to storage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the storage backend fails to flush data.
     pub fn save(&mut self) -> anyhow::Result<()> {
         if let Some(ref mut backend) = self.storage {
             backend.flush()?;
@@ -259,6 +273,11 @@ impl Model {
     }
 
     /// Add sample tasks for development
+    ///
+    /// # Panics
+    ///
+    /// Panics if the current date cannot be computed for sample due dates.
+    #[must_use]
     pub fn with_sample_data(mut self) -> Self {
         use crate::domain::{Priority, Project, TaskStatus};
         use chrono::{NaiveDate, Utc};
@@ -301,7 +320,7 @@ impl Model {
             Task::new("Write integration tests")
                 .with_priority(Priority::Medium)
                 .with_due_date(next_week)
-                .with_project(backend_id.clone())
+                .with_project(backend_id)
                 .with_tags(vec!["testing".into()]),
             // Frontend tasks
             Task::new("Design component library")
@@ -321,7 +340,7 @@ impl Model {
                 .with_tags(vec!["ux".into(), "accessibility".into()]),
             Task::new("Implement dark mode")
                 .with_priority(Priority::Low)
-                .with_project(frontend_id.clone())
+                .with_project(frontend_id)
                 .with_tags(vec!["ui".into(), "design".into()]),
             // Documentation tasks
             Task::new("Write API documentation")
@@ -331,7 +350,7 @@ impl Model {
                 .with_tags(vec!["docs".into(), "api".into()]),
             Task::new("Create user guide")
                 .with_priority(Priority::Low)
-                .with_project(docs_id.clone())
+                .with_project(docs_id)
                 .with_tags(vec!["docs".into()]),
             // Standalone tasks (no project)
             Task::new("Fix critical bug in parser")
@@ -482,59 +501,52 @@ impl Model {
 
         // Filter by current view
         match self.current_view {
-            ViewId::TaskList => true, // Show all tasks
+            // TaskList and Dashboard show all tasks
+            ViewId::TaskList | ViewId::Dashboard => true,
             ViewId::Today => {
                 // Show tasks due today
                 task.due_date
-                    .map(|d| d == chrono::Utc::now().date_naive())
-                    .unwrap_or(false)
+                    .is_some_and(|d| d == chrono::Utc::now().date_naive())
             }
             ViewId::Upcoming => {
                 // Show tasks with future due dates
                 task.due_date
-                    .map(|d| d > chrono::Utc::now().date_naive())
-                    .unwrap_or(false)
+                    .is_some_and(|d| d > chrono::Utc::now().date_naive())
             }
             ViewId::Overdue => {
                 // Show tasks with past due dates (before today)
                 task.due_date
-                    .map(|d| d < chrono::Utc::now().date_naive())
-                    .unwrap_or(false)
+                    .is_some_and(|d| d < chrono::Utc::now().date_naive())
             }
             ViewId::Calendar => {
                 // Show tasks for the selected day in calendar (if any)
-                if let Some(selected_day) = self.calendar_state.selected_day {
-                    if let Some(date) = NaiveDate::from_ymd_opt(
-                        self.calendar_state.year,
-                        self.calendar_state.month,
-                        selected_day,
-                    ) {
-                        task.due_date == Some(date)
-                    } else {
-                        false
-                    }
-                } else {
-                    // No day selected, show tasks for the entire month
-                    task.due_date
-                        .map(|d| {
+                self.calendar_state.selected_day.map_or_else(
+                    || {
+                        // No day selected, show tasks for the entire month
+                        task.due_date.is_some_and(|d| {
                             d.year() == self.calendar_state.year
                                 && d.month() == self.calendar_state.month
                         })
-                        .unwrap_or(false)
-                }
+                    },
+                    |selected_day| {
+                        NaiveDate::from_ymd_opt(
+                            self.calendar_state.year,
+                            self.calendar_state.month,
+                            selected_day,
+                        )
+                        .is_some_and(|date| task.due_date == Some(date))
+                    },
+                )
             }
             ViewId::Projects => {
                 // Show tasks that belong to a project
                 task.project_id.is_some()
             }
-            ViewId::Dashboard => {
-                // Dashboard shows all tasks (stats are calculated separately)
-                true
-            }
         }
     }
 
     /// Get the currently selected task
+    #[must_use]
     pub fn selected_task(&self) -> Option<&Task> {
         self.visible_tasks
             .get(self.selected_index)
@@ -542,20 +554,24 @@ impl Model {
     }
 
     /// Get the currently selected task mutably
+    #[must_use]
     pub fn selected_task_mut(&mut self) -> Option<&mut Task> {
         let id = self.visible_tasks.get(self.selected_index)?.clone();
         self.tasks.get_mut(&id)
     }
 
     /// Check if storage is configured
-    pub fn has_storage(&self) -> bool {
+    #[must_use]
+    pub const fn has_storage(&self) -> bool {
         self.storage.is_some()
     }
 
     /// Get tasks grouped by project for the Projects view
-    /// Returns a Vec of (Option<ProjectId>, project_name, Vec<TaskId>)
+    ///
+    /// Returns a `Vec` of (`Option<ProjectId>`, project_name, `Vec<TaskId>`)
     /// Projects are sorted alphabetically, with tasks within each project
     /// following the current sort order
+    #[must_use]
     pub fn get_tasks_grouped_by_project(&self) -> Vec<(Option<ProjectId>, String, Vec<TaskId>)> {
         // Group visible tasks by project_id using a Vec to preserve order
         let mut grouped: Vec<(Option<ProjectId>, Vec<TaskId>)> = Vec::new();
@@ -579,8 +595,7 @@ impl Model {
                 let name = project_id
                     .as_ref()
                     .and_then(|pid| self.projects.get(pid))
-                    .map(|p| p.name.clone())
-                    .unwrap_or_else(|| "No Project".to_string());
+                    .map_or_else(|| "No Project".to_string(), |p| p.name.clone());
                 (project_id, name, task_ids)
             })
             .collect();
@@ -621,6 +636,7 @@ impl Model {
     }
 
     /// Get the active time entry
+    #[must_use]
     pub fn active_time_entry(&self) -> Option<&TimeEntry> {
         self.active_time_entry
             .as_ref()
@@ -628,18 +644,19 @@ impl Model {
     }
 
     /// Check if time is being tracked for a specific task
+    #[must_use]
     pub fn is_tracking_task(&self, task_id: &TaskId) -> bool {
         self.active_time_entry()
-            .map(|e| &e.task_id == task_id)
-            .unwrap_or(false)
+            .is_some_and(|e| &e.task_id == task_id)
     }
 
     /// Get total time tracked for a task
+    #[must_use]
     pub fn total_time_for_task(&self, task_id: &TaskId) -> u32 {
         self.time_entries
             .values()
             .filter(|e| &e.task_id == task_id)
-            .map(|e| e.calculated_duration_minutes())
+            .map(TimeEntry::calculated_duration_minutes)
             .sum()
     }
 }

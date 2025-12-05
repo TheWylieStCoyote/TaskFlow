@@ -1056,50 +1056,73 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        // Calendar navigation - delegated to helper
+        UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
+            handle_ui_calendar(model, msg);
+        }
+        // Macro recording/playback - delegated to helper
+        UiMessage::StartRecordMacro | UiMessage::StopRecordMacro | UiMessage::PlayMacro(_) => {
+            handle_ui_macros(model, msg);
+        }
+        // Template picker - delegated to helper
+        UiMessage::ShowTemplates | UiMessage::HideTemplates | UiMessage::SelectTemplate(_) => {
+            handle_ui_templates(model, msg);
+        }
+    }
+}
+
+/// Handle calendar navigation messages
+fn handle_ui_calendar(model: &mut Model, msg: UiMessage) {
+    if model.current_view != ViewId::Calendar {
+        return;
+    }
+
+    match msg {
         UiMessage::CalendarPrevDay => {
-            if model.current_view == ViewId::Calendar {
-                if let Some(day) = model.calendar_state.selected_day {
-                    if day > 1 {
-                        model.calendar_state.selected_day = Some(day - 1);
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > 1 {
+                    model.calendar_state.selected_day = Some(day - 1);
+                } else {
+                    // Go to previous month's last day
+                    if model.calendar_state.month == 1 {
+                        model.calendar_state.month = 12;
+                        model.calendar_state.year -= 1;
                     } else {
-                        // Go to previous month's last day
-                        if model.calendar_state.month == 1 {
-                            model.calendar_state.month = 12;
-                            model.calendar_state.year -= 1;
-                        } else {
-                            model.calendar_state.month -= 1;
-                        }
-                        let days =
-                            days_in_month(model.calendar_state.year, model.calendar_state.month);
-                        model.calendar_state.selected_day = Some(days);
+                        model.calendar_state.month -= 1;
                     }
-                    model.selected_index = 0;
-                    model.refresh_visible_tasks();
+                    let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+                    model.calendar_state.selected_day = Some(days);
                 }
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
             }
         }
         UiMessage::CalendarNextDay => {
-            if model.current_view == ViewId::Calendar {
-                if let Some(day) = model.calendar_state.selected_day {
-                    let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
-                    if day < days {
-                        model.calendar_state.selected_day = Some(day + 1);
+            if let Some(day) = model.calendar_state.selected_day {
+                let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+                if day < days {
+                    model.calendar_state.selected_day = Some(day + 1);
+                } else {
+                    // Go to next month's first day
+                    if model.calendar_state.month == 12 {
+                        model.calendar_state.month = 1;
+                        model.calendar_state.year += 1;
                     } else {
-                        // Go to next month's first day
-                        if model.calendar_state.month == 12 {
-                            model.calendar_state.month = 1;
-                            model.calendar_state.year += 1;
-                        } else {
-                            model.calendar_state.month += 1;
-                        }
-                        model.calendar_state.selected_day = Some(1);
+                        model.calendar_state.month += 1;
                     }
-                    model.selected_index = 0;
-                    model.refresh_visible_tasks();
+                    model.calendar_state.selected_day = Some(1);
                 }
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
             }
         }
-        // Macro recording/playback
+        _ => {}
+    }
+}
+
+/// Handle macro recording and playback messages
+fn handle_ui_macros(model: &mut Model, msg: UiMessage) {
+    match msg {
         UiMessage::StartRecordMacro => {
             if model.macro_state.is_recording() {
                 // Already recording - treat as entering slot number mode
@@ -1108,7 +1131,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             } else if let Some(slot) = model.pending_macro_slot.take() {
                 // We have a pending slot, start recording
                 if model.macro_state.start_recording(slot) {
-                    model.status_message = Some(format!("Recording macro {}...", slot));
+                    model.status_message = Some(format!("Recording macro {slot}..."));
                 }
             } else {
                 // First press - prompt for slot
@@ -1120,7 +1143,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             if let Some(slot) = model.pending_macro_slot.take() {
                 if model.macro_state.is_recording() {
                     if model.macro_state.stop_recording(slot) {
-                        model.status_message = Some(format!("Macro {} saved", slot));
+                        model.status_message = Some(format!("Macro {slot} saved"));
                     } else {
                         model.status_message = Some("Macro was empty, not saved".to_string());
                     }
@@ -1134,12 +1157,18 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::PlayMacro(slot) => {
             // Playback is handled in main.rs by dispatching stored messages
             if model.macro_state.has_macro(slot) {
-                model.status_message = Some(format!("Playing macro {}...", slot));
+                model.status_message = Some(format!("Playing macro {slot}..."));
             } else {
-                model.status_message = Some(format!("No macro in slot {}", slot));
+                model.status_message = Some(format!("No macro in slot {slot}"));
             }
         }
-        // Template picker
+        _ => {}
+    }
+}
+
+/// Handle template picker messages
+fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
+    match msg {
         UiMessage::ShowTemplates => {
             model.show_templates = true;
             model.template_selected = 0;
@@ -1176,6 +1205,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.refresh_visible_tasks();
             }
         }
+        _ => {}
     }
 }
 

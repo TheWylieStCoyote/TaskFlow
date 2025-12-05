@@ -10,6 +10,7 @@ pub struct Macro {
 }
 
 impl Macro {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -25,27 +26,28 @@ impl Macro {
     }
 
     /// Check if a message should be recorded
-    fn should_record(message: &Message) -> bool {
+    const fn should_record(message: &Message) -> bool {
         use super::{SystemMessage, UiMessage};
         match message {
-            // Don't record system messages that shouldn't be replayed
-            Message::System(SystemMessage::Quit)
-            | Message::System(SystemMessage::Tick)
-            | Message::System(SystemMessage::Resize { .. }) => false,
-            // Don't record macro control messages to avoid infinite loops
-            Message::Ui(UiMessage::StartRecordMacro)
-            | Message::Ui(UiMessage::StopRecordMacro)
-            | Message::Ui(UiMessage::PlayMacro(_)) => false,
+            // Don't record system messages or macro control messages
+            Message::System(
+                SystemMessage::Quit | SystemMessage::Tick | SystemMessage::Resize { .. },
+            )
+            | Message::Ui(
+                UiMessage::StartRecordMacro | UiMessage::StopRecordMacro | UiMessage::PlayMacro(_),
+            ) => false,
             // Record everything else
             _ => true,
         }
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.messages.len()
     }
 }
@@ -62,6 +64,7 @@ pub struct MacroState {
 }
 
 impl MacroState {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -71,7 +74,7 @@ impl MacroState {
         if slot >= 10 || self.playing {
             return false;
         }
-        self.recording = Some(Macro::new(format!("Macro {}", slot)));
+        self.recording = Some(Macro::new(format!("Macro {slot}")));
         true
     }
 
@@ -95,7 +98,8 @@ impl MacroState {
     }
 
     /// Check if currently recording
-    pub fn is_recording(&self) -> bool {
+    #[must_use]
+    pub const fn is_recording(&self) -> bool {
         self.recording.is_some()
     }
 
@@ -107,6 +111,7 @@ impl MacroState {
     }
 
     /// Get messages for playback from a slot
+    #[must_use]
     pub fn get_playback_messages(&self, slot: usize) -> Option<Vec<Message>> {
         if slot >= 10 {
             return None;
@@ -115,11 +120,13 @@ impl MacroState {
     }
 
     /// Check if a slot has a macro
-    pub fn has_macro(&self, slot: usize) -> bool {
+    #[must_use]
+    pub const fn has_macro(&self, slot: usize) -> bool {
         slot < 10 && self.slots[slot].is_some()
     }
 
     /// Get macro info for display
+    #[must_use]
     pub fn macro_info(&self, slot: usize) -> Option<(String, usize)> {
         if slot >= 10 {
             return None;

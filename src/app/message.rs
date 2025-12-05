@@ -147,30 +147,30 @@ pub enum SystemMessage {
 
 impl From<NavigationMessage> for Message {
     fn from(msg: NavigationMessage) -> Self {
-        Message::Navigation(msg)
+        Self::Navigation(msg)
     }
 }
 
 impl From<TaskMessage> for Message {
     fn from(msg: TaskMessage) -> Self {
-        Message::Task(msg)
+        Self::Task(msg)
     }
 }
 
 impl From<UiMessage> for Message {
     fn from(msg: UiMessage) -> Self {
-        Message::Ui(msg)
+        Self::Ui(msg)
     }
 }
 
 impl From<SystemMessage> for Message {
     fn from(msg: SystemMessage) -> Self {
-        Message::System(msg)
+        Self::System(msg)
     }
 }
 
 impl From<TimeMessage> for Message {
     fn from(msg: TimeMessage) -> Self {
-        Message::Time(msg)
+        Self::Time(msg)
     }
 }

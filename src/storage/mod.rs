@@ -1,3 +1,34 @@
+//! Storage backends and persistence layer.
+//!
+//! This module provides pluggable storage backends for persisting
+//! application data. All backends implement the [`StorageBackend`] trait
+//! which provides a unified interface for CRUD operations.
+//!
+//! ## Available Backends
+//!
+//! - [`backends::JsonBackend`] - JSON file storage (default)
+//! - [`backends::YamlBackend`] - YAML file storage
+//! - [`backends::SqliteBackend`] - SQLite database storage
+//! - [`backends::MarkdownBackend`] - Markdown files with YAML frontmatter
+//!
+//! ## Usage
+//!
+//! Use [`create_backend`] to instantiate a backend:
+//!
+//! ```no_run
+//! use taskflow::storage::{create_backend, BackendType};
+//! use std::path::Path;
+//!
+//! let backend = create_backend(BackendType::Json, Path::new("tasks.json")).unwrap();
+//! ```
+//!
+//! ## Export Formats
+//!
+//! Tasks can be exported to external formats via the [`export`] module:
+//!
+//! - CSV - Spreadsheet-compatible format
+//! - ICS - iCalendar format for calendar applications
+
 pub mod backends;
 mod error;
 pub mod export;

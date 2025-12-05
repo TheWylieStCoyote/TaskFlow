@@ -36,7 +36,7 @@ impl SqliteBackend {
         let conn = self.conn()?;
 
         conn.execute_batch(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -93,7 +93,7 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
-            "#,
+            ",
         )?;
 
         Ok(())
@@ -238,11 +238,11 @@ impl TaskRepository for SqliteBackend {
     fn create_task(&mut self, task: &Task) -> StorageResult<()> {
         let conn = self.conn()?;
         conn.execute(
-            r#"INSERT INTO tasks (
+            r"INSERT INTO tasks (
                 id, title, description, status, priority, project_id, parent_task_id,
                 tags, dependencies, created_at, updated_at, due_date, scheduled_date,
                 completed_at, recurrence, estimated_minutes, actual_minutes, custom_fields
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"#,
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 task.id.0.to_string(),
                 task.title,
@@ -279,12 +279,12 @@ impl TaskRepository for SqliteBackend {
     fn update_task(&mut self, task: &Task) -> StorageResult<()> {
         let conn = self.conn()?;
         let rows = conn.execute(
-            r#"UPDATE tasks SET
+            r"UPDATE tasks SET
                 title = ?2, description = ?3, status = ?4, priority = ?5,
                 project_id = ?6, parent_task_id = ?7, tags = ?8, dependencies = ?9,
                 updated_at = ?10, due_date = ?11, scheduled_date = ?12, completed_at = ?13,
                 recurrence = ?14, estimated_minutes = ?15, actual_minutes = ?16, custom_fields = ?17
-            WHERE id = ?1"#,
+            WHERE id = ?1",
             params![
                 task.id.0.to_string(),
                 task.title,
@@ -401,10 +401,10 @@ impl ProjectRepository for SqliteBackend {
     fn create_project(&mut self, project: &Project) -> StorageResult<()> {
         let conn = self.conn()?;
         conn.execute(
-            r#"INSERT INTO projects (
+            r"INSERT INTO projects (
                 id, name, description, status, parent_id, color, icon,
                 created_at, updated_at, start_date, due_date, default_tags, custom_fields
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"#,
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 project.id.0.to_string(),
                 project.name,
@@ -436,10 +436,10 @@ impl ProjectRepository for SqliteBackend {
     fn update_project(&mut self, project: &Project) -> StorageResult<()> {
         let conn = self.conn()?;
         let rows = conn.execute(
-            r#"UPDATE projects SET
+            r"UPDATE projects SET
                 name = ?2, description = ?3, status = ?4, parent_id = ?5, color = ?6, icon = ?7,
                 updated_at = ?8, start_date = ?9, due_date = ?10, default_tags = ?11, custom_fields = ?12
-            WHERE id = ?1"#,
+            WHERE id = ?1",
             params![
                 project.id.0.to_string(),
                 project.name,
@@ -549,8 +549,8 @@ impl TimeEntryRepository for SqliteBackend {
     fn create_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()> {
         let conn = self.conn()?;
         conn.execute(
-            r#"INSERT INTO time_entries (id, task_id, description, started_at, ended_at, duration_minutes)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)"#,
+            r"INSERT INTO time_entries (id, task_id, description, started_at, ended_at, duration_minutes)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 entry.id.0.to_string(),
                 entry.task_id.0.to_string(),
@@ -596,9 +596,9 @@ impl TimeEntryRepository for SqliteBackend {
     fn update_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()> {
         let conn = self.conn()?;
         let rows = conn.execute(
-            r#"UPDATE time_entries SET
+            r"UPDATE time_entries SET
                 task_id = ?2, description = ?3, started_at = ?4, ended_at = ?5, duration_minutes = ?6
-            WHERE id = ?1"#,
+            WHERE id = ?1",
             params![
                 entry.id.0.to_string(),
                 entry.task_id.0.to_string(),

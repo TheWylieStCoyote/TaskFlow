@@ -389,8 +389,14 @@ mod completion_tests {
             String::from_utf8_lossy(&output.stderr)
         );
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("_taskflow"), "bash completion should contain _taskflow function");
-        assert!(stdout.contains("--backend"), "bash completion should include --backend option");
+        assert!(
+            stdout.contains("_taskflow"),
+            "bash completion should contain _taskflow function"
+        );
+        assert!(
+            stdout.contains("--backend"),
+            "bash completion should include --backend option"
+        );
     }
 
     #[test]
@@ -406,7 +412,10 @@ mod completion_tests {
             String::from_utf8_lossy(&output.stderr)
         );
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("#compdef taskflow"), "zsh completion should contain #compdef");
+        assert!(
+            stdout.contains("#compdef taskflow"),
+            "zsh completion should contain #compdef"
+        );
     }
 
     #[test]
@@ -422,7 +431,10 @@ mod completion_tests {
             String::from_utf8_lossy(&output.stderr)
         );
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("complete -c taskflow"), "fish completion should contain complete -c taskflow");
+        assert!(
+            stdout.contains("complete -c taskflow"),
+            "fish completion should contain complete -c taskflow"
+        );
     }
 
     #[test]
@@ -452,8 +464,14 @@ mod completion_tests {
 
         assert!(output.status.success(), "help should succeed");
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("completion"), "help should show completion subcommand");
-        assert!(stdout.contains("Generate shell completion"), "help should describe completion");
+        assert!(
+            stdout.contains("completion"),
+            "help should show completion subcommand"
+        );
+        assert!(
+            stdout.contains("Generate shell completion"),
+            "help should describe completion"
+        );
     }
 
     #[test]
@@ -465,9 +483,21 @@ mod completion_tests {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         // The completion should contain the backend values
-        assert!(stdout.contains("json"), "completion should include json backend");
-        assert!(stdout.contains("yaml"), "completion should include yaml backend");
-        assert!(stdout.contains("sqlite"), "completion should include sqlite backend");
-        assert!(stdout.contains("markdown"), "completion should include markdown backend");
+        assert!(
+            stdout.contains("json"),
+            "completion should include json backend"
+        );
+        assert!(
+            stdout.contains("yaml"),
+            "completion should include yaml backend"
+        );
+        assert!(
+            stdout.contains("sqlite"),
+            "completion should include sqlite backend"
+        );
+        assert!(
+            stdout.contains("markdown"),
+            "completion should include markdown backend"
+        );
     }
 }

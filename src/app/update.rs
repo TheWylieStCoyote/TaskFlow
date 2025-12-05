@@ -21,23 +21,29 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
     match msg {
         NavigationMessage::Up => match model.focus_pane {
             FocusPane::TaskList => {
-                if model.selected_index > 0 {
+                if model.current_view == ViewId::Calendar {
+                    // In calendar view, up moves to previous week (or wraps)
+                    handle_calendar_up(model);
+                } else if model.selected_index > 0 {
                     model.selected_index -= 1;
                 }
             }
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 4)
-                    if model.sidebar_selected == 4 {
-                        model.sidebar_selected = 3;
+                    // Skip separator (index 5)
+                    if model.sidebar_selected == 5 {
+                        model.sidebar_selected = 4;
                     }
                 }
             }
         },
         NavigationMessage::Down => match model.focus_pane {
             FocusPane::TaskList => {
-                if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
+                if model.current_view == ViewId::Calendar {
+                    // In calendar view, down moves to next week (or wraps)
+                    handle_calendar_down(model);
+                } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
                 }
             }
@@ -45,9 +51,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 4)
-                    if model.sidebar_selected == 4 {
-                        model.sidebar_selected = 5;
+                    // Skip separator (index 5)
+                    if model.sidebar_selected == 5 {
+                        model.sidebar_selected = 6;
                     }
                 }
             }
@@ -106,6 +112,110 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::SelectSidebarItem => {
             handle_sidebar_selection(model);
         }
+        NavigationMessage::CalendarPrevMonth => {
+            if model.calendar_state.month == 1 {
+                model.calendar_state.month = 12;
+                model.calendar_state.year -= 1;
+            } else {
+                model.calendar_state.month -= 1;
+            }
+            // Adjust selected day if it exceeds days in new month
+            let days_in_month =
+                days_in_month(model.calendar_state.year, model.calendar_state.month);
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > days_in_month {
+                    model.calendar_state.selected_day = Some(days_in_month);
+                }
+            }
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarNextMonth => {
+            if model.calendar_state.month == 12 {
+                model.calendar_state.month = 1;
+                model.calendar_state.year += 1;
+            } else {
+                model.calendar_state.month += 1;
+            }
+            // Adjust selected day if it exceeds days in new month
+            let days_in_month =
+                days_in_month(model.calendar_state.year, model.calendar_state.month);
+            if let Some(day) = model.calendar_state.selected_day {
+                if day > days_in_month {
+                    model.calendar_state.selected_day = Some(days_in_month);
+                }
+            }
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarSelectDay(day) => {
+            model.calendar_state.selected_day = Some(day);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+    }
+}
+
+/// Helper to get days in a month
+fn days_in_month(year: i32, month: u32) -> u32 {
+    use chrono::{Datelike, NaiveDate};
+    if month == 12 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 1, 1)
+    }
+    .and_then(|d| d.pred_opt())
+    .map(|d| d.day())
+    .unwrap_or(28)
+}
+
+/// Handle calendar up navigation (move to previous week)
+fn handle_calendar_up(model: &mut Model) {
+    if let Some(day) = model.calendar_state.selected_day {
+        if day > 7 {
+            model.calendar_state.selected_day = Some(day - 7);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        } else {
+            // Move to previous month, last row
+            if model.calendar_state.month == 1 {
+                model.calendar_state.month = 12;
+                model.calendar_state.year -= 1;
+            } else {
+                model.calendar_state.month -= 1;
+            }
+            let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+            // Try to land on same weekday in last week
+            let new_day = days - (7 - day);
+            model.calendar_state.selected_day = Some(new_day.max(1));
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+    }
+}
+
+/// Handle calendar down navigation (move to next week)
+fn handle_calendar_down(model: &mut Model) {
+    if let Some(day) = model.calendar_state.selected_day {
+        let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+        if day + 7 <= days {
+            model.calendar_state.selected_day = Some(day + 7);
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        } else {
+            // Move to next month, first row
+            if model.calendar_state.month == 12 {
+                model.calendar_state.month = 1;
+                model.calendar_state.year += 1;
+            } else {
+                model.calendar_state.month += 1;
+            }
+            // Try to land on same weekday in first week
+            let new_day = (day + 7) - days;
+            model.calendar_state.selected_day = Some(new_day.min(7));
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
     }
 }
 
@@ -117,9 +227,10 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 1: Today
     // 2: Upcoming
     // 3: Overdue
-    // 4: Separator (skip)
-    // 5: "Projects" header (skip or go to Projects view)
-    // 6+: Individual projects
+    // 4: Calendar
+    // 5: Separator (skip)
+    // 6: "Projects" header (skip or go to Projects view)
+    // 7+: Individual projects
 
     match selected {
         0 => {
@@ -150,8 +261,15 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        4 => {} // Separator, do nothing
-        5 => {
+        4 => {
+            model.current_view = ViewId::Calendar;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        5 => {} // Separator, do nothing
+        6 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -159,9 +277,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 6 => {
+        n if n >= 7 => {
             // Select a specific project
-            let project_index = n - 6;
+            let project_index = n - 7;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -925,6 +1043,49 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::CalendarPrevDay => {
+            if model.current_view == ViewId::Calendar {
+                if let Some(day) = model.calendar_state.selected_day {
+                    if day > 1 {
+                        model.calendar_state.selected_day = Some(day - 1);
+                    } else {
+                        // Go to previous month's last day
+                        if model.calendar_state.month == 1 {
+                            model.calendar_state.month = 12;
+                            model.calendar_state.year -= 1;
+                        } else {
+                            model.calendar_state.month -= 1;
+                        }
+                        let days =
+                            days_in_month(model.calendar_state.year, model.calendar_state.month);
+                        model.calendar_state.selected_day = Some(days);
+                    }
+                    model.selected_index = 0;
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
+        UiMessage::CalendarNextDay => {
+            if model.current_view == ViewId::Calendar {
+                if let Some(day) = model.calendar_state.selected_day {
+                    let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
+                    if day < days {
+                        model.calendar_state.selected_day = Some(day + 1);
+                    } else {
+                        // Go to next month's first day
+                        if model.calendar_state.month == 12 {
+                            model.calendar_state.month = 1;
+                            model.calendar_state.year += 1;
+                        } else {
+                            model.calendar_state.month += 1;
+                        }
+                        model.calendar_state.selected_day = Some(1);
+                    }
+                    model.selected_index = 0;
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
     }
 }
 
@@ -1572,15 +1733,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 3; // Overdue (before separator at 4)
+        model.sidebar_selected = 4; // Calendar (before separator at 5)
 
-        // Move down should skip separator (4) and go to Projects header (5)
+        // Move down should skip separator (5) and go to Projects header (6)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 5);
+        assert_eq!(model.sidebar_selected, 6);
 
-        // Move up should skip separator and go back to Overdue (3)
+        // Move up should skip separator and go back to Calendar (4)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 3);
+        assert_eq!(model.sidebar_selected, 4);
     }
 
     #[test]
@@ -1637,7 +1798,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 6; // First project (index 6 = after header items)
+        model.sidebar_selected = 7; // First project (index 7 = after header items including Calendar)
 
         update(
             &mut model,

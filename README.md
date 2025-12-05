@@ -167,6 +167,16 @@ Tasks with dependencies show a `[B]` indicator. Recurring tasks show a `↻` ind
 
 When you complete a recurring task, a new task is automatically created with the next due date.
 
+#### Calendar View
+
+| Key | Action |
+|-----|--------|
+| `←`/`→` or `h`/`l` | Navigate days |
+| `↑`/`↓` or `j`/`k` | Navigate weeks |
+| `<`/`>` | Previous/Next month |
+
+The Calendar view shows a monthly grid with tasks displayed for each day. Days with tasks show a dot indicator, and the selected day's tasks are listed in a panel on the right.
+
 #### General
 
 | Key | Action |

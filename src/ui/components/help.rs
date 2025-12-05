@@ -190,6 +190,23 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Calendar View",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("←/→", Style::default().fg(Color::Cyan)),
+                Span::raw("       Navigate days"),
+            ]),
+            Line::from(vec![
+                Span::styled("↑/↓", Style::default().fg(Color::Cyan)),
+                Span::raw("       Navigate weeks"),
+            ]),
+            Line::from(vec![
+                Span::styled("</> ", Style::default().fg(Color::Cyan)),
+                Span::raw("      Previous/Next month"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

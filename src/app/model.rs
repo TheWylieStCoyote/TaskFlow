@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use chrono::{Datelike, NaiveDate, Utc};
+
 use crate::domain::{
     Filter, Priority, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId,
 };
@@ -9,6 +11,25 @@ use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskR
 use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, UndoStack, ViewId};
+
+/// Calendar state for the calendar view
+#[derive(Debug, Clone)]
+pub struct CalendarState {
+    pub year: i32,
+    pub month: u32,
+    pub selected_day: Option<u32>,
+}
+
+impl Default for CalendarState {
+    fn default() -> Self {
+        let today = Utc::now().date_naive();
+        Self {
+            year: today.year(),
+            month: today.month(),
+            selected_day: Some(today.day()),
+        }
+    }
+}
 
 /// Application running state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -70,6 +91,9 @@ pub struct Model {
 
     // Undo history
     pub undo_stack: UndoStack,
+
+    // Calendar state
+    pub calendar_state: CalendarState,
 }
 
 impl Model {
@@ -104,13 +128,42 @@ impl Model {
             dirty: false,
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
+            calendar_state: CalendarState::default(),
         }
     }
 
     /// Get the number of sidebar items (views + separator + projects header + projects)
     pub fn sidebar_item_count(&self) -> usize {
-        // 4 views (All Tasks, Today, Upcoming, Overdue) + 1 separator + 1 "Projects" header + projects count
-        6 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // 5 views (All Tasks, Today, Upcoming, Overdue, Calendar) + 1 separator + 1 "Projects" header + projects count
+        7 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+    }
+
+    /// Get tasks for a specific day in the calendar
+    pub fn tasks_for_day(&self, date: NaiveDate) -> Vec<&Task> {
+        self.tasks
+            .values()
+            .filter(|t| t.due_date == Some(date))
+            .collect()
+    }
+
+    /// Get the number of tasks for a specific day
+    pub fn task_count_for_day(&self, date: NaiveDate) -> usize {
+        self.tasks
+            .values()
+            .filter(|t| {
+                t.due_date == Some(date) && (self.show_completed || !t.status.is_complete())
+            })
+            .count()
+    }
+
+    /// Check if any task on a given day is overdue
+    pub fn has_overdue_on_day(&self, date: NaiveDate) -> bool {
+        let today = Utc::now().date_naive();
+        date < today
+            && self
+                .tasks
+                .values()
+                .any(|t| t.due_date == Some(date) && !t.status.is_complete())
     }
 
     /// Load data from a storage backend
@@ -421,6 +474,28 @@ impl Model {
                 task.due_date
                     .map(|d| d < chrono::Utc::now().date_naive())
                     .unwrap_or(false)
+            }
+            ViewId::Calendar => {
+                // Show tasks for the selected day in calendar (if any)
+                if let Some(selected_day) = self.calendar_state.selected_day {
+                    if let Some(date) = NaiveDate::from_ymd_opt(
+                        self.calendar_state.year,
+                        self.calendar_state.month,
+                        selected_day,
+                    ) {
+                        task.due_date == Some(date)
+                    } else {
+                        false
+                    }
+                } else {
+                    // No day selected, show tasks for the entire month
+                    task.due_date
+                        .map(|d| {
+                            d.year() == self.calendar_state.year
+                                && d.month() == self.calendar_state.month
+                        })
+                        .unwrap_or(false)
+                }
             }
             ViewId::Projects => {
                 // Show tasks that belong to a project

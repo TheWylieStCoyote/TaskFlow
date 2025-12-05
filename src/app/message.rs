@@ -33,6 +33,10 @@ pub enum NavigationMessage {
     FocusSidebar,
     FocusTaskList,
     SelectSidebarItem,
+    // Calendar navigation
+    CalendarPrevMonth,
+    CalendarNextMonth,
+    CalendarSelectDay(u32),
 }
 
 /// View identifiers
@@ -43,6 +47,7 @@ pub enum ViewId {
     Today,
     Upcoming,
     Overdue,
+    Calendar,
     Projects,
 }
 
@@ -113,6 +118,9 @@ pub enum UiMessage {
     StartEditDependencies,
     // Recurrence
     StartEditRecurrence,
+    // Calendar
+    CalendarPrevDay,
+    CalendarNextDay,
 }
 
 /// System messages

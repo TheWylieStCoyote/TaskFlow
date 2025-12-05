@@ -211,6 +211,19 @@ fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindin
         return Message::Ui(UiMessage::ToggleTaskSelection);
     }
 
+    // In calendar view, arrow keys navigate days/weeks
+    if model.current_view == taskflow::app::ViewId::Calendar
+        && model.focus_pane == taskflow::app::FocusPane::TaskList
+    {
+        match key.code {
+            KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
+            KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
+            KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
+            KeyCode::Char('l') => return Message::Ui(UiMessage::CalendarNextDay),
+            _ => {}
+        }
+    }
+
     // Convert key event to string for lookup
     let key_str = key_event_to_string(&key);
 
@@ -306,6 +319,10 @@ fn action_to_message(action: &Action) -> Message {
         Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
         Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
         Action::EditRecurrence => Message::Ui(UiMessage::StartEditRecurrence),
+        Action::CalendarPrevMonth => Message::Navigation(NavigationMessage::CalendarPrevMonth),
+        Action::CalendarNextMonth => Message::Navigation(NavigationMessage::CalendarNextMonth),
+        Action::CalendarPrevDay => Message::Ui(UiMessage::CalendarPrevDay),
+        Action::CalendarNextDay => Message::Ui(UiMessage::CalendarNextDay),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),

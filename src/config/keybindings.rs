@@ -62,6 +62,12 @@ pub enum Action {
     // Recurrence
     EditRecurrence,
 
+    // Calendar navigation
+    CalendarPrevMonth,
+    CalendarNextMonth,
+    CalendarPrevDay,
+    CalendarNextDay,
+
     // System
     Save,
     Undo,
@@ -181,6 +187,10 @@ impl Default for Keybindings {
 
         // Recurrence
         bindings.insert("R".to_string(), Action::EditRecurrence);
+
+        // Calendar navigation
+        bindings.insert("<".to_string(), Action::CalendarPrevMonth);
+        bindings.insert(">".to_string(), Action::CalendarNextMonth);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

@@ -9,9 +9,11 @@ use ratatui::{
 use crate::app::Model;
 use crate::config::Theme;
 
+use crate::app::ViewId;
+
 use super::components::{
-    centered_rect, centered_rect_fixed_height, ConfirmDialog, HelpPopup, InputDialog, InputMode,
-    InputTarget, Sidebar, TaskList,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, HelpPopup, InputDialog,
+    InputMode, InputTarget, Sidebar, TaskList,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -117,13 +119,24 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
         // Render sidebar
         frame.render_widget(Sidebar::new(model, theme), chunks[0]);
 
-        // Render task list in main area
-        let task_list = TaskList::new(model, theme);
-        frame.render_widget(task_list, chunks[1]);
+        // Render main content based on current view
+        render_main_content(model, frame, chunks[1], theme);
     } else {
-        // No sidebar, full width task list
-        let task_list = TaskList::new(model, theme);
-        frame.render_widget(task_list, area);
+        // No sidebar, full width content
+        render_main_content(model, frame, area, theme);
+    }
+}
+
+fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+    match model.current_view {
+        ViewId::Calendar => {
+            let calendar = Calendar::new(model, theme);
+            frame.render_widget(calendar, area);
+        }
+        _ => {
+            let task_list = TaskList::new(model, theme);
+            frame.render_widget(task_list, area);
+        }
     }
 }
 

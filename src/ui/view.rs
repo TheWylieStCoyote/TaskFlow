@@ -10,7 +10,8 @@ use crate::app::Model;
 use crate::config::Theme;
 
 use super::components::{
-    centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, InputTarget, Sidebar, TaskList,
+    centered_rect, centered_rect_fixed_height, ConfirmDialog, HelpPopup, InputDialog, InputMode,
+    InputTarget, Sidebar, TaskList,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -44,7 +45,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
 
     // Render input dialog if in editing mode
     if model.input_mode == InputMode::Editing {
-        let input_area = centered_rect(60, 3, area);
+        // Height: 3 rows (top border, text line, bottom border)
+        let input_area = centered_rect_fixed_height(60, 3, area);
         let title = match &model.input_target {
             InputTarget::Task => "New Task",
             InputTarget::EditTask(_) => "Edit Task",
@@ -63,7 +65,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
 
     // Render delete confirmation dialog
     if model.show_confirm_delete {
-        let confirm_area = centered_rect(40, 5, area);
+        // Height: 5 rows (border, message, blank, y/n prompt, border)
+        let confirm_area = centered_rect_fixed_height(50, 5, area);
         let task_name = model
             .selected_task()
             .map(|t| t.title.as_str())

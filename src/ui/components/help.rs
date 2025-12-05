@@ -188,12 +188,22 @@ impl Widget for HelpPopup {
     }
 }
 
-/// Calculate centered rect for popup
+/// Calculate centered rect for popup using percentages
 pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_width = r.width * percent_x / 100;
     let popup_height = r.height * percent_y / 100;
     let popup_x = (r.width - popup_width) / 2;
     let popup_y = (r.height - popup_height) / 2;
+
+    Rect::new(r.x + popup_x, r.y + popup_y, popup_width, popup_height)
+}
+
+/// Calculate centered rect with fixed height (for input dialogs)
+pub fn centered_rect_fixed_height(percent_x: u16, height: u16, r: Rect) -> Rect {
+    let popup_width = r.width * percent_x / 100;
+    let popup_height = height.min(r.height); // Don't exceed screen height
+    let popup_x = (r.width - popup_width) / 2;
+    let popup_y = (r.height.saturating_sub(popup_height)) / 2;
 
     Rect::new(r.x + popup_x, r.y + popup_y, popup_width, popup_height)
 }

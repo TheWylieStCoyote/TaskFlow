@@ -288,6 +288,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::CycleSortField => Message::Ui(UiMessage::CycleSortField),
         Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
         Action::Save => Message::System(SystemMessage::Save),
+        Action::Undo => Message::System(SystemMessage::Undo),
         Action::Quit => Message::System(SystemMessage::Quit),
     }
 }

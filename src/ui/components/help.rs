@@ -93,16 +93,20 @@ impl Widget for HelpPopup {
             )]),
             Line::from(""),
             Line::from(vec![
+                Span::styled("u/Ctrl+z", Style::default().fg(Color::Cyan)),
+                Span::raw(" Undo last action"),
+            ]),
+            Line::from(vec![
                 Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),
-                Span::raw("  Save"),
+                Span::raw("   Save"),
             ]),
             Line::from(vec![
                 Span::styled("?", Style::default().fg(Color::Cyan)),
-                Span::raw("       Show/hide help"),
+                Span::raw("        Show/hide help"),
             ]),
             Line::from(vec![
                 Span::styled("q/Esc", Style::default().fg(Color::Cyan)),
-                Span::raw("   Quit"),
+                Span::raw("    Quit"),
             ]),
         ];
 

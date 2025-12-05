@@ -2,7 +2,7 @@ use crate::ui::{InputMode, InputTarget};
 
 use super::{
     FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
-    TimeMessage, UiMessage, ViewId,
+    TimeMessage, UiMessage, UndoAction, ViewId,
 };
 
 /// Main update function - heart of TEA pattern
@@ -175,28 +175,43 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
 
             if let Some(id) = task_id {
                 if let Some(task) = model.tasks.get_mut(&id) {
+                    let before = task.clone();
                     task.toggle_complete();
-                    let task_clone = task.clone();
-                    model.sync_task(&task_clone);
+                    let after = task.clone();
+                    model.sync_task(&after);
+                    model.undo_stack.push(UndoAction::TaskModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
                 }
             }
             model.refresh_visible_tasks();
         }
         TaskMessage::SetStatus(task_id, status) => {
             if let Some(task) = model.tasks.get_mut(&task_id) {
+                let before = task.clone();
                 task.status = status;
                 task.updated_at = chrono::Utc::now();
-                let task_clone = task.clone();
-                model.sync_task(&task_clone);
+                let after = task.clone();
+                model.sync_task(&after);
+                model.undo_stack.push(UndoAction::TaskModified {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
             }
             model.refresh_visible_tasks();
         }
         TaskMessage::SetPriority(task_id, priority) => {
             if let Some(task) = model.tasks.get_mut(&task_id) {
+                let before = task.clone();
                 task.priority = priority;
                 task.updated_at = chrono::Utc::now();
-                let task_clone = task.clone();
-                model.sync_task(&task_clone);
+                let after = task.clone();
+                model.sync_task(&after);
+                model.undo_stack.push(UndoAction::TaskModified {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
             }
             model.refresh_visible_tasks();
         }
@@ -206,6 +221,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
 
             if let Some(id) = task_id {
                 if let Some(task) = model.tasks.get_mut(&id) {
+                    let before = task.clone();
                     task.priority = match task.priority {
                         Priority::None => Priority::Low,
                         Priority::Low => Priority::Medium,
@@ -214,8 +230,12 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         Priority::Urgent => Priority::None,
                     };
                     task.updated_at = chrono::Utc::now();
-                    let task_clone = task.clone();
-                    model.sync_task(&task_clone);
+                    let after = task.clone();
+                    model.sync_task(&after);
+                    model.undo_stack.push(UndoAction::TaskModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
                 }
             }
             model.refresh_visible_tasks();
@@ -223,20 +243,32 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
         TaskMessage::Create(title) => {
             let task = crate::domain::Task::new(title).with_priority(model.default_priority);
             model.sync_task(&task);
+            model
+                .undo_stack
+                .push(UndoAction::TaskCreated(Box::new(task.clone())));
             model.tasks.insert(task.id.clone(), task);
             model.refresh_visible_tasks();
         }
         TaskMessage::Delete(task_id) => {
-            model.delete_task_from_storage(&task_id);
-            model.tasks.remove(&task_id);
+            if let Some(task) = model.tasks.remove(&task_id) {
+                model.delete_task_from_storage(&task_id);
+                model
+                    .undo_stack
+                    .push(UndoAction::TaskDeleted(Box::new(task)));
+            }
             model.refresh_visible_tasks();
         }
         TaskMessage::MoveToProject(task_id, project_id) => {
             if let Some(task) = model.tasks.get_mut(&task_id) {
+                let before = task.clone();
                 task.project_id = project_id;
                 task.updated_at = chrono::Utc::now();
-                let task_clone = task.clone();
-                model.sync_task(&task_clone);
+                let after = task.clone();
+                model.sync_task(&after);
+                model.undo_stack.push(UndoAction::TaskModified {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
             }
         }
     }
@@ -350,6 +382,9 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         let task =
                             crate::domain::Task::new(input).with_priority(model.default_priority);
                         model.sync_task(&task);
+                        model
+                            .undo_stack
+                            .push(UndoAction::TaskCreated(Box::new(task.clone())));
                         model.tasks.insert(task.id.clone(), task);
                         model.refresh_visible_tasks();
                     }
@@ -357,10 +392,15 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 InputTarget::EditTask(task_id) => {
                     if !input.is_empty() {
                         if let Some(task) = model.tasks.get_mut(task_id) {
+                            let before = task.clone();
                             task.title = input;
                             task.updated_at = chrono::Utc::now();
-                            let task_clone = task.clone();
-                            model.sync_task(&task_clone);
+                            let after = task.clone();
+                            model.sync_task(&after);
+                            model.undo_stack.push(UndoAction::TaskModified {
+                                before: Box::new(before),
+                                after: Box::new(after),
+                            });
                         }
                         model.refresh_visible_tasks();
                     }
@@ -368,6 +408,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 InputTarget::EditDueDate(task_id) => {
                     use chrono::NaiveDate;
                     if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
                         // Empty input clears the due date
                         if input.is_empty() {
                             task.due_date = None;
@@ -376,13 +417,18 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         }
                         // If parsing fails, just ignore (keep old date)
                         task.updated_at = chrono::Utc::now();
-                        let task_clone = task.clone();
-                        model.sync_task(&task_clone);
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
                     }
                     model.refresh_visible_tasks();
                 }
                 InputTarget::EditTags(task_id) => {
                     if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
                         // Parse comma-separated tags, trim whitespace, filter empty
                         task.tags = input
                             .split(',')
@@ -390,8 +436,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             .filter(|s| !s.is_empty())
                             .collect();
                         task.updated_at = chrono::Utc::now();
-                        let task_clone = task.clone();
-                        model.sync_task(&task_clone);
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
                     }
                     model.refresh_visible_tasks();
                 }
@@ -399,6 +449,9 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     if !input.is_empty() {
                         let project = crate::domain::Project::new(input);
                         model.sync_project(&project);
+                        model
+                            .undo_stack
+                            .push(UndoAction::ProjectCreated(Box::new(project.clone())));
                         model.projects.insert(project.id.clone(), project);
                     }
                 }
@@ -453,8 +506,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::ConfirmDelete => {
             if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
-                model.delete_task_from_storage(&id);
-                model.tasks.remove(&id);
+                if let Some(task) = model.tasks.remove(&id) {
+                    model.delete_task_from_storage(&id);
+                    model
+                        .undo_stack
+                        .push(UndoAction::TaskDeleted(Box::new(task)));
+                }
                 model.refresh_visible_tasks();
             }
             model.show_confirm_delete = false;
@@ -496,6 +553,35 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::Save => {
             let _ = model.save();
+        }
+        SystemMessage::Undo => {
+            if let Some(action) = model.undo_stack.pop() {
+                match action {
+                    UndoAction::TaskCreated(task) => {
+                        // Undo create by deleting the task
+                        model.delete_task_from_storage(&task.id);
+                        model.tasks.remove(&task.id);
+                    }
+                    UndoAction::TaskDeleted(task) => {
+                        // Undo delete by restoring the task
+                        model.sync_task(&task);
+                        model.tasks.insert(task.id.clone(), *task);
+                    }
+                    UndoAction::TaskModified { before, after: _ } => {
+                        // Undo modify by restoring previous state
+                        model.sync_task(&before);
+                        model.tasks.insert(before.id.clone(), *before);
+                    }
+                    UndoAction::ProjectCreated(project) => {
+                        // Undo project create by removing it
+                        model.projects.remove(&project.id);
+                        // Note: Project deletion from storage would need a delete_project_from_storage method
+                        // For now, projects are only removed from in-memory state
+                        model.dirty = true;
+                    }
+                }
+                model.refresh_visible_tasks();
+            }
         }
         SystemMessage::Resize { width, height } => {
             model.terminal_size = (width, height);
@@ -1431,5 +1517,222 @@ mod tests {
         let task = model.tasks.get(&task_id).unwrap();
         assert_eq!(task.tags, original_tags);
         assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    // Undo tests
+    #[test]
+    fn test_undo_task_create() {
+        let mut model = Model::new();
+        assert!(model.tasks.is_empty());
+        assert!(model.undo_stack.is_empty());
+
+        // Create a task
+        update(
+            &mut model,
+            Message::Task(TaskMessage::Create("New task".to_string())),
+        );
+
+        assert_eq!(model.tasks.len(), 1);
+        assert_eq!(model.undo_stack.len(), 1);
+
+        // Undo should remove the task
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.tasks.is_empty());
+        assert!(model.undo_stack.is_empty());
+    }
+
+    #[test]
+    fn test_undo_task_delete() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+        let task_id = model.visible_tasks[0].clone();
+        let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+        // Delete the task via confirm dialog path
+        model.selected_index = 0;
+        update(&mut model, Message::Ui(UiMessage::ShowDeleteConfirm));
+        update(&mut model, Message::Ui(UiMessage::ConfirmDelete));
+
+        assert_eq!(model.tasks.len(), initial_count - 1);
+        assert!(model.tasks.get(&task_id).is_none());
+
+        // Undo should restore the task
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(model.tasks.len(), initial_count);
+        let restored_task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(restored_task.title, original_title);
+    }
+
+    #[test]
+    fn test_undo_task_toggle_complete() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Task starts as Todo
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
+
+        // Toggle complete
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
+
+        // Undo should restore to Todo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
+    }
+
+    #[test]
+    fn test_undo_task_edit_title() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+        // Edit the title
+        update(&mut model, Message::Ui(UiMessage::StartEditTask));
+        model.input_buffer = "Changed Title".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, "Changed Title");
+
+        // Undo should restore original title
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, original_title);
+    }
+
+    #[test]
+    fn test_undo_task_cycle_priority() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial priority
+        model.tasks.get_mut(&task_id).unwrap().priority = Priority::None;
+
+        // Cycle priority
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::Low);
+
+        // Undo should restore to None
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::None);
+    }
+
+    #[test]
+    fn test_undo_project_create() {
+        let mut model = Model::new();
+        assert!(model.projects.is_empty());
+
+        // Create a project
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+        for c in "My Project".chars() {
+            update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+        }
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.projects.len(), 1);
+
+        // Undo should remove the project
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.projects.is_empty());
+    }
+
+    #[test]
+    fn test_undo_multiple_actions() {
+        let mut model = Model::new();
+
+        // Create three tasks
+        for i in 1..=3 {
+            update(
+                &mut model,
+                Message::Task(TaskMessage::Create(format!("Task {}", i))),
+            );
+        }
+
+        assert_eq!(model.tasks.len(), 3);
+        assert_eq!(model.undo_stack.len(), 3);
+
+        // Undo all three
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.tasks.len(), 2);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.tasks.len(), 1);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert!(model.tasks.is_empty());
+        assert!(model.undo_stack.is_empty());
+    }
+
+    #[test]
+    fn test_undo_empty_stack() {
+        let mut model = Model::new();
+        assert!(model.undo_stack.is_empty());
+
+        // Undo with empty stack should do nothing
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.undo_stack.is_empty());
+    }
+
+    #[test]
+    fn test_undo_edit_due_date() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial due date
+        let original_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        model.tasks.get_mut(&task_id).unwrap().due_date = Some(original_date);
+
+        // Edit due date
+        update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
+        model.input_buffer = "2025-12-25".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().due_date,
+            Some(NaiveDate::from_ymd_opt(2025, 12, 25).unwrap())
+        );
+
+        // Undo should restore original date
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().due_date,
+            Some(original_date)
+        );
+    }
+
+    #[test]
+    fn test_undo_edit_tags() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial tags
+        model.tasks.get_mut(&task_id).unwrap().tags = vec!["original".to_string()];
+
+        // Edit tags
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+        model.input_buffer = "new, tags".to_string();
+        model.cursor_position = model.input_buffer.len();
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(model.tasks.get(&task_id).unwrap().tags, vec!["new", "tags"]);
+
+        // Undo should restore original tags
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().tags,
+            vec!["original".to_string()]
+        );
     }
 }

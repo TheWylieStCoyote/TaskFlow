@@ -8,7 +8,7 @@ use crate::domain::{
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::{InputMode, InputTarget};
 
-use super::{FocusPane, ViewId};
+use super::{FocusPane, UndoStack, ViewId};
 
 /// Application running state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -63,6 +63,9 @@ pub struct Model {
 
     // Configuration
     pub default_priority: Priority,
+
+    // Undo history
+    pub undo_stack: UndoStack,
 }
 
 impl Model {
@@ -94,6 +97,7 @@ impl Model {
             data_path: None,
             dirty: false,
             default_priority: Priority::default(),
+            undo_stack: UndoStack::new(),
         }
     }
 

@@ -44,6 +44,7 @@ pub enum Action {
 
     // System
     Save,
+    Undo,
     Quit,
 }
 
@@ -146,6 +147,8 @@ impl Default for Keybindings {
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);
+        bindings.insert("u".to_string(), Action::Undo);
+        bindings.insert("ctrl+z".to_string(), Action::Undo);
         bindings.insert("q".to_string(), Action::Quit);
         bindings.insert("esc".to_string(), Action::Quit);
 

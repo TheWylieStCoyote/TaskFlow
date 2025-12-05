@@ -102,6 +102,7 @@ pub enum UiMessage {
 pub enum SystemMessage {
     Quit,
     Save,
+    Undo,
     Resize { width: u16, height: u16 },
     Tick,
 }

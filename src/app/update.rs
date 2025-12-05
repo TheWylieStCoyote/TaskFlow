@@ -1,8 +1,8 @@
 use crate::ui::InputMode;
 
 use super::{
-    Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage, TimeMessage,
-    UiMessage,
+    FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
+    TimeMessage, UiMessage, ViewId,
 };
 
 /// Main update function - heart of TEA pattern
@@ -19,31 +19,71 @@ pub fn update(model: &mut Model, message: Message) {
 
 fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
     match msg {
-        NavigationMessage::Up => {
-            if model.selected_index > 0 {
-                model.selected_index -= 1;
+        NavigationMessage::Up => match model.focus_pane {
+            FocusPane::TaskList => {
+                if model.selected_index > 0 {
+                    model.selected_index -= 1;
+                }
             }
-        }
-        NavigationMessage::Down => {
-            if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
-                model.selected_index += 1;
+            FocusPane::Sidebar => {
+                if model.sidebar_selected > 0 {
+                    model.sidebar_selected -= 1;
+                    // Skip separator (index 3)
+                    if model.sidebar_selected == 3 {
+                        model.sidebar_selected = 2;
+                    }
+                }
             }
-        }
-        NavigationMessage::First => {
-            model.selected_index = 0;
-        }
-        NavigationMessage::Last => {
-            if !model.visible_tasks.is_empty() {
-                model.selected_index = model.visible_tasks.len() - 1;
+        },
+        NavigationMessage::Down => match model.focus_pane {
+            FocusPane::TaskList => {
+                if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
+                    model.selected_index += 1;
+                }
             }
-        }
-        NavigationMessage::PageUp => {
-            model.selected_index = model.selected_index.saturating_sub(10);
-        }
-        NavigationMessage::PageDown => {
-            let max_index = model.visible_tasks.len().saturating_sub(1);
-            model.selected_index = (model.selected_index + 10).min(max_index);
-        }
+            FocusPane::Sidebar => {
+                let max_index = model.sidebar_item_count().saturating_sub(1);
+                if model.sidebar_selected < max_index {
+                    model.sidebar_selected += 1;
+                    // Skip separator (index 3)
+                    if model.sidebar_selected == 3 {
+                        model.sidebar_selected = 4;
+                    }
+                }
+            }
+        },
+        NavigationMessage::First => match model.focus_pane {
+            FocusPane::TaskList => model.selected_index = 0,
+            FocusPane::Sidebar => model.sidebar_selected = 0,
+        },
+        NavigationMessage::Last => match model.focus_pane {
+            FocusPane::TaskList => {
+                if !model.visible_tasks.is_empty() {
+                    model.selected_index = model.visible_tasks.len() - 1;
+                }
+            }
+            FocusPane::Sidebar => {
+                model.sidebar_selected = model.sidebar_item_count().saturating_sub(1);
+            }
+        },
+        NavigationMessage::PageUp => match model.focus_pane {
+            FocusPane::TaskList => {
+                model.selected_index = model.selected_index.saturating_sub(10);
+            }
+            FocusPane::Sidebar => {
+                model.sidebar_selected = model.sidebar_selected.saturating_sub(5);
+            }
+        },
+        NavigationMessage::PageDown => match model.focus_pane {
+            FocusPane::TaskList => {
+                let max_index = model.visible_tasks.len().saturating_sub(1);
+                model.selected_index = (model.selected_index + 10).min(max_index);
+            }
+            FocusPane::Sidebar => {
+                let max_index = model.sidebar_item_count().saturating_sub(1);
+                model.sidebar_selected = (model.sidebar_selected + 5).min(max_index);
+            }
+        },
         NavigationMessage::Select(index) => {
             if index < model.visible_tasks.len() {
                 model.selected_index = index;
@@ -52,8 +92,78 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::GoToView(view_id) => {
             model.current_view = view_id;
             model.selected_index = 0;
+            model.selected_project = None;
             model.refresh_visible_tasks();
         }
+        NavigationMessage::FocusSidebar => {
+            if model.show_sidebar {
+                model.focus_pane = FocusPane::Sidebar;
+            }
+        }
+        NavigationMessage::FocusTaskList => {
+            model.focus_pane = FocusPane::TaskList;
+        }
+        NavigationMessage::SelectSidebarItem => {
+            handle_sidebar_selection(model);
+        }
+    }
+}
+
+fn handle_sidebar_selection(model: &mut Model) {
+    let selected = model.sidebar_selected;
+
+    // Sidebar layout:
+    // 0: All Tasks (TaskList view)
+    // 1: Today
+    // 2: Upcoming
+    // 3: Separator (skip)
+    // 4: "Projects" header (skip or go to Projects view)
+    // 5+: Individual projects
+
+    match selected {
+        0 => {
+            model.current_view = ViewId::TaskList;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        1 => {
+            model.current_view = ViewId::Today;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        2 => {
+            model.current_view = ViewId::Upcoming;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        3 => {} // Separator, do nothing
+        4 => {
+            // Projects header - go to Projects view showing all project tasks
+            model.current_view = ViewId::Projects;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        n if n >= 5 => {
+            // Select a specific project
+            let project_index = n - 5;
+            let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+            if let Some(project_id) = project_ids.get(project_index) {
+                model.current_view = ViewId::TaskList;
+                model.selected_project = Some(project_id.clone());
+                model.focus_pane = FocusPane::TaskList;
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
+            }
+        }
+        _ => {}
     }
 }
 
@@ -661,5 +771,139 @@ mod tests {
         let task = model.tasks.values().next().unwrap();
         assert_eq!(task.title, "Task via input");
         assert_eq!(task.priority, Priority::Urgent);
+    }
+
+    // Sidebar navigation tests
+    #[test]
+    fn test_focus_sidebar() {
+        let mut model = Model::new();
+        assert_eq!(model.focus_pane, FocusPane::TaskList);
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::FocusSidebar),
+        );
+
+        assert_eq!(model.focus_pane, FocusPane::Sidebar);
+    }
+
+    #[test]
+    fn test_focus_task_list() {
+        let mut model = Model::new();
+        model.focus_pane = FocusPane::Sidebar;
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::FocusTaskList),
+        );
+
+        assert_eq!(model.focus_pane, FocusPane::TaskList);
+    }
+
+    #[test]
+    fn test_sidebar_navigation_up_down() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 0;
+
+        // Move down
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.sidebar_selected, 1);
+
+        // Move down again
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.sidebar_selected, 2);
+
+        // Move up
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+        assert_eq!(model.sidebar_selected, 1);
+    }
+
+    #[test]
+    fn test_sidebar_navigation_skips_separator() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 2; // Upcoming (before separator at 3)
+
+        // Move down should skip separator (3) and go to Projects header (4)
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.sidebar_selected, 4);
+
+        // Move up should skip separator and go back to Upcoming (2)
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+        assert_eq!(model.sidebar_selected, 2);
+    }
+
+    #[test]
+    fn test_sidebar_select_view() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 1; // Today view
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        assert_eq!(model.current_view, ViewId::Today);
+        assert!(model.selected_project.is_none());
+    }
+
+    #[test]
+    fn test_sidebar_select_project() {
+        use crate::domain::Project;
+
+        let mut model = Model::new();
+        // Add a project
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project.id.clone(), project);
+
+        // Add a task with this project
+        let mut task = Task::new("Task in project");
+        task.project_id = Some(project_id.clone());
+        model.tasks.insert(task.id.clone(), task);
+
+        // Add a task without project
+        let task2 = Task::new("Task without project");
+        model.tasks.insert(task2.id.clone(), task2);
+
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 2);
+
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 5; // First project (index 5 = after header items)
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        // Project should be selected
+        assert_eq!(model.selected_project, Some(project_id));
+        // Only project tasks should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_sidebar_select_all_tasks_clears_project_filter() {
+        use crate::domain::Project;
+
+        let mut model = Model::new();
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project.id.clone(), project);
+        model.selected_project = Some(project_id);
+
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 0; // All Tasks
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        assert!(model.selected_project.is_none());
+        assert_eq!(model.current_view, ViewId::TaskList);
     }
 }

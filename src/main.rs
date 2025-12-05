@@ -275,6 +275,9 @@ fn action_to_message(action: &Action) -> Message {
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
         Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),
+        Action::FocusSidebar => Message::Navigation(NavigationMessage::FocusSidebar),
+        Action::FocusTaskList => Message::Navigation(NavigationMessage::FocusTaskList),
+        Action::Select => Message::Navigation(NavigationMessage::SelectSidebarItem),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Quit => Message::System(SystemMessage::Quit),
     }

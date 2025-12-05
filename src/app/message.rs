@@ -1,5 +1,13 @@
 use crate::domain::{Priority, ProjectId, TaskId, TaskStatus};
 
+/// Which pane currently has focus
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FocusPane {
+    #[default]
+    TaskList,
+    Sidebar,
+}
+
 /// Top-level message enum for the application
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -22,6 +30,9 @@ pub enum NavigationMessage {
     PageDown,
     Select(usize),
     GoToView(ViewId),
+    FocusSidebar,
+    FocusTaskList,
+    SelectSidebarItem,
 }
 
 /// View identifiers

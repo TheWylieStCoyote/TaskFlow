@@ -8,7 +8,7 @@ use crate::domain::{
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::InputMode;
 
-use super::ViewId;
+use super::{FocusPane, ViewId};
 
 /// Application running state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -45,6 +45,9 @@ pub struct Model {
     pub show_sidebar: bool,
     pub show_help: bool,
     pub terminal_size: (u16, u16),
+    pub focus_pane: FocusPane,
+    pub sidebar_selected: usize,
+    pub selected_project: Option<ProjectId>,
 
     // Input state
     pub input_mode: InputMode,
@@ -78,6 +81,9 @@ impl Model {
             show_sidebar: true,
             show_help: false,
             terminal_size: (80, 24),
+            focus_pane: FocusPane::default(),
+            sidebar_selected: 0,
+            selected_project: None,
             input_mode: InputMode::Normal,
             input_buffer: String::new(),
             cursor_position: 0,
@@ -87,6 +93,12 @@ impl Model {
             dirty: false,
             default_priority: Priority::default(),
         }
+    }
+
+    /// Get the number of sidebar items (views + separator + projects header + projects)
+    pub fn sidebar_item_count(&self) -> usize {
+        // 3 views + 1 separator + 1 "Projects" header + projects count
+        5 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Load data from a storage backend
@@ -213,6 +225,13 @@ impl Model {
         // Filter out completed tasks unless show_completed is true
         if !self.show_completed && task.status.is_complete() {
             return false;
+        }
+
+        // Filter by selected project if any
+        if let Some(ref project_id) = self.selected_project {
+            if task.project_id.as_ref() != Some(project_id) {
+                return false;
+            }
         }
 
         // Filter by current view

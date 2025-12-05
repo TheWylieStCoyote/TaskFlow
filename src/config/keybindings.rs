@@ -29,6 +29,9 @@ pub enum Action {
     ToggleSidebar,
     ToggleShowCompleted,
     ShowHelp,
+    FocusSidebar,
+    FocusTaskList,
+    Select,
 
     // System
     Save,
@@ -117,6 +120,11 @@ impl Default for Keybindings {
         bindings.insert("b".to_string(), Action::ToggleSidebar);
         bindings.insert("c".to_string(), Action::ToggleShowCompleted);
         bindings.insert("?".to_string(), Action::ShowHelp);
+        bindings.insert("h".to_string(), Action::FocusSidebar);
+        bindings.insert("l".to_string(), Action::FocusTaskList);
+        bindings.insert("left".to_string(), Action::FocusSidebar);
+        bindings.insert("right".to_string(), Action::FocusTaskList);
+        bindings.insert("enter".to_string(), Action::Select);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

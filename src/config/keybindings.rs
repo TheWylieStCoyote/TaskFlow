@@ -20,6 +20,7 @@ pub enum Action {
     // Task actions
     ToggleComplete,
     CreateTask,
+    CreateSubtask,
     CreateProject,
     EditTask,
     EditDueDate,
@@ -126,6 +127,7 @@ impl Default for Keybindings {
         bindings.insert("x".to_string(), Action::ToggleComplete);
         bindings.insert("space".to_string(), Action::ToggleComplete);
         bindings.insert("a".to_string(), Action::CreateTask);
+        bindings.insert("A".to_string(), Action::CreateSubtask);
         bindings.insert("P".to_string(), Action::CreateProject);
         bindings.insert("e".to_string(), Action::EditTask);
         bindings.insert("D".to_string(), Action::EditDueDate);

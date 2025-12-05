@@ -6,7 +6,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 
 ## Features
 
-- **Task Management**: Create, edit, and track tasks with priorities, due dates, and status
+- **Task Management**: Create, edit, and track tasks with priorities, due dates, status, and subtasks
 - **Project Organization**: Group related tasks under projects with sidebar navigation
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer
@@ -102,6 +102,7 @@ Each task shows:
 | Key | Action |
 |-----|--------|
 | `a` | Add new task |
+| `A` | Add subtask under selected task |
 | `e` | Edit task title |
 | `d` | Delete task (with confirmation) |
 | `x` or `Space` | Toggle task completion |

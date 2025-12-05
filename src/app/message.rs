@@ -75,6 +75,7 @@ pub enum UiMessage {
     HideHelp,
     // Input mode
     StartCreateTask,
+    StartCreateSubtask,
     StartCreateProject,
     StartEditTask,
     StartEditDueDate,

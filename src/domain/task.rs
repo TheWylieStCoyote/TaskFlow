@@ -212,6 +212,11 @@ impl Task {
         self
     }
 
+    pub fn with_parent(mut self, parent_id: TaskId) -> Self {
+        self.parent_task_id = Some(parent_id);
+        self
+    }
+
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
             return due < Utc::now().date_naive() && !self.status.is_complete();

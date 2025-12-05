@@ -18,6 +18,7 @@ enum ListEntry<'a> {
         task: &'a Task,
         index: usize, // Index in visible_tasks for selection tracking
         time_spent: u32,
+        is_subtask: bool,
     },
     ProjectHeader {
         name: String,
@@ -55,10 +56,12 @@ impl<'a> TaskList<'a> {
         for (idx, task_id) in model.visible_tasks.iter().enumerate() {
             if let Some(task) = model.tasks.get(task_id) {
                 let time_spent = model.total_time_for_task(task_id);
+                let is_subtask = task.parent_task_id.is_some();
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
                     time_spent,
+                    is_subtask,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -101,10 +104,12 @@ impl<'a> TaskList<'a> {
                         .position(|id| id == &task_id)
                         .unwrap_or(0);
                     let time_spent = model.total_time_for_task(&task_id);
+                    let is_subtask = task.parent_task_id.is_some();
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
                         time_spent,
+                        is_subtask,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -142,10 +147,18 @@ impl Widget for TaskList<'_> {
                     task,
                     index,
                     time_spent,
+                    is_subtask,
                 } => {
                     let is_selected = *index == self.selected;
                     let is_tracking = self.active_tracking == Some(&task.id);
-                    task_to_list_item(task, is_selected, is_tracking, *time_spent, theme)
+                    task_to_list_item(
+                        task,
+                        is_selected,
+                        is_tracking,
+                        *time_spent,
+                        *is_subtask,
+                        theme,
+                    )
                 }
                 ListEntry::ProjectHeader { name, task_count } => {
                     project_header_to_list_item(name, *task_count, theme)
@@ -201,8 +214,16 @@ fn task_to_list_item(
     is_selected: bool,
     is_tracking: bool,
     time_spent: u32,
+    is_subtask: bool,
     theme: &Theme,
 ) -> ListItem<'static> {
+    // Subtask indentation prefix
+    let indent_span = if is_subtask {
+        Span::styled("  └─ ", Style::default().fg(theme.colors.muted.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let status_style = match task.status {
         TaskStatus::Done => Style::default().fg(theme.status.done.to_color()),
         TaskStatus::InProgress => Style::default().fg(theme.status.in_progress.to_color()),
@@ -309,6 +330,7 @@ fn task_to_list_item(
     };
 
     let line = Line::from(vec![
+        indent_span,
         tracking_span,
         priority_span,
         status_span,

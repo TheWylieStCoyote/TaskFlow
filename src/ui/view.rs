@@ -49,6 +49,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let input_area = centered_rect_fixed_height(60, 3, area);
         let title = match &model.input_target {
             InputTarget::Task => "New Task",
+            InputTarget::Subtask(_) => "New Subtask",
             InputTarget::EditTask(_) => "Edit Task",
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",

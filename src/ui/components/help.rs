@@ -69,6 +69,10 @@ impl Widget for HelpPopup {
                 Span::raw("         Add new task"),
             ]),
             Line::from(vec![
+                Span::styled("A", Style::default().fg(Color::Cyan)),
+                Span::raw("         Add subtask"),
+            ]),
+            Line::from(vec![
                 Span::styled("e", Style::default().fg(Color::Cyan)),
                 Span::raw("         Edit task title"),
             ]),

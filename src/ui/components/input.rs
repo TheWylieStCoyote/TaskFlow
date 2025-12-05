@@ -19,6 +19,7 @@ use crate::domain::TaskId;
 pub enum InputTarget {
     #[default]
     Task,
+    Subtask(TaskId), // Creating a subtask under the given parent
     EditTask(TaskId),
     EditDueDate(TaskId),
     EditTags(TaskId),

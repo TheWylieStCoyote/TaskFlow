@@ -270,6 +270,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::PageDown => Message::Navigation(NavigationMessage::PageDown),
         Action::ToggleComplete => Message::Task(TaskMessage::ToggleComplete),
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
+        Action::CreateSubtask => Message::Ui(UiMessage::StartCreateSubtask),
         Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
         Action::EditTask => Message::Ui(UiMessage::StartEditTask),
         Action::EditDueDate => Message::Ui(UiMessage::StartEditDueDate),

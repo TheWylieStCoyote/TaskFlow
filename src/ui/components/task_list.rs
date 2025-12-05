@@ -167,19 +167,18 @@ impl Widget for TaskList<'_> {
                     has_dependencies,
                     is_recurring,
                 } => {
-                    let is_selected = *index == self.selected;
-                    let is_tracking = self.active_tracking == Some(&task.id);
-                    task_to_list_item(
+                    let ctx = TaskItemContext {
                         task,
-                        is_selected,
-                        is_tracking,
-                        *time_spent,
-                        *is_subtask,
-                        *is_multi_selected,
-                        *has_dependencies,
-                        *is_recurring,
+                        is_selected: *index == self.selected,
+                        is_tracking: self.active_tracking == Some(&task.id),
+                        time_spent: *time_spent,
+                        is_subtask: *is_subtask,
+                        is_multi_selected: *is_multi_selected,
+                        has_dependencies: *has_dependencies,
+                        is_recurring: *is_recurring,
                         theme,
-                    )
+                    };
+                    task_to_list_item(&ctx)
                 }
                 ListEntry::ProjectHeader { name, task_count } => {
                     project_header_to_list_item(name, *task_count, theme)
@@ -213,6 +212,19 @@ impl Widget for TaskList<'_> {
     }
 }
 
+/// Context for rendering a task item
+struct TaskItemContext<'a> {
+    task: &'a Task,
+    is_selected: bool,
+    is_tracking: bool,
+    time_spent: u32,
+    is_subtask: bool,
+    is_multi_selected: bool,
+    has_dependencies: bool,
+    is_recurring: bool,
+    theme: &'a Theme,
+}
+
 fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> ListItem<'static> {
     let header_style = Style::default()
         .fg(theme.colors.accent.to_color())
@@ -230,26 +242,19 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
     ListItem::new(line)
 }
 
-fn task_to_list_item(
-    task: &Task,
-    is_selected: bool,
-    is_tracking: bool,
-    time_spent: u32,
-    is_subtask: bool,
-    is_multi_selected: bool,
-    has_dependencies: bool,
-    is_recurring: bool,
-    theme: &Theme,
-) -> ListItem<'static> {
+fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
+    let task = ctx.task;
+    let theme = ctx.theme;
+
     // Multi-select indicator
-    let select_span = if is_multi_selected {
+    let select_span = if ctx.is_multi_selected {
         Span::styled("● ", Style::default().fg(theme.colors.accent.to_color()))
     } else {
         Span::raw("  ")
     };
 
     // Subtask indentation prefix
-    let indent_span = if is_subtask {
+    let indent_span = if ctx.is_subtask {
         Span::styled("└─ ", Style::default().fg(theme.colors.muted.to_color()))
     } else {
         Span::raw("")
@@ -280,7 +285,7 @@ fn task_to_list_item(
     };
 
     // Time tracking indicator
-    let tracking_span = if is_tracking {
+    let tracking_span = if ctx.is_tracking {
         Span::styled(
             "● ",
             Style::default()
@@ -297,7 +302,7 @@ fn task_to_list_item(
         Style::default()
             .fg(theme.colors.muted.to_color())
             .add_modifier(Modifier::CROSSED_OUT)
-    } else if is_selected {
+    } else if ctx.is_selected {
         Style::default().add_modifier(Modifier::BOLD)
     } else {
         Style::default()
@@ -321,9 +326,9 @@ fn task_to_list_item(
     };
 
     // Time spent indicator
-    let time_span = if time_spent > 0 {
-        let hours = time_spent / 60;
-        let mins = time_spent % 60;
+    let time_span = if ctx.time_spent > 0 {
+        let hours = ctx.time_spent / 60;
+        let mins = ctx.time_spent % 60;
         let time_str = if hours > 0 {
             format!(" ({}h {}m)", hours, mins)
         } else {
@@ -361,14 +366,14 @@ fn task_to_list_item(
     };
 
     // Dependency indicator (shows if task is blocked by other tasks)
-    let dep_span = if has_dependencies {
+    let dep_span = if ctx.has_dependencies {
         Span::styled(" [B]", Style::default().fg(theme.colors.warning.to_color()))
     } else {
         Span::raw("")
     };
 
     // Recurrence indicator
-    let recur_span = if is_recurring {
+    let recur_span = if ctx.is_recurring {
         Span::styled(" ↻", Style::default().fg(theme.colors.accent.to_color()))
     } else {
         Span::raw("")

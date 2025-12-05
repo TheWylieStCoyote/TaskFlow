@@ -39,10 +39,7 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
         let title = escape_csv(&task.title);
         let status = task.status.as_str();
         let priority = task.priority.as_str();
-        let due_date = task
-            .due_date
-            .map(|d| d.to_string())
-            .unwrap_or_default();
+        let due_date = task.due_date.map(|d| d.to_string()).unwrap_or_default();
         let tags = task.tags.join(";");
         let project_id = task
             .project_id
@@ -63,7 +60,16 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
         writeln!(
             writer,
             "{},{},{},{},{},{},{},{},{},{}",
-            id, title, status, priority, due_date, tags, project_id, description, created, completed
+            id,
+            title,
+            status,
+            priority,
+            due_date,
+            tags,
+            project_id,
+            description,
+            created,
+            completed
         )?;
     }
 

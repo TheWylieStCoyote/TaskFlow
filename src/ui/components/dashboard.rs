@@ -97,7 +97,8 @@ impl<'a> Dashboard<'a> {
     /// Get tasks created this week
     fn tasks_this_week(&self) -> usize {
         let today = Utc::now().date_naive();
-        let week_start = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+        let week_start =
+            today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
 
         self.model
             .tasks
@@ -109,7 +110,8 @@ impl<'a> Dashboard<'a> {
     /// Get tasks completed this week
     fn completed_this_week(&self) -> usize {
         let today = Utc::now().date_naive();
-        let week_start = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+        let week_start =
+            today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
 
         self.model
             .tasks
@@ -195,16 +197,20 @@ impl Dashboard<'_> {
 
         let lines = [
             Line::from(vec![
-                Span::styled("Overall: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Overall: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     format!("{:.0}%", rate),
-                    Style::default()
-                        .fg(rate_color)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(rate_color).add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Overdue: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Overdue: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     format!("{}", overdue),
                     Style::default().fg(if overdue > 0 {
@@ -225,7 +231,12 @@ impl Dashboard<'_> {
         }
     }
 
-    fn priority_completion_line(&self, priority: Priority, label: &str, theme: &Theme) -> Line<'static> {
+    fn priority_completion_line(
+        &self,
+        priority: Priority,
+        label: &str,
+        theme: &Theme,
+    ) -> Line<'static> {
         let (completed, total) = self.completion_by_priority(priority);
         let rate = if total > 0 {
             (completed as f32 / total as f32) * 100.0
@@ -234,7 +245,10 @@ impl Dashboard<'_> {
         };
 
         Line::from(vec![
-            Span::styled(format!("{}: ", label), Style::default().fg(theme.colors.muted.to_color())),
+            Span::styled(
+                format!("{}: ", label),
+                Style::default().fg(theme.colors.muted.to_color()),
+            ),
             Span::styled(
                 format!("{}/{} ({:.0}%)", completed, total, rate),
                 Style::default(),
@@ -267,7 +281,10 @@ impl Dashboard<'_> {
 
         let lines = [
             Line::from(vec![
-                Span::styled("Total: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Total: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     Self::format_duration(total_time),
                     Style::default()
@@ -276,11 +293,17 @@ impl Dashboard<'_> {
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Avg/task: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Avg/task: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(Self::format_duration(avg_time), Style::default()),
             ]),
             Line::from(vec![
-                Span::styled("Tracking: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Tracking: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     if active { "● Active" } else { "○ Idle" },
                     Style::default().fg(if active {
@@ -330,7 +353,10 @@ impl Dashboard<'_> {
                 .collect();
 
             let total = project_tasks.len();
-            let completed = project_tasks.iter().filter(|t| t.status.is_complete()).count();
+            let completed = project_tasks
+                .iter()
+                .filter(|t| t.status.is_complete())
+                .count();
             let rate = if total > 0 {
                 (completed as f32 / total as f32) * 100.0
             } else {
@@ -358,10 +384,7 @@ impl Dashboard<'_> {
             let line = Line::from(vec![
                 Span::styled(name, Style::default()),
                 Span::styled(" ", Style::default()),
-                Span::styled(
-                    format!("{:.0}%", rate),
-                    Style::default().fg(rate_color),
-                ),
+                Span::styled(format!("{:.0}%", rate), Style::default().fg(rate_color)),
             ]);
 
             buf.set_line(inner.x, inner.y + i as u16, &line, inner.width);
@@ -381,7 +404,11 @@ impl Dashboard<'_> {
 
         let statuses = [
             ("Todo", todo, theme.status.pending.to_color()),
-            ("In Progress", in_progress, theme.status.in_progress.to_color()),
+            (
+                "In Progress",
+                in_progress,
+                theme.status.in_progress.to_color(),
+            ),
             ("Blocked", blocked, theme.colors.danger.to_color()),
             ("Done", done, theme.status.done.to_color()),
             ("Cancelled", cancelled, theme.status.cancelled.to_color()),
@@ -431,25 +458,37 @@ impl Dashboard<'_> {
 
         let lines = [
             Line::from(vec![
-                Span::styled("Created: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Created: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     format!("{}", created),
                     Style::default().fg(theme.colors.accent.to_color()),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Completed: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Completed: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(format!("{}", completed), Style::default().fg(Color::Green)),
             ]),
             Line::from(vec![
-                Span::styled("Active: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Active: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(
                     format!("{}", active_tasks),
                     Style::default().fg(theme.status.in_progress.to_color()),
                 ),
             ]),
             Line::from(vec![
-                Span::styled("Total: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    "Total: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
                 Span::styled(format!("{}", total_tasks), Style::default()),
             ]),
         ];

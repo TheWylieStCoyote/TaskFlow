@@ -111,9 +111,7 @@ impl MacroState {
         if slot >= 10 {
             return None;
         }
-        self.slots[slot]
-            .as_ref()
-            .map(|m| m.messages.clone())
+        self.slots[slot].as_ref().map(|m| m.messages.clone())
     }
 
     /// Check if a slot has a macro
@@ -126,9 +124,7 @@ impl MacroState {
         if slot >= 10 {
             return None;
         }
-        self.slots[slot]
-            .as_ref()
-            .map(|m| (m.name.clone(), m.len()))
+        self.slots[slot].as_ref().map(|m| (m.name.clone(), m.len()))
     }
 }
 

@@ -1158,7 +1158,9 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
 
                 // Push undo action
-                model.undo_stack.push(UndoAction::TaskCreated(Box::new(task.clone())));
+                model
+                    .undo_stack
+                    .push(UndoAction::TaskCreated(Box::new(task.clone())));
 
                 // Store the task
                 model.sync_task(&task);
@@ -1371,8 +1373,11 @@ fn handle_export_csv(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message =
-                        Some(format!("Exported {} tasks to {}", tasks.len(), export_path.display()));
+                    model.status_message = Some(format!(
+                        "Exported {} tasks to {}",
+                        tasks.len(),
+                        export_path.display()
+                    ));
                 }
                 Err(e) => {
                     model.status_message = Some(format!("Export failed: {}", e));
@@ -1400,8 +1405,11 @@ fn handle_export_ics(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message =
-                        Some(format!("Exported {} tasks to {}", tasks.len(), export_path.display()));
+                    model.status_message = Some(format!(
+                        "Exported {} tasks to {}",
+                        tasks.len(),
+                        export_path.display()
+                    ));
                 }
                 Err(e) => {
                     model.status_message = Some(format!("Export failed: {}", e));

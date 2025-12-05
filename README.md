@@ -199,6 +199,28 @@ Record a sequence of actions and replay them later:
 
 The footer shows `[REC]` when recording is active.
 
+#### Templates
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+n` | Show template picker |
+| `0`-`9` | Select template by number (in picker) |
+| `j`/`k` | Navigate template list (in picker) |
+| `Enter` | Create task from selected template |
+| `Esc` | Cancel template picker |
+
+Templates allow quickly creating common task types with preset fields:
+- **Bug Fix**: High priority with #bug tag and structured description
+- **Feature**: Medium priority with #feature tag
+- **Review**: Medium priority, due tomorrow
+- **Meeting Notes**: Low priority with attendee/agenda template
+- **Daily Task**: Low priority, due today
+- **Weekly Task**: Low priority, due in 7 days
+- **Urgent**: Urgent priority, due today
+- **Research**: Low priority with research template
+
+After selecting a template, the task is created and you can edit the title.
+
 #### General
 
 | Key | Action |

@@ -233,6 +233,15 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Templates",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("Ctrl+n", Style::default().fg(Color::Cyan)),
+                Span::raw("    Create task from template"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

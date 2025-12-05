@@ -91,6 +91,9 @@ pub enum Action {
     PlayMacro7,
     PlayMacro8,
     PlayMacro9,
+
+    // Templates
+    ShowTemplates,
 }
 
 /// Key modifier
@@ -236,6 +239,9 @@ impl Default for Keybindings {
         bindings.insert("@7".to_string(), Action::PlayMacro7);
         bindings.insert("@8".to_string(), Action::PlayMacro8);
         bindings.insert("@9".to_string(), Action::PlayMacro9);
+
+        // Templates
+        bindings.insert("ctrl+n".to_string(), Action::ShowTemplates);
 
         Self { bindings }
     }

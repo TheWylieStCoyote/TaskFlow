@@ -222,6 +222,36 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         return Message::Ui(UiMessage::HideHelp);
     }
 
+    // If template picker is showing, handle navigation and selection
+    if model.show_templates {
+        return match key.code {
+            KeyCode::Esc => Message::Ui(UiMessage::HideTemplates),
+            KeyCode::Enter => Message::Ui(UiMessage::SelectTemplate(model.template_selected)),
+            KeyCode::Up | KeyCode::Char('k') => {
+                if model.template_selected > 0 {
+                    model.template_selected -= 1;
+                }
+                Message::None
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let max = model.template_manager.len().saturating_sub(1);
+                if model.template_selected < max {
+                    model.template_selected += 1;
+                }
+                Message::None
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let index = c.to_digit(10).unwrap() as usize;
+                if index < model.template_manager.len() {
+                    Message::Ui(UiMessage::SelectTemplate(index))
+                } else {
+                    Message::None
+                }
+            }
+            _ => Message::None,
+        };
+    }
+
     // In multi-select mode, Space toggles task selection
     if model.multi_select_mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
@@ -380,5 +410,6 @@ fn action_to_message(action: &Action) -> Message {
         Action::PlayMacro7 => Message::Ui(UiMessage::PlayMacro(7)),
         Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
         Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
+        Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
     }
 }

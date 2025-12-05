@@ -21,4 +21,4 @@ Potential features to implement in future versions:
 - [x] **Statistics Dashboard** - Dashboard view with completion rates, time tracking stats, project progress, status distribution
 - [x] **Export Formats** - Export tasks to CSV (`Ctrl+E`) or ICS/iCalendar (`Ctrl+I`) formats
 - [x] **Keyboard Macros** - Record (`Ctrl+Q` + 0-9) and replay (`@0-9`) action sequences with 10 slots
-- [ ] **Task Templates** - Create new tasks from predefined templates
+- [x] **Task Templates** - Create tasks from 8 built-in templates (`Ctrl+N`) with presets for bugs, features, reviews, meetings, etc.

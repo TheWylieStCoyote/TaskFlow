@@ -126,6 +126,10 @@ pub enum UiMessage {
     StartRecordMacro,
     StopRecordMacro,
     PlayMacro(usize),
+    // Templates
+    ShowTemplates,
+    HideTemplates,
+    SelectTemplate(usize),
 }
 
 /// System messages

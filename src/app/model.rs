@@ -10,7 +10,7 @@ use crate::domain::{
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::{InputMode, InputTarget};
 
-use super::{FocusPane, MacroState, UndoStack, ViewId};
+use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
 /// Calendar state for the calendar view
 #[derive(Debug, Clone)]
@@ -102,6 +102,13 @@ pub struct Model {
     pub macro_state: MacroState,
     // Pending macro slot for recording start
     pub pending_macro_slot: Option<usize>,
+
+    // Task templates
+    pub template_manager: TemplateManager,
+    // Whether template picker is showing
+    pub show_templates: bool,
+    // Selected template index
+    pub template_selected: usize,
 }
 
 impl Model {
@@ -140,6 +147,9 @@ impl Model {
             status_message: None,
             macro_state: MacroState::new(),
             pending_macro_slot: None,
+            template_manager: TemplateManager::new(),
+            show_templates: false,
+            template_selected: 0,
         }
     }
 

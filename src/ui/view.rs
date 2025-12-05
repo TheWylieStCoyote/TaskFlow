@@ -13,7 +13,7 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, HelpPopup,
-    InputDialog, InputMode, InputTarget, Sidebar, TaskList,
+    InputDialog, InputMode, InputTarget, Sidebar, TaskList, TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -84,6 +84,17 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         frame.render_widget(
             ConfirmDialog::new("Delete Task", &format!("Delete \"{}\"?", task_name)),
             confirm_area,
+        );
+    }
+
+    // Render template picker
+    if model.show_templates {
+        // Height depends on number of templates, min 4, max 15
+        let height = (model.template_manager.len() as u16 + 2).clamp(4, 15);
+        let picker_area = centered_rect_fixed_height(60, height, area);
+        frame.render_widget(
+            TemplatePicker::new(&model.template_manager, model.template_selected, theme),
+            picker_area,
         );
     }
 }

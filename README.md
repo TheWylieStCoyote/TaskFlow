@@ -216,7 +216,21 @@ Tasks can have one of five priority levels:
 | Today | Tasks due today |
 | Upcoming | Tasks with future due dates |
 | Overdue | Tasks past their due date |
+| Calendar | Monthly calendar view with task indicators |
+| Dashboard | Statistics overview with completion rates and time tracking |
 | Projects | Tasks assigned to a project |
+
+### Dashboard View
+
+The Dashboard provides an overview of your task statistics:
+
+- **Completion Panel**: Overall completion rate, overdue count, and completion by priority
+- **Time Tracking Panel**: Total time tracked, average time per task, current tracking status
+- **Projects Panel**: Per-project completion percentages
+- **Status Distribution**: Bar chart showing task counts by status (Todo, In Progress, Blocked, Done, Cancelled)
+- **This Week Panel**: Tasks created and completed this week, active tasks count
+
+Access the Dashboard by selecting it from the sidebar navigation.
 
 ### Due Dates
 

@@ -77,6 +77,16 @@ impl Widget for Sidebar<'_> {
                     theme,
                 ),
             ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📊 ", Style::default()),
+                styled_view_name(
+                    "Dashboard",
+                    ViewId::Dashboard,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
             // Separator
             ListItem::new(Line::from("───────────")),
             // Projects section

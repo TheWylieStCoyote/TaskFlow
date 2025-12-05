@@ -31,9 +31,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 5)
-                    if model.sidebar_selected == 5 {
-                        model.sidebar_selected = 4;
+                    // Skip separator (index 6)
+                    if model.sidebar_selected == 6 {
+                        model.sidebar_selected = 5;
                     }
                 }
             }
@@ -51,9 +51,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 5)
-                    if model.sidebar_selected == 5 {
-                        model.sidebar_selected = 6;
+                    // Skip separator (index 6)
+                    if model.sidebar_selected == 6 {
+                        model.sidebar_selected = 7;
                     }
                 }
             }
@@ -228,9 +228,10 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 2: Upcoming
     // 3: Overdue
     // 4: Calendar
-    // 5: Separator (skip)
-    // 6: "Projects" header (skip or go to Projects view)
-    // 7+: Individual projects
+    // 5: Dashboard
+    // 6: Separator (skip)
+    // 7: "Projects" header (skip or go to Projects view)
+    // 8+: Individual projects
 
     match selected {
         0 => {
@@ -268,8 +269,15 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        5 => {} // Separator, do nothing
-        6 => {
+        5 => {
+            model.current_view = ViewId::Dashboard;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        6 => {} // Separator, do nothing
+        7 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -277,9 +285,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 7 => {
+        n if n >= 8 => {
             // Select a specific project
-            let project_index = n - 7;
+            let project_index = n - 8;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -1733,15 +1741,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 4; // Calendar (before separator at 5)
+        model.sidebar_selected = 5; // Dashboard (before separator at 6)
 
-        // Move down should skip separator (5) and go to Projects header (6)
+        // Move down should skip separator (6) and go to Projects header (7)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 6);
+        assert_eq!(model.sidebar_selected, 7);
 
-        // Move up should skip separator and go back to Calendar (4)
+        // Move up should skip separator and go back to Dashboard (5)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 4);
+        assert_eq!(model.sidebar_selected, 5);
     }
 
     #[test]
@@ -1798,7 +1806,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 7; // First project (index 7 = after header items including Calendar)
+        model.sidebar_selected = 8; // First project (index 8 = after header items including Dashboard)
 
         update(
             &mut model,

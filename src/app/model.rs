@@ -134,8 +134,8 @@ impl Model {
 
     /// Get the number of sidebar items (views + separator + projects header + projects)
     pub fn sidebar_item_count(&self) -> usize {
-        // 5 views (All Tasks, Today, Upcoming, Overdue, Calendar) + 1 separator + 1 "Projects" header + projects count
-        7 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // 6 views (All Tasks, Today, Upcoming, Overdue, Calendar, Dashboard) + 1 separator + 1 "Projects" header + projects count
+        8 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Get tasks for a specific day in the calendar
@@ -500,6 +500,10 @@ impl Model {
             ViewId::Projects => {
                 // Show tasks that belong to a project
                 task.project_id.is_some()
+            }
+            ViewId::Dashboard => {
+                // Dashboard shows all tasks (stats are calculated separately)
+                true
             }
         }
     }

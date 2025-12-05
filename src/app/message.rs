@@ -48,6 +48,7 @@ pub enum ViewId {
     Upcoming,
     Overdue,
     Calendar,
+    Dashboard,
     Projects,
 }
 

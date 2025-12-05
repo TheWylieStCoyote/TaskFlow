@@ -12,8 +12,8 @@ use crate::config::Theme;
 use crate::app::ViewId;
 
 use super::components::{
-    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, HelpPopup, InputDialog,
-    InputMode, InputTarget, Sidebar, TaskList,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, HelpPopup,
+    InputDialog, InputMode, InputTarget, Sidebar, TaskList,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -132,6 +132,10 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
         ViewId::Calendar => {
             let calendar = Calendar::new(model, theme);
             frame.render_widget(calendar, area);
+        }
+        ViewId::Dashboard => {
+            let dashboard = Dashboard::new(model, theme);
+            frame.render_widget(dashboard, area);
         }
         _ => {
             let task_list = TaskList::new(model, theme);

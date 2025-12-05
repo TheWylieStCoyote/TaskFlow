@@ -156,6 +156,27 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Multi-Select",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("v", Style::default().fg(Color::Cyan)),
+                Span::raw("         Toggle multi-select mode"),
+            ]),
+            Line::from(vec![
+                Span::styled("V", Style::default().fg(Color::Cyan)),
+                Span::raw("         Select all tasks"),
+            ]),
+            Line::from(vec![
+                Span::styled("Space", Style::default().fg(Color::Cyan)),
+                Span::raw("     Toggle task selection (in multi-select)"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+v", Style::default().fg(Color::Cyan)),
+                Span::raw("    Clear selection"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

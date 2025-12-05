@@ -56,6 +56,10 @@ pub struct Model {
     pub cursor_position: usize,
     pub show_confirm_delete: bool,
 
+    // Multi-select state for bulk operations
+    pub selected_tasks: std::collections::HashSet<TaskId>,
+    pub multi_select_mode: bool,
+
     // Storage
     storage: Option<Box<dyn StorageBackend>>,
     pub data_path: Option<PathBuf>,
@@ -93,6 +97,8 @@ impl Model {
             input_buffer: String::new(),
             cursor_position: 0,
             show_confirm_delete: false,
+            selected_tasks: std::collections::HashSet::new(),
+            multi_select_mode: false,
             storage: None,
             data_path: None,
             dirty: false,

@@ -610,6 +610,72 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                     model.refresh_visible_tasks();
                 }
+                InputTarget::BulkMoveToProject => {
+                    if let Ok(choice) = input.parse::<usize>() {
+                        let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                        let target_project = if choice == 0 {
+                            None
+                        } else {
+                            project_ids.get(choice - 1).cloned()
+                        };
+
+                        // Move all selected tasks
+                        let tasks_to_move: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                        for task_id in tasks_to_move {
+                            if let Some(task) = model.tasks.get_mut(&task_id) {
+                                let before = task.clone();
+                                task.project_id = target_project.clone();
+                                task.updated_at = chrono::Utc::now();
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                        model.selected_tasks.clear();
+                        model.multi_select_mode = false;
+                        model.refresh_visible_tasks();
+                    }
+                }
+                InputTarget::BulkSetStatus => {
+                    use crate::domain::TaskStatus;
+                    let status = match input.parse::<usize>() {
+                        Ok(1) => Some(TaskStatus::Todo),
+                        Ok(2) => Some(TaskStatus::InProgress),
+                        Ok(3) => Some(TaskStatus::Blocked),
+                        Ok(4) => Some(TaskStatus::Done),
+                        Ok(5) => Some(TaskStatus::Cancelled),
+                        _ => None,
+                    };
+
+                    if let Some(new_status) = status {
+                        let tasks_to_update: Vec<_> =
+                            model.selected_tasks.iter().cloned().collect();
+                        for task_id in tasks_to_update {
+                            if let Some(task) = model.tasks.get_mut(&task_id) {
+                                let before = task.clone();
+                                task.status = new_status;
+                                task.updated_at = chrono::Utc::now();
+                                if new_status.is_complete() && task.completed_at.is_none() {
+                                    task.completed_at = Some(chrono::Utc::now());
+                                } else if !new_status.is_complete() {
+                                    task.completed_at = None;
+                                }
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                        model.selected_tasks.clear();
+                        model.multi_select_mode = false;
+                        model.refresh_visible_tasks();
+                    }
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -665,6 +731,72 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::CancelDelete => {
             model.show_confirm_delete = false;
+        }
+        // Multi-select / Bulk operations
+        UiMessage::ToggleMultiSelect => {
+            model.multi_select_mode = !model.multi_select_mode;
+            if !model.multi_select_mode {
+                // Exiting multi-select mode clears selection
+                model.selected_tasks.clear();
+            }
+        }
+        UiMessage::ToggleTaskSelection => {
+            if model.multi_select_mode {
+                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                    if model.selected_tasks.contains(&task_id) {
+                        model.selected_tasks.remove(&task_id);
+                    } else {
+                        model.selected_tasks.insert(task_id);
+                    }
+                }
+            }
+        }
+        UiMessage::SelectAll => {
+            model.multi_select_mode = true;
+            model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+        }
+        UiMessage::ClearSelection => {
+            model.selected_tasks.clear();
+            model.multi_select_mode = false;
+        }
+        UiMessage::BulkDelete => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                // Delete all selected tasks
+                let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                for task_id in tasks_to_delete {
+                    if let Some(task) = model.tasks.remove(&task_id) {
+                        model.delete_task_from_storage(&task_id);
+                        model
+                            .undo_stack
+                            .push(UndoAction::TaskDeleted(Box::new(task)));
+                    }
+                }
+                model.selected_tasks.clear();
+                model.multi_select_mode = false;
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::StartBulkMoveToProject => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkMoveToProject;
+                // Build project list string
+                let mut options = vec!["0: (none)".to_string()];
+                for (i, project) in model.projects.values().enumerate() {
+                    options.push(format!("{}: {}", i + 1, project.name));
+                }
+                model.input_buffer = options.join(", ");
+                model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartBulkSetStatus => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkSetStatus;
+                model.input_buffer =
+                    "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
+                model.cursor_position = model.input_buffer.len();
+            }
         }
     }
 }
@@ -2621,5 +2753,116 @@ mod tests {
 
         assert_eq!(model.tasks.len(), initial_count);
         assert!(!model.tasks.values().any(|t| t.title == "Subtask to undo"));
+    }
+
+    // Bulk operation tests
+    #[test]
+    fn test_toggle_multi_select() {
+        let mut model = create_test_model_with_tasks();
+
+        assert!(!model.multi_select_mode);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+        assert!(model.multi_select_mode);
+
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+        assert!(!model.multi_select_mode);
+    }
+
+    #[test]
+    fn test_toggle_task_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        let task_id = model.visible_tasks[0].clone();
+
+        assert!(!model.selected_tasks.contains(&task_id));
+
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+        assert!(model.selected_tasks.contains(&task_id));
+
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+        assert!(!model.selected_tasks.contains(&task_id));
+    }
+
+    #[test]
+    fn test_toggle_task_selection_not_in_multi_mode() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Not in multi-select mode
+        update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
+
+        // Should not select anything
+        assert!(!model.selected_tasks.contains(&task_id));
+    }
+
+    #[test]
+    fn test_select_all() {
+        let mut model = create_test_model_with_tasks();
+        let task_count = model.visible_tasks.len();
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+
+        update(&mut model, Message::Ui(UiMessage::SelectAll));
+
+        assert!(model.multi_select_mode);
+        assert_eq!(model.selected_tasks.len(), task_count);
+    }
+
+    #[test]
+    fn test_clear_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+
+        update(&mut model, Message::Ui(UiMessage::ClearSelection));
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+    }
+
+    #[test]
+    fn test_bulk_delete() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Select first two tasks
+        model.multi_select_mode = true;
+        let task1 = model.visible_tasks[0].clone();
+        let task2 = model.visible_tasks[1].clone();
+        model.selected_tasks.insert(task1);
+        model.selected_tasks.insert(task2);
+
+        update(&mut model, Message::Ui(UiMessage::BulkDelete));
+
+        assert_eq!(model.tasks.len(), initial_count - 2);
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
+    }
+
+    #[test]
+    fn test_bulk_delete_not_in_multi_mode() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Not in multi-select mode
+        update(&mut model, Message::Ui(UiMessage::BulkDelete));
+
+        // Nothing should be deleted
+        assert_eq!(model.tasks.len(), initial_count);
+    }
+
+    #[test]
+    fn test_exiting_multi_select_clears_selection() {
+        let mut model = create_test_model_with_tasks();
+        model.multi_select_mode = true;
+        model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+
+        // Exit multi-select mode
+        update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));
+
+        assert!(!model.multi_select_mode);
+        assert!(model.selected_tasks.is_empty());
     }
 }

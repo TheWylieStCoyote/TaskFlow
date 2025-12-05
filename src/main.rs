@@ -206,6 +206,11 @@ fn handle_key_event(key: event::KeyEvent, model: &Model, keybindings: &Keybindin
         return Message::Ui(UiMessage::HideHelp);
     }
 
+    // In multi-select mode, Space toggles task selection
+    if model.multi_select_mode && key.code == KeyCode::Char(' ') {
+        return Message::Ui(UiMessage::ToggleTaskSelection);
+    }
+
     // Convert key event to string for lookup
     let key_str = key_event_to_string(&key);
 
@@ -292,6 +297,13 @@ fn action_to_message(action: &Action) -> Message {
         Action::ClearTagFilter => Message::Ui(UiMessage::ClearTagFilter),
         Action::CycleSortField => Message::Ui(UiMessage::CycleSortField),
         Action::ToggleSortOrder => Message::Ui(UiMessage::ToggleSortOrder),
+        Action::ToggleMultiSelect => Message::Ui(UiMessage::ToggleMultiSelect),
+        Action::ToggleTaskSelection => Message::Ui(UiMessage::ToggleTaskSelection),
+        Action::SelectAll => Message::Ui(UiMessage::SelectAll),
+        Action::ClearSelection => Message::Ui(UiMessage::ClearSelection),
+        Action::BulkDelete => Message::Ui(UiMessage::BulkDelete),
+        Action::BulkMoveToProject => Message::Ui(UiMessage::StartBulkMoveToProject),
+        Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),

@@ -28,6 +28,8 @@ pub enum InputTarget {
     Search,
     MoveToProject(TaskId),
     FilterByTag,
+    BulkMoveToProject,
+    BulkSetStatus,
 }
 
 /// Input dialog for creating/editing items

@@ -19,6 +19,7 @@ enum ListEntry<'a> {
         index: usize, // Index in visible_tasks for selection tracking
         time_spent: u32,
         is_subtask: bool,
+        is_multi_selected: bool,
     },
     ProjectHeader {
         name: String,
@@ -57,11 +58,13 @@ impl<'a> TaskList<'a> {
             if let Some(task) = model.tasks.get(task_id) {
                 let time_spent = model.total_time_for_task(task_id);
                 let is_subtask = task.parent_task_id.is_some();
+                let is_multi_selected = model.selected_tasks.contains(task_id);
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
                     time_spent,
                     is_subtask,
+                    is_multi_selected,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -105,11 +108,13 @@ impl<'a> TaskList<'a> {
                         .unwrap_or(0);
                     let time_spent = model.total_time_for_task(&task_id);
                     let is_subtask = task.parent_task_id.is_some();
+                    let is_multi_selected = model.selected_tasks.contains(&task_id);
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
                         time_spent,
                         is_subtask,
+                        is_multi_selected,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -148,6 +153,7 @@ impl Widget for TaskList<'_> {
                     index,
                     time_spent,
                     is_subtask,
+                    is_multi_selected,
                 } => {
                     let is_selected = *index == self.selected;
                     let is_tracking = self.active_tracking == Some(&task.id);
@@ -157,6 +163,7 @@ impl Widget for TaskList<'_> {
                         is_tracking,
                         *time_spent,
                         *is_subtask,
+                        *is_multi_selected,
                         theme,
                     )
                 }
@@ -215,11 +222,19 @@ fn task_to_list_item(
     is_tracking: bool,
     time_spent: u32,
     is_subtask: bool,
+    is_multi_selected: bool,
     theme: &Theme,
 ) -> ListItem<'static> {
+    // Multi-select indicator
+    let select_span = if is_multi_selected {
+        Span::styled("● ", Style::default().fg(theme.colors.accent.to_color()))
+    } else {
+        Span::raw("  ")
+    };
+
     // Subtask indentation prefix
     let indent_span = if is_subtask {
-        Span::styled("  └─ ", Style::default().fg(theme.colors.muted.to_color()))
+        Span::styled("└─ ", Style::default().fg(theme.colors.muted.to_color()))
     } else {
         Span::raw("")
     };
@@ -330,6 +345,7 @@ fn task_to_list_item(
     };
 
     let line = Line::from(vec![
+        select_span,
         indent_span,
         tracking_span,
         priority_span,

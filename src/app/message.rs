@@ -101,6 +101,14 @@ pub enum UiMessage {
     ShowDeleteConfirm,
     ConfirmDelete,
     CancelDelete,
+    // Multi-select / Bulk operations
+    ToggleMultiSelect,
+    ToggleTaskSelection,
+    SelectAll,
+    ClearSelection,
+    BulkDelete,
+    StartBulkMoveToProject,
+    StartBulkSetStatus,
 }
 
 /// System messages

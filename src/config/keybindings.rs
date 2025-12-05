@@ -47,6 +47,15 @@ pub enum Action {
     CycleSortField,
     ToggleSortOrder,
 
+    // Multi-select / Bulk operations
+    ToggleMultiSelect,
+    ToggleTaskSelection,
+    SelectAll,
+    ClearSelection,
+    BulkDelete,
+    BulkMoveToProject,
+    BulkSetStatus,
+
     // System
     Save,
     Undo,
@@ -155,6 +164,11 @@ impl Default for Keybindings {
         bindings.insert("ctrl+t".to_string(), Action::ClearTagFilter);
         bindings.insert("s".to_string(), Action::CycleSortField);
         bindings.insert("S".to_string(), Action::ToggleSortOrder);
+
+        // Multi-select / Bulk operations
+        bindings.insert("v".to_string(), Action::ToggleMultiSelect);
+        bindings.insert("V".to_string(), Action::SelectAll);
+        bindings.insert("ctrl+v".to_string(), Action::ClearSelection);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

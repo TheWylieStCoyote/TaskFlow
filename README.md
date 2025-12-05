@@ -138,6 +138,17 @@ Each task shows:
 | `c` | Toggle showing completed tasks |
 | `?` | Show/hide help popup |
 
+#### Multi-Select (Bulk Operations)
+
+| Key | Action |
+|-----|--------|
+| `v` | Toggle multi-select mode |
+| `V` | Select all visible tasks |
+| `Space` | Toggle selection of current task (in multi-select mode) |
+| `Ctrl+v` | Clear selection and exit multi-select |
+
+When in multi-select mode, selected tasks show a `●` indicator. After selecting tasks, you can delete them with `d` or perform other operations.
+
 #### General
 
 | Key | Action |

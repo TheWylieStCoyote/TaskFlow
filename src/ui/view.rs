@@ -58,6 +58,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::Search => "Search (Ctrl+L to clear)",
             InputTarget::MoveToProject(_) => "Move to Project (enter number)",
             InputTarget::FilterByTag => "Filter by Tag (comma-separated, Ctrl+T to clear)",
+            InputTarget::BulkMoveToProject => "Move Selected to Project (enter number)",
+            InputTarget::BulkSetStatus => "Set Status for Selected (enter number)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),

@@ -6,7 +6,7 @@ use crate::domain::{
 };
 #[allow(unused_imports)]
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
-use crate::ui::InputMode;
+use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, ViewId};
 
@@ -51,6 +51,7 @@ pub struct Model {
 
     // Input state
     pub input_mode: InputMode,
+    pub input_target: InputTarget,
     pub input_buffer: String,
     pub cursor_position: usize,
     pub show_confirm_delete: bool,
@@ -85,6 +86,7 @@ impl Model {
             sidebar_selected: 0,
             selected_project: None,
             input_mode: InputMode::Normal,
+            input_target: InputTarget::default(),
             input_buffer: String::new(),
             cursor_position: 0,
             show_confirm_delete: false,
@@ -152,6 +154,17 @@ impl Model {
     pub fn delete_task_from_storage(&mut self, id: &TaskId) {
         if let Some(ref mut backend) = self.storage {
             let _ = backend.delete_task(id);
+            self.dirty = true;
+        }
+    }
+
+    /// Sync a project to storage (create or update)
+    pub fn sync_project(&mut self, project: &Project) {
+        if let Some(ref mut backend) = self.storage {
+            // Try update first, if not found, create
+            if backend.update_project(project).is_err() {
+                let _ = backend.create_project(project);
+            }
             self.dirty = true;
         }
     }

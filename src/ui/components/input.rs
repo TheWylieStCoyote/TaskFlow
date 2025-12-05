@@ -12,6 +12,14 @@ pub enum InputMode {
     Editing,
 }
 
+/// What type of item is being created/edited
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum InputTarget {
+    #[default]
+    Task,
+    Project,
+}
+
 /// Input dialog for creating/editing items
 pub struct InputDialog<'a> {
     title: &'a str,

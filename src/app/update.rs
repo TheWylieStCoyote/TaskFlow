@@ -1,4 +1,4 @@
-use crate::ui::InputMode;
+use crate::ui::{InputMode, InputTarget};
 
 use super::{
     FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
@@ -240,23 +240,42 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         // Input mode handling
         UiMessage::StartCreateTask => {
             model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Task;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
+        UiMessage::StartCreateProject => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Project;
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
         UiMessage::CancelInput => {
             model.input_mode = InputMode::Normal;
+            model.input_target = InputTarget::default();
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
         UiMessage::SubmitInput => {
             if !model.input_buffer.trim().is_empty() {
-                let title = model.input_buffer.clone();
-                let task = crate::domain::Task::new(title).with_priority(model.default_priority);
-                model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), task);
-                model.refresh_visible_tasks();
+                let name = model.input_buffer.clone();
+                match model.input_target {
+                    InputTarget::Task => {
+                        let task =
+                            crate::domain::Task::new(name).with_priority(model.default_priority);
+                        model.sync_task(&task);
+                        model.tasks.insert(task.id.clone(), task);
+                        model.refresh_visible_tasks();
+                    }
+                    InputTarget::Project => {
+                        let project = crate::domain::Project::new(name);
+                        model.sync_project(&project);
+                        model.projects.insert(project.id.clone(), project);
+                    }
+                }
             }
             model.input_mode = InputMode::Normal;
+            model.input_target = InputTarget::default();
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
@@ -905,5 +924,79 @@ mod tests {
 
         assert!(model.selected_project.is_none());
         assert_eq!(model.current_view, ViewId::TaskList);
+    }
+
+    // Project creation tests
+    #[test]
+    fn test_start_create_project() {
+        let mut model = Model::new();
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert_eq!(model.input_target, InputTarget::Task); // Default
+
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert_eq!(model.input_target, InputTarget::Project);
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_submit_input_creates_project() {
+        let mut model = Model::new();
+        assert!(model.projects.is_empty());
+
+        // Start project creation
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+
+        // Type project name
+        for c in "My New Project".chars() {
+            update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+        }
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Project should be created
+        assert_eq!(model.projects.len(), 1);
+        let project = model.projects.values().next().unwrap();
+        assert_eq!(project.name, "My New Project");
+
+        // Should return to normal mode
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert_eq!(model.input_target, InputTarget::Task); // Reset to default
+    }
+
+    #[test]
+    fn test_cancel_project_creation() {
+        let mut model = Model::new();
+
+        // Start project creation
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+
+        // Type something
+        update(&mut model, Message::Ui(UiMessage::InputChar('T')));
+
+        // Cancel
+        update(&mut model, Message::Ui(UiMessage::CancelInput));
+
+        // No project should be created
+        assert!(model.projects.is_empty());
+        assert_eq!(model.input_mode, InputMode::Normal);
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_empty_project_name_not_created() {
+        let mut model = Model::new();
+
+        // Start project creation
+        update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+
+        // Submit with empty name
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // No project should be created
+        assert!(model.projects.is_empty());
+        assert_eq!(model.input_mode, InputMode::Normal);
     }
 }

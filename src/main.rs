@@ -270,6 +270,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::PageDown => Message::Navigation(NavigationMessage::PageDown),
         Action::ToggleComplete => Message::Task(TaskMessage::ToggleComplete),
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
+        Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),

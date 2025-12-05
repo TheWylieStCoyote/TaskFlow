@@ -10,7 +10,7 @@ use crate::app::Model;
 use crate::config::Theme;
 
 use super::components::{
-    centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, Sidebar, TaskList,
+    centered_rect, ConfirmDialog, HelpPopup, InputDialog, InputMode, InputTarget, Sidebar, TaskList,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -45,8 +45,12 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     // Render input dialog if in editing mode
     if model.input_mode == InputMode::Editing {
         let input_area = centered_rect(60, 3, area);
+        let title = match model.input_target {
+            InputTarget::Task => "New Task",
+            InputTarget::Project => "New Project",
+        };
         frame.render_widget(
-            InputDialog::new("New Task", &model.input_buffer, model.cursor_position),
+            InputDialog::new(title, &model.input_buffer, model.cursor_position),
             input_area,
         );
     }

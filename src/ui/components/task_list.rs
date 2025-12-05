@@ -8,65 +8,162 @@ use ratatui::{
 
 // Note: Color is still used for highlight_style background
 
-use crate::app::Model;
+use crate::app::{Model, ViewId};
 use crate::config::Theme;
 use crate::domain::{Priority, Task, TaskId, TaskStatus};
 
+/// Represents an item in the task list (either a task or a project header)
+enum ListEntry<'a> {
+    Task {
+        task: &'a Task,
+        index: usize, // Index in visible_tasks for selection tracking
+        time_spent: u32,
+    },
+    ProjectHeader {
+        name: String,
+        task_count: usize,
+    },
+}
+
 /// Task list widget
 pub struct TaskList<'a> {
-    tasks: Vec<&'a Task>,
+    entries: Vec<ListEntry<'a>>,
     selected: usize,
+    /// Maps display row to visible_tasks index (None for headers)
+    row_to_task_index: Vec<Option<usize>>,
     active_tracking: Option<&'a TaskId>,
-    time_for_tasks: Vec<u32>,
     theme: &'a Theme,
+    is_grouped: bool,
 }
 
 impl<'a> TaskList<'a> {
     pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
-        let tasks: Vec<&Task> = model
-            .visible_tasks
-            .iter()
-            .filter_map(|id| model.tasks.get(id))
-            .collect();
-
         let active_tracking = model.active_time_entry().map(|e| &e.task_id);
+        let is_grouped = model.current_view == ViewId::Projects;
 
-        let time_for_tasks: Vec<u32> = model
-            .visible_tasks
-            .iter()
-            .map(|id| model.total_time_for_task(id))
-            .collect();
+        if is_grouped {
+            Self::new_grouped(model, theme, active_tracking)
+        } else {
+            Self::new_flat(model, theme, active_tracking)
+        }
+    }
+
+    fn new_flat(model: &'a Model, theme: &'a Theme, active_tracking: Option<&'a TaskId>) -> Self {
+        let mut entries = Vec::new();
+        let mut row_to_task_index = Vec::new();
+
+        for (idx, task_id) in model.visible_tasks.iter().enumerate() {
+            if let Some(task) = model.tasks.get(task_id) {
+                let time_spent = model.total_time_for_task(task_id);
+                entries.push(ListEntry::Task {
+                    task,
+                    index: idx,
+                    time_spent,
+                });
+                row_to_task_index.push(Some(idx));
+            }
+        }
 
         Self {
-            tasks,
+            entries,
             selected: model.selected_index,
+            row_to_task_index,
             active_tracking,
-            time_for_tasks,
             theme,
+            is_grouped: false,
         }
+    }
+
+    fn new_grouped(
+        model: &'a Model,
+        theme: &'a Theme,
+        active_tracking: Option<&'a TaskId>,
+    ) -> Self {
+        let grouped = model.get_tasks_grouped_by_project();
+        let mut entries = Vec::new();
+        let mut row_to_task_index = Vec::new();
+
+        for (_project_id, project_name, task_ids) in grouped {
+            // Add project header
+            entries.push(ListEntry::ProjectHeader {
+                name: project_name,
+                task_count: task_ids.len(),
+            });
+            row_to_task_index.push(None); // Headers are not selectable
+
+            // Add tasks under this project
+            for task_id in task_ids {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    // Find the index in visible_tasks
+                    let idx = model
+                        .visible_tasks
+                        .iter()
+                        .position(|id| id == &task_id)
+                        .unwrap_or(0);
+                    let time_spent = model.total_time_for_task(&task_id);
+                    entries.push(ListEntry::Task {
+                        task,
+                        index: idx,
+                        time_spent,
+                    });
+                    row_to_task_index.push(Some(idx));
+                }
+            }
+        }
+
+        Self {
+            entries,
+            selected: model.selected_index,
+            row_to_task_index,
+            active_tracking,
+            theme,
+            is_grouped: true,
+        }
+    }
+
+    /// Find the display row for the currently selected task index
+    fn selected_row(&self) -> Option<usize> {
+        self.row_to_task_index
+            .iter()
+            .position(|idx| *idx == Some(self.selected))
     }
 }
 
 impl Widget for TaskList<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
+        let selected_row = self.selected_row();
+
         let items: Vec<ListItem> = self
-            .tasks
+            .entries
             .iter()
-            .enumerate()
-            .map(|(i, task)| {
-                let is_selected = i == self.selected;
-                let is_tracking = self.active_tracking == Some(&task.id);
-                let time_spent = self.time_for_tasks.get(i).copied().unwrap_or(0);
-                task_to_list_item(task, is_selected, is_tracking, time_spent, theme)
+            .map(|entry| match entry {
+                ListEntry::Task {
+                    task,
+                    index,
+                    time_spent,
+                } => {
+                    let is_selected = *index == self.selected;
+                    let is_tracking = self.active_tracking == Some(&task.id);
+                    task_to_list_item(task, is_selected, is_tracking, *time_spent, theme)
+                }
+                ListEntry::ProjectHeader { name, task_count } => {
+                    project_header_to_list_item(name, *task_count, theme)
+                }
             })
             .collect();
+
+        let title = if self.is_grouped {
+            " Tasks (by Project) "
+        } else {
+            " Tasks "
+        };
 
         let list = List::new(items)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Tasks ")
+                    .title(title)
                     .border_style(Style::default().fg(theme.colors.border.to_color())),
             )
             .highlight_style(
@@ -76,10 +173,27 @@ impl Widget for TaskList<'_> {
             );
 
         let mut state = ListState::default();
-        state.select(Some(self.selected));
+        state.select(selected_row);
 
         StatefulWidget::render(list, area, buf, &mut state);
     }
+}
+
+fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> ListItem<'static> {
+    let header_style = Style::default()
+        .fg(theme.colors.accent.to_color())
+        .add_modifier(Modifier::BOLD);
+
+    let count_style = Style::default().fg(theme.colors.muted.to_color());
+
+    let line = Line::from(vec![
+        Span::styled("── ", Style::default().fg(theme.colors.muted.to_color())),
+        Span::styled(name.to_string(), header_style),
+        Span::styled(format!(" ({}) ", task_count), count_style),
+        Span::styled("──", Style::default().fg(theme.colors.muted.to_color())),
+    ]);
+
+    ListItem::new(line)
 }
 
 fn task_to_list_item(

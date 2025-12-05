@@ -441,6 +441,50 @@ impl Model {
         self.storage.is_some()
     }
 
+    /// Get tasks grouped by project for the Projects view
+    /// Returns a Vec of (Option<ProjectId>, project_name, Vec<TaskId>)
+    /// Projects are sorted alphabetically, with tasks within each project
+    /// following the current sort order
+    pub fn get_tasks_grouped_by_project(&self) -> Vec<(Option<ProjectId>, String, Vec<TaskId>)> {
+        // Group visible tasks by project_id using a Vec to preserve order
+        let mut grouped: Vec<(Option<ProjectId>, Vec<TaskId>)> = Vec::new();
+
+        for task_id in &self.visible_tasks {
+            if let Some(task) = self.tasks.get(task_id) {
+                let project_id = task.project_id.clone();
+                // Find existing group or create new one
+                if let Some(group) = grouped.iter_mut().find(|(pid, _)| *pid == project_id) {
+                    group.1.push(task_id.clone());
+                } else {
+                    grouped.push((project_id, vec![task_id.clone()]));
+                }
+            }
+        }
+
+        // Convert to vec with project names
+        let mut result: Vec<(Option<ProjectId>, String, Vec<TaskId>)> = grouped
+            .into_iter()
+            .map(|(project_id, task_ids)| {
+                let name = project_id
+                    .as_ref()
+                    .and_then(|pid| self.projects.get(pid))
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| "No Project".to_string());
+                (project_id, name, task_ids)
+            })
+            .collect();
+
+        // Sort by project name (No Project goes last)
+        result.sort_by(|a, b| match (&a.0, &b.0) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Greater, // No Project last
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (Some(_), Some(_)) => a.1.to_lowercase().cmp(&b.1.to_lowercase()),
+        });
+
+        result
+    }
+
     /// Start time tracking for a task
     pub fn start_time_tracking(&mut self, task_id: TaskId) {
         // Stop any currently running timer
@@ -1301,5 +1345,172 @@ mod tests {
         model.refresh_visible_tasks();
         assert_eq!(model.visible_tasks[0], task_low.id);
         assert_eq!(model.visible_tasks[1], task_high.id);
+    }
+
+    #[test]
+    fn test_get_tasks_grouped_by_project_basic() {
+        use crate::domain::Project;
+
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+
+        // Create two projects
+        let project_a = Project::new("Alpha Project");
+        let project_b = Project::new("Beta Project");
+        let project_a_id = project_a.id.clone();
+        let project_b_id = project_b.id.clone();
+
+        model.projects.insert(project_a_id.clone(), project_a);
+        model.projects.insert(project_b_id.clone(), project_b);
+
+        // Create tasks for each project
+        let task_a1 = Task::new("Alpha Task 1").with_project(project_a_id.clone());
+        let task_a2 = Task::new("Alpha Task 2").with_project(project_a_id.clone());
+        let task_b1 = Task::new("Beta Task 1").with_project(project_b_id.clone());
+
+        model.tasks.insert(task_a1.id.clone(), task_a1);
+        model.tasks.insert(task_a2.id.clone(), task_a2);
+        model.tasks.insert(task_b1.id.clone(), task_b1);
+
+        model.refresh_visible_tasks();
+
+        let grouped = model.get_tasks_grouped_by_project();
+
+        // Should have 2 groups (Alpha and Beta, sorted alphabetically)
+        assert_eq!(grouped.len(), 2);
+        assert_eq!(grouped[0].1, "Alpha Project");
+        assert_eq!(grouped[0].2.len(), 2); // 2 tasks in Alpha
+        assert_eq!(grouped[1].1, "Beta Project");
+        assert_eq!(grouped[1].2.len(), 1); // 1 task in Beta
+    }
+
+    #[test]
+    fn test_get_tasks_grouped_by_project_alphabetical_order() {
+        use crate::domain::Project;
+
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+
+        // Create projects out of alphabetical order
+        let project_z = Project::new("Zebra");
+        let project_a = Project::new("Apple");
+        let project_m = Project::new("Mango");
+
+        let z_id = project_z.id.clone();
+        let a_id = project_a.id.clone();
+        let m_id = project_m.id.clone();
+
+        model.projects.insert(z_id.clone(), project_z);
+        model.projects.insert(a_id.clone(), project_a);
+        model.projects.insert(m_id.clone(), project_m);
+
+        // Create one task per project
+        let task_z = Task::new("Z task").with_project(z_id);
+        let task_a = Task::new("A task").with_project(a_id);
+        let task_m = Task::new("M task").with_project(m_id);
+
+        model.tasks.insert(task_z.id.clone(), task_z);
+        model.tasks.insert(task_a.id.clone(), task_a);
+        model.tasks.insert(task_m.id.clone(), task_m);
+
+        model.refresh_visible_tasks();
+
+        let grouped = model.get_tasks_grouped_by_project();
+
+        // Should be sorted alphabetically: Apple, Mango, Zebra
+        assert_eq!(grouped.len(), 3);
+        assert_eq!(grouped[0].1, "Apple");
+        assert_eq!(grouped[1].1, "Mango");
+        assert_eq!(grouped[2].1, "Zebra");
+    }
+
+    #[test]
+    fn test_get_tasks_grouped_no_project_goes_last() {
+        use crate::domain::Project;
+
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+
+        // Create one project
+        let project = Project::new("My Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project_id.clone(), project);
+
+        // Task with project
+        let task_with = Task::new("With project").with_project(project_id);
+        // Task without project (shouldn't appear in Projects view normally,
+        // but test the grouping logic)
+        let task_without = Task::new("Without project");
+
+        model.tasks.insert(task_with.id.clone(), task_with);
+        model.tasks.insert(task_without.id.clone(), task_without);
+
+        // For this test, we need to make both visible
+        // Override the view filtering by using TaskList view
+        model.current_view = ViewId::TaskList;
+        model.refresh_visible_tasks();
+
+        // Now get grouped (the function doesn't filter, just groups visible tasks)
+        let grouped = model.get_tasks_grouped_by_project();
+
+        // Should have 2 groups: My Project first, No Project last
+        assert_eq!(grouped.len(), 2);
+        assert_eq!(grouped[0].1, "My Project");
+        assert_eq!(grouped[1].1, "No Project");
+    }
+
+    #[test]
+    fn test_get_tasks_grouped_empty() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+        model.refresh_visible_tasks();
+
+        let grouped = model.get_tasks_grouped_by_project();
+
+        // No tasks, no groups
+        assert!(grouped.is_empty());
+    }
+
+    #[test]
+    fn test_get_tasks_grouped_preserves_task_order_within_group() {
+        use crate::domain::{Project, SortField, SortOrder};
+
+        let mut model = Model::new();
+        model.current_view = ViewId::Projects;
+
+        // Sort by title ascending
+        model.sort.field = SortField::Title;
+        model.sort.order = SortOrder::Ascending;
+
+        let project = Project::new("Test Project");
+        let project_id = project.id.clone();
+        model.projects.insert(project_id.clone(), project);
+
+        // Create tasks with different titles (will be sorted alphabetically)
+        let task_c = Task::new("Charlie").with_project(project_id.clone());
+        let task_a = Task::new("Alpha").with_project(project_id.clone());
+        let task_b = Task::new("Bravo").with_project(project_id.clone());
+
+        let task_a_id = task_a.id.clone();
+        let task_b_id = task_b.id.clone();
+        let task_c_id = task_c.id.clone();
+
+        model.tasks.insert(task_c.id.clone(), task_c);
+        model.tasks.insert(task_a.id.clone(), task_a);
+        model.tasks.insert(task_b.id.clone(), task_b);
+
+        model.refresh_visible_tasks();
+
+        let grouped = model.get_tasks_grouped_by_project();
+
+        assert_eq!(grouped.len(), 1);
+        let task_ids = &grouped[0].2;
+        assert_eq!(task_ids.len(), 3);
+
+        // Tasks should be in order based on visible_tasks order (sorted by title)
+        // Alpha, Bravo, Charlie
+        assert_eq!(task_ids[0], task_a_id);
+        assert_eq!(task_ids[1], task_b_id);
+        assert_eq!(task_ids[2], task_c_id);
     }
 }

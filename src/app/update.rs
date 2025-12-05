@@ -294,6 +294,17 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::StartEditTags => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditTags(task_id);
+                    // Pre-fill with existing tags as comma-separated
+                    model.input_buffer = task.tags.join(", ");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
         UiMessage::CancelInput => {
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -333,6 +344,20 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             task.due_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
+                        task.updated_at = chrono::Utc::now();
+                        let task_clone = task.clone();
+                        model.sync_task(&task_clone);
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::EditTags(task_id) => {
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        // Parse comma-separated tags, trim whitespace, filter empty
+                        task.tags = input
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
                         task.updated_at = chrono::Utc::now();
                         let task_clone = task.clone();
                         model.sync_task(&task_clone);
@@ -1240,5 +1265,132 @@ mod tests {
         // Due date should be unchanged
         let task = model.tasks.get(&task_id).unwrap();
         assert_eq!(task.due_date, Some(original_date));
+    }
+
+    // Tag management tests
+    #[test]
+    fn test_start_edit_tags() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Add some initial tags
+        model.tasks.get_mut(&task_id).unwrap().tags =
+            vec!["work".to_string(), "urgent".to_string()];
+
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(model.input_target, InputTarget::EditTags(_)));
+        assert_eq!(model.input_buffer, "work, urgent");
+    }
+
+    #[test]
+    fn test_edit_tags_add_new() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Task has no tags initially
+        assert!(model.tasks.get(&task_id).unwrap().tags.is_empty());
+
+        // Start editing tags
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        // Type new tags
+        model.input_buffer = "feature, bug, priority".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Tags should be set
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.tags, vec!["feature", "bug", "priority"]);
+    }
+
+    #[test]
+    fn test_edit_tags_clear() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial tags
+        model.tasks.get_mut(&task_id).unwrap().tags = vec!["work".to_string()];
+
+        // Start editing tags
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        // Clear input
+        model.input_buffer.clear();
+        model.cursor_position = 0;
+
+        // Submit empty
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Tags should be cleared
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.tags.is_empty());
+    }
+
+    #[test]
+    fn test_edit_tags_trims_whitespace() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing tags
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        // Type tags with extra whitespace
+        model.input_buffer = "  work  ,  play  , rest ".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Tags should be trimmed
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.tags, vec!["work", "play", "rest"]);
+    }
+
+    #[test]
+    fn test_edit_tags_filters_empty() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing tags
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        // Type tags with empty entries
+        model.input_buffer = "work,,, ,play".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Only non-empty tags should remain
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.tags, vec!["work", "play"]);
+    }
+
+    #[test]
+    fn test_cancel_edit_tags() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial tags
+        let original_tags = vec!["original".to_string()];
+        model.tasks.get_mut(&task_id).unwrap().tags = original_tags.clone();
+
+        // Start editing
+        update(&mut model, Message::Ui(UiMessage::StartEditTags));
+
+        // Type something different
+        model.input_buffer = "new, tags, here".to_string();
+
+        // Cancel
+        update(&mut model, Message::Ui(UiMessage::CancelInput));
+
+        // Tags should NOT be changed
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.tags, original_tags);
+        assert_eq!(model.input_mode, InputMode::Normal);
     }
 }

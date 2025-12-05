@@ -77,6 +77,7 @@ pub enum UiMessage {
     StartCreateProject,
     StartEditTask,
     StartEditDueDate,
+    StartEditTags,
     CancelInput,
     SubmitInput,
     InputChar(char),

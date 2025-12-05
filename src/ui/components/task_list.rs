@@ -171,6 +171,22 @@ fn task_to_list_item(
         Span::raw("")
     };
 
+    // Tags display
+    let tags_span = if !task.tags.is_empty() {
+        let tags_str = task
+            .tags
+            .iter()
+            .map(|t| format!("#{}", t))
+            .collect::<Vec<_>>()
+            .join(" ");
+        Span::styled(
+            format!(" {}", tags_str),
+            Style::default().fg(theme.colors.muted.to_color()),
+        )
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         tracking_span,
         priority_span,
@@ -178,6 +194,7 @@ fn task_to_list_item(
         title_span,
         due_span,
         time_span,
+        tags_span,
     ]);
 
     ListItem::new(line)

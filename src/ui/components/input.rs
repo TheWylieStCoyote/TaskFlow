@@ -21,6 +21,7 @@ pub enum InputTarget {
     Task,
     EditTask(TaskId),
     EditDueDate(TaskId),
+    EditTags(TaskId),
     Project,
 }
 

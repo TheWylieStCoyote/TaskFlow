@@ -273,6 +273,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
         Action::EditTask => Message::Ui(UiMessage::StartEditTask),
         Action::EditDueDate => Message::Ui(UiMessage::StartEditDueDate),
+        Action::EditTags => Message::Ui(UiMessage::StartEditTags),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
         Action::CyclePriority => Message::Task(TaskMessage::CyclePriority),
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),

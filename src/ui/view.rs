@@ -49,6 +49,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::Task => "New Task",
             InputTarget::EditTask(_) => "Edit Task",
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
+            InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::Project => "New Project",
         };
         frame.render_widget(

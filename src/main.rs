@@ -2,7 +2,8 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
@@ -22,44 +23,70 @@ use taskflow::ui::{view, InputMode};
 #[derive(Parser, Debug)]
 #[command(name = "taskflow")]
 #[command(author, version, about, long_about = None)]
-struct Args {
+struct Cli {
     /// Path to data file or directory
-    #[arg(short, long)]
+    #[arg(short, long, global = true, value_hint = ValueHint::AnyPath)]
     data: Option<PathBuf>,
 
-    /// Storage backend type (json, yaml, sqlite, markdown)
-    #[arg(short, long, default_value = "json")]
-    backend: String,
+    /// Storage backend type
+    #[arg(short, long, default_value = "json", global = true, value_enum)]
+    backend: BackendType,
 
     /// Use sample data instead of loading from storage
-    #[arg(long)]
+    #[arg(long, global = true)]
     demo: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Generate shell completion scripts
+    Completion {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let cli = Cli::parse();
 
+    // Handle completion subcommand
+    if let Some(Commands::Completion { shell }) = cli.command {
+        print_completions(shell);
+        return Ok(());
+    }
+
+    // No subcommand - run the TUI
+    run_tui(cli)
+}
+
+/// Generate shell completion scripts and print to stdout
+fn print_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    let name = cmd.get_name().to_string();
+    generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+/// Run the TUI application
+fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Load settings from config file
     let settings = Settings::load();
 
     // CLI args override config file settings
-    let backend_str = if args.backend != "json" {
-        &args.backend
+    let backend_type = if cli.backend != BackendType::Json {
+        cli.backend
     } else {
-        &settings.backend
+        BackendType::parse(&settings.backend).unwrap_or_default()
     };
 
     // Determine data path (CLI > config > default)
-    let data_path = args
-        .data
-        .clone()
-        .unwrap_or_else(|| settings.get_data_path());
-
-    // Parse backend type
-    let backend_type = BackendType::parse(backend_str).unwrap_or_default();
+    let data_path = cli.data.unwrap_or_else(|| settings.get_data_path());
 
     // Create app state
-    let mut model = if args.demo {
+    let mut model = if cli.demo {
         Model::new().with_sample_data()
     } else {
         // Try to load from storage, fall back to sample data on error
@@ -411,5 +438,126 @@ fn action_to_message(action: &Action) -> Message {
         Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
         Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli() {
+        // Validates the CLI configuration is correct
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn test_parse_no_subcommand() {
+        let cli = Cli::try_parse_from(["taskflow"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.backend, BackendType::Json);
+        assert!(!cli.demo);
+    }
+
+    #[test]
+    fn test_parse_completion_bash() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Bash })
+        ));
+    }
+
+    #[test]
+    fn test_parse_completion_zsh() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "zsh"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Zsh })
+        ));
+    }
+
+    #[test]
+    fn test_parse_completion_fish() {
+        let cli = Cli::try_parse_from(["taskflow", "completion", "fish"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Completion { shell: Shell::Fish })
+        ));
+    }
+
+    #[test]
+    fn test_parse_with_backend() {
+        let cli = Cli::try_parse_from(["taskflow", "--backend", "yaml"]).unwrap();
+        assert_eq!(cli.backend, BackendType::Yaml);
+        assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn test_parse_with_data_path() {
+        let cli = Cli::try_parse_from(["taskflow", "--data", "/tmp/tasks.json"]).unwrap();
+        assert_eq!(cli.data, Some(PathBuf::from("/tmp/tasks.json")));
+    }
+
+    #[test]
+    fn test_parse_with_demo() {
+        let cli = Cli::try_parse_from(["taskflow", "--demo"]).unwrap();
+        assert!(cli.demo);
+    }
+
+    #[test]
+    fn test_parse_all_backends() {
+        for backend in ["json", "yaml", "sqlite", "markdown"] {
+            let cli = Cli::try_parse_from(["taskflow", "--backend", backend]).unwrap();
+            let expected = BackendType::parse(backend).unwrap();
+            assert_eq!(cli.backend, expected);
+        }
+    }
+
+    #[test]
+    fn test_completion_output_bash() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Bash, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("_taskflow"));
+        assert!(output.contains("--backend"));
+        assert!(output.contains("--data"));
+        assert!(output.contains("completion"));
+    }
+
+    #[test]
+    fn test_completion_output_zsh() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Zsh, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("#compdef taskflow"));
+        assert!(output.contains("--backend"));
+    }
+
+    #[test]
+    fn test_completion_output_fish() {
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        generate(Shell::Fish, &mut cmd, "taskflow", &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("complete -c taskflow"));
+    }
+
+    #[test]
+    fn test_invalid_backend_rejected() {
+        let result = Cli::try_parse_from(["taskflow", "--backend", "invalid"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_shell_rejected() {
+        let result = Cli::try_parse_from(["taskflow", "completion", "invalid"]);
+        assert!(result.is_err());
     }
 }

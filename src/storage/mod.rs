@@ -9,8 +9,10 @@ pub use repository::*;
 
 use std::path::Path;
 
+use clap::ValueEnum;
+
 /// Storage backend type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
 pub enum BackendType {
     #[default]
     Json,

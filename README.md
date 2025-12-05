@@ -36,6 +36,44 @@ cargo build --release
 - Rust 1.70 or later
 - A terminal with UTF-8 support
 
+### Shell Completions
+
+TaskFlow supports shell completion for Bash, Zsh, and Fish. Generate and install completions:
+
+**Bash:**
+```bash
+# Generate and install
+taskflow completion bash > ~/.local/share/bash-completion/completions/taskflow
+
+# Or system-wide (requires sudo)
+sudo taskflow completion bash > /etc/bash_completion.d/taskflow
+
+# Reload (or restart terminal)
+source ~/.local/share/bash-completion/completions/taskflow
+```
+
+**Zsh:**
+```bash
+# Create completions directory if needed
+mkdir -p ~/.zsh/completions
+
+# Generate completions
+taskflow completion zsh > ~/.zsh/completions/_taskflow
+
+# Add to ~/.zshrc (if not already present):
+# fpath=(~/.zsh/completions $fpath)
+# autoload -Uz compinit && compinit
+
+# Reload
+source ~/.zshrc
+```
+
+**Fish:**
+```bash
+# Generate and install (Fish loads automatically)
+taskflow completion fish > ~/.config/fish/completions/taskflow.fish
+```
+
 ## Quick Start
 
 ```bash

@@ -45,8 +45,10 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     // Render input dialog if in editing mode
     if model.input_mode == InputMode::Editing {
         let input_area = centered_rect(60, 3, area);
-        let title = match model.input_target {
+        let title = match &model.input_target {
             InputTarget::Task => "New Task",
+            InputTarget::EditTask(_) => "Edit Task",
+            InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::Project => "New Project",
         };
         frame.render_widget(

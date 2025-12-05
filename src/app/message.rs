@@ -51,6 +51,7 @@ pub enum TaskMessage {
     ToggleComplete,
     SetStatus(TaskId, TaskStatus),
     SetPriority(TaskId, Priority),
+    CyclePriority,
     Create(String),
     Delete(TaskId),
     MoveToProject(TaskId, Option<ProjectId>),
@@ -74,6 +75,8 @@ pub enum UiMessage {
     // Input mode
     StartCreateTask,
     StartCreateProject,
+    StartEditTask,
+    StartEditDueDate,
     CancelInput,
     SubmitInput,
     InputChar(char),

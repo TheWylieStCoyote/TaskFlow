@@ -21,7 +21,10 @@ pub enum Action {
     ToggleComplete,
     CreateTask,
     CreateProject,
+    EditTask,
+    EditDueDate,
     DeleteTask,
+    CyclePriority,
 
     // Time tracking
     ToggleTimeTracking,
@@ -113,7 +116,10 @@ impl Default for Keybindings {
         bindings.insert("space".to_string(), Action::ToggleComplete);
         bindings.insert("a".to_string(), Action::CreateTask);
         bindings.insert("P".to_string(), Action::CreateProject);
+        bindings.insert("e".to_string(), Action::EditTask);
+        bindings.insert("D".to_string(), Action::EditDueDate);
         bindings.insert("d".to_string(), Action::DeleteTask);
+        bindings.insert("p".to_string(), Action::CyclePriority);
 
         // Time tracking
         bindings.insert("t".to_string(), Action::ToggleTimeTracking);

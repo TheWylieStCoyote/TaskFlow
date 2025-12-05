@@ -200,6 +200,26 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             }
             model.refresh_visible_tasks();
         }
+        TaskMessage::CyclePriority => {
+            use crate::domain::Priority;
+            let task_id = model.visible_tasks.get(model.selected_index).cloned();
+
+            if let Some(id) = task_id {
+                if let Some(task) = model.tasks.get_mut(&id) {
+                    task.priority = match task.priority {
+                        Priority::None => Priority::Low,
+                        Priority::Low => Priority::Medium,
+                        Priority::Medium => Priority::High,
+                        Priority::High => Priority::Urgent,
+                        Priority::Urgent => Priority::None,
+                    };
+                    task.updated_at = chrono::Utc::now();
+                    let task_clone = task.clone();
+                    model.sync_task(&task_clone);
+                }
+            }
+            model.refresh_visible_tasks();
+        }
         TaskMessage::Create(title) => {
             let task = crate::domain::Task::new(title).with_priority(model.default_priority);
             model.sync_task(&task);
@@ -250,6 +270,30 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
+        UiMessage::StartEditTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditTask(task_id);
+                    model.input_buffer = task.title.clone();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditDueDate => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDueDate(task_id);
+                    // Pre-fill with existing due date or empty
+                    model.input_buffer = task
+                        .due_date
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
         UiMessage::CancelInput => {
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -257,18 +301,47 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.cursor_position = 0;
         }
         UiMessage::SubmitInput => {
-            if !model.input_buffer.trim().is_empty() {
-                let name = model.input_buffer.clone();
-                match model.input_target {
-                    InputTarget::Task => {
+            let input = model.input_buffer.trim().to_string();
+            match &model.input_target {
+                InputTarget::Task => {
+                    if !input.is_empty() {
                         let task =
-                            crate::domain::Task::new(name).with_priority(model.default_priority);
+                            crate::domain::Task::new(input).with_priority(model.default_priority);
                         model.sync_task(&task);
                         model.tasks.insert(task.id.clone(), task);
                         model.refresh_visible_tasks();
                     }
-                    InputTarget::Project => {
-                        let project = crate::domain::Project::new(name);
+                }
+                InputTarget::EditTask(task_id) => {
+                    if !input.is_empty() {
+                        if let Some(task) = model.tasks.get_mut(task_id) {
+                            task.title = input;
+                            task.updated_at = chrono::Utc::now();
+                            let task_clone = task.clone();
+                            model.sync_task(&task_clone);
+                        }
+                        model.refresh_visible_tasks();
+                    }
+                }
+                InputTarget::EditDueDate(task_id) => {
+                    use chrono::NaiveDate;
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        // Empty input clears the due date
+                        if input.is_empty() {
+                            task.due_date = None;
+                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                            task.due_date = Some(date);
+                        }
+                        // If parsing fails, just ignore (keep old date)
+                        task.updated_at = chrono::Utc::now();
+                        let task_clone = task.clone();
+                        model.sync_task(&task_clone);
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::Project => {
+                    if !input.is_empty() {
+                        let project = crate::domain::Project::new(input);
                         model.sync_project(&project);
                         model.projects.insert(project.id.clone(), project);
                     }
@@ -998,5 +1071,174 @@ mod tests {
         // No project should be created
         assert!(model.projects.is_empty());
         assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    // Task editing tests
+    #[test]
+    fn test_start_edit_task() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartEditTask));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert_eq!(model.input_target, InputTarget::EditTask(task_id));
+        assert_eq!(model.input_buffer, original_title);
+        assert_eq!(model.cursor_position, original_title.len());
+    }
+
+    #[test]
+    fn test_edit_task_title() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing
+        update(&mut model, Message::Ui(UiMessage::StartEditTask));
+
+        // Clear and type new title
+        model.input_buffer.clear();
+        model.cursor_position = 0;
+        for c in "Updated Title".chars() {
+            update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+        }
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Title should be updated
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.title, "Updated Title");
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_cancel_edit_task() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+        // Start editing
+        update(&mut model, Message::Ui(UiMessage::StartEditTask));
+
+        // Type something
+        model.input_buffer = "Changed".to_string();
+
+        // Cancel
+        update(&mut model, Message::Ui(UiMessage::CancelInput));
+
+        // Title should NOT be changed
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.title, original_title);
+        assert_eq!(model.input_mode, InputMode::Normal);
+    }
+
+    #[test]
+    fn test_cycle_priority() {
+        use crate::domain::Priority;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set initial priority to None
+        model.tasks.get_mut(&task_id).unwrap().priority = Priority::None;
+
+        // Cycle through priorities
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+        assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::Low);
+
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().priority,
+            Priority::Medium
+        );
+
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+        assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::High);
+
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().priority,
+            Priority::Urgent
+        );
+
+        update(&mut model, Message::Task(TaskMessage::CyclePriority));
+        assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::None);
+    }
+
+    #[test]
+    fn test_edit_due_date() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing due date
+        update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(model.input_target, InputTarget::EditDueDate(_)));
+
+        // Type a date
+        model.input_buffer = "2025-12-25".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Due date should be set
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(
+            task.due_date,
+            Some(NaiveDate::from_ymd_opt(2025, 12, 25).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_clear_due_date() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set an initial due date
+        model.tasks.get_mut(&task_id).unwrap().due_date =
+            Some(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap());
+
+        // Start editing due date
+        update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
+
+        // Clear the buffer
+        model.input_buffer.clear();
+        model.cursor_position = 0;
+
+        // Submit empty
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Due date should be cleared
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.due_date.is_none());
+    }
+
+    #[test]
+    fn test_invalid_due_date_keeps_old() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set an initial due date
+        let original_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        model.tasks.get_mut(&task_id).unwrap().due_date = Some(original_date);
+
+        // Start editing due date
+        update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
+
+        // Type invalid date
+        model.input_buffer = "not-a-date".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        // Submit
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Due date should be unchanged
+        let task = model.tasks.get(&task_id).unwrap();
+        assert_eq!(task.due_date, Some(original_date));
     }
 }

@@ -12,11 +12,15 @@ pub enum InputMode {
     Editing,
 }
 
+use crate::domain::TaskId;
+
 /// What type of item is being created/edited
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum InputTarget {
     #[default]
     Task,
+    EditTask(TaskId),
+    EditDueDate(TaskId),
     Project,
 }
 

@@ -42,6 +42,7 @@ pub enum ViewId {
     TaskList,
     Today,
     Upcoming,
+    Overdue,
     Projects,
 }
 

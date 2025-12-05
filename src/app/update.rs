@@ -28,9 +28,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 3)
-                    if model.sidebar_selected == 3 {
-                        model.sidebar_selected = 2;
+                    // Skip separator (index 4)
+                    if model.sidebar_selected == 4 {
+                        model.sidebar_selected = 3;
                     }
                 }
             }
@@ -45,9 +45,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 3)
-                    if model.sidebar_selected == 3 {
-                        model.sidebar_selected = 4;
+                    // Skip separator (index 4)
+                    if model.sidebar_selected == 4 {
+                        model.sidebar_selected = 5;
                     }
                 }
             }
@@ -116,9 +116,10 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 0: All Tasks (TaskList view)
     // 1: Today
     // 2: Upcoming
-    // 3: Separator (skip)
-    // 4: "Projects" header (skip or go to Projects view)
-    // 5+: Individual projects
+    // 3: Overdue
+    // 4: Separator (skip)
+    // 5: "Projects" header (skip or go to Projects view)
+    // 6+: Individual projects
 
     match selected {
         0 => {
@@ -142,8 +143,15 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        3 => {} // Separator, do nothing
-        4 => {
+        3 => {
+            model.current_view = ViewId::Overdue;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        4 => {} // Separator, do nothing
+        5 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -151,9 +159,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 5 => {
+        n if n >= 6 => {
             // Select a specific project
-            let project_index = n - 5;
+            let project_index = n - 6;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -1090,15 +1098,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 2; // Upcoming (before separator at 3)
+        model.sidebar_selected = 3; // Overdue (before separator at 4)
 
-        // Move down should skip separator (3) and go to Projects header (4)
+        // Move down should skip separator (4) and go to Projects header (5)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 4);
+        assert_eq!(model.sidebar_selected, 5);
 
-        // Move up should skip separator and go back to Upcoming (2)
+        // Move up should skip separator and go back to Overdue (3)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 2);
+        assert_eq!(model.sidebar_selected, 3);
     }
 
     #[test]
@@ -1114,6 +1122,22 @@ mod tests {
 
         assert_eq!(model.current_view, ViewId::Today);
         assert!(model.selected_project.is_none());
+    }
+
+    #[test]
+    fn test_sidebar_select_overdue_view() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 3; // Overdue view
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        assert_eq!(model.current_view, ViewId::Overdue);
+        assert!(model.selected_project.is_none());
+        assert_eq!(model.focus_pane, FocusPane::TaskList);
     }
 
     #[test]
@@ -1139,7 +1163,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 5; // First project (index 5 = after header items)
+        model.sidebar_selected = 6; // First project (index 6 = after header items)
 
         update(
             &mut model,

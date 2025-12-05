@@ -103,8 +103,8 @@ impl Model {
 
     /// Get the number of sidebar items (views + separator + projects header + projects)
     pub fn sidebar_item_count(&self) -> usize {
-        // 3 views + 1 separator + 1 "Projects" header + projects count
-        5 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // 4 views (All Tasks, Today, Upcoming, Overdue) + 1 separator + 1 "Projects" header + projects count
+        6 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Load data from a storage backend
@@ -311,6 +311,12 @@ impl Model {
                 // Show tasks with future due dates
                 task.due_date
                     .map(|d| d > chrono::Utc::now().date_naive())
+                    .unwrap_or(false)
+            }
+            ViewId::Overdue => {
+                // Show tasks with past due dates (before today)
+                task.due_date
+                    .map(|d| d < chrono::Utc::now().date_naive())
                     .unwrap_or(false)
             }
             ViewId::Projects => {
@@ -782,6 +788,70 @@ mod tests {
         // Only tasks with projects should be visible
         assert_eq!(model.visible_tasks.len(), 1);
         assert_eq!(model.visible_tasks[0], task_with_project.id);
+    }
+
+    #[test]
+    fn test_view_overdue_filters_past_due() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Overdue;
+
+        let today = chrono::Utc::now().date_naive();
+        let yesterday = today - chrono::Duration::days(1);
+        let last_week = today - chrono::Duration::days(7);
+        let tomorrow = today + chrono::Duration::days(1);
+
+        let task_yesterday = Task::new("Due yesterday").with_due_date(yesterday);
+        let task_last_week = Task::new("Due last week").with_due_date(last_week);
+        let task_today = Task::new("Due today").with_due_date(today);
+        let task_tomorrow = Task::new("Due tomorrow").with_due_date(tomorrow);
+        let task_no_date = Task::new("No due date");
+
+        model
+            .tasks
+            .insert(task_yesterday.id.clone(), task_yesterday.clone());
+        model
+            .tasks
+            .insert(task_last_week.id.clone(), task_last_week.clone());
+        model.tasks.insert(task_today.id.clone(), task_today);
+        model.tasks.insert(task_tomorrow.id.clone(), task_tomorrow);
+        model.tasks.insert(task_no_date.id.clone(), task_no_date);
+
+        model.refresh_visible_tasks();
+
+        // Only overdue tasks (past due dates) should be visible
+        assert_eq!(model.visible_tasks.len(), 2);
+        assert!(model.visible_tasks.contains(&task_yesterday.id));
+        assert!(model.visible_tasks.contains(&task_last_week.id));
+    }
+
+    #[test]
+    fn test_view_overdue_excludes_today() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Overdue;
+
+        let today = chrono::Utc::now().date_naive();
+        let task_today = Task::new("Due today").with_due_date(today);
+
+        model.tasks.insert(task_today.id.clone(), task_today);
+
+        model.refresh_visible_tasks();
+
+        // Today's tasks are not overdue
+        assert!(model.visible_tasks.is_empty());
+    }
+
+    #[test]
+    fn test_view_overdue_excludes_no_due_date() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Overdue;
+
+        let task_no_date = Task::new("No due date");
+        model.tasks.insert(task_no_date.id.clone(), task_no_date);
+
+        model.refresh_visible_tasks();
+
+        // Tasks without due dates are not overdue
+        assert!(model.visible_tasks.is_empty());
     }
 
     #[test]

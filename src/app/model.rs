@@ -175,29 +175,100 @@ impl Model {
 
     /// Add sample tasks for development
     pub fn with_sample_data(mut self) -> Self {
-        use crate::domain::{Priority, TaskStatus};
-        use chrono::NaiveDate;
+        use crate::domain::{Priority, Project, TaskStatus};
+        use chrono::{NaiveDate, Utc};
+
+        // Create sample projects
+        let backend_project = Project::new("Backend API");
+        let frontend_project = Project::new("Frontend UI");
+        let docs_project = Project::new("Documentation");
+
+        let backend_id = backend_project.id.clone();
+        let frontend_id = frontend_project.id.clone();
+        let docs_id = docs_project.id.clone();
+
+        self.projects.insert(backend_id.clone(), backend_project);
+        self.projects.insert(frontend_id.clone(), frontend_project);
+        self.projects.insert(docs_id.clone(), docs_project);
+
+        let today = Utc::now().date_naive();
+        let yesterday = today - chrono::Duration::days(1);
+        let tomorrow = today + chrono::Duration::days(1);
+        let next_week = today + chrono::Duration::days(7);
 
         let tasks = vec![
-            Task::new("Set up project structure")
+            // Backend tasks
+            Task::new("Set up database schema")
                 .with_status(TaskStatus::Done)
-                .with_priority(Priority::High),
-            Task::new("Implement domain types")
-                .with_status(TaskStatus::Done)
-                .with_priority(Priority::High),
-            Task::new("Create TEA architecture")
+                .with_priority(Priority::High)
+                .with_project(backend_id.clone())
+                .with_tags(vec!["database".into(), "setup".into()]),
+            Task::new("Implement REST endpoints")
                 .with_status(TaskStatus::InProgress)
-                .with_priority(Priority::High),
-            Task::new("Build task list UI").with_priority(Priority::Medium),
-            Task::new("Add storage backends")
+                .with_priority(Priority::High)
+                .with_project(backend_id.clone())
+                .with_tags(vec!["api".into(), "rust".into()]),
+            Task::new("Add authentication middleware")
+                .with_priority(Priority::Urgent)
+                .with_due_date(tomorrow)
+                .with_project(backend_id.clone())
+                .with_tags(vec!["security".into(), "api".into()]),
+            Task::new("Write integration tests")
+                .with_priority(Priority::Medium)
+                .with_due_date(next_week)
+                .with_project(backend_id.clone())
+                .with_tags(vec!["testing".into()]),
+            // Frontend tasks
+            Task::new("Design component library")
                 .with_status(TaskStatus::Done)
-                .with_priority(Priority::Medium),
-            Task::new("Implement keybinding config").with_priority(Priority::Low),
-            Task::new("Add theme support").with_priority(Priority::Low),
-            Task::new("Write documentation").with_priority(Priority::None),
-            Task::new("Review and fix bugs")
-                .with_due_date(NaiveDate::from_ymd_opt(2025, 12, 10).unwrap())
-                .with_priority(Priority::Urgent),
+                .with_priority(Priority::High)
+                .with_project(frontend_id.clone())
+                .with_tags(vec!["design".into(), "ui".into()]),
+            Task::new("Build task list widget")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(frontend_id.clone())
+                .with_tags(vec!["ui".into(), "rust".into()]),
+            Task::new("Add keyboard navigation")
+                .with_priority(Priority::Medium)
+                .with_due_date(today)
+                .with_project(frontend_id.clone())
+                .with_tags(vec!["ux".into(), "accessibility".into()]),
+            Task::new("Implement dark mode")
+                .with_priority(Priority::Low)
+                .with_project(frontend_id.clone())
+                .with_tags(vec!["ui".into(), "design".into()]),
+            // Documentation tasks
+            Task::new("Write API documentation")
+                .with_priority(Priority::Medium)
+                .with_due_date(next_week)
+                .with_project(docs_id.clone())
+                .with_tags(vec!["docs".into(), "api".into()]),
+            Task::new("Create user guide")
+                .with_priority(Priority::Low)
+                .with_project(docs_id.clone())
+                .with_tags(vec!["docs".into()]),
+            // Standalone tasks (no project)
+            Task::new("Fix critical bug in parser")
+                .with_priority(Priority::Urgent)
+                .with_due_date(yesterday)
+                .with_tags(vec!["bug".into(), "urgent".into()]),
+            Task::new("Review pull requests")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::Medium)
+                .with_due_date(today)
+                .with_tags(vec!["review".into()]),
+            Task::new("Update dependencies")
+                .with_priority(Priority::Low)
+                .with_tags(vec!["maintenance".into()]),
+            Task::new("Plan next sprint")
+                .with_priority(Priority::Medium)
+                .with_due_date(NaiveDate::from_ymd_opt(2025, 12, 15).unwrap())
+                .with_tags(vec!["planning".into()]),
+            Task::new("Team sync meeting")
+                .with_status(TaskStatus::Done)
+                .with_priority(Priority::None)
+                .with_tags(vec!["meeting".into()]),
         ];
 
         for task in tasks {
@@ -452,10 +523,11 @@ mod tests {
     fn test_model_with_sample_data() {
         let model = Model::new().with_sample_data();
 
-        // Sample data creates 9 tasks
-        assert_eq!(model.tasks.len(), 9);
+        // Sample data creates 15 tasks across 3 projects
+        assert_eq!(model.tasks.len(), 15);
+        assert_eq!(model.projects.len(), 3);
         // Some are completed, so visible should be less
-        assert!(model.visible_tasks.len() < 9);
+        assert!(model.visible_tasks.len() < 15);
     }
 
     #[test]

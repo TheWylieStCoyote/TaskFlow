@@ -59,6 +59,9 @@ pub enum Action {
     // Dependencies
     EditDependencies,
 
+    // Recurrence
+    EditRecurrence,
+
     // System
     Save,
     Undo,
@@ -175,6 +178,9 @@ impl Default for Keybindings {
 
         // Dependencies
         bindings.insert("B".to_string(), Action::EditDependencies);
+
+        // Recurrence
+        bindings.insert("R".to_string(), Action::EditRecurrence);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

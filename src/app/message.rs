@@ -111,6 +111,8 @@ pub enum UiMessage {
     StartBulkSetStatus,
     // Dependencies
     StartEditDependencies,
+    // Recurrence
+    StartEditRecurrence,
 }
 
 /// System messages

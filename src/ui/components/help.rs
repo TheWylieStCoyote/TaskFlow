@@ -177,12 +177,16 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
-                "Dependencies",
+                "Dependencies & Recurrence",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),
             Line::from(vec![
                 Span::styled("B", Style::default().fg(Color::Cyan)),
                 Span::raw("         Edit dependencies (blocked by)"),
+            ]),
+            Line::from(vec![
+                Span::styled("R", Style::default().fg(Color::Cyan)),
+                Span::raw("         Set recurrence (d/w/m/y/0)"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(

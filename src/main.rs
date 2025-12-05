@@ -305,6 +305,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::BulkMoveToProject => Message::Ui(UiMessage::StartBulkMoveToProject),
         Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
         Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
+        Action::EditRecurrence => Message::Ui(UiMessage::StartEditRecurrence),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),

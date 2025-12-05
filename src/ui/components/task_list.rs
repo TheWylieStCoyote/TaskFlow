@@ -21,6 +21,7 @@ enum ListEntry<'a> {
         is_subtask: bool,
         is_multi_selected: bool,
         has_dependencies: bool,
+        is_recurring: bool,
     },
     ProjectHeader {
         name: String,
@@ -61,6 +62,7 @@ impl<'a> TaskList<'a> {
                 let is_subtask = task.parent_task_id.is_some();
                 let is_multi_selected = model.selected_tasks.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
+                let is_recurring = task.recurrence.is_some();
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
@@ -68,6 +70,7 @@ impl<'a> TaskList<'a> {
                     is_subtask,
                     is_multi_selected,
                     has_dependencies,
+                    is_recurring,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -113,6 +116,7 @@ impl<'a> TaskList<'a> {
                     let is_subtask = task.parent_task_id.is_some();
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
+                    let is_recurring = task.recurrence.is_some();
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
@@ -120,6 +124,7 @@ impl<'a> TaskList<'a> {
                         is_subtask,
                         is_multi_selected,
                         has_dependencies,
+                        is_recurring,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -160,6 +165,7 @@ impl Widget for TaskList<'_> {
                     is_subtask,
                     is_multi_selected,
                     has_dependencies,
+                    is_recurring,
                 } => {
                     let is_selected = *index == self.selected;
                     let is_tracking = self.active_tracking == Some(&task.id);
@@ -171,6 +177,7 @@ impl Widget for TaskList<'_> {
                         *is_subtask,
                         *is_multi_selected,
                         *has_dependencies,
+                        *is_recurring,
                         theme,
                     )
                 }
@@ -231,6 +238,7 @@ fn task_to_list_item(
     is_subtask: bool,
     is_multi_selected: bool,
     has_dependencies: bool,
+    is_recurring: bool,
     theme: &Theme,
 ) -> ListItem<'static> {
     // Multi-select indicator
@@ -359,6 +367,13 @@ fn task_to_list_item(
         Span::raw("")
     };
 
+    // Recurrence indicator
+    let recur_span = if is_recurring {
+        Span::styled(" ↻", Style::default().fg(theme.colors.accent.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         select_span,
         indent_span,
@@ -368,6 +383,7 @@ fn task_to_list_item(
         title_span,
         desc_span,
         dep_span,
+        recur_span,
         due_span,
         time_span,
         tags_span,

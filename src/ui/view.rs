@@ -61,6 +61,9 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::BulkMoveToProject => "Move Selected to Project (enter number)",
             InputTarget::BulkSetStatus => "Set Status for Selected (enter number)",
             InputTarget::EditDependencies(_) => "Blocked by (task numbers, comma-separated)",
+            InputTarget::EditRecurrence(_) => {
+                "Recurrence (d=daily, w=weekly, m=monthly, y=yearly, 0=none)"
+            }
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),

@@ -217,6 +217,21 @@ impl Task {
         self
     }
 
+    pub fn with_recurrence(mut self, recurrence: Option<Recurrence>) -> Self {
+        self.recurrence = recurrence;
+        self
+    }
+
+    pub fn with_project_opt(mut self, project_id: Option<super::ProjectId>) -> Self {
+        self.project_id = project_id;
+        self
+    }
+
+    pub fn with_description_opt(mut self, description: Option<String>) -> Self {
+        self.description = description;
+        self
+    }
+
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
             return due < Utc::now().date_naive() && !self.status.is_complete();

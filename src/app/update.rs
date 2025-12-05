@@ -182,6 +182,18 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             let task_id = model.visible_tasks.get(model.selected_index).cloned();
 
             if let Some(id) = task_id {
+                // Check if completing a recurring task
+                let next_task = if let Some(task) = model.tasks.get(&id) {
+                    if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
+                        // Create next occurrence
+                        Some(create_next_recurring_task(task))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -191,6 +203,15 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         before: Box::new(before),
                         after: Box::new(after),
                     });
+                }
+
+                // Add the next recurring task if one was created
+                if let Some(new_task) = next_task {
+                    model.sync_task(&new_task);
+                    model
+                        .undo_stack
+                        .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
+                    model.tasks.insert(new_task.id.clone(), new_task);
                 }
             }
             model.refresh_visible_tasks();
@@ -703,6 +724,43 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                     model.refresh_visible_tasks();
                 }
+                InputTarget::EditRecurrence(task_id) => {
+                    use crate::domain::Recurrence;
+                    use chrono::Datelike;
+                    // Parse recurrence from input (first char: d, w, m, y, 0)
+                    let first_char = input.chars().next().unwrap_or('0');
+                    let new_recurrence = match first_char {
+                        'd' | 'D' => Some(Recurrence::Daily),
+                        'w' | 'W' => Some(Recurrence::Weekly {
+                            days: vec![], // Default to all days
+                        }),
+                        'm' | 'M' => Some(Recurrence::Monthly {
+                            day: chrono::Utc::now().date_naive().day(),
+                        }),
+                        'y' | 'Y' => {
+                            let today = chrono::Utc::now().date_naive();
+                            Some(Recurrence::Yearly {
+                                month: today.month(),
+                                day: today.day(),
+                            })
+                        }
+                        '0' | 'n' | 'N' => None,
+                        _ => None, // Invalid input clears recurrence
+                    };
+
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        task.recurrence = new_recurrence;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -849,7 +907,101 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::StartEditRecurrence => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditRecurrence(task_id);
+                    // Show current recurrence setting
+                    let current = match &task.recurrence {
+                        Some(crate::domain::Recurrence::Daily) => "d (daily)",
+                        Some(crate::domain::Recurrence::Weekly { .. }) => "w (weekly)",
+                        Some(crate::domain::Recurrence::Monthly { .. }) => "m (monthly)",
+                        Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
+                        None => "0 (none)",
+                    };
+                    model.input_buffer = format!("Current: {}", current);
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
     }
+}
+
+/// Create the next occurrence of a recurring task
+fn create_next_recurring_task(task: &crate::domain::Task) -> crate::domain::Task {
+    use crate::domain::Recurrence;
+    use chrono::{Datelike, Duration, NaiveDate, Utc};
+
+    let today = Utc::now().date_naive();
+    let base_date = task.due_date.unwrap_or(today);
+
+    let next_due = match &task.recurrence {
+        Some(Recurrence::Daily) => base_date + Duration::days(1),
+        Some(Recurrence::Weekly { days }) => {
+            if days.is_empty() {
+                // Default: same day next week
+                base_date + Duration::weeks(1)
+            } else {
+                // Find next day in the list after today
+                let current_weekday = today.weekday();
+                let mut min_days = 7i64;
+                for day in days {
+                    let days_until = (day.num_days_from_monday() as i64
+                        - current_weekday.num_days_from_monday() as i64
+                        + 7)
+                        % 7;
+                    let days_until = if days_until == 0 { 7 } else { days_until };
+                    if days_until < min_days {
+                        min_days = days_until;
+                    }
+                }
+                today + Duration::days(min_days)
+            }
+        }
+        Some(Recurrence::Monthly { day }) => {
+            let next_month = if base_date.month() == 12 {
+                NaiveDate::from_ymd_opt(base_date.year() + 1, 1, *day)
+            } else {
+                NaiveDate::from_ymd_opt(base_date.year(), base_date.month() + 1, *day)
+            };
+            // Handle invalid dates (e.g., Feb 30) by using last day of month
+            next_month.unwrap_or_else(|| {
+                let year = if base_date.month() == 12 {
+                    base_date.year() + 1
+                } else {
+                    base_date.year()
+                };
+                let month = if base_date.month() == 12 {
+                    1
+                } else {
+                    base_date.month() + 1
+                };
+                // Get last day of the target month
+                NaiveDate::from_ymd_opt(
+                    if month == 12 { year + 1 } else { year },
+                    if month == 12 { 1 } else { month + 1 },
+                    1,
+                )
+                .unwrap()
+                    - Duration::days(1)
+            })
+        }
+        Some(Recurrence::Yearly { month, day }) => {
+            let next_year = base_date.year() + 1;
+            NaiveDate::from_ymd_opt(next_year, *month, *day)
+                .unwrap_or_else(|| NaiveDate::from_ymd_opt(next_year, *month, 28).unwrap())
+        }
+        None => today + Duration::days(1), // Shouldn't happen
+    };
+
+    crate::domain::Task::new(&task.title)
+        .with_priority(task.priority)
+        .with_due_date(next_due)
+        .with_tags(task.tags.clone())
+        .with_recurrence(task.recurrence.clone())
+        .with_project_opt(task.project_id.clone())
+        .with_description_opt(task.description.clone())
 }
 
 fn handle_time(model: &mut Model, msg: TimeMessage) {
@@ -2915,5 +3067,127 @@ mod tests {
 
         assert!(!model.multi_select_mode);
         assert!(model.selected_tasks.is_empty());
+    }
+
+    // Recurrence tests
+    #[test]
+    fn test_set_recurrence_daily() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Start editing recurrence
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        assert_eq!(model.input_mode, InputMode::Editing);
+
+        // Set to daily
+        model.input_buffer = "d".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(matches!(
+            task.recurrence,
+            Some(crate::domain::Recurrence::Daily)
+        ));
+    }
+
+    #[test]
+    fn test_set_recurrence_weekly() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "w".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(matches!(
+            task.recurrence,
+            Some(crate::domain::Recurrence::Weekly { .. })
+        ));
+    }
+
+    #[test]
+    fn test_clear_recurrence() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // First set recurrence
+        if let Some(task) = model.tasks.get_mut(&task_id) {
+            task.recurrence = Some(crate::domain::Recurrence::Daily);
+        }
+
+        // Now clear it
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "0".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        let task = model.tasks.get(&task_id).unwrap();
+        assert!(task.recurrence.is_none());
+    }
+
+    #[test]
+    fn test_completing_recurring_task_creates_next() {
+        use chrono::NaiveDate;
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let initial_count = model.tasks.len();
+
+        // Set task as recurring with a due date
+        if let Some(task) = model.tasks.get_mut(&task_id) {
+            task.recurrence = Some(crate::domain::Recurrence::Daily);
+            task.due_date = Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap());
+        }
+        model.refresh_visible_tasks();
+
+        // Complete the task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Should have created a new task
+        assert_eq!(model.tasks.len(), initial_count + 1);
+
+        // The new task should have the same title and be recurring
+        let new_tasks: Vec<_> = model
+            .tasks
+            .values()
+            .filter(|t| t.id != task_id && t.recurrence.is_some())
+            .collect();
+        assert_eq!(new_tasks.len(), 1);
+        let new_task = new_tasks[0];
+        assert!(new_task.recurrence.is_some());
+        assert!(new_task.due_date.is_some());
+    }
+
+    #[test]
+    fn test_completing_non_recurring_task_no_new_task() {
+        let mut model = create_test_model_with_tasks();
+        let initial_count = model.tasks.len();
+
+        // Complete a non-recurring task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Should NOT create a new task
+        assert_eq!(model.tasks.len(), initial_count);
+    }
+
+    #[test]
+    fn test_recurrence_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Set recurrence
+        update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
+        model.input_buffer = "d".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert!(model.tasks.get(&task_id).unwrap().recurrence.is_some());
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.tasks.get(&task_id).unwrap().recurrence.is_none());
     }
 }

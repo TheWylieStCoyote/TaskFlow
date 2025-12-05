@@ -16,7 +16,7 @@ Potential features to implement in future versions:
 
 ## Low Priority
 
-- [ ] **Recurring Tasks** - Tasks that repeat on a schedule (daily, weekly, monthly)
+- [x] **Recurring Tasks** - Set recurrence patterns (`R` to edit, `↻` indicator, auto-creates next occurrence)
 - [ ] **Calendar View** - View tasks in a calendar layout by due date
 - [ ] **Statistics Dashboard** - Show completion rates, time tracked, overdue counts
 - [ ] **Export Formats** - Export tasks to CSV, ICS (calendar), or other formats

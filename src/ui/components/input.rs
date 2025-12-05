@@ -31,6 +31,7 @@ pub enum InputTarget {
     BulkMoveToProject,
     BulkSetStatus,
     EditDependencies(TaskId),
+    EditRecurrence(TaskId),
 }
 
 /// Input dialog for creating/editing items

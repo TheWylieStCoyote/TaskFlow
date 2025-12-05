@@ -149,13 +149,23 @@ Each task shows:
 
 When in multi-select mode, selected tasks show a `●` indicator. After selecting tasks, you can delete them with `d` or perform other operations.
 
-#### Dependencies
+#### Dependencies & Recurrence
 
 | Key | Action |
 |-----|--------|
 | `B` | Edit dependencies (set which tasks block this one) |
+| `R` | Set task recurrence pattern |
 
-Tasks with dependencies show a `[B]` indicator. Enter task numbers when editing dependencies.
+Tasks with dependencies show a `[B]` indicator. Recurring tasks show a `↻` indicator.
+
+**Recurrence patterns:**
+- `d` - Daily (repeats every day)
+- `w` - Weekly (repeats on same day of week)
+- `m` - Monthly (repeats on same day of month)
+- `y` - Yearly (repeats on same date each year)
+- `0` - Clear recurrence (make non-recurring)
+
+When you complete a recurring task, a new task is automatically created with the next due date.
 
 #### General
 

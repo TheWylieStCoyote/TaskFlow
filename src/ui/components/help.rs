@@ -31,114 +31,145 @@ impl Widget for HelpPopup {
                 "Navigation",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),
-            Line::from(""),
             Line::from(vec![
                 Span::styled("j/↓", Style::default().fg(Color::Cyan)),
-                Span::raw("     Move down"),
+                Span::raw("       Move down"),
             ]),
             Line::from(vec![
                 Span::styled("k/↑", Style::default().fg(Color::Cyan)),
-                Span::raw("     Move up"),
+                Span::raw("       Move up"),
             ]),
             Line::from(vec![
-                Span::styled("g", Style::default().fg(Color::Cyan)),
-                Span::raw("       Go to first"),
+                Span::styled("g/G", Style::default().fg(Color::Cyan)),
+                Span::raw("       Go to first/last"),
             ]),
             Line::from(vec![
-                Span::styled("G", Style::default().fg(Color::Cyan)),
-                Span::raw("       Go to last"),
+                Span::styled("Ctrl+u/d", Style::default().fg(Color::Cyan)),
+                Span::raw("   Page up/down"),
             ]),
             Line::from(vec![
-                Span::styled("Ctrl+u", Style::default().fg(Color::Cyan)),
-                Span::raw("  Page up"),
+                Span::styled("h/←", Style::default().fg(Color::Cyan)),
+                Span::raw("       Focus sidebar"),
             ]),
             Line::from(vec![
-                Span::styled("Ctrl+d", Style::default().fg(Color::Cyan)),
-                Span::raw("  Page down"),
+                Span::styled("l/→", Style::default().fg(Color::Cyan)),
+                Span::raw("       Focus task list"),
+            ]),
+            Line::from(vec![
+                Span::styled("Enter", Style::default().fg(Color::Cyan)),
+                Span::raw("     Select item"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
-                "Actions",
+                "Tasks",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),
-            Line::from(""),
             Line::from(vec![
                 Span::styled("a", Style::default().fg(Color::Cyan)),
-                Span::raw("       Add new task"),
-            ]),
-            Line::from(vec![
-                Span::styled("P", Style::default().fg(Color::Cyan)),
-                Span::raw("       Create new project"),
-            ]),
-            Line::from(vec![
-                Span::styled("x/Space", Style::default().fg(Color::Cyan)),
-                Span::raw(" Toggle complete"),
-            ]),
-            Line::from(vec![
-                Span::styled("d", Style::default().fg(Color::Cyan)),
-                Span::raw("       Delete task"),
+                Span::raw("         Add new task"),
             ]),
             Line::from(vec![
                 Span::styled("e", Style::default().fg(Color::Cyan)),
-                Span::raw("       Edit task title"),
+                Span::raw("         Edit task title"),
+            ]),
+            Line::from(vec![
+                Span::styled("d", Style::default().fg(Color::Cyan)),
+                Span::raw("         Delete task"),
+            ]),
+            Line::from(vec![
+                Span::styled("x/Space", Style::default().fg(Color::Cyan)),
+                Span::raw("   Toggle complete"),
             ]),
             Line::from(vec![
                 Span::styled("p", Style::default().fg(Color::Cyan)),
-                Span::raw("       Cycle priority"),
+                Span::raw("         Cycle priority"),
+            ]),
+            Line::from(vec![
+                Span::styled("D", Style::default().fg(Color::Cyan)),
+                Span::raw("         Edit due date"),
+            ]),
+            Line::from(vec![
+                Span::styled("T", Style::default().fg(Color::Cyan)),
+                Span::raw("         Edit tags"),
             ]),
             Line::from(vec![
                 Span::styled("m", Style::default().fg(Color::Cyan)),
-                Span::raw("       Move to project"),
+                Span::raw("         Move to project"),
             ]),
             Line::from(vec![
                 Span::styled("t", Style::default().fg(Color::Cyan)),
-                Span::raw("       Toggle time tracking"),
+                Span::raw("         Toggle time tracking"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Projects",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("P", Style::default().fg(Color::Cyan)),
+                Span::raw("         Create new project"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "View & Filter",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("b", Style::default().fg(Color::Cyan)),
+                Span::raw("         Toggle sidebar"),
             ]),
             Line::from(vec![
                 Span::styled("c", Style::default().fg(Color::Cyan)),
-                Span::raw("       Toggle show completed"),
-            ]),
-            Line::from(vec![
-                Span::styled("b", Style::default().fg(Color::Cyan)),
-                Span::raw("       Toggle sidebar"),
+                Span::raw("         Toggle show completed"),
             ]),
             Line::from(vec![
                 Span::styled("/", Style::default().fg(Color::Cyan)),
-                Span::raw("       Search tasks"),
+                Span::raw("         Search tasks"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+l", Style::default().fg(Color::Cyan)),
+                Span::raw("    Clear search"),
             ]),
             Line::from(vec![
                 Span::styled("#", Style::default().fg(Color::Cyan)),
-                Span::raw("       Filter by tag"),
+                Span::raw("         Filter by tag"),
             ]),
             Line::from(vec![
                 Span::styled("Ctrl+t", Style::default().fg(Color::Cyan)),
-                Span::raw("  Clear tag filter"),
+                Span::raw("    Clear tag filter"),
+            ]),
+            Line::from(vec![
+                Span::styled("s", Style::default().fg(Color::Cyan)),
+                Span::raw("         Cycle sort field"),
+            ]),
+            Line::from(vec![
+                Span::styled("S", Style::default().fg(Color::Cyan)),
+                Span::raw("         Toggle sort order"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),
-            Line::from(""),
             Line::from(vec![
                 Span::styled("u/Ctrl+z", Style::default().fg(Color::Cyan)),
-                Span::raw(" Undo last action"),
+                Span::raw("   Undo"),
             ]),
             Line::from(vec![
                 Span::styled("U/Ctrl+r", Style::default().fg(Color::Cyan)),
-                Span::raw(" Redo last action"),
+                Span::raw("   Redo"),
             ]),
             Line::from(vec![
                 Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),
-                Span::raw("   Save"),
+                Span::raw("    Save"),
             ]),
             Line::from(vec![
                 Span::styled("?", Style::default().fg(Color::Cyan)),
-                Span::raw("        Show/hide help"),
+                Span::raw("         Show/hide help"),
             ]),
             Line::from(vec![
                 Span::styled("q/Esc", Style::default().fg(Color::Cyan)),
-                Span::raw("    Quit"),
+                Span::raw("     Quit"),
             ]),
         ];
 

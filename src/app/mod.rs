@@ -4,7 +4,7 @@
 //!
 //! - [`Model`] - The complete application state
 //! - [`Message`] - Events that can modify state
-//! - [`update`] - The update function that handles messages
+//! - [`update()`] - The update function that handles messages
 //!
 //! ## The Elm Architecture
 //!
@@ -12,7 +12,7 @@
 //!
 //! 1. The [`Model`] holds all application state
 //! 2. User actions and system events generate [`Message`]s
-//! 3. The [`update`] function processes messages and returns new state
+//! 3. The [`update()`] function processes messages and returns new state
 //! 4. The UI renders based on current state (see [`crate::ui`])
 //!
 //! This pattern ensures predictable state transitions and makes the
@@ -25,7 +25,7 @@
 //! - [`Model`] - Application state struct
 //! - [`TemplateManager`] - Task templates for quick creation
 //! - [`UndoStack`] - Undo/redo action history
-//! - [`update`] - Message handling and state transitions
+//! - [`update()`] - Message handling and state transitions
 
 mod macros;
 mod message;

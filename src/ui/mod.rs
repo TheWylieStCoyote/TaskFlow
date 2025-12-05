@@ -16,7 +16,7 @@
 //!
 //! ## View Function
 //!
-//! The main [`view`] function renders the complete UI based on the
+//! The main [`view()`] function renders the complete UI based on the
 //! current [`crate::app::Model`] state. It follows the TEA pattern
 //! where the view is a pure function of state.
 //!

@@ -500,3 +500,251 @@ impl Dashboard<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::Task;
+
+    /// Helper to render a widget into a buffer
+    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+        buffer
+    }
+
+    /// Extract text content from buffer
+    fn buffer_content(buffer: &Buffer) -> String {
+        let mut content = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                content.push(
+                    buffer
+                        .cell((x, y))
+                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+                );
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    #[test]
+    fn test_dashboard_renders_completion_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Completion"),
+            "Completion panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_renders_time_tracking_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Time Tracking"),
+            "Time Tracking panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_renders_projects_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Projects"),
+            "Projects panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_renders_status_distribution_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Status Distribution"),
+            "Status Distribution panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_renders_this_week_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("This Week"),
+            "This Week panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_overall_completion_rate() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Overall"),
+            "Overall completion rate should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_overdue_count() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Overdue"),
+            "Overdue count should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_tracking_status() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        // Should show Tracking: with either Active or Idle
+        assert!(
+            content.contains("Tracking"),
+            "Tracking status should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_status_types() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        // Status distribution should show task statuses
+        assert!(
+            content.contains("Todo") || content.contains("Done"),
+            "Status types should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_no_projects_when_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 25);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("No projects"),
+            "Should show 'No projects' when empty"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_with_sample_data() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 30);
+
+        // Should render without panic
+        let _ = buffer_content(&buffer);
+    }
+
+    #[test]
+    fn test_dashboard_completion_rate_calculation() {
+        let mut model = Model::new();
+
+        // Add 4 tasks, 2 done, 2 not done
+        let task1 = Task::new("Task 1").with_status(TaskStatus::Done);
+        let task2 = Task::new("Task 2").with_status(TaskStatus::Done);
+        let task3 = Task::new("Task 3").with_status(TaskStatus::Todo);
+        let task4 = Task::new("Task 4").with_status(TaskStatus::Todo);
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task3.id.clone(), task3);
+        model.tasks.insert(task4.id.clone(), task4);
+
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+
+        // Completion rate should be 50%
+        assert!((dashboard.completion_rate() - 50.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_dashboard_completion_rate_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+
+        // No tasks = 0% completion
+        assert_eq!(dashboard.completion_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_dashboard_status_counts() {
+        let mut model = Model::new();
+
+        let task1 = Task::new("Task 1").with_status(TaskStatus::Todo);
+        let task2 = Task::new("Task 2").with_status(TaskStatus::InProgress);
+        let task3 = Task::new("Task 3").with_status(TaskStatus::Done);
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task3.id.clone(), task3);
+
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+
+        let (todo, in_progress, blocked, done, cancelled) = dashboard.status_counts();
+        assert_eq!(todo, 1);
+        assert_eq!(in_progress, 1);
+        assert_eq!(blocked, 0);
+        assert_eq!(done, 1);
+        assert_eq!(cancelled, 0);
+    }
+
+    #[test]
+    fn test_dashboard_format_duration() {
+        assert_eq!(Dashboard::format_duration(30), "30m");
+        assert_eq!(Dashboard::format_duration(60), "1h 0m");
+        assert_eq!(Dashboard::format_duration(90), "1h 30m");
+        assert_eq!(Dashboard::format_duration(125), "2h 5m");
+    }
+}

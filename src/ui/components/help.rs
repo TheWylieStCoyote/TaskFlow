@@ -301,3 +301,127 @@ pub fn centered_rect_fixed_height(percent_x: u16, height: u16, r: Rect) -> Rect 
 
     Rect::new(r.x + popup_x, r.y + popup_y, popup_width, popup_height)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::buffer::Buffer;
+
+    /// Helper to render a widget into a buffer and return it
+    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+        buffer
+    }
+
+    /// Extract text content from buffer (ignoring styles)
+    fn buffer_content(buffer: &Buffer) -> String {
+        let mut content = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                content.push(
+                    buffer
+                        .cell((x, y))
+                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+                );
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    #[test]
+    fn test_centered_rect_calculates_correct_position() {
+        let screen = Rect::new(0, 0, 100, 50);
+        let popup = centered_rect(50, 50, screen);
+
+        assert_eq!(popup.width, 50);
+        assert_eq!(popup.height, 25);
+        assert_eq!(popup.x, 25); // Centered horizontally
+        assert_eq!(popup.y, 12); // Centered vertically
+    }
+
+    #[test]
+    fn test_centered_rect_with_offset_parent() {
+        let screen = Rect::new(10, 5, 100, 50);
+        let popup = centered_rect(50, 50, screen);
+
+        assert_eq!(popup.width, 50);
+        assert_eq!(popup.height, 25);
+        assert_eq!(popup.x, 35); // 10 + (100-50)/2 = 35
+        assert_eq!(popup.y, 17); // 5 + (50-25)/2 = 17
+    }
+
+    #[test]
+    fn test_centered_rect_fixed_height_calculates_correct_position() {
+        let screen = Rect::new(0, 0, 100, 50);
+        let popup = centered_rect_fixed_height(60, 10, screen);
+
+        assert_eq!(popup.width, 60);
+        assert_eq!(popup.height, 10);
+        assert_eq!(popup.x, 20); // Centered horizontally
+        assert_eq!(popup.y, 20); // Centered vertically
+    }
+
+    #[test]
+    fn test_centered_rect_fixed_height_clamps_to_screen() {
+        let screen = Rect::new(0, 0, 100, 20);
+        let popup = centered_rect_fixed_height(50, 30, screen); // Request 30, screen is 20
+
+        assert_eq!(popup.height, 20); // Should be clamped to screen height
+    }
+
+    #[test]
+    fn test_help_popup_renders_title() {
+        let popup = HelpPopup::new();
+        let buffer = render_widget(popup, 60, 30);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Help"), "Help title should be visible");
+    }
+
+    #[test]
+    fn test_help_popup_renders_navigation_section() {
+        let popup = HelpPopup::new();
+        let buffer = render_widget(popup, 60, 40);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Navigation"),
+            "Navigation section header should be visible"
+        );
+        assert!(
+            content.contains("Move down") || content.contains("j"),
+            "Navigation instructions should be visible"
+        );
+    }
+
+    #[test]
+    fn test_help_popup_renders_keybindings() {
+        let popup = HelpPopup::new();
+        let buffer = render_widget(popup, 60, 50);
+        let content = buffer_content(&buffer);
+
+        // Check for various keybinding categories
+        assert!(
+            content.contains("Tasks") || content.contains("Add new task"),
+            "Tasks section should be visible"
+        );
+    }
+
+    #[test]
+    fn test_help_popup_default_impl() {
+        let popup1 = HelpPopup::new();
+        let popup2 = HelpPopup::default();
+
+        // Both should render the same content
+        let buffer1 = render_widget(popup1, 40, 20);
+        let buffer2 = render_widget(popup2, 40, 20);
+
+        let content1 = buffer_content(&buffer1);
+        let content2 = buffer_content(&buffer2);
+
+        assert_eq!(content1, content2);
+    }
+}

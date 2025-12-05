@@ -56,6 +56,9 @@ pub enum Action {
     BulkMoveToProject,
     BulkSetStatus,
 
+    // Dependencies
+    EditDependencies,
+
     // System
     Save,
     Undo,
@@ -169,6 +172,9 @@ impl Default for Keybindings {
         bindings.insert("v".to_string(), Action::ToggleMultiSelect);
         bindings.insert("V".to_string(), Action::SelectAll);
         bindings.insert("ctrl+v".to_string(), Action::ClearSelection);
+
+        // Dependencies
+        bindings.insert("B".to_string(), Action::EditDependencies);
 
         // System
         bindings.insert("ctrl+s".to_string(), Action::Save);

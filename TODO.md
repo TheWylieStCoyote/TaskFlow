@@ -12,7 +12,7 @@ Potential features to implement in future versions:
 - [x] **Task Notes/Descriptions** - Add descriptions to tasks (`n` to edit, `[+]` indicator)
 - [x] **Subtasks/Checklists** - Create subtasks under any task (`A` to add subtask, indented display)
 - [x] **Bulk Operations** - Multi-select tasks (`v` toggle, `V` select all, `Space` toggle) for bulk delete
-- [ ] **Task Dependencies** - Mark tasks as blocked by other tasks
+- [x] **Task Dependencies** - Mark tasks as blocked by other tasks (`B` to edit, `[B]` indicator)
 
 ## Low Priority
 

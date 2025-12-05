@@ -676,6 +676,33 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         model.refresh_visible_tasks();
                     }
                 }
+                InputTarget::EditDependencies(task_id) => {
+                    // Parse task numbers from input
+                    let dep_indices: Vec<usize> = input
+                        .split(|c: char| !c.is_ascii_digit())
+                        .filter_map(|s| s.parse::<usize>().ok())
+                        .collect();
+
+                    // Convert indices to task IDs
+                    let new_deps: Vec<_> = dep_indices
+                        .iter()
+                        .filter_map(|i| model.visible_tasks.get(i.saturating_sub(1)).cloned())
+                        .filter(|id| id != task_id) // Can't depend on self
+                        .collect();
+
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        task.dependencies = new_deps;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -796,6 +823,30 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.input_buffer =
                     "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
                 model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartEditDependencies => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDependencies(task_id.clone());
+                    // Build list of available tasks with numbers
+                    let mut buffer = String::new();
+                    for (i, id) in model.visible_tasks.iter().enumerate() {
+                        if *id != task.id {
+                            if let Some(t) = model.tasks.get(id) {
+                                let is_dep = task.dependencies.contains(id);
+                                let marker = if is_dep { "*" } else { "" };
+                                buffer.push_str(&format!("{}{}: {}, ", marker, i + 1, t.title));
+                            }
+                        }
+                    }
+                    if buffer.ends_with(", ") {
+                        buffer.truncate(buffer.len() - 2);
+                    }
+                    model.input_buffer = buffer;
+                    model.cursor_position = model.input_buffer.len();
+                }
             }
         }
     }

@@ -109,6 +109,8 @@ pub enum UiMessage {
     BulkDelete,
     StartBulkMoveToProject,
     StartBulkSetStatus,
+    // Dependencies
+    StartEditDependencies,
 }
 
 /// System messages

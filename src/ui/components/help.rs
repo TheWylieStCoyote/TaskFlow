@@ -177,6 +177,15 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Dependencies",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("B", Style::default().fg(Color::Cyan)),
+                Span::raw("         Edit dependencies (blocked by)"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

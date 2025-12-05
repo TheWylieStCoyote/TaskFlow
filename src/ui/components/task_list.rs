@@ -20,6 +20,7 @@ enum ListEntry<'a> {
         time_spent: u32,
         is_subtask: bool,
         is_multi_selected: bool,
+        has_dependencies: bool,
     },
     ProjectHeader {
         name: String,
@@ -59,12 +60,14 @@ impl<'a> TaskList<'a> {
                 let time_spent = model.total_time_for_task(task_id);
                 let is_subtask = task.parent_task_id.is_some();
                 let is_multi_selected = model.selected_tasks.contains(task_id);
+                let has_dependencies = !task.dependencies.is_empty();
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
                     time_spent,
                     is_subtask,
                     is_multi_selected,
+                    has_dependencies,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -109,12 +112,14 @@ impl<'a> TaskList<'a> {
                     let time_spent = model.total_time_for_task(&task_id);
                     let is_subtask = task.parent_task_id.is_some();
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
+                    let has_dependencies = !task.dependencies.is_empty();
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
                         time_spent,
                         is_subtask,
                         is_multi_selected,
+                        has_dependencies,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -154,6 +159,7 @@ impl Widget for TaskList<'_> {
                     time_spent,
                     is_subtask,
                     is_multi_selected,
+                    has_dependencies,
                 } => {
                     let is_selected = *index == self.selected;
                     let is_tracking = self.active_tracking == Some(&task.id);
@@ -164,6 +170,7 @@ impl Widget for TaskList<'_> {
                         *time_spent,
                         *is_subtask,
                         *is_multi_selected,
+                        *has_dependencies,
                         theme,
                     )
                 }
@@ -223,6 +230,7 @@ fn task_to_list_item(
     time_spent: u32,
     is_subtask: bool,
     is_multi_selected: bool,
+    has_dependencies: bool,
     theme: &Theme,
 ) -> ListItem<'static> {
     // Multi-select indicator
@@ -344,6 +352,13 @@ fn task_to_list_item(
         Span::raw("")
     };
 
+    // Dependency indicator (shows if task is blocked by other tasks)
+    let dep_span = if has_dependencies {
+        Span::styled(" [B]", Style::default().fg(theme.colors.warning.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         select_span,
         indent_span,
@@ -352,6 +367,7 @@ fn task_to_list_item(
         status_span,
         title_span,
         desc_span,
+        dep_span,
         due_span,
         time_span,
         tags_span,

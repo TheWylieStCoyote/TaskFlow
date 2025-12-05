@@ -30,6 +30,7 @@ pub enum InputTarget {
     FilterByTag,
     BulkMoveToProject,
     BulkSetStatus,
+    EditDependencies(TaskId),
 }
 
 /// Input dialog for creating/editing items

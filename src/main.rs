@@ -304,6 +304,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::BulkDelete => Message::Ui(UiMessage::BulkDelete),
         Action::BulkMoveToProject => Message::Ui(UiMessage::StartBulkMoveToProject),
         Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
+        Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),

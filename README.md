@@ -149,6 +149,14 @@ Each task shows:
 
 When in multi-select mode, selected tasks show a `●` indicator. After selecting tasks, you can delete them with `d` or perform other operations.
 
+#### Dependencies
+
+| Key | Action |
+|-----|--------|
+| `B` | Edit dependencies (set which tasks block this one) |
+
+Tasks with dependencies show a `[B]` indicator. Enter task numbers when editing dependencies.
+
 #### General
 
 | Key | Action |

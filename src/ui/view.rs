@@ -60,6 +60,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::FilterByTag => "Filter by Tag (comma-separated, Ctrl+T to clear)",
             InputTarget::BulkMoveToProject => "Move Selected to Project (enter number)",
             InputTarget::BulkSetStatus => "Set Status for Selected (enter number)",
+            InputTarget::EditDependencies(_) => "Blocked by (task numbers, comma-separated)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),

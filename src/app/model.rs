@@ -94,6 +94,9 @@ pub struct Model {
 
     // Calendar state
     pub calendar_state: CalendarState,
+
+    // Status message for user feedback
+    pub status_message: Option<String>,
 }
 
 impl Model {
@@ -129,7 +132,13 @@ impl Model {
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
+            status_message: None,
         }
+    }
+
+    /// Get all tasks as a vector for export
+    pub fn tasks_for_export(&self) -> Vec<Task> {
+        self.tasks.values().cloned().collect()
     }
 
     /// Get the number of sidebar items (views + separator + projects header + projects)

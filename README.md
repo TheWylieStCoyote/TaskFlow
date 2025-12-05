@@ -177,6 +177,13 @@ When you complete a recurring task, a new task is automatically created with the
 
 The Calendar view shows a monthly grid with tasks displayed for each day. Days with tasks show a dot indicator, and the selected day's tasks are listed in a panel on the right.
 
+#### Export
+
+| Key | Action |
+|-----|--------|
+| `Ctrl+e` | Export tasks to CSV |
+| `Ctrl+i` | Export tasks to ICS (iCalendar) |
+
 #### General
 
 | Key | Action |
@@ -369,6 +376,33 @@ tags:
 
 Task description and notes go here...
 ```
+
+## Export Formats
+
+TaskFlow can export tasks to external formats for use with other tools:
+
+### CSV Export (`Ctrl+e`)
+
+Exports all tasks to a CSV file with columns:
+- ID, Title, Status, Priority, Due Date, Tags, Project ID, Description, Created, Completed
+
+CSV files can be opened in spreadsheet applications like Excel, Google Sheets, or LibreOffice Calc.
+
+### ICS Export (`Ctrl+i`)
+
+Exports tasks as iCalendar (ICS) format VTODO items, compatible with:
+- Apple Calendar/Reminders
+- Google Calendar
+- Microsoft Outlook
+- Any calendar application supporting the iCalendar standard
+
+Each task becomes a VTODO component with:
+- Summary (title)
+- Description
+- Due date
+- Priority (mapped to iCalendar priority 1-9)
+- Status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)
+- Categories (tags)
 
 ## Contributing
 

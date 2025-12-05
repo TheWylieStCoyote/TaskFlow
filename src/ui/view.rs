@@ -145,25 +145,36 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
 }
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
-    let task_count = model.visible_tasks.len();
-    let completed = model
-        .tasks
-        .values()
-        .filter(|t| t.status.is_complete())
-        .count();
+    // Show status message if available, otherwise show normal footer
+    let footer_text = if let Some(ref msg) = model.status_message {
+        msg.clone()
+    } else {
+        let task_count = model.visible_tasks.len();
+        let completed = model
+            .tasks
+            .values()
+            .filter(|t| t.status.is_complete())
+            .count();
 
-    let status = format!(
-        " {} tasks ({} completed) | {} | Press ? for help ",
-        task_count,
-        completed,
-        if model.show_completed {
-            "showing all"
-        } else {
-            "hiding completed"
-        }
-    );
+        format!(
+            " {} tasks ({} completed) | {} | Press ? for help ",
+            task_count,
+            completed,
+            if model.show_completed {
+                "showing all"
+            } else {
+                "hiding completed"
+            }
+        )
+    };
 
-    let footer = Paragraph::new(status).style(Style::default().fg(theme.colors.muted.to_color()));
+    let footer_style = if model.status_message.is_some() {
+        Style::default().fg(theme.colors.accent.to_color())
+    } else {
+        Style::default().fg(theme.colors.muted.to_color())
+    };
+
+    let footer = Paragraph::new(footer_text).style(footer_style);
 
     frame.render_widget(footer, area);
 }

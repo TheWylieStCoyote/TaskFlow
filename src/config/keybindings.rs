@@ -73,6 +73,10 @@ pub enum Action {
     Undo,
     Redo,
     Quit,
+
+    // Export
+    ExportCsv,
+    ExportIcs,
 }
 
 /// Key modifier
@@ -200,6 +204,10 @@ impl Default for Keybindings {
         bindings.insert("U".to_string(), Action::Redo);
         bindings.insert("q".to_string(), Action::Quit);
         bindings.insert("esc".to_string(), Action::Quit);
+
+        // Export
+        bindings.insert("ctrl+e".to_string(), Action::ExportCsv);
+        bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
 
         Self { bindings }
     }

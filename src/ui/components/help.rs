@@ -207,6 +207,19 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Export",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("Ctrl+e", Style::default().fg(Color::Cyan)),
+                Span::raw("    Export to CSV"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+i", Style::default().fg(Color::Cyan)),
+                Span::raw("    Export to ICS (calendar)"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),

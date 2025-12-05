@@ -133,6 +133,8 @@ pub enum SystemMessage {
     Redo,
     Resize { width: u16, height: u16 },
     Tick,
+    ExportCsv,
+    ExportIcs,
 }
 
 impl From<NavigationMessage> for Message {

@@ -19,6 +19,6 @@ Potential features to implement in future versions:
 - [x] **Recurring Tasks** - Set recurrence patterns (`R` to edit, `↻` indicator, auto-creates next occurrence)
 - [x] **Calendar View** - Monthly grid with task indicators (select Calendar from sidebar, `<`/`>` for months)
 - [x] **Statistics Dashboard** - Dashboard view with completion rates, time tracking stats, project progress, status distribution
-- [ ] **Export Formats** - Export tasks to CSV, ICS (calendar), or other formats
+- [x] **Export Formats** - Export tasks to CSV (`Ctrl+E`) or ICS/iCalendar (`Ctrl+I`) formats
 - [ ] **Keyboard Macros** - Record and replay sequences of actions
 - [ ] **Task Templates** - Create new tasks from predefined templates

@@ -1264,6 +1264,72 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::Tick => {
             // Handle periodic updates (e.g., timer display)
+            // Clear status message after a tick
+            model.status_message = None;
+        }
+        SystemMessage::ExportCsv => {
+            handle_export_csv(model);
+        }
+        SystemMessage::ExportIcs => {
+            handle_export_ics(model);
+        }
+    }
+}
+
+fn handle_export_csv(model: &mut Model) {
+    use crate::storage::{export_to_string, ExportFormat};
+
+    let tasks = model.tasks_for_export();
+    match export_to_string(&tasks, ExportFormat::Csv) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("csv"))
+                .unwrap_or_else(|| std::path::PathBuf::from("tasks.csv"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message =
+                        Some(format!("Exported {} tasks to {}", tasks.len(), export_path.display()));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {}", e));
+        }
+    }
+}
+
+fn handle_export_ics(model: &mut Model) {
+    use crate::storage::{export_to_string, ExportFormat};
+
+    let tasks = model.tasks_for_export();
+    match export_to_string(&tasks, ExportFormat::Ics) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("ics"))
+                .unwrap_or_else(|| std::path::PathBuf::from("tasks.ics"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message =
+                        Some(format!("Exported {} tasks to {}", tasks.len(), export_path.display()));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {}", e));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {}", e));
         }
     }
 }

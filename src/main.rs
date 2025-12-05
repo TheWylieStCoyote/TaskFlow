@@ -327,5 +327,7 @@ fn action_to_message(action: &Action) -> Message {
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),
         Action::Quit => Message::System(SystemMessage::Quit),
+        Action::ExportCsv => Message::System(SystemMessage::ExportCsv),
+        Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
     }
 }

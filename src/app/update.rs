@@ -22,6 +22,7 @@ pub fn update(model: &mut Model, message: Message) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
     match msg {
         NavigationMessage::Up => match model.focus_pane {
@@ -306,6 +307,7 @@ fn handle_sidebar_selection(model: &mut Model) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_task(model: &mut Model, msg: TaskMessage) {
     match msg {
         TaskMessage::ToggleComplete => {
@@ -431,6 +433,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_ui(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ToggleShowCompleted => {

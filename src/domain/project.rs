@@ -70,12 +70,12 @@ pub enum ProjectStatus {
 impl ProjectStatus {
     /// Returns the status as a lowercase string.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            ProjectStatus::Active => "active",
-            ProjectStatus::OnHold => "on_hold",
-            ProjectStatus::Completed => "completed",
-            ProjectStatus::Archived => "archived",
+            Self::Active => "active",
+            Self::OnHold => "on_hold",
+            Self::Completed => "completed",
+            Self::Archived => "archived",
         }
     }
 }
@@ -113,7 +113,7 @@ impl ProjectStatus {
 ///
 /// assert_eq!(child.parent_id, Some(parent.id));
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
     pub name: String,

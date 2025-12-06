@@ -21,6 +21,7 @@ impl<'a> Sidebar<'a> {
 }
 
 impl Widget for Sidebar<'_> {
+    #[allow(clippy::too_many_lines)]
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         let theme = self.theme;
         let is_focused = self.model.focus_pane == FocusPane::Sidebar;

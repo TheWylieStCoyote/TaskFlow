@@ -152,6 +152,7 @@ pub enum RunningState {
 /// // Check visible tasks
 /// assert_eq!(model.visible_tasks.len(), 1);
 /// ```
+#[allow(clippy::struct_excessive_bools)]
 pub struct Model {
     // Running state
     /// Application lifecycle state

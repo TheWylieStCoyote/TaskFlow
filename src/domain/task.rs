@@ -87,13 +87,13 @@ pub enum Priority {
 impl Priority {
     /// Returns the priority as a lowercase string.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            Priority::None => "none",
-            Priority::Low => "low",
-            Priority::Medium => "medium",
-            Priority::High => "high",
-            Priority::Urgent => "urgent",
+            Self::None => "none",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Urgent => "urgent",
         }
     }
 
@@ -103,11 +103,11 @@ impl Priority {
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "none" => Some(Priority::None),
-            "low" => Some(Priority::Low),
-            "medium" | "med" => Some(Priority::Medium),
-            "high" => Some(Priority::High),
-            "urgent" => Some(Priority::Urgent),
+            "none" => Some(Self::None),
+            "low" => Some(Self::Low),
+            "medium" | "med" => Some(Self::Medium),
+            "high" => Some(Self::High),
+            "urgent" => Some(Self::Urgent),
             _ => None,
         }
     }
@@ -116,13 +116,13 @@ impl Priority {
     ///
     /// Used in the UI to show priority at a glance.
     #[must_use]
-    pub fn symbol(&self) -> &'static str {
+    pub const fn symbol(&self) -> &'static str {
         match self {
-            Priority::None => " ",
-            Priority::Low => "!",
-            Priority::Medium => "!!",
-            Priority::High => "!!!",
-            Priority::Urgent => "!!!!",
+            Self::None => " ",
+            Self::Low => "!",
+            Self::Medium => "!!",
+            Self::High => "!!!",
+            Self::Urgent => "!!!!",
         }
     }
 }
@@ -162,13 +162,13 @@ pub enum TaskStatus {
 impl TaskStatus {
     /// Returns the status as a lowercase string.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            TaskStatus::Todo => "todo",
-            TaskStatus::InProgress => "in_progress",
-            TaskStatus::Blocked => "blocked",
-            TaskStatus::Done => "done",
-            TaskStatus::Cancelled => "cancelled",
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::Blocked => "blocked",
+            Self::Done => "done",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -176,20 +176,20 @@ impl TaskStatus {
     ///
     /// Used in the UI to show status at a glance.
     #[must_use]
-    pub fn symbol(&self) -> &'static str {
+    pub const fn symbol(&self) -> &'static str {
         match self {
-            TaskStatus::Todo => "[ ]",
-            TaskStatus::InProgress => "[~]",
-            TaskStatus::Blocked => "[!]",
-            TaskStatus::Done => "[x]",
-            TaskStatus::Cancelled => "[-]",
+            Self::Todo => "[ ]",
+            Self::InProgress => "[~]",
+            Self::Blocked => "[!]",
+            Self::Done => "[x]",
+            Self::Cancelled => "[-]",
         }
     }
 
     /// Returns true if the task is in a terminal state (Done or Cancelled).
     #[must_use]
-    pub fn is_complete(&self) -> bool {
-        matches!(self, TaskStatus::Done | TaskStatus::Cancelled)
+    pub const fn is_complete(&self) -> bool {
+        matches!(self, Self::Done | Self::Cancelled)
     }
 }
 
@@ -218,7 +218,7 @@ impl TaskStatus {
 /// // Yearly (e.g., annual review on March 1st)
 /// let yearly = Recurrence::Yearly { month: 3, day: 1 };
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Recurrence {
     /// Repeats every day
@@ -244,7 +244,7 @@ pub enum Recurrence {
 
 /// A task represents a unit of work to be done.
 ///
-/// Tasks are the core entity in TaskFlow. They have a title, status,
+/// Tasks are the core entity in `TaskFlow`. They have a title, status,
 /// priority, and various optional metadata like due dates, tags,
 /// descriptions, and time tracking.
 ///
@@ -408,16 +408,19 @@ impl Task {
         self
     }
 
-    pub fn with_project_opt(mut self, project_id: Option<super::ProjectId>) -> Self {
+    #[must_use]
+    pub const fn with_project_opt(mut self, project_id: Option<super::ProjectId>) -> Self {
         self.project_id = project_id;
         self
     }
 
+    #[must_use]
     pub fn with_description_opt(mut self, description: Option<String>) -> Self {
         self.description = description;
         self
     }
 
+    #[must_use]
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
             return due < Utc::now().date_naive() && !self.status.is_complete();
@@ -425,6 +428,7 @@ impl Task {
         false
     }
 
+    #[must_use]
     pub fn is_due_today(&self) -> bool {
         if let Some(due) = self.due_date {
             return due == Utc::now().date_naive();

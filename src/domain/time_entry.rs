@@ -66,7 +66,7 @@ impl Default for TimeEntryId {
 /// entry.duration_minutes = Some(30);
 /// assert_eq!(entry.calculated_duration_minutes(), 30);
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeEntry {
     pub id: TimeEntryId,
     pub task_id: TaskId,
@@ -80,6 +80,7 @@ pub struct TimeEntry {
 }
 
 impl TimeEntry {
+    #[must_use]
     pub fn start(task_id: TaskId) -> Self {
         Self {
             id: TimeEntryId::new(),

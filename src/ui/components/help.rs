@@ -22,6 +22,7 @@ impl Default for HelpPopup {
 }
 
 impl Widget for HelpPopup {
+    #[allow(clippy::too_many_lines)]
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Clear the area first
         Clear.render(area, buf);

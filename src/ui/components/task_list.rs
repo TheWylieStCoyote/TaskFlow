@@ -242,6 +242,7 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
     ListItem::new(line)
 }
 
+#[allow(clippy::too_many_lines)]
 fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
     let task = ctx.task;
     let theme = ctx.theme;

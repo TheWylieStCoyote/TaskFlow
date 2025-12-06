@@ -4,8 +4,8 @@ use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
-    parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage, RunningState,
-    SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
+    parse_date, parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage,
+    RunningState, SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
 };
 
 /// Main update function - heart of TEA pattern
@@ -191,6 +191,16 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::CalendarFocusGrid => {
             model.calendar_state.focus_task_list = false;
         }
+        NavigationMessage::ReportsNextPanel => {
+            if model.current_view == ViewId::Reports {
+                model.report_panel = model.report_panel.next();
+            }
+        }
+        NavigationMessage::ReportsPrevPanel => {
+            if model.current_view == ViewId::Reports {
+                model.report_panel = model.report_panel.prev();
+            }
+        }
     }
 }
 
@@ -266,13 +276,14 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 4: Scheduled
     // 5: Calendar
     // 6: Dashboard
-    // 7: Blocked
-    // 8: Untagged
-    // 9: No Project
-    // 10: Recently Modified
-    // 11: Separator (skip)
-    // 12: "Projects" header (skip or go to Projects view)
-    // 13+: Individual projects
+    // 7: Reports
+    // 8: Blocked
+    // 9: Untagged
+    // 10: No Project
+    // 11: Recently Modified
+    // 12: Separator (skip)
+    // 13: "Projects" header (skip or go to Projects view)
+    // 14+: Individual projects
 
     match selected {
         0 => {
@@ -325,35 +336,42 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         7 => {
-            model.current_view = ViewId::Blocked;
+            model.current_view = ViewId::Reports;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
         8 => {
-            model.current_view = ViewId::Untagged;
+            model.current_view = ViewId::Blocked;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
         9 => {
-            model.current_view = ViewId::NoProject;
+            model.current_view = ViewId::Untagged;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
         10 => {
+            model.current_view = ViewId::NoProject;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        11 => {
             model.current_view = ViewId::RecentlyModified;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        11 => {} // Separator, do nothing
-        12 => {
+        12 => {} // Separator, do nothing
+        13 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -361,9 +379,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 13 => {
+        n if n >= 14 => {
             // Select a specific project
-            let project_index = n - 13;
+            let project_index = n - 14;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -760,13 +778,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                 }
                 InputTarget::EditDueDate(task_id) => {
-                    use chrono::NaiveDate;
                     if let Some(task) = model.tasks.get_mut(task_id) {
                         let before = task.clone();
                         // Empty input clears the due date
                         if input.is_empty() {
                             task.due_date = None;
-                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                        } else if let Some(date) = parse_date(&input) {
                             task.due_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
@@ -781,13 +798,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.refresh_visible_tasks();
                 }
                 InputTarget::EditScheduledDate(task_id) => {
-                    use chrono::NaiveDate;
                     if let Some(task) = model.tasks.get_mut(task_id) {
                         let before = task.clone();
                         // Empty input clears the scheduled date
                         if input.is_empty() {
                             task.scheduled_date = None;
-                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                        } else if let Some(date) = parse_date(&input) {
                             task.scheduled_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
@@ -1058,6 +1074,13 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             }
                         }
                     }
+                }
+                InputTarget::ImportFilePath(_format) => {
+                    // File path entered, execute the import
+                    handle_execute_import(model);
+                    // Don't reset input mode here - handle_execute_import does it
+                    // and may show preview dialog
+                    return;
                 }
             }
             model.input_mode = InputMode::Normal;
@@ -1687,6 +1710,21 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::ExportChainsMermaid => {
             handle_export_chains_mermaid(model);
         }
+        SystemMessage::StartImportCsv => {
+            handle_start_import(model, crate::storage::ImportFormat::Csv);
+        }
+        SystemMessage::StartImportIcs => {
+            handle_start_import(model, crate::storage::ImportFormat::Ics);
+        }
+        SystemMessage::ExecuteImport => {
+            handle_execute_import(model);
+        }
+        SystemMessage::ConfirmImport => {
+            handle_confirm_import(model);
+        }
+        SystemMessage::CancelImport => {
+            handle_cancel_import(model);
+        }
     }
 }
 
@@ -1812,6 +1850,127 @@ fn handle_export_chains_mermaid(model: &mut Model) {
             model.status_message = Some(format!("Export failed: {e}"));
         }
     }
+}
+
+fn handle_start_import(model: &mut Model, format: crate::storage::ImportFormat) {
+    use crate::ui::InputTarget;
+
+    model.input_mode = InputMode::Editing;
+    model.input_target = InputTarget::ImportFilePath(format);
+    model.input_buffer.clear();
+    model.cursor_position = 0;
+}
+
+fn handle_execute_import(model: &mut Model) {
+    use crate::storage::{
+        apply_merge_strategy, import_from_csv, import_from_ics, ImportFormat, ImportOptions,
+        MergeStrategy,
+    };
+    use crate::ui::InputTarget;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let format = match &model.input_target {
+        InputTarget::ImportFilePath(fmt) => *fmt,
+        _ => return,
+    };
+
+    let file_path = model.input_buffer.trim();
+    if file_path.is_empty() {
+        model.status_message = Some("No file path provided".to_string());
+        model.input_mode = InputMode::Normal;
+        model.input_target = InputTarget::Task;
+        return;
+    }
+
+    // Open the file
+    let file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            model.status_message = Some(format!("Failed to open file: {e}"));
+            model.input_mode = InputMode::Normal;
+            model.input_target = InputTarget::Task;
+            return;
+        }
+    };
+
+    let reader = BufReader::new(file);
+    let options = ImportOptions {
+        merge_strategy: MergeStrategy::Skip,
+        validate: true,
+        dry_run: false,
+    };
+
+    // Parse the file
+    let mut result = match format {
+        ImportFormat::Csv => match import_from_csv(reader, &options) {
+            Ok(r) => r,
+            Err(e) => {
+                model.status_message = Some(format!("Import failed: {e}"));
+                model.input_mode = InputMode::Normal;
+                model.input_target = InputTarget::Task;
+                return;
+            }
+        },
+        ImportFormat::Ics => match import_from_ics(reader, &options) {
+            Ok(r) => r,
+            Err(e) => {
+                model.status_message = Some(format!("Import failed: {e}"));
+                model.input_mode = InputMode::Normal;
+                model.input_target = InputTarget::Task;
+                return;
+            }
+        },
+    };
+
+    // Apply duplicate detection
+    apply_merge_strategy(&mut result, &model.tasks, options.merge_strategy);
+
+    // Reset input mode
+    model.input_mode = InputMode::Normal;
+    model.input_target = InputTarget::Task;
+    model.input_buffer.clear();
+
+    // If there are tasks to import, show preview
+    if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {
+        model.status_message = Some("No tasks found in file".to_string());
+        return;
+    }
+
+    // Store the result and show preview
+    let import_count = result.imported.len();
+    let skip_count = result.skipped.len();
+    let error_count = result.errors.len();
+
+    model.pending_import = Some(result);
+    model.show_import_preview = true;
+    model.status_message = Some(format!(
+        "Preview: {} to import, {} skipped, {} errors. Press Enter to confirm, Esc to cancel.",
+        import_count, skip_count, error_count
+    ));
+}
+
+fn handle_confirm_import(model: &mut Model) {
+    if let Some(result) = model.pending_import.take() {
+        let count = result.imported.len();
+
+        // Add all imported tasks
+        for task in result.imported {
+            model.sync_task(&task);
+            model.tasks.insert(task.id.clone(), task);
+        }
+
+        model.dirty = true;
+        model.show_import_preview = false;
+        model.refresh_visible_tasks();
+        model.status_message = Some(format!("Imported {} tasks", count));
+    }
+}
+
+fn handle_cancel_import(model: &mut Model) {
+    model.pending_import = None;
+    model.show_import_preview = false;
+    model.status_message = Some("Import cancelled".to_string());
 }
 
 fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
@@ -2678,7 +2837,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 13; // First project (index 13 = after 11 views + separator + Projects header)
+        model.sidebar_selected = 14; // First project (index 14 = after 12 views + separator + Projects header)
 
         update(
             &mut model,
@@ -4912,5 +5071,191 @@ mod tests {
 
         // Task should now be Done
         assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
+    }
+
+    // Import tests
+    #[test]
+    fn test_start_import_csv_sets_input_mode() {
+        let mut model = Model::new();
+
+        update(&mut model, Message::System(SystemMessage::StartImportCsv));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv)
+        ));
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_start_import_ics_sets_input_mode() {
+        let mut model = Model::new();
+
+        update(&mut model, Message::System(SystemMessage::StartImportIcs));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::ImportFilePath(crate::storage::ImportFormat::Ics)
+        ));
+    }
+
+    #[test]
+    fn test_cancel_import_resets_state() {
+        let mut model = Model::new();
+
+        // Set up pending import state
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::CancelImport));
+
+        assert!(!model.show_import_preview);
+        assert!(model.pending_import.is_none());
+        assert!(model.status_message.is_some());
+        assert!(model.status_message.as_ref().unwrap().contains("cancelled"));
+    }
+
+    #[test]
+    fn test_confirm_import_adds_tasks() {
+        let mut model = Model::new();
+
+        // Create a task to import
+        let task = Task::new("Imported Task");
+
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![task.clone()],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::ConfirmImport));
+
+        assert!(!model.show_import_preview);
+        assert!(model.pending_import.is_none());
+        assert_eq!(model.tasks.len(), 1);
+        assert!(model.tasks.values().any(|t| t.title == "Imported Task"));
+        assert!(model.status_message.is_some());
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("Imported 1"));
+    }
+
+    #[test]
+    fn test_confirm_import_multiple_tasks() {
+        let mut model = Model::new();
+
+        // Create multiple tasks to import
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        let task3 = Task::new("Task 3");
+
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![task1, task2, task3],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::ConfirmImport));
+
+        assert_eq!(model.tasks.len(), 3);
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("Imported 3"));
+    }
+
+    #[test]
+    fn test_import_empty_path_shows_error() {
+        use crate::ui::InputTarget;
+
+        let mut model = Model::new();
+
+        // Set up for file path input
+        model.input_mode = InputMode::Editing;
+        model.input_target = InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv);
+        model.input_buffer = "   ".to_string(); // Whitespace only
+
+        // Submit the input
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should show error, not crash
+        assert!(model.status_message.is_some());
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("No file path"));
+    }
+
+    #[test]
+    fn test_reports_panel_navigation() {
+        use crate::ui::ReportPanel;
+
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Reports;
+        assert_eq!(model.report_panel, ReportPanel::Overview);
+
+        // Navigate to next panel
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Velocity);
+
+        // Navigate to next panel again
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Tags);
+
+        // Navigate back
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsPrevPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Velocity);
+    }
+
+    #[test]
+    fn test_reports_navigation_only_works_in_reports_view() {
+        use crate::ui::ReportPanel;
+
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::TaskList; // Not in reports view
+        assert_eq!(model.report_panel, ReportPanel::Overview);
+
+        // Try to navigate - should have no effect
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Overview); // Unchanged
+    }
+
+    #[test]
+    fn test_sidebar_select_reports_view() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 7; // Reports view index
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        assert_eq!(model.current_view, ViewId::Reports);
+        assert_eq!(model.focus_pane, FocusPane::TaskList);
     }
 }

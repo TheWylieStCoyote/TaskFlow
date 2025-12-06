@@ -78,6 +78,10 @@ pub enum Action {
     CalendarPrevDay,
     CalendarNextDay,
 
+    // Reports navigation
+    ReportsNextPanel,
+    ReportsPrevPanel,
+
     // System
     Save,
     Undo,
@@ -89,6 +93,10 @@ pub enum Action {
     ExportIcs,
     ExportChainsDot,
     ExportChainsMermaid,
+
+    // Import
+    ImportCsv,
+    ImportIcs,
 
     // Macros
     RecordMacro,
@@ -252,6 +260,14 @@ impl Default for Keybindings {
         bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
         bindings.insert("ctrl+g".to_string(), Action::ExportChainsDot);
         bindings.insert("ctrl+m".to_string(), Action::ExportChainsMermaid);
+
+        // Import
+        bindings.insert("I".to_string(), Action::ImportCsv); // Shift+I for CSV import
+        bindings.insert("alt+i".to_string(), Action::ImportIcs); // Alt+I for ICS import
+
+        // Reports navigation (Tab/Shift+Tab or l/h when in reports view)
+        bindings.insert("Tab".to_string(), Action::ReportsNextPanel);
+        bindings.insert("shift+Tab".to_string(), Action::ReportsPrevPanel);
 
         // Macros - q to record, Q to stop, @0-9 to play
         bindings.insert("ctrl+q".to_string(), Action::RecordMacro);

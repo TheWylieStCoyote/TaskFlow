@@ -229,6 +229,17 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         };
     }
 
+    // Handle import preview dialog
+    if model.show_import_preview {
+        return match key.code {
+            KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
+                Message::System(SystemMessage::ConfirmImport)
+            }
+            KeyCode::Esc | KeyCode::Char('n' | 'N') => Message::System(SystemMessage::CancelImport),
+            _ => Message::None,
+        };
+    }
+
     // Handle input mode
     if model.input_mode == InputMode::Editing {
         return match key.code {
@@ -491,6 +502,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
         Action::ExportChainsDot => Message::System(SystemMessage::ExportChainsDot),
         Action::ExportChainsMermaid => Message::System(SystemMessage::ExportChainsMermaid),
+        Action::ImportCsv => Message::System(SystemMessage::StartImportCsv),
+        Action::ImportIcs => Message::System(SystemMessage::StartImportIcs),
         Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),
         Action::StopRecordMacro => Message::Ui(UiMessage::StopRecordMacro),
         Action::PlayMacro0 => Message::Ui(UiMessage::PlayMacro(0)),
@@ -506,6 +519,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
         Action::ToggleFocusMode => Message::Ui(UiMessage::ToggleFocusMode),
         Action::ShowKeybindingsEditor => Message::Ui(UiMessage::ShowKeybindingsEditor),
+        Action::ReportsNextPanel => Message::Navigation(NavigationMessage::ReportsNextPanel),
+        Action::ReportsPrevPanel => Message::Navigation(NavigationMessage::ReportsPrevPanel),
     }
 }
 

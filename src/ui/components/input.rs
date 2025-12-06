@@ -14,6 +14,8 @@ pub enum InputMode {
 
 use crate::domain::TaskId;
 
+use crate::storage::ImportFormat;
+
 /// What type of item is being created/edited
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum InputTarget {
@@ -33,7 +35,8 @@ pub enum InputTarget {
     BulkSetStatus,
     EditDependencies(TaskId),
     EditRecurrence(TaskId),
-    LinkTask(TaskId), // Linking current task to next task in chain
+    LinkTask(TaskId),             // Linking current task to next task in chain
+    ImportFilePath(ImportFormat), // File path input for import
 }
 
 /// Input dialog for creating/editing items

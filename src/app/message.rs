@@ -132,6 +132,10 @@ pub enum NavigationMessage {
     CalendarFocusTaskList,
     /// Focus the calendar grid in calendar view
     CalendarFocusGrid,
+    /// Navigate to next panel in reports view
+    ReportsNextPanel,
+    /// Navigate to previous panel in reports view
+    ReportsPrevPanel,
 }
 
 /// View identifiers for different application screens.
@@ -178,6 +182,8 @@ pub enum ViewId {
     NoProject,
     /// Tasks modified in the last 7 days
     RecentlyModified,
+    /// Analytics and reports view
+    Reports,
 }
 
 /// Task operation messages.
@@ -462,6 +468,16 @@ pub enum SystemMessage {
     ExportChainsDot,
     /// Export task chains to Mermaid format
     ExportChainsMermaid,
+    /// Start import from CSV (opens file path input)
+    StartImportCsv,
+    /// Start import from ICS (opens file path input)
+    StartImportIcs,
+    /// Execute import after file path is entered
+    ExecuteImport,
+    /// Confirm pending import
+    ConfirmImport,
+    /// Cancel pending import
+    CancelImport,
 }
 
 impl From<NavigationMessage> for Message {

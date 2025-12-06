@@ -278,6 +278,16 @@ pub struct Model {
     pub keybinding_capturing: bool,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
+
+    // Reports state
+    /// Selected panel in the reports view
+    pub report_panel: crate::ui::ReportPanel,
+
+    // Import state
+    /// Pending import result awaiting confirmation
+    pub pending_import: Option<crate::storage::ImportResult>,
+    /// Whether import preview dialog is showing
+    pub show_import_preview: bool,
 }
 
 impl Model {
@@ -345,6 +355,9 @@ impl Model {
             keybinding_selected: 0,
             keybinding_capturing: false,
             keybindings: crate::config::Keybindings::load(),
+            report_panel: crate::ui::ReportPanel::default(),
+            pending_import: None,
+            show_import_preview: false,
         }
     }
 
@@ -359,12 +372,12 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Includes: 11 views + 1 separator + 1 "Projects" header + project count.
+    /// Includes: 12 views + 1 separator + 1 "Projects" header + project count.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
-        // 11 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard, Blocked, Untagged, No Project, Recent)
+        // 12 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent)
         // + 1 separator + 1 "Projects" header + projects count
-        13 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        14 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Returns all tasks due on a specific day.
@@ -914,6 +927,10 @@ impl Model {
                 // Show tasks modified in the last 7 days
                 let week_ago = chrono::Utc::now() - chrono::Duration::days(7);
                 task.updated_at >= week_ago
+            }
+            ViewId::Reports => {
+                // Reports view shows all tasks (used for analytics)
+                true
             }
         }
     }

@@ -114,6 +114,7 @@
 //!     .with_recurrence(Some(Recurrence::Monthly { day: 1 }));
 //! ```
 
+pub mod analytics;
 mod filter;
 mod pomodoro;
 mod project;

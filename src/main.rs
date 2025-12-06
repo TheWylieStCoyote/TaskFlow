@@ -19,7 +19,7 @@ use taskflow::config::{Action, Keybindings, Settings, Theme};
 use taskflow::storage::BackendType;
 use taskflow::ui::{view, InputMode};
 
-/// TaskFlow - A TUI project management application
+/// `TaskFlow` - A TUI project management application
 #[derive(Parser, Debug)]
 #[command(name = "taskflow")]
 #[command(author, version, about, long_about = None)]
@@ -220,10 +220,8 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => Message::Ui(UiMessage::ConfirmDelete),
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                Message::Ui(UiMessage::CancelDelete)
-            }
+            KeyCode::Char('y' | 'Y') => Message::Ui(UiMessage::ConfirmDelete),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => Message::Ui(UiMessage::CancelDelete),
             _ => Message::None,
         };
     }
@@ -374,7 +372,7 @@ fn key_event_to_string(key: &event::KeyEvent) -> String {
 }
 
 /// Convert an Action to a Message
-fn action_to_message(action: &Action) -> Message {
+const fn action_to_message(action: &Action) -> Message {
     match action {
         Action::MoveUp => Message::Navigation(NavigationMessage::Up),
         Action::MoveDown => Message::Navigation(NavigationMessage::Down),

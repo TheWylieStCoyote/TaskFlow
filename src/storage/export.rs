@@ -10,6 +10,7 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "csv" => Some(Self::Csv),
@@ -18,7 +19,8 @@ impl ExportFormat {
         }
     }
 
-    pub fn file_extension(&self) -> &'static str {
+    #[must_use]
+    pub const fn file_extension(&self) -> &'static str {
         match self {
             Self::Csv => "csv",
             Self::Ics => "ics",
@@ -26,7 +28,11 @@ impl ExportFormat {
     }
 }
 
-/// Export tasks to CSV format
+/// Exports tasks to CSV format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
 pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Result<()> {
     // Write header
     writeln!(
@@ -75,7 +81,11 @@ fn escape_csv(s: &str) -> String {
     }
 }
 
-/// Export tasks to ICS (iCalendar) format
+/// Exports tasks to ICS (iCalendar) format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
 pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Result<()> {
     // Write calendar header
     writeln!(writer, "BEGIN:VCALENDAR")?;
@@ -171,7 +181,11 @@ fn escape_ics(s: &str) -> String {
         .replace('\n', "\\n")
 }
 
-/// Export tasks to a string in the specified format
+/// Exports tasks to a string in the specified format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if formatting fails.
 pub fn export_to_string(tasks: &[Task], format: ExportFormat) -> std::io::Result<String> {
     let mut buffer = Vec::new();
     match format {

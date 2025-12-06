@@ -10,7 +10,8 @@ use ratatui::{
 pub struct HelpPopup;
 
 impl HelpPopup {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -284,7 +285,8 @@ impl Widget for HelpPopup {
 }
 
 /// Calculate centered rect for popup using percentages
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+#[must_use]
+pub const fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_width = r.width * percent_x / 100;
     let popup_height = r.height * percent_y / 100;
     let popup_x = (r.width - popup_width) / 2;
@@ -294,6 +296,7 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 }
 
 /// Calculate centered rect with fixed height (for input dialogs)
+#[must_use]
 pub fn centered_rect_fixed_height(percent_x: u16, height: u16, r: Rect) -> Rect {
     let popup_width = r.width * percent_x / 100;
     let popup_height = height.min(r.height); // Don't exceed screen height

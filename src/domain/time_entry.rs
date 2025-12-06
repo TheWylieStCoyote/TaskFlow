@@ -98,7 +98,8 @@ impl TimeEntry {
         self.duration_minutes = Some((end - self.started_at).num_minutes().max(0) as u32);
     }
 
-    pub fn is_running(&self) -> bool {
+    #[must_use]
+    pub const fn is_running(&self) -> bool {
         self.ended_at.is_none()
     }
 
@@ -111,6 +112,7 @@ impl TimeEntry {
         }
     }
 
+    #[must_use]
     pub fn formatted_duration(&self) -> String {
         let minutes = self.calculated_duration_minutes();
         let hours = minutes / 60;

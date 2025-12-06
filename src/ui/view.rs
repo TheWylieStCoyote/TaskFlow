@@ -82,7 +82,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             .map(|t| t.title.as_str())
             .unwrap_or("this task");
         frame.render_widget(
-            ConfirmDialog::new("Delete Task", &format!("Delete \"{}\"?", task_name)),
+            ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?")),
             confirm_area,
         );
     }

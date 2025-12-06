@@ -19,6 +19,7 @@ pub enum ColorSpec {
 
 impl ColorSpec {
     /// Convert to ratatui Color
+    #[must_use]
     pub fn to_color(&self) -> Color {
         match self {
             Self::Named(name) => match name.to_lowercase().as_str() {

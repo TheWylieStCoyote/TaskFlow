@@ -33,7 +33,7 @@ enum ListEntry<'a> {
 pub struct TaskList<'a> {
     entries: Vec<ListEntry<'a>>,
     selected: usize,
-    /// Maps display row to visible_tasks index (None for headers)
+    /// Maps display row to `visible_tasks` index (None for headers)
     row_to_task_index: Vec<Option<usize>>,
     active_tracking: Option<&'a TaskId>,
     theme: &'a Theme,
@@ -41,6 +41,7 @@ pub struct TaskList<'a> {
 }
 
 impl<'a> TaskList<'a> {
+    #[must_use]
     pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
         let active_tracking = model.active_time_entry().map(|e| &e.task_id);
         let is_grouped = model.current_view == ViewId::Projects;
@@ -235,7 +236,7 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
     let line = Line::from(vec![
         Span::styled("── ", Style::default().fg(theme.colors.muted.to_color())),
         Span::styled(name.to_string(), header_style),
-        Span::styled(format!(" ({}) ", task_count), count_style),
+        Span::styled(format!(" ({task_count}) "), count_style),
         Span::styled("──", Style::default().fg(theme.colors.muted.to_color())),
     ]);
 
@@ -331,9 +332,9 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         let hours = ctx.time_spent / 60;
         let mins = ctx.time_spent % 60;
         let time_str = if hours > 0 {
-            format!(" ({}h {}m)", hours, mins)
+            format!(" ({hours}h {mins}m)")
         } else {
-            format!(" ({}m)", mins)
+            format!(" ({mins}m)")
         };
         Span::styled(
             time_str,
@@ -348,11 +349,11 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         let tags_str = task
             .tags
             .iter()
-            .map(|t| format!("#{}", t))
+            .map(|t| format!("#{t}"))
             .collect::<Vec<_>>()
             .join(" ");
         Span::styled(
-            format!(" {}", tags_str),
+            format!(" {tags_str}"),
             Style::default().fg(theme.colors.muted.to_color()),
         )
     } else {

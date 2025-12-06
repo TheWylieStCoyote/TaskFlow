@@ -10,7 +10,7 @@
 //! |---------|--------|----------|
 //! | [`backends::JsonBackend`] | JSON file | Fast loading, compact storage |
 //! | [`backends::YamlBackend`] | YAML file | Human-readable, easy manual editing |
-//! | [`backends::SqliteBackend`] | SQLite DB | Large datasets, complex queries |
+//! | [`backends::SqliteBackend`] | `SQLite` DB | Large datasets, complex queries |
 //! | [`backends::MarkdownBackend`] | Markdown + YAML | Git-friendly, text editors |
 //!
 //! ## Quick Start
@@ -85,9 +85,9 @@
 //! - **Cons**: Larger file size, slower parsing
 //! - **Use when**: You want to edit tasks in a text editor
 //!
-//! ### SQLite
+//! ### `SQLite`
 //! - **Pros**: Efficient for large datasets, ACID transactions
-//! - **Cons**: Binary format, requires SQLite
+//! - **Cons**: Binary format, requires `SQLite`
 //! - **Use when**: Managing hundreds/thousands of tasks
 //!
 //! ### Markdown
@@ -133,7 +133,7 @@ pub enum BackendType {
     Json,
     /// YAML file storage - human-readable
     Yaml,
-    /// SQLite database - efficient for large datasets
+    /// `SQLite` database - efficient for large datasets
     Sqlite,
     /// Markdown files with YAML frontmatter - git-friendly
     Markdown,
@@ -156,7 +156,7 @@ impl BackendType {
 
     /// Returns the backend type as a lowercase string.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Json => "json",
             Self::Yaml => "yaml",
@@ -167,7 +167,7 @@ impl BackendType {
 
     /// Returns the typical file extension for this backend type.
     #[must_use]
-    pub fn file_extension(&self) -> &'static str {
+    pub const fn file_extension(&self) -> &'static str {
         match self {
             Self::Json => "json",
             Self::Yaml => "yaml",

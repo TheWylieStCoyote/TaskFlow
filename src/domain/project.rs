@@ -168,7 +168,7 @@ impl Project {
     }
 
     #[must_use]
-    pub fn with_parent(mut self, parent_id: ProjectId) -> Self {
+    pub const fn with_parent(mut self, parent_id: ProjectId) -> Self {
         self.parent_id = Some(parent_id);
         self
     }

@@ -17,7 +17,8 @@ pub struct Calendar<'a> {
 }
 
 impl<'a> Calendar<'a> {
-    pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
+    #[must_use]
+    pub const fn new(model: &'a Model, theme: &'a Theme) -> Self {
         Self { model, theme }
     }
 
@@ -157,12 +158,10 @@ impl Calendar<'_> {
                 );
 
                 let task_count = date.map(|d| self.model.task_count_for_day(d)).unwrap_or(0);
-                let has_overdue = date
-                    .map(|d| self.model.has_overdue_on_day(d))
-                    .unwrap_or(false);
+                let has_overdue = date.is_some_and(|d| self.model.has_overdue_on_day(d));
 
                 // Determine style
-                let is_today = date.map(|d| d == today).unwrap_or(false);
+                let is_today = date.is_some_and(|d| d == today);
                 let is_selected = selected_day == Some(day);
 
                 let style = if is_selected {
@@ -182,7 +181,7 @@ impl Calendar<'_> {
                     Style::default().fg(theme.colors.foreground.to_color())
                 };
 
-                let day_str = format!("{:2}", day);
+                let day_str = format!("{day:2}");
                 buf.set_string(x, y, &day_str, style);
 
                 // Add task indicator
@@ -312,7 +311,7 @@ impl Calendar<'_> {
                 };
 
                 ListItem::new(Line::from(vec![
-                    Span::styled(format!("{} ", priority_symbol), priority_style),
+                    Span::styled(format!("{priority_symbol} "), priority_style),
                     Span::styled(format!("{} ", task.status.symbol()), status_style),
                     Span::styled(title_display, title_style),
                 ]))

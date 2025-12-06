@@ -37,6 +37,11 @@ pub struct MarkdownBackend {
 }
 
 impl MarkdownBackend {
+    /// Creates a new Markdown backend at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             base_path: path.to_path_buf(),
@@ -70,7 +75,7 @@ impl MarkdownBackend {
             let entry = entry.map_err(|e| StorageError::io(&self.tasks_dir, e))?;
             let path = entry.path();
 
-            if path.extension().map(|e| e == "md").unwrap_or(false) {
+            if path.extension().is_some_and(|e| e == "md") {
                 if let Ok(task) = self.parse_task_file(&path) {
                     self.tasks_cache.insert(task.id.clone(), task);
                 }
@@ -93,7 +98,7 @@ impl MarkdownBackend {
             let entry = entry.map_err(|e| StorageError::io(&self.projects_dir, e))?;
             let path = entry.path();
 
-            if path.extension().map(|e| e == "md").unwrap_or(false) {
+            if path.extension().is_some_and(|e| e == "md") {
                 if let Ok(project) = self.parse_project_file(&path) {
                     self.projects_cache.insert(project.id.clone(), project);
                 }
@@ -259,7 +264,7 @@ impl MarkdownBackend {
     }
 
     #[allow(dead_code)]
-    fn mark_dirty(&mut self) {
+    const fn mark_dirty(&mut self) {
         self.dirty = true;
     }
 }
@@ -515,8 +520,9 @@ impl StorageBackend for MarkdownBackend {
         })
     }
 
+    #[allow(clippy::needless_collect)]
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
-        // Clear existing data
+        // Clear existing data - collect needed to avoid borrow conflict
         for id in self.tasks_cache.keys().cloned().collect::<Vec<_>>() {
             self.delete_task_file(&id)?;
         }

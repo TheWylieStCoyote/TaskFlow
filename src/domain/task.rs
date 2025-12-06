@@ -358,7 +358,7 @@ impl Task {
     }
 
     #[must_use]
-    pub fn with_priority(mut self, priority: Priority) -> Self {
+    pub const fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
@@ -373,13 +373,13 @@ impl Task {
     }
 
     #[must_use]
-    pub fn with_due_date(mut self, date: NaiveDate) -> Self {
+    pub const fn with_due_date(mut self, date: NaiveDate) -> Self {
         self.due_date = Some(date);
         self
     }
 
     #[must_use]
-    pub fn with_project(mut self, project_id: ProjectId) -> Self {
+    pub const fn with_project(mut self, project_id: ProjectId) -> Self {
         self.project_id = Some(project_id);
         self
     }
@@ -397,7 +397,7 @@ impl Task {
     }
 
     #[must_use]
-    pub fn with_parent(mut self, parent_id: TaskId) -> Self {
+    pub const fn with_parent(mut self, parent_id: TaskId) -> Self {
         self.parent_task_id = Some(parent_id);
         self
     }

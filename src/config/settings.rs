@@ -67,12 +67,20 @@ impl Settings {
         Self::default()
     }
 
-    /// Save settings to the default config path
+    /// Saves settings to the default config path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save(&self) -> anyhow::Result<()> {
         self.save_to_path(Self::config_path())
     }
 
-    /// Save settings to a specific path
+    /// Saves settings to a specific path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save_to_path(&self, path: PathBuf) -> anyhow::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;

@@ -42,7 +42,8 @@ pub struct InputDialog<'a> {
 }
 
 impl<'a> InputDialog<'a> {
-    pub fn new(title: &'a str, input: &'a str, cursor_position: usize) -> Self {
+    #[must_use]
+    pub const fn new(title: &'a str, input: &'a str, cursor_position: usize) -> Self {
         Self {
             title,
             input,
@@ -60,7 +61,7 @@ impl Widget for InputDialog<'_> {
         let display_text = if self.cursor_position < self.input.len() {
             let (before, after) = self.input.split_at(self.cursor_position);
             let (_cursor_char, rest) = after.split_at(1);
-            format!("{}▌{}", before, rest)
+            format!("{before}▌{rest}")
         } else {
             format!("{}▌", self.input)
         };
@@ -90,7 +91,8 @@ pub struct ConfirmDialog<'a> {
 }
 
 impl<'a> ConfirmDialog<'a> {
-    pub fn new(title: &'a str, message: &'a str) -> Self {
+    #[must_use]
+    pub const fn new(title: &'a str, message: &'a str) -> Self {
         Self { title, message }
     }
 }

@@ -200,9 +200,9 @@ impl Theme {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(theme) => return theme,
-                    Err(e) => eprintln!("Warning: Failed to parse theme: {}", e),
+                    Err(e) => eprintln!("Warning: Failed to parse theme: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read theme: {}", e),
+                Err(e) => eprintln!("Warning: Failed to read theme: {e}"),
             }
         }
         Self::default()
@@ -212,7 +212,7 @@ impl Theme {
     pub fn theme_path(name: &str) -> PathBuf {
         Settings::config_dir()
             .join("themes")
-            .join(format!("{}.toml", name))
+            .join(format!("{name}.toml"))
     }
 
     /// Get the themes directory

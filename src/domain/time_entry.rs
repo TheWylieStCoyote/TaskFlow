@@ -115,9 +115,9 @@ impl TimeEntry {
         let hours = minutes / 60;
         let mins = minutes % 60;
         if hours > 0 {
-            format!("{}h {}m", hours, mins)
+            format!("{hours}h {mins}m")
         } else {
-            format!("{}m", mins)
+            format!("{mins}m")
         }
     }
 }

@@ -255,11 +255,11 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("  ")
     };
 
-    // Subtask indentation prefix
+    // Subtask indentation prefix (3 chars for alignment)
     let indent_span = if ctx.is_subtask {
         Span::styled("└─ ", Style::default().fg(theme.colors.muted.to_color()))
     } else {
-        Span::raw("")
+        Span::raw("   ")
     };
 
     let status_style = match task.status {

@@ -13,7 +13,8 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
-    HelpPopup, InputDialog, InputMode, InputTarget, Sidebar, TaskList, TemplatePicker,
+    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, Sidebar, TaskList,
+    TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -97,6 +98,23 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         frame.render_widget(
             TemplatePicker::new(&model.template_manager, model.template_selected, theme),
             picker_area,
+        );
+    }
+
+    // Render keybindings editor
+    if model.show_keybindings_editor {
+        // Height depends on number of bindings, min 10, max 30
+        let bindings_count = model.keybindings.sorted_bindings().len() as u16;
+        let height = (bindings_count + 2).clamp(10, 30);
+        let editor_area = centered_rect_fixed_height(70, height, area);
+        frame.render_widget(
+            KeybindingsEditor::new(
+                &model.keybindings,
+                model.keybinding_selected,
+                model.keybinding_capturing,
+                theme,
+            ),
+            editor_area,
         );
     }
 }

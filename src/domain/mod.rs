@@ -115,12 +115,14 @@
 //! ```
 
 mod filter;
+mod pomodoro;
 mod project;
 mod tag;
 mod task;
 mod time_entry;
 
 pub use filter::*;
+pub use pomodoro::*;
 pub use project::*;
 pub use tag::*;
 pub use task::*;

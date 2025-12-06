@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::io::Write;
 
-use crate::domain::{Priority, Task, TaskStatus};
+use crate::domain::{Priority, Task, TaskId, TaskStatus};
 
 /// Export format types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportFormat {
     Csv,
     Ics,
+    Dot,
+    Mermaid,
 }
 
 impl ExportFormat {
@@ -15,6 +18,8 @@ impl ExportFormat {
         match s.to_lowercase().as_str() {
             "csv" => Some(Self::Csv),
             "ics" | "ical" | "icalendar" => Some(Self::Ics),
+            "dot" | "graphviz" => Some(Self::Dot),
+            "mermaid" | "md" => Some(Self::Mermaid),
             _ => None,
         }
     }
@@ -24,6 +29,8 @@ impl ExportFormat {
         match self {
             Self::Csv => "csv",
             Self::Ics => "ics",
+            Self::Dot => "dot",
+            Self::Mermaid => "md",
         }
     }
 }
@@ -181,6 +188,178 @@ fn escape_ics(s: &str) -> String {
         .replace('\n', "\\n")
 }
 
+/// Exports task chains/dependencies to DOT (Graphviz) format.
+///
+/// This creates a directed graph showing:
+/// - Task nodes with color-coded status (green=done, yellow=in progress, red=blocked)
+/// - Chain edges (blue) from `next_task_id` relationships
+/// - Dependency edges (red dashed) from `dependencies` relationships
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
+pub fn export_to_dot<W: Write>(
+    tasks: &HashMap<TaskId, Task>,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    writeln!(writer, "digraph TaskChains {{")?;
+    writeln!(writer, "    rankdir=LR;")?;
+    writeln!(
+        writer,
+        "    node [shape=box, style=filled, fontname=\"Arial\"];"
+    )?;
+    writeln!(writer)?;
+
+    // Write all nodes
+    writeln!(writer, "    // Nodes")?;
+    for task in tasks.values() {
+        let node_id = format!("task_{}", task.id.0.to_string().replace('-', "_"));
+        let label = escape_dot(&task.title);
+        let fill_color = match task.status {
+            TaskStatus::Done => "\"#90EE90\"",       // Light green
+            TaskStatus::Cancelled => "\"#D3D3D3\"",  // Light gray
+            TaskStatus::InProgress => "\"#FFD700\"", // Gold
+            TaskStatus::Blocked => "\"#FFB6C1\"",    // Light pink
+            TaskStatus::Todo => "\"#FFFFFF\"",       // White
+        };
+        writeln!(
+            writer,
+            "    {node_id} [label=\"{label}\" fillcolor={fill_color}];"
+        )?;
+    }
+
+    writeln!(writer)?;
+
+    // Write chain edges (next_task_id)
+    writeln!(writer, "    // Chain edges (next_task_id)")?;
+    for task in tasks.values() {
+        if let Some(ref next_id) = task.next_task_id {
+            if tasks.contains_key(next_id) {
+                let from_id = format!("task_{}", task.id.0.to_string().replace('-', "_"));
+                let to_id = format!("task_{}", next_id.0.to_string().replace('-', "_"));
+                writeln!(
+                    writer,
+                    "    {from_id} -> {to_id} [color=\"blue\" label=\"chain\"];"
+                )?;
+            }
+        }
+    }
+
+    writeln!(writer)?;
+
+    // Write dependency edges
+    writeln!(writer, "    // Dependency edges (blocks)")?;
+    for task in tasks.values() {
+        for dep_id in &task.dependencies {
+            if tasks.contains_key(dep_id) {
+                let from_id = format!("task_{}", dep_id.0.to_string().replace('-', "_"));
+                let to_id = format!("task_{}", task.id.0.to_string().replace('-', "_"));
+                writeln!(
+                    writer,
+                    "    {from_id} -> {to_id} [color=\"red\" style=\"dashed\" label=\"blocks\"];"
+                )?;
+            }
+        }
+    }
+
+    writeln!(writer, "}}")?;
+    Ok(())
+}
+
+/// Escape special characters for DOT format
+fn escape_dot(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
+/// Exports task chains/dependencies to Mermaid format.
+///
+/// This creates a flowchart showing:
+/// - Task nodes with styled classes for status
+/// - Chain edges (solid arrows) from `next_task_id` relationships
+/// - Dependency edges (dotted arrows with "blocks" label) from `dependencies` relationships
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
+pub fn export_to_mermaid<W: Write>(
+    tasks: &HashMap<TaskId, Task>,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    writeln!(writer, "```mermaid")?;
+    writeln!(writer, "flowchart LR")?;
+    writeln!(writer)?;
+
+    // Define style classes
+    writeln!(writer, "    %% Style definitions")?;
+    writeln!(writer, "    classDef done fill:#90EE90,stroke:#228B22")?;
+    writeln!(writer, "    classDef cancelled fill:#D3D3D3,stroke:#696969")?;
+    writeln!(
+        writer,
+        "    classDef inprogress fill:#FFD700,stroke:#DAA520"
+    )?;
+    writeln!(writer, "    classDef blocked fill:#FFB6C1,stroke:#DC143C")?;
+    writeln!(writer, "    classDef todo fill:#FFFFFF,stroke:#333333")?;
+    writeln!(writer)?;
+
+    // Write nodes with shorter IDs for readability
+    let id_map: HashMap<TaskId, String> = tasks
+        .keys()
+        .enumerate()
+        .map(|(i, id)| (id.clone(), format!("T{i}")))
+        .collect();
+
+    writeln!(writer, "    %% Nodes")?;
+    for task in tasks.values() {
+        let short_id = id_map.get(&task.id).unwrap();
+        let label = escape_mermaid(&task.title);
+        let class = match task.status {
+            TaskStatus::Done => "done",
+            TaskStatus::Cancelled => "cancelled",
+            TaskStatus::InProgress => "inprogress",
+            TaskStatus::Blocked => "blocked",
+            TaskStatus::Todo => "todo",
+        };
+        writeln!(writer, "    {short_id}[\"{label}\"]:::{class}")?;
+    }
+
+    writeln!(writer)?;
+
+    // Write chain edges (next_task_id)
+    writeln!(writer, "    %% Chain edges (next task in sequence)")?;
+    for task in tasks.values() {
+        if let Some(ref next_id) = task.next_task_id {
+            if let (Some(from), Some(to)) = (id_map.get(&task.id), id_map.get(next_id)) {
+                writeln!(writer, "    {from} --> {to}")?;
+            }
+        }
+    }
+
+    writeln!(writer)?;
+
+    // Write dependency edges
+    writeln!(writer, "    %% Dependency edges (blocks)")?;
+    for task in tasks.values() {
+        for dep_id in &task.dependencies {
+            if let (Some(from), Some(to)) = (id_map.get(dep_id), id_map.get(&task.id)) {
+                writeln!(writer, "    {from} -.->|blocks| {to}")?;
+            }
+        }
+    }
+
+    writeln!(writer, "```")?;
+    Ok(())
+}
+
+/// Escape special characters for Mermaid format
+fn escape_mermaid(s: &str) -> String {
+    s.replace('"', "'")
+        .replace('[', "(")
+        .replace(']', ")")
+        .replace('\n', " ")
+}
+
 /// Exports tasks to a string in the specified format.
 ///
 /// # Errors
@@ -191,6 +370,36 @@ pub fn export_to_string(tasks: &[Task], format: ExportFormat) -> std::io::Result
     match format {
         ExportFormat::Csv => export_to_csv(tasks, &mut buffer)?,
         ExportFormat::Ics => export_to_ics(tasks, &mut buffer)?,
+        ExportFormat::Dot | ExportFormat::Mermaid => {
+            // These formats need the full task map for chain/dependency lookups
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Use export_chains_to_string for DOT/Mermaid formats",
+            ));
+        }
+    }
+    String::from_utf8(buffer).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+/// Exports task chains to a string in DOT or Mermaid format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if formatting fails.
+pub fn export_chains_to_string(
+    tasks: &HashMap<TaskId, Task>,
+    format: ExportFormat,
+) -> std::io::Result<String> {
+    let mut buffer = Vec::new();
+    match format {
+        ExportFormat::Dot => export_to_dot(tasks, &mut buffer)?,
+        ExportFormat::Mermaid => export_to_mermaid(tasks, &mut buffer)?,
+        ExportFormat::Csv | ExportFormat::Ics => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Use export_to_string for CSV/ICS formats",
+            ));
+        }
     }
     String::from_utf8(buffer).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
@@ -350,5 +559,172 @@ mod tests {
         assert!(ics_result.contains("BEGIN:VCALENDAR"));
         assert!(ics_result.contains("END:VCALENDAR"));
         assert!(!ics_result.contains("BEGIN:VTODO")); // No tasks
+    }
+
+    #[test]
+    fn test_export_format_parse_dot() {
+        assert_eq!(ExportFormat::parse("dot"), Some(ExportFormat::Dot));
+        assert_eq!(ExportFormat::parse("graphviz"), Some(ExportFormat::Dot));
+    }
+
+    #[test]
+    fn test_export_format_parse_mermaid() {
+        assert_eq!(ExportFormat::parse("mermaid"), Some(ExportFormat::Mermaid));
+        assert_eq!(ExportFormat::parse("md"), Some(ExportFormat::Mermaid));
+    }
+
+    #[test]
+    fn test_escape_dot() {
+        assert_eq!(escape_dot("hello"), "hello");
+        assert_eq!(escape_dot("say \"hi\""), "say \\\"hi\\\"");
+        assert_eq!(escape_dot("line1\nline2"), "line1\\nline2");
+    }
+
+    #[test]
+    fn test_escape_mermaid() {
+        assert_eq!(escape_mermaid("hello"), "hello");
+        assert_eq!(escape_mermaid("say \"hi\""), "say 'hi'");
+        assert_eq!(escape_mermaid("array[0]"), "array(0)");
+    }
+
+    #[test]
+    fn test_export_dot_basic() {
+        let mut tasks = HashMap::new();
+        let task = create_test_task("Test Task");
+        tasks.insert(task.id.clone(), task);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Dot).unwrap();
+
+        assert!(result.starts_with("digraph TaskChains {"));
+        assert!(result.contains("rankdir=LR"));
+        assert!(result.contains("Test Task"));
+        assert!(result.ends_with("}\n"));
+    }
+
+    #[test]
+    fn test_export_dot_with_chain() {
+        let mut tasks = HashMap::new();
+
+        let task1 = create_test_task("First Task");
+        let task2 = create_test_task("Second Task");
+        let task1_id = task1.id.clone();
+
+        // Create chain: task1 -> task2
+        let mut task1_modified = task1.clone();
+        task1_modified.next_task_id = Some(task2.id.clone());
+
+        tasks.insert(task1_id.clone(), task1_modified);
+        tasks.insert(task2.id.clone(), task2);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Dot).unwrap();
+
+        assert!(result.contains("Chain edges"));
+        assert!(result.contains("[color=\"blue\" label=\"chain\"]"));
+    }
+
+    #[test]
+    fn test_export_dot_with_dependency() {
+        let mut tasks = HashMap::new();
+
+        let task1 = create_test_task("Dependency");
+        let task1_id = task1.id.clone();
+
+        let mut task2 = create_test_task("Dependent Task");
+        task2.dependencies.push(task1_id.clone());
+
+        tasks.insert(task1_id, task1);
+        tasks.insert(task2.id.clone(), task2);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Dot).unwrap();
+
+        assert!(result.contains("Dependency edges"));
+        assert!(result.contains("[color=\"red\" style=\"dashed\" label=\"blocks\"]"));
+    }
+
+    #[test]
+    fn test_export_dot_status_colors() {
+        let mut tasks = HashMap::new();
+
+        let done_task = create_test_task("Done Task").with_status(TaskStatus::Done);
+        tasks.insert(done_task.id.clone(), done_task);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Dot).unwrap();
+
+        assert!(result.contains("#90EE90")); // Light green for done
+    }
+
+    #[test]
+    fn test_export_mermaid_basic() {
+        let mut tasks = HashMap::new();
+        let task = create_test_task("Test Task");
+        tasks.insert(task.id.clone(), task);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Mermaid).unwrap();
+
+        assert!(result.starts_with("```mermaid"));
+        assert!(result.contains("flowchart LR"));
+        assert!(result.contains("Test Task"));
+        assert!(result.ends_with("```\n"));
+    }
+
+    #[test]
+    fn test_export_mermaid_with_chain() {
+        let mut tasks = HashMap::new();
+
+        let task1 = create_test_task("First Task");
+        let task2 = create_test_task("Second Task");
+
+        let mut task1_modified = task1.clone();
+        task1_modified.next_task_id = Some(task2.id.clone());
+
+        tasks.insert(task1.id.clone(), task1_modified);
+        tasks.insert(task2.id.clone(), task2);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Mermaid).unwrap();
+
+        assert!(result.contains("Chain edges"));
+        assert!(result.contains("-->")); // Chain arrow
+    }
+
+    #[test]
+    fn test_export_mermaid_with_dependency() {
+        let mut tasks = HashMap::new();
+
+        let task1 = create_test_task("Dependency");
+        let task1_id = task1.id.clone();
+
+        let mut task2 = create_test_task("Dependent Task");
+        task2.dependencies.push(task1_id.clone());
+
+        tasks.insert(task1_id, task1);
+        tasks.insert(task2.id.clone(), task2);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Mermaid).unwrap();
+
+        assert!(result.contains("Dependency edges"));
+        assert!(result.contains("-.->|blocks|")); // Dependency arrow with label
+    }
+
+    #[test]
+    fn test_export_mermaid_style_classes() {
+        let mut tasks = HashMap::new();
+        let done_task = create_test_task("Done Task").with_status(TaskStatus::Done);
+        tasks.insert(done_task.id.clone(), done_task);
+
+        let result = export_chains_to_string(&tasks, ExportFormat::Mermaid).unwrap();
+
+        assert!(result.contains("classDef done"));
+        assert!(result.contains(":::done")); // Node uses the class
+    }
+
+    #[test]
+    fn test_export_chains_empty() {
+        let tasks: HashMap<TaskId, Task> = HashMap::new();
+
+        let dot_result = export_chains_to_string(&tasks, ExportFormat::Dot).unwrap();
+        assert!(dot_result.contains("digraph TaskChains"));
+
+        let mermaid_result = export_chains_to_string(&tasks, ExportFormat::Mermaid).unwrap();
+        assert!(mermaid_result.contains("flowchart LR"));
     }
 }

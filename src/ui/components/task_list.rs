@@ -314,13 +314,12 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
 
     // Add due date if present
     let due_span = if let Some(due) = task.due_date {
+        use std::cmp::Ordering;
         let today = chrono::Utc::now().date_naive();
-        let style = if due < today {
-            Style::default().fg(theme.colors.danger.to_color()) // Overdue
-        } else if due == today {
-            Style::default().fg(theme.colors.warning.to_color()) // Due today
-        } else {
-            Style::default().fg(theme.colors.muted.to_color())
+        let style = match due.cmp(&today) {
+            Ordering::Less => Style::default().fg(theme.colors.danger.to_color()), // Overdue
+            Ordering::Equal => Style::default().fg(theme.colors.warning.to_color()), // Due today
+            Ordering::Greater => Style::default().fg(theme.colors.muted.to_color()),
         };
         Span::styled(format!(" [{}]", due.format("%m/%d")), style)
     } else {
@@ -345,7 +344,9 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
     };
 
     // Tags display
-    let tags_span = if !task.tags.is_empty() {
+    let tags_span = if task.tags.is_empty() {
+        Span::raw("")
+    } else {
         let tags_str = task
             .tags
             .iter()
@@ -356,8 +357,6 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
             format!(" {tags_str}"),
             Style::default().fg(theme.colors.muted.to_color()),
         )
-    } else {
-        Span::raw("")
     };
 
     // Description indicator (shows if task has a note)

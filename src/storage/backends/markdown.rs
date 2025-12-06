@@ -179,6 +179,7 @@ impl MarkdownBackend {
         Ok(project)
     }
 
+    #[allow(clippy::unused_self)]
     fn parse_frontmatter(&self, content: &str) -> StorageResult<(String, String)> {
         let content = content.trim();
 

@@ -54,7 +54,7 @@ impl<'a> Calendar<'a> {
     }
 
     /// Get month name
-    fn month_name(&self) -> &'static str {
+    const fn month_name(&self) -> &'static str {
         match self.model.calendar_state.month {
             1 => "January",
             2 => "February",

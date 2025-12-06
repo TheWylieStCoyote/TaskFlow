@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
@@ -180,8 +182,6 @@ fn handle_calendar_up(model: &mut Model) {
     if let Some(day) = model.calendar_state.selected_day {
         if day > 7 {
             model.calendar_state.selected_day = Some(day - 7);
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         } else {
             // Move to previous month, last row
             if model.calendar_state.month == 1 {
@@ -194,9 +194,9 @@ fn handle_calendar_up(model: &mut Model) {
             // Try to land on same weekday in last week
             let new_day = days - (7 - day);
             model.calendar_state.selected_day = Some(new_day.max(1));
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         }
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
     }
 }
 
@@ -206,8 +206,6 @@ fn handle_calendar_down(model: &mut Model) {
         let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
         if day + 7 <= days {
             model.calendar_state.selected_day = Some(day + 7);
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         } else {
             // Move to next month, first row
             if model.calendar_state.month == 12 {
@@ -219,9 +217,9 @@ fn handle_calendar_down(model: &mut Model) {
             // Try to land on same weekday in first week
             let new_day = (day + 7) - days;
             model.calendar_state.selected_day = Some(new_day.min(7));
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         }
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
     }
 }
 
@@ -316,12 +314,14 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
 
             if let Some(id) = task_id {
                 // Check if completing a recurring task
-                let next_task = model.tasks.get(&id).map_or(None, |task| if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
+                let next_task = model.tasks.get(&id).and_then(|task| {
+                    if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
                         // Create next occurrence
                         Some(create_next_recurring_task(task))
                     } else {
                         None
-                    });
+                    }
+                });
 
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
@@ -874,7 +874,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                                 day: today.day(),
                             })
                         }
-                        '0' | 'n' | 'N' | _ => None, // Invalid input clears recurrence
+                        _ => None, // Invalid input or explicit 0/n/N clears recurrence
                     };
 
                     if let Some(task) = model.tasks.get_mut(task_id) {
@@ -1024,7 +1024,6 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             if let Some(t) = model.tasks.get(id) {
                                 let is_dep = task.dependencies.contains(id);
                                 let marker = if is_dep { "*" } else { "" };
-                                use std::fmt::Write;
                                 let _ = write!(buffer, "{}{}: {}, ", marker, i + 1, t.title);
                             }
                         }

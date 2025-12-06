@@ -116,10 +116,7 @@ impl<'a> Dashboard<'a> {
         self.model
             .tasks
             .values()
-            .filter(|t| {
-                t.completed_at
-                    .is_some_and(|d| d.date_naive() >= week_start)
-            })
+            .filter(|t| t.completed_at.is_some_and(|d| d.date_naive() >= week_start))
             .count()
     }
 

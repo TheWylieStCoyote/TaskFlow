@@ -299,7 +299,7 @@ pub enum Recurrence {
 ///
 /// assert_eq!(subtask.parent_task_id, Some(parent.id));
 /// ```
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
     pub title: String,

@@ -22,6 +22,7 @@ enum ListEntry<'a> {
         is_multi_selected: bool,
         has_dependencies: bool,
         is_recurring: bool,
+        subtask_progress: (usize, usize), // (completed, total) - only shown if total > 0
     },
     ProjectHeader {
         name: String,
@@ -64,6 +65,7 @@ impl<'a> TaskList<'a> {
                 let is_multi_selected = model.selected_tasks.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
                 let is_recurring = task.recurrence.is_some();
+                let subtask_progress = model.subtask_progress(task_id);
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
@@ -72,6 +74,7 @@ impl<'a> TaskList<'a> {
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
+                    subtask_progress,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -118,6 +121,7 @@ impl<'a> TaskList<'a> {
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
                     let is_recurring = task.recurrence.is_some();
+                    let subtask_progress = model.subtask_progress(&task_id);
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
@@ -126,6 +130,7 @@ impl<'a> TaskList<'a> {
                         is_multi_selected,
                         has_dependencies,
                         is_recurring,
+                        subtask_progress,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -167,6 +172,7 @@ impl Widget for TaskList<'_> {
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
+                    subtask_progress,
                 } => {
                     let ctx = TaskItemContext {
                         task,
@@ -177,6 +183,7 @@ impl Widget for TaskList<'_> {
                         is_multi_selected: *is_multi_selected,
                         has_dependencies: *has_dependencies,
                         is_recurring: *is_recurring,
+                        subtask_progress: *subtask_progress,
                         theme,
                     };
                     task_to_list_item(&ctx)
@@ -223,6 +230,7 @@ struct TaskItemContext<'a> {
     is_multi_selected: bool,
     has_dependencies: bool,
     is_recurring: bool,
+    subtask_progress: (usize, usize), // (completed, total)
     theme: &'a Theme,
 }
 
@@ -380,6 +388,20 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("")
     };
 
+    // Subtask progress indicator (only show if task has subtasks)
+    let progress_span = if ctx.subtask_progress.1 > 0 {
+        let (completed, total) = ctx.subtask_progress;
+        let style = if completed == total {
+            // All done - show in success/done color
+            Style::default().fg(theme.status.done.to_color())
+        } else {
+            Style::default().fg(theme.colors.muted.to_color())
+        };
+        Span::styled(format!(" [{completed}/{total}]"), style)
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         select_span,
         indent_span,
@@ -387,6 +409,7 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         priority_span,
         status_span,
         title_span,
+        progress_span,
         desc_span,
         dep_span,
         recur_span,

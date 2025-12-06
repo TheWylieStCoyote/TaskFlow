@@ -927,6 +927,43 @@ impl Model {
             .map(TimeEntry::calculated_duration_minutes)
             .sum()
     }
+
+    /// Returns subtask completion progress for a task.
+    ///
+    /// Returns a tuple of (completed_count, total_count) for subtasks
+    /// that have this task as their parent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use taskflow::app::Model;
+    /// use taskflow::domain::Task;
+    ///
+    /// let mut model = Model::new();
+    /// let parent = Task::new("Parent task");
+    /// let parent_id = parent.id.clone();
+    ///
+    /// let subtask1 = Task::new("Subtask 1").with_parent(parent_id.clone());
+    /// let subtask2 = Task::new("Subtask 2").with_parent(parent_id.clone());
+    ///
+    /// model.tasks.insert(parent.id.clone(), parent);
+    /// model.tasks.insert(subtask1.id.clone(), subtask1);
+    /// model.tasks.insert(subtask2.id.clone(), subtask2);
+    ///
+    /// let (completed, total) = model.subtask_progress(&parent_id);
+    /// assert_eq!(total, 2);
+    /// assert_eq!(completed, 0);
+    /// ```
+    #[must_use]
+    pub fn subtask_progress(&self, task_id: &TaskId) -> (usize, usize) {
+        let subtasks: Vec<_> = self
+            .tasks
+            .values()
+            .filter(|t| t.parent_task_id.as_ref() == Some(task_id))
+            .collect();
+        let completed = subtasks.iter().filter(|t| t.status.is_complete()).count();
+        (completed, subtasks.len())
+    }
 }
 
 impl Default for Model {

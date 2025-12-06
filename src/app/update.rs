@@ -40,9 +40,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 6)
-                    if model.sidebar_selected == 6 {
-                        model.sidebar_selected = 5;
+                    // Skip separator (index 7)
+                    if model.sidebar_selected == 7 {
+                        model.sidebar_selected = 6;
                     }
                 }
             }
@@ -60,9 +60,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 6)
-                    if model.sidebar_selected == 6 {
-                        model.sidebar_selected = 7;
+                    // Skip separator (index 7)
+                    if model.sidebar_selected == 7 {
+                        model.sidebar_selected = 8;
                     }
                 }
             }
@@ -670,7 +670,8 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
                 InputTarget::Subtask(parent_id) => {
                     if !input.is_empty() {
-                        let task = create_task_from_quick_add(&input, model, Some(parent_id.clone()));
+                        let task =
+                            create_task_from_quick_add(&input, model, Some(parent_id.clone()));
                         model.sync_task(&task);
                         model
                             .undo_stack
@@ -973,8 +974,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             .tasks
                             .iter()
                             .find(|(id, t)| {
-                                *id != task_id
-                                    && t.title.to_lowercase().contains(&input_lower)
+                                *id != task_id && t.title.to_lowercase().contains(&input_lower)
                             })
                             .map(|(id, _)| id.clone())
                     };
@@ -1176,7 +1176,8 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     if let Some(task) = model.tasks.get(&task_id) {
                         if let Some(next_id) = &task.next_task_id {
                             if let Some(next_task) = model.tasks.get(next_id) {
-                                model.input_buffer = format!("Currently linked to: {}", next_task.title);
+                                model.input_buffer =
+                                    format!("Currently linked to: {}", next_task.title);
                             } else {
                                 model.input_buffer = String::new();
                             }
@@ -2205,15 +2206,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 5; // Dashboard (before separator at 6)
+        model.sidebar_selected = 6; // Dashboard (before separator at 7)
 
-        // Move down should skip separator (6) and go to Projects header (7)
+        // Move down should skip separator (7) and go to Projects header (8)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 7);
+        assert_eq!(model.sidebar_selected, 8);
 
-        // Move up should skip separator and go back to Dashboard (5)
+        // Move up should skip separator and go back to Dashboard (6)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 5);
+        assert_eq!(model.sidebar_selected, 6);
     }
 
     #[test]

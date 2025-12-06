@@ -185,6 +185,7 @@ impl Default for Theme {
 
 impl Theme {
     /// Load theme from a name (looks in themes directory)
+    #[must_use]
     pub fn load(name: &str) -> Self {
         if name == "default" {
             return Self::default();
@@ -195,6 +196,7 @@ impl Theme {
     }
 
     /// Load theme from a specific path
+    #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         if path.exists() {
             match std::fs::read_to_string(&path) {
@@ -209,6 +211,7 @@ impl Theme {
     }
 
     /// Get the path for a theme by name
+    #[must_use]
     pub fn theme_path(name: &str) -> PathBuf {
         Settings::config_dir()
             .join("themes")
@@ -216,6 +219,7 @@ impl Theme {
     }
 
     /// Get the themes directory
+    #[must_use]
     pub fn themes_dir() -> PathBuf {
         Settings::config_dir().join("themes")
     }

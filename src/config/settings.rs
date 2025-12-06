@@ -47,11 +47,13 @@ impl Default for Settings {
 
 impl Settings {
     /// Load settings from the default config path
+    #[must_use]
     pub fn load() -> Self {
         Self::load_from_path(Self::config_path())
     }
 
     /// Load settings from a specific path
+    #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         if path.exists() {
             match std::fs::read_to_string(&path) {
@@ -81,6 +83,7 @@ impl Settings {
     }
 
     /// Get the default config directory
+    #[must_use]
     pub fn config_dir() -> PathBuf {
         directories::ProjectDirs::from("com", "taskflow", "taskflow")
             .map(|dirs| dirs.config_dir().to_path_buf())
@@ -88,16 +91,19 @@ impl Settings {
     }
 
     /// Get the default config file path
+    #[must_use]
     pub fn config_path() -> PathBuf {
         Self::config_dir().join("config.toml")
     }
 
     /// Get the backend type
+    #[must_use]
     pub fn backend_type(&self) -> BackendType {
         BackendType::parse(&self.backend).unwrap_or_default()
     }
 
     /// Get the data path, using defaults if not set
+    #[must_use]
     pub fn get_data_path(&self) -> PathBuf {
         self.data_path.clone().unwrap_or_else(|| {
             let data_dir = directories::ProjectDirs::from("com", "taskflow", "taskflow")
@@ -110,6 +116,7 @@ impl Settings {
     }
 
     /// Get the default priority for new tasks
+    #[must_use]
     pub fn default_priority(&self) -> Priority {
         Priority::parse(&self.default_priority).unwrap_or_default()
     }

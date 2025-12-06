@@ -234,11 +234,8 @@ impl FocusView<'_> {
 
         let icon = "⏱ ";
 
-        let timer_line = Line::from(vec![Span::styled(
-            format!("{icon}{time_str}"),
-            timer_style,
-        )])
-        .alignment(Alignment::Center);
+        let timer_line = Line::from(vec![Span::styled(format!("{icon}{time_str}"), timer_style)])
+            .alignment(Alignment::Center);
 
         // Center the timer vertically in its area
         let y = area.y + area.height / 2;
@@ -254,12 +251,11 @@ impl FocusView<'_> {
             "[t] Start Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
         };
 
-        let help_line =
-            Line::from(Span::styled(
-                help_text,
-                Style::default().fg(theme.colors.muted.to_color()),
-            ))
-            .alignment(Alignment::Center);
+        let help_line = Line::from(Span::styled(
+            help_text,
+            Style::default().fg(theme.colors.muted.to_color()),
+        ))
+        .alignment(Alignment::Center);
 
         buf.set_line(area.x, area.y, &help_line, area.width);
     }
@@ -336,7 +332,10 @@ mod tests {
         let content = buffer_content(&buffer);
 
         // Timer shows time in format like 00:00:00
-        assert!(content.contains(':'), "Timer should show colon-separated time");
+        assert!(
+            content.contains(':'),
+            "Timer should show colon-separated time"
+        );
     }
 
     #[test]
@@ -370,10 +369,22 @@ mod tests {
 
     #[test]
     fn test_format_duration() {
-        assert_eq!(FocusView::format_duration(Duration::from_secs(0)), "00:00:00");
-        assert_eq!(FocusView::format_duration(Duration::from_secs(59)), "00:00:59");
-        assert_eq!(FocusView::format_duration(Duration::from_secs(60)), "00:01:00");
-        assert_eq!(FocusView::format_duration(Duration::from_secs(3661)), "01:01:01");
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(0)),
+            "00:00:00"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(59)),
+            "00:00:59"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(60)),
+            "00:01:00"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(3661)),
+            "01:01:01"
+        );
         assert_eq!(
             FocusView::format_duration(Duration::from_secs(7200)),
             "02:00:00"

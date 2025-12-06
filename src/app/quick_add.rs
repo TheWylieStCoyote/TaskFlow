@@ -179,10 +179,8 @@ fn parse_weekday(s: &str) -> Option<Weekday> {
 /// Get the next occurrence of a weekday from a given date
 fn next_weekday(from: NaiveDate, target: Weekday) -> NaiveDate {
     let current = from.weekday();
-    let days_until = (target.num_days_from_monday() as i64
-        - current.num_days_from_monday() as i64
-        + 7)
-        % 7;
+    let days_until =
+        (target.num_days_from_monday() as i64 - current.num_days_from_monday() as i64 + 7) % 7;
 
     // If it's the same day, return next week
     let days = if days_until == 0 { 7 } else { days_until };
@@ -366,5 +364,120 @@ mod tests {
         assert_eq!(parsed.title, "Fix in the code today");
         assert_eq!(parsed.tags, vec!["bug"]);
         assert_eq!(parsed.priority, Some(Priority::High));
+    }
+
+    // Edge case tests
+
+    #[test]
+    fn test_parse_multiple_priorities_uses_first() {
+        // When multiple priorities are given, regex captures the first match
+        let parsed = parse_quick_add("Task !high !low !urgent");
+        // The regex only captures the first priority
+        assert_eq!(parsed.priority, Some(Priority::High));
+    }
+
+    #[test]
+    fn test_parse_multiple_projects_uses_first() {
+        // When multiple projects are given, regex captures the first match
+        let parsed = parse_quick_add("Task @work @home @office");
+        // The regex only captures the first project
+        assert_eq!(parsed.project_name, Some("work".to_string()));
+    }
+
+    #[test]
+    fn test_parse_multiple_due_dates_uses_first() {
+        // When multiple due dates are given, regex captures the first match
+        let parsed = parse_quick_add("Task due:today due:tomorrow");
+        assert_eq!(parsed.due_date, Some(Utc::now().date_naive()));
+    }
+
+    #[test]
+    fn test_parse_invalid_iso_date_returns_none() {
+        let parsed = parse_quick_add("Task due:2025-13-45");
+        // Invalid month/day should return None
+        assert!(parsed.due_date.is_none());
+    }
+
+    #[test]
+    fn test_parse_invalid_month_day_returns_none() {
+        let parsed = parse_quick_add("Task due:13/45");
+        // Invalid month/day should return None
+        assert!(parsed.due_date.is_none());
+    }
+
+    #[test]
+    fn test_parse_invalid_weekday_returns_none() {
+        let parsed = parse_quick_add("Task due:notaday");
+        // Invalid weekday should return None
+        assert!(parsed.due_date.is_none());
+    }
+
+    #[test]
+    fn test_parse_tag_with_numbers() {
+        let parsed = parse_quick_add("Task #v2 #bug123 #3d");
+        assert_eq!(parsed.tags, vec!["v2", "bug123", "3d"]);
+    }
+
+    #[test]
+    fn test_parse_tag_stops_at_special_chars() {
+        // Tags only match word characters (\w+)
+        let parsed = parse_quick_add("Task #hello-world");
+        // Should only capture "hello", not "hello-world"
+        assert_eq!(parsed.tags, vec!["hello"]);
+    }
+
+    #[test]
+    fn test_parse_whitespace_only_input() {
+        let parsed = parse_quick_add("   ");
+        assert_eq!(parsed.title, "");
+        assert!(parsed.tags.is_empty());
+        assert!(parsed.priority.is_none());
+    }
+
+    #[test]
+    fn test_parse_consecutive_metadata_tokens() {
+        let parsed = parse_quick_add("#tag1#tag2 !high!low");
+        // The regex should handle consecutive tokens - let's see what actually happens
+        // #tag1#tag2 will match as one tag "tag1" (stops at #)
+        // Actually \w+ won't match #, so it will get tag1 and tag2 separately
+        assert!(parsed.tags.contains(&"tag1".to_string()));
+        assert!(parsed.tags.contains(&"tag2".to_string()));
+    }
+
+    #[test]
+    fn test_parse_date_month_day_dash_format() {
+        let parsed = parse_quick_add("Task due:12-25");
+        let year = Utc::now().date_naive().year();
+        assert_eq!(
+            parsed.due_date,
+            Some(NaiveDate::from_ymd_opt(year, 12, 25).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_parse_priority_case_insensitive() {
+        let parsed1 = parse_quick_add("Task !HIGH");
+        let parsed2 = parse_quick_add("Task !High");
+        let parsed3 = parse_quick_add("Task !high");
+        assert_eq!(parsed1.priority, Some(Priority::High));
+        assert_eq!(parsed2.priority, Some(Priority::High));
+        assert_eq!(parsed3.priority, Some(Priority::High));
+    }
+
+    #[test]
+    fn test_parse_unrecognized_priority() {
+        let parsed = parse_quick_add("Task !invalid");
+        // Unrecognized priority string should result in None
+        assert!(parsed.priority.is_none());
+    }
+
+    #[test]
+    fn test_parse_date_abbreviations() {
+        let parsed = parse_quick_add("Task due:tod");
+        assert_eq!(parsed.due_date, Some(Utc::now().date_naive()));
+
+        let parsed2 = parse_quick_add("Task due:tom");
+        let tomorrow = Utc::now().date_naive() + chrono::Duration::days(1);
+        assert_eq!(parsed2.due_date, Some(tomorrow));
     }
 }

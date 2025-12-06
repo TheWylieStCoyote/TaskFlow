@@ -57,9 +57,9 @@ impl Settings {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(settings) => return settings,
-                    Err(e) => eprintln!("Warning: Failed to parse config: {}", e),
+                    Err(e) => eprintln!("Warning: Failed to parse config: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read config: {}", e),
+                Err(e) => eprintln!("Warning: Failed to read config: {e}"),
             }
         }
         Self::default()
@@ -105,7 +105,7 @@ impl Settings {
                 .unwrap_or_else(|| PathBuf::from("."));
 
             let ext = self.backend_type().file_extension();
-            data_dir.join(format!("tasks.{}", ext))
+            data_dir.join(format!("tasks.{ext}"))
         })
     }
 

@@ -261,7 +261,7 @@ impl Model {
     ///
     /// The model starts with:
     /// - Empty task and project collections
-    /// - TaskList view selected
+    /// - `TaskList` view selected
     /// - Sidebar visible
     /// - No active filters
     ///
@@ -783,7 +783,7 @@ impl Model {
 
     /// Returns visible tasks grouped by project.
     ///
-    /// Returns a `Vec` of (`Option<ProjectId>`, project_name, `Vec<TaskId>`).
+    /// Returns a `Vec` of (`Option<ProjectId>`, `project_name`, `Vec<TaskId>`).
     /// Projects are sorted alphabetically, with "No Project" last.
     /// Tasks within each project follow the current sort order.
     #[must_use]

@@ -1051,7 +1051,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
                         None => "0 (none)",
                     };
-                    model.input_buffer = format!("Current: {}", current);
+                    model.input_buffer = format!("Current: {current}");
                     model.cursor_position = model.input_buffer.len();
                 }
             }
@@ -1410,12 +1410,12 @@ fn handle_export_csv(model: &mut Model) {
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {}", e));
+                    model.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {}", e));
+            model.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -1442,12 +1442,12 @@ fn handle_export_ics(model: &mut Model) {
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {}", e));
+                    model.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {}", e));
+            model.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }

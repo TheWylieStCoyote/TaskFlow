@@ -1,8 +1,8 @@
-//! # TaskFlow
+//! # `TaskFlow`
 //!
 //! A terminal-based task and project management application built with Rust.
 //!
-//! TaskFlow provides a fast, keyboard-driven TUI interface for managing tasks,
+//! `TaskFlow` provides a fast, keyboard-driven TUI interface for managing tasks,
 //! projects, and time tracking. It follows The Elm Architecture (TEA) pattern
 //! for predictable state management.
 //!
@@ -13,7 +13,7 @@
 //! - **Time Tracking**: Track time spent on tasks with start/stop timers
 //! - **Multiple Views**: Task list, Today, Upcoming, Overdue, Calendar, Dashboard
 //! - **Keyboard-Driven**: Full vim-style navigation and shortcuts
-//! - **Multiple Storage Backends**: JSON, YAML, SQLite, Markdown
+//! - **Multiple Storage Backends**: JSON, YAML, `SQLite`, Markdown
 //! - **Customizable**: Themes, keybindings, and settings
 //!
 //! ## Quick Start
@@ -101,14 +101,14 @@
 //! The application is structured into several modules:
 //!
 //! - [`app`] - Application state management (Model, Message, Update)
-//! - [`domain`] - Core domain entities (Task, Project, TimeEntry)
-//! - [`storage`] - Persistence backends (JSON, YAML, SQLite, Markdown)
+//! - [`domain`] - Core domain entities (Task, Project, `TimeEntry`)
+//! - [`storage`] - Persistence backends (JSON, YAML, `SQLite`, Markdown)
 //! - [`config`] - Configuration management (settings, themes, keybindings)
 //! - [`ui`] - Terminal UI rendering with Ratatui
 //!
 //! ## The Elm Architecture (TEA)
 //!
-//! TaskFlow uses TEA for state management:
+//! `TaskFlow` uses TEA for state management:
 //!
 //! ```text
 //! ┌─────────┐    ┌──────────┐    ┌─────────┐
@@ -141,7 +141,7 @@
 //!
 //! ## Keyboard Shortcuts
 //!
-//! TaskFlow uses vim-style navigation:
+//! `TaskFlow` uses vim-style navigation:
 //!
 //! | Key | Action |
 //! |-----|--------|

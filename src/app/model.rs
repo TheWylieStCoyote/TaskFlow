@@ -59,6 +59,32 @@ use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
+// ============================================================================
+// Sidebar Layout Constants
+// ============================================================================
+// These constants define the sidebar structure. When adding/removing views,
+// update SIDEBAR_VIEW_COUNT and the indices will adjust automatically.
+//
+// Layout:
+//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (All Tasks, Today, etc.)
+//   SIDEBAR_SEPARATOR_INDEX       = Separator line
+//   SIDEBAR_PROJECTS_HEADER_INDEX = "Projects" header
+//   SIDEBAR_FIRST_PROJECT_INDEX+  = Individual projects
+
+/// Number of view items in the sidebar (before the separator).
+/// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
+///        Dashboard, Reports, Blocked, Untagged, No Project, Recent
+pub const SIDEBAR_VIEW_COUNT: usize = 12;
+
+/// Index of the separator line in the sidebar.
+pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
+
+/// Index of the "Projects" header in the sidebar.
+pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1; // 13
+
+/// Index where individual projects start in the sidebar.
+pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1; // 14
+
 /// State for the calendar view.
 ///
 /// Tracks the currently displayed month and selected day.
@@ -372,12 +398,11 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Includes: 12 views + 1 separator + 1 "Projects" header + project count.
+    /// Uses [`SIDEBAR_FIRST_PROJECT_INDEX`] as the base count, plus projects.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
-        // 12 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent)
-        // + 1 separator + 1 "Projects" header + projects count
-        14 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // Base items (views + separator + Projects header) + project count
+        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1)
     }
 
     /// Returns all tasks due on a specific day.

@@ -6,6 +6,7 @@ use crate::ui::{InputMode, InputTarget};
 use super::{
     parse_date, parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage,
     RunningState, SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
+    SIDEBAR_FIRST_PROJECT_INDEX, SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
 };
 
 /// Main update function - heart of TEA pattern
@@ -48,9 +49,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 11)
-                    if model.sidebar_selected == 11 {
-                        model.sidebar_selected = 10;
+                    // Skip separator
+                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
+                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
                     }
                 }
             }
@@ -76,9 +77,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 11)
-                    if model.sidebar_selected == 11 {
-                        model.sidebar_selected = 12;
+                    // Skip separator
+                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
+                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX + 1;
                     }
                 }
             }
@@ -268,120 +269,43 @@ fn handle_calendar_down(model: &mut Model) {
 fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
-    // Sidebar layout:
-    // 0: All Tasks (TaskList view)
-    // 1: Today
-    // 2: Upcoming
-    // 3: Overdue
-    // 4: Scheduled
-    // 5: Calendar
-    // 6: Dashboard
-    // 7: Reports
-    // 8: Blocked
-    // 9: Untagged
-    // 10: No Project
-    // 11: Recently Modified
-    // 12: Separator (skip)
-    // 13: "Projects" header (skip or go to Projects view)
-    // 14+: Individual projects
+    // Sidebar layout - see SIDEBAR_* constants in model.rs:
+    // 0-11: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
+    //       Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent)
+    // SIDEBAR_SEPARATOR_INDEX (12): Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX (13): "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+ (14+): Individual projects
+
+    // Helper to activate a view
+    let activate_view = |model: &mut Model, view: ViewId| {
+        model.current_view = view;
+        model.selected_project = None;
+        model.focus_pane = FocusPane::TaskList;
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
+    };
 
     match selected {
-        0 => {
-            model.current_view = ViewId::TaskList;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        1 => {
-            model.current_view = ViewId::Today;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        2 => {
-            model.current_view = ViewId::Upcoming;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        3 => {
-            model.current_view = ViewId::Overdue;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        4 => {
-            model.current_view = ViewId::Scheduled;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        5 => {
-            model.current_view = ViewId::Calendar;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        6 => {
-            model.current_view = ViewId::Dashboard;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        7 => {
-            model.current_view = ViewId::Reports;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        8 => {
-            model.current_view = ViewId::Blocked;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        9 => {
-            model.current_view = ViewId::Untagged;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        10 => {
-            model.current_view = ViewId::NoProject;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        11 => {
-            model.current_view = ViewId::RecentlyModified;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        12 => {} // Separator, do nothing
-        13 => {
+        0 => activate_view(model, ViewId::TaskList),
+        1 => activate_view(model, ViewId::Today),
+        2 => activate_view(model, ViewId::Upcoming),
+        3 => activate_view(model, ViewId::Overdue),
+        4 => activate_view(model, ViewId::Scheduled),
+        5 => activate_view(model, ViewId::Calendar),
+        6 => activate_view(model, ViewId::Dashboard),
+        7 => activate_view(model, ViewId::Reports),
+        8 => activate_view(model, ViewId::Blocked),
+        9 => activate_view(model, ViewId::Untagged),
+        10 => activate_view(model, ViewId::NoProject),
+        11 => activate_view(model, ViewId::RecentlyModified),
+        n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
+        n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks
-            model.current_view = ViewId::Projects;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
+            activate_view(model, ViewId::Projects);
         }
-        n if n >= 14 => {
+        n if n >= SIDEBAR_FIRST_PROJECT_INDEX => {
             // Select a specific project
-            let project_index = n - 14;
+            let project_index = n - SIDEBAR_FIRST_PROJECT_INDEX;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -2772,15 +2696,16 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 10; // Recent (before separator at 11)
+        // Position at last view item (just before separator)
+        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
 
-        // Move down should skip separator (11) and go to Projects header (12)
+        // Move down should skip separator and go to Projects header
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 12);
+        assert_eq!(model.sidebar_selected, SIDEBAR_PROJECTS_HEADER_INDEX);
 
-        // Move up should skip separator and go back to Recent (10)
+        // Move up should skip separator and go back to last view item
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 10);
+        assert_eq!(model.sidebar_selected, SIDEBAR_SEPARATOR_INDEX - 1);
     }
 
     #[test]
@@ -2837,7 +2762,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 14; // First project (index 14 = after 12 views + separator + Projects header)
+        model.sidebar_selected = SIDEBAR_FIRST_PROJECT_INDEX; // First project
 
         update(
             &mut model,

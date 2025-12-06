@@ -100,7 +100,7 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
                 }
             }
             Err(e) => {
-                eprintln!("Warning: Could not load data from {:?}: {}", data_path, e);
+                eprintln!("Warning: Could not load data from {data_path:?}: {e}");
                 eprintln!("Starting with sample data...");
                 Model::new().with_sample_data()
             }
@@ -130,7 +130,7 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Save before exit if storage is configured
     if model.has_storage() && model.dirty {
         if let Err(e) = model.save() {
-            eprintln!("Warning: Could not save data: {}", e);
+            eprintln!("Warning: Could not save data: {e}");
         }
     }
 
@@ -361,7 +361,7 @@ fn key_event_to_string(key: &event::KeyEvent) -> String {
         KeyCode::PageUp => "pageup".to_string(),
         KeyCode::PageDown => "pagedown".to_string(),
         KeyCode::Tab => "tab".to_string(),
-        KeyCode::F(n) => format!("f{}", n),
+        KeyCode::F(n) => format!("f{n}"),
         _ => return String::new(),
     };
 

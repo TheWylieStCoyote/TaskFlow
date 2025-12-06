@@ -205,7 +205,7 @@ impl MarkdownBackend {
         let frontmatter = serde_yaml::to_string(&task_for_yaml)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
 
-        let mut content = format!("---\n{}---\n", frontmatter);
+        let mut content = format!("---\n{frontmatter}---\n");
 
         // Add description as body
         if let Some(ref desc) = task.description {
@@ -220,7 +220,8 @@ impl MarkdownBackend {
     }
 
     fn write_project_file(&self, project: &Project) -> StorageResult<()> {
-        let path = self.projects_dir.join(format!("{}.md", project.id.0));
+        let id = project.id.0;
+        let path = self.projects_dir.join(format!("{id}.md"));
 
         let mut project_for_yaml = project.clone();
         project_for_yaml.description = None;
@@ -228,7 +229,7 @@ impl MarkdownBackend {
         let frontmatter = serde_yaml::to_string(&project_for_yaml)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
 
-        let mut content = format!("---\n{}---\n", frontmatter);
+        let mut content = format!("---\n{frontmatter}---\n");
 
         if let Some(ref desc) = project.description {
             content.push('\n');

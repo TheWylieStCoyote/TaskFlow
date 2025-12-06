@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry,
-    TimeEntryId,
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Priority, Project, ProjectId,
+    ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId,
 };
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
@@ -60,6 +60,8 @@ impl SqliteBackend {
                 recurrence TEXT,
                 estimated_minutes INTEGER,
                 actual_minutes INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER,
+                next_task_id TEXT,
                 custom_fields TEXT NOT NULL DEFAULT '{}'
             );
 
@@ -98,6 +100,11 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
+
+            CREATE TABLE IF NOT EXISTS pomodoro_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             ",
         )?;
 
@@ -133,6 +140,41 @@ impl SqliteBackend {
             .filter_map(Result::ok)
             .collect();
         Ok(entries)
+    }
+
+    fn get_pomodoro_value<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> StorageResult<Option<T>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT value FROM pomodoro_state WHERE key = ?1")?;
+        let value: Option<String> = stmt.query_row(params![key], |row| row.get(0)).optional()?;
+        match value {
+            Some(json) => Ok(serde_json::from_str(&json)?),
+            None => Ok(None),
+        }
+    }
+
+    fn set_pomodoro_value<T: serde::Serialize>(
+        &self,
+        key: &str,
+        value: Option<&T>,
+    ) -> StorageResult<()> {
+        let conn = self.conn()?;
+        match value {
+            Some(v) => {
+                let json = serde_json::to_string(v)
+                    .map_err(|e| StorageError::serialization(e.to_string()))?;
+                conn.execute(
+                    "INSERT OR REPLACE INTO pomodoro_state (key, value) VALUES (?1, ?2)",
+                    params![key, json],
+                )?;
+            }
+            None => {
+                conn.execute("DELETE FROM pomodoro_state WHERE key = ?1", params![key])?;
+            }
+        }
+        Ok(())
     }
 
     fn task_from_row(row: &rusqlite::Row) -> rusqlite::Result<Task> {
@@ -196,6 +238,13 @@ impl SqliteBackend {
             recurrence: recurrence_json.and_then(|s| serde_json::from_str(&s).ok()),
             estimated_minutes: row.get("estimated_minutes")?,
             actual_minutes: row.get::<_, i32>("actual_minutes")? as u32,
+            sort_order: row.get("sort_order").ok().flatten(),
+            next_task_id: row
+                .get::<_, Option<String>>("next_task_id")
+                .ok()
+                .flatten()
+                .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+                .map(TaskId),
             custom_fields: serde_json::from_str(&custom_fields_json).unwrap_or_default(),
         })
     }
@@ -246,8 +295,8 @@ impl TaskRepository for SqliteBackend {
             r"INSERT INTO tasks (
                 id, title, description, status, priority, project_id, parent_task_id,
                 tags, dependencies, created_at, updated_at, due_date, scheduled_date,
-                completed_at, recurrence, estimated_minutes, actual_minutes, custom_fields
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                completed_at, recurrence, estimated_minutes, actual_minutes, sort_order, next_task_id, custom_fields
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 task.id.0.to_string(),
                 task.title,
@@ -266,6 +315,8 @@ impl TaskRepository for SqliteBackend {
                 task.recurrence.as_ref().and_then(|r| serde_json::to_string(r).ok()),
                 task.estimated_minutes.map(|m| m as i32),
                 task.actual_minutes as i32,
+                task.sort_order,
+                task.next_task_id.as_ref().map(|t| t.0.to_string()),
                 serde_json::to_string(&task.custom_fields).unwrap_or_default(),
             ],
         )?;
@@ -288,7 +339,8 @@ impl TaskRepository for SqliteBackend {
                 title = ?2, description = ?3, status = ?4, priority = ?5,
                 project_id = ?6, parent_task_id = ?7, tags = ?8, dependencies = ?9,
                 updated_at = ?10, due_date = ?11, scheduled_date = ?12, completed_at = ?13,
-                recurrence = ?14, estimated_minutes = ?15, actual_minutes = ?16, custom_fields = ?17
+                recurrence = ?14, estimated_minutes = ?15, actual_minutes = ?16, sort_order = ?17,
+                next_task_id = ?18, custom_fields = ?19
             WHERE id = ?1",
             params![
                 task.id.0.to_string(),
@@ -317,6 +369,8 @@ impl TaskRepository for SqliteBackend {
                     .and_then(|r| serde_json::to_string(r).ok()),
                 task.estimated_minutes.map(|m| m as i32),
                 task.actual_minutes as i32,
+                task.sort_order,
+                task.next_task_id.as_ref().map(|t| t.0.to_string()),
                 serde_json::to_string(&task.custom_fields).unwrap_or_default(),
             ],
         )?;
@@ -707,6 +761,9 @@ impl StorageBackend for SqliteBackend {
             tags: self.list_tags()?,
             time_entries: self.list_all_time_entries()?,
             version: 1,
+            pomodoro_session: self.get_pomodoro_value("session")?,
+            pomodoro_config: self.get_pomodoro_value("config")?,
+            pomodoro_stats: self.get_pomodoro_value("stats")?,
         })
     }
 
@@ -732,11 +789,32 @@ impl StorageBackend for SqliteBackend {
             self.create_time_entry(entry)?;
         }
 
+        // Import Pomodoro state
+        self.set_pomodoro_session(data.pomodoro_session.as_ref())?;
+        if let Some(ref config) = data.pomodoro_config {
+            self.set_pomodoro_config(config)?;
+        }
+        if let Some(ref stats) = data.pomodoro_stats {
+            self.set_pomodoro_stats(stats)?;
+        }
+
         Ok(())
     }
 
     fn backend_type(&self) -> &'static str {
         "sqlite"
+    }
+
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
+        self.set_pomodoro_value("session", session)
+    }
+
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
+        self.set_pomodoro_value("config", Some(config))
+    }
+
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
+        self.set_pomodoro_value("stats", Some(stats))
     }
 }
 

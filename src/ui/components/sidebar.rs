@@ -70,6 +70,16 @@ impl Widget for Sidebar<'_> {
                 ),
             ])),
             ListItem::new(Line::from(vec![
+                Span::styled("📋 ", Style::default()),
+                styled_view_name(
+                    "Scheduled",
+                    ViewId::Scheduled,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
                 Span::styled("🗓️  ", Style::default()),
                 styled_view_name(
                     "Calendar",
@@ -84,6 +94,46 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Dashboard",
                     ViewId::Dashboard,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🔒 ", Style::default()),
+                styled_view_name(
+                    "Blocked",
+                    ViewId::Blocked,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🏷️  ", Style::default()),
+                styled_view_name(
+                    "Untagged",
+                    ViewId::Untagged,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📁 ", Style::default()),
+                styled_view_name(
+                    "No Project",
+                    ViewId::NoProject,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🕐 ", Style::default()),
+                styled_view_name(
+                    "Recent",
+                    ViewId::RecentlyModified,
                     &self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,

@@ -1,10 +1,11 @@
 use std::fmt::Write as _;
 
+use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
-    FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
-    TimeMessage, UiMessage, UndoAction, ViewId,
+    parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage, RunningState,
+    SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
 };
 
 /// Main update function - heart of TEA pattern
@@ -18,6 +19,7 @@ pub fn update(model: &mut Model, message: Message) {
         Message::Navigation(msg) => handle_navigation(model, msg),
         Message::Task(msg) => handle_task(model, msg),
         Message::Time(msg) => handle_time(model, msg),
+        Message::Pomodoro(msg) => handle_pomodoro(model, msg),
         Message::Ui(msg) => handle_ui(model, msg),
         Message::System(msg) => handle_system(model, msg),
         Message::None => {}
@@ -39,9 +41,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 6)
-                    if model.sidebar_selected == 6 {
-                        model.sidebar_selected = 5;
+                    // Skip separator (index 11)
+                    if model.sidebar_selected == 11 {
+                        model.sidebar_selected = 10;
                     }
                 }
             }
@@ -59,9 +61,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 6)
-                    if model.sidebar_selected == 6 {
-                        model.sidebar_selected = 7;
+                    // Skip separator (index 11)
+                    if model.sidebar_selected == 11 {
+                        model.sidebar_selected = 12;
                     }
                 }
             }
@@ -231,11 +233,16 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 1: Today
     // 2: Upcoming
     // 3: Overdue
-    // 4: Calendar
-    // 5: Dashboard
-    // 6: Separator (skip)
-    // 7: "Projects" header (skip or go to Projects view)
-    // 8+: Individual projects
+    // 4: Scheduled
+    // 5: Calendar
+    // 6: Dashboard
+    // 7: Blocked
+    // 8: Untagged
+    // 9: No Project
+    // 10: Recently Modified
+    // 11: Separator (skip)
+    // 12: "Projects" header (skip or go to Projects view)
+    // 13+: Individual projects
 
     match selected {
         0 => {
@@ -267,21 +274,56 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         4 => {
-            model.current_view = ViewId::Calendar;
+            model.current_view = ViewId::Scheduled;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
         5 => {
+            model.current_view = ViewId::Calendar;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        6 => {
             model.current_view = ViewId::Dashboard;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        6 => {} // Separator, do nothing
         7 => {
+            model.current_view = ViewId::Blocked;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        8 => {
+            model.current_view = ViewId::Untagged;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        9 => {
+            model.current_view = ViewId::NoProject;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        10 => {
+            model.current_view = ViewId::RecentlyModified;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        11 => {} // Separator, do nothing
+        12 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -289,9 +331,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 8 => {
+        n if n >= 13 => {
             // Select a specific project
-            let project_index = n - 8;
+            let project_index = n - 13;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -323,6 +365,15 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     }
                 });
 
+                // Check for task chain - if completing and has next_task_id, schedule it
+                let chain_next_id = model.tasks.get(&id).and_then(|task| {
+                    if task.status != crate::domain::TaskStatus::Done {
+                        task.next_task_id.clone()
+                    } else {
+                        None
+                    }
+                });
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -341,6 +392,21 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         .undo_stack
                         .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
                     model.tasks.insert(new_task.id.clone(), new_task);
+                }
+
+                // Auto-schedule the next task in chain for today
+                if let Some(next_id) = chain_next_id {
+                    if let Some(next_task) = model.tasks.get_mut(&next_id) {
+                        let before = next_task.clone();
+                        next_task.scheduled_date = Some(chrono::Local::now().date_naive());
+                        next_task.updated_at = chrono::Utc::now();
+                        let after = next_task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
                 }
             }
             model.refresh_visible_tasks();
@@ -448,6 +514,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::HideHelp => {
             model.show_help = false;
+        }
+        UiMessage::ToggleFocusMode => {
+            // Only toggle focus mode if there's a selected task
+            if model.selected_task().is_some() {
+                model.focus_mode = !model.focus_mode;
+            }
         }
         // Input mode handling
         UiMessage::StartCreateTask => {
@@ -620,8 +692,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             match &model.input_target {
                 InputTarget::Task => {
                     if !input.is_empty() {
-                        let task =
-                            crate::domain::Task::new(input).with_priority(model.default_priority);
+                        let task = create_task_from_quick_add(&input, model, None);
                         model.sync_task(&task);
                         model
                             .undo_stack
@@ -632,9 +703,8 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
                 InputTarget::Subtask(parent_id) => {
                     if !input.is_empty() {
-                        let task = crate::domain::Task::new(input)
-                            .with_priority(model.default_priority)
-                            .with_parent(parent_id.clone());
+                        let task =
+                            create_task_from_quick_add(&input, model, Some(parent_id.clone()));
                         model.sync_task(&task);
                         model
                             .undo_stack
@@ -925,6 +995,40 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                     model.refresh_visible_tasks();
                 }
+                InputTarget::LinkTask(task_id) => {
+                    // Parse the input - support task number or task title search
+                    let target_task_id = if let Ok(num) = input.parse::<usize>() {
+                        // User entered a task number
+                        model.visible_tasks.get(num.saturating_sub(1)).cloned()
+                    } else {
+                        // User entered a task title - find matching task
+                        let input_lower = input.to_lowercase();
+                        model
+                            .tasks
+                            .iter()
+                            .find(|(id, t)| {
+                                *id != task_id && t.title.to_lowercase().contains(&input_lower)
+                            })
+                            .map(|(id, _)| id.clone())
+                    };
+
+                    if let Some(next_id) = target_task_id {
+                        // Don't allow linking to self
+                        if next_id != *task_id {
+                            if let Some(task) = model.tasks.get_mut(task_id) {
+                                let before = task.clone();
+                                task.next_task_id = Some(next_id);
+                                task.updated_at = chrono::Utc::now();
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                    }
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -1089,6 +1193,53 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        // Manual ordering
+        UiMessage::MoveTaskUp => {
+            handle_move_task(model, -1);
+        }
+        UiMessage::MoveTaskDown => {
+            handle_move_task(model, 1);
+        }
+        // Task chains
+        UiMessage::StartLinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    // Show current link if any
+                    if let Some(task) = model.tasks.get(&task_id) {
+                        if let Some(next_id) = &task.next_task_id {
+                            if let Some(next_task) = model.tasks.get(next_id) {
+                                model.input_buffer =
+                                    format!("Currently linked to: {}", next_task.title);
+                            } else {
+                                model.input_buffer = String::new();
+                            }
+                        } else {
+                            model.input_buffer = String::new();
+                        }
+                    }
+                    model.input_target = InputTarget::LinkTask(task_id);
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::UnlinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    if task.next_task_id.is_some() {
+                        let before = task.clone();
+                        task.next_task_id = None;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                }
+            }
+        }
         // Calendar navigation - delegated to helper
         UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
             handle_ui_calendar(model, msg);
@@ -1100,6 +1251,19 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         // Template picker - delegated to helper
         UiMessage::ShowTemplates | UiMessage::HideTemplates | UiMessage::SelectTemplate(_) => {
             handle_ui_templates(model, msg);
+        }
+        // Keybindings editor - delegated to helper
+        UiMessage::ShowKeybindingsEditor
+        | UiMessage::HideKeybindingsEditor
+        | UiMessage::KeybindingsUp
+        | UiMessage::KeybindingsDown
+        | UiMessage::StartEditKeybinding
+        | UiMessage::CancelEditKeybinding
+        | UiMessage::ApplyKeybinding(_)
+        | UiMessage::ResetKeybinding
+        | UiMessage::ResetAllKeybindings
+        | UiMessage::SaveKeybindings => {
+            handle_ui_keybindings(model, msg);
         }
     }
 }
@@ -1240,6 +1404,75 @@ fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
         }
         _ => {}
     }
+}
+
+/// Handle moving a task up or down in the list order
+fn handle_move_task(model: &mut Model, direction: i32) {
+    if model.selected_index >= model.visible_tasks.len() {
+        return;
+    }
+
+    let current_task_id = model.visible_tasks[model.selected_index].clone();
+
+    // Get the current task
+    let current_order = model
+        .tasks
+        .get(&current_task_id)
+        .and_then(|t| t.sort_order)
+        .unwrap_or(0);
+
+    // Find the task to swap with
+    let swap_index = if direction < 0 {
+        // Moving up - find previous non-subtask at same level
+        if model.selected_index == 0 {
+            return;
+        }
+        model.selected_index - 1
+    } else {
+        // Moving down - find next task
+        if model.selected_index >= model.visible_tasks.len() - 1 {
+            return;
+        }
+        model.selected_index + 1
+    };
+
+    let swap_task_id = model.visible_tasks[swap_index].clone();
+
+    // Get the swap task's order
+    let swap_order = model
+        .tasks
+        .get(&swap_task_id)
+        .and_then(|t| t.sort_order)
+        .unwrap_or(0);
+
+    // Swap the sort orders
+    if let Some(current_task) = model.tasks.get_mut(&current_task_id) {
+        let before = current_task.clone();
+        current_task.sort_order = Some(swap_order);
+        current_task.updated_at = chrono::Utc::now();
+        let after = current_task.clone();
+        model.sync_task(&after);
+        model.undo_stack.push(UndoAction::TaskModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+    }
+
+    if let Some(swap_task) = model.tasks.get_mut(&swap_task_id) {
+        let before = swap_task.clone();
+        swap_task.sort_order = Some(current_order);
+        swap_task.updated_at = chrono::Utc::now();
+        let after = swap_task.clone();
+        model.sync_task(&after);
+        model.undo_stack.push(UndoAction::TaskModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+    }
+
+    // Update selection to follow the moved task
+    model.selected_index = swap_index;
+    model.refresh_visible_tasks();
 }
 
 /// Create the next occurrence of a recurring task
@@ -1418,6 +1651,12 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::ExportIcs => {
             handle_export_ics(model);
         }
+        SystemMessage::ExportChainsDot => {
+            handle_export_chains_dot(model);
+        }
+        SystemMessage::ExportChainsMermaid => {
+            handle_export_chains_mermaid(model);
+        }
     }
 }
 
@@ -1482,6 +1721,392 @@ fn handle_export_ics(model: &mut Model) {
         Err(e) => {
             model.status_message = Some(format!("Export failed: {e}"));
         }
+    }
+}
+
+fn handle_export_chains_dot(model: &mut Model) {
+    use crate::storage::{export_chains_to_string, ExportFormat};
+
+    match export_chains_to_string(&model.tasks, ExportFormat::Dot) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("dot"))
+                .unwrap_or_else(|| std::path::PathBuf::from("task_chains.dot"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported task chains to {} (use Graphviz to render)",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_export_chains_mermaid(model: &mut Model) {
+    use crate::storage::{export_chains_to_string, ExportFormat};
+
+    match export_chains_to_string(&model.tasks, ExportFormat::Mermaid) {
+        Ok(content) => {
+            // Determine export path
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("md"))
+                .unwrap_or_else(|| std::path::PathBuf::from("task_chains.md"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported task chains to {} (Mermaid diagram)",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
+    use crate::domain::PomodoroSession;
+
+    match msg {
+        PomodoroMessage::Start { goal_cycles } => {
+            // Start a new session for the selected task
+            if let Some(task) = model.selected_task() {
+                let task_id = task.id.clone();
+                model.pomodoro_session = Some(PomodoroSession::new(
+                    task_id,
+                    &model.pomodoro_config,
+                    goal_cycles,
+                ));
+                // Automatically enter focus mode
+                model.focus_mode = true;
+                model.status_message =
+                    Some(format!("Pomodoro started: {} cycle goal", goal_cycles));
+            } else {
+                model.status_message = Some("Select a task to start Pomodoro".to_string());
+            }
+        }
+        PomodoroMessage::Pause => {
+            if let Some(ref mut session) = model.pomodoro_session {
+                if !session.paused {
+                    session.paused = true;
+                    session.paused_at = Some(chrono::Utc::now());
+                }
+            }
+        }
+        PomodoroMessage::Resume => {
+            if let Some(ref mut session) = model.pomodoro_session {
+                if session.paused {
+                    // Add elapsed pause time to total paused duration
+                    if let Some(pause_start) = session.paused_at {
+                        let pause_duration =
+                            (chrono::Utc::now() - pause_start).num_seconds().max(0) as u32;
+                        session.paused_duration_secs += pause_duration;
+                    }
+                    session.paused = false;
+                    session.paused_at = None;
+                }
+            }
+        }
+        PomodoroMessage::TogglePause => {
+            if let Some(ref mut session) = model.pomodoro_session {
+                if session.paused {
+                    // Resuming - add elapsed pause time
+                    if let Some(pause_start) = session.paused_at {
+                        let pause_duration =
+                            (chrono::Utc::now() - pause_start).num_seconds().max(0) as u32;
+                        session.paused_duration_secs += pause_duration;
+                    }
+                    session.paused = false;
+                    session.paused_at = None;
+                } else {
+                    // Pausing - record pause start
+                    session.paused = true;
+                    session.paused_at = Some(chrono::Utc::now());
+                }
+            }
+        }
+        PomodoroMessage::Skip => {
+            if model.pomodoro_session.is_some() {
+                transition_pomodoro_phase(model);
+            }
+        }
+        PomodoroMessage::Stop => {
+            if model.pomodoro_session.is_some() {
+                model.pomodoro_session = None;
+                model.status_message = Some("Pomodoro session stopped".to_string());
+            }
+        }
+        PomodoroMessage::Tick => {
+            let should_transition = if let Some(ref mut session) = model.pomodoro_session {
+                if !session.paused && session.remaining_secs > 0 {
+                    session.remaining_secs -= 1;
+                }
+                session.remaining_secs == 0
+            } else {
+                false
+            };
+
+            if should_transition {
+                transition_pomodoro_phase(model);
+            }
+        }
+        PomodoroMessage::SetWorkDuration(mins) => {
+            model.pomodoro_config.work_duration_mins = mins.max(1);
+        }
+        PomodoroMessage::SetShortBreak(mins) => {
+            model.pomodoro_config.short_break_mins = mins.max(1);
+        }
+        PomodoroMessage::SetLongBreak(mins) => {
+            model.pomodoro_config.long_break_mins = mins.max(1);
+        }
+        PomodoroMessage::SetCyclesBeforeLongBreak(cycles) => {
+            model.pomodoro_config.cycles_before_long_break = cycles.max(1);
+        }
+        PomodoroMessage::IncrementGoal => {
+            if let Some(ref mut session) = model.pomodoro_session {
+                session.session_goal += 1;
+            }
+        }
+        PomodoroMessage::DecrementGoal => {
+            if let Some(ref mut session) = model.pomodoro_session {
+                if session.session_goal > 1 {
+                    session.session_goal -= 1;
+                }
+            }
+        }
+    }
+}
+
+fn transition_pomodoro_phase(model: &mut Model) {
+    use crate::domain::PomodoroPhase;
+
+    let (next_phase, next_remaining, cycles_completed, message) = {
+        let session = match model.pomodoro_session.as_ref() {
+            Some(s) => s,
+            None => return,
+        };
+
+        match session.phase {
+            PomodoroPhase::Work => {
+                // Record the completed work cycle
+                let new_cycles = session.cycles_completed + 1;
+
+                // Determine if long break or short break
+                if new_cycles > 0
+                    && new_cycles % model.pomodoro_config.cycles_before_long_break == 0
+                {
+                    (
+                        PomodoroPhase::LongBreak,
+                        model.pomodoro_config.long_break_mins * 60,
+                        new_cycles,
+                        format!("🎉 Cycle {} complete! Time for a long break.", new_cycles),
+                    )
+                } else {
+                    (
+                        PomodoroPhase::ShortBreak,
+                        model.pomodoro_config.short_break_mins * 60,
+                        new_cycles,
+                        format!("🍅 Cycle {} complete! Take a short break.", new_cycles),
+                    )
+                }
+            }
+            PomodoroPhase::ShortBreak | PomodoroPhase::LongBreak => (
+                PomodoroPhase::Work,
+                model.pomodoro_config.work_duration_mins * 60,
+                session.cycles_completed,
+                "☕ Break over! Back to work.".to_string(),
+            ),
+        }
+    };
+
+    // Update session
+    if let Some(ref mut session) = model.pomodoro_session {
+        // Record stats when completing a work phase
+        if session.phase == PomodoroPhase::Work {
+            model
+                .pomodoro_stats
+                .record_cycle(model.pomodoro_config.work_duration_mins);
+        }
+
+        session.phase = next_phase;
+        session.cycles_completed = cycles_completed;
+        // Reset phase timing (sets remaining_secs, phase_started_at, clears pause state)
+        session.reset_phase_timing(next_remaining);
+
+        // Check if goal reached
+        if session.goal_reached() && next_phase == PomodoroPhase::Work {
+            model.status_message = Some(format!(
+                "🎊 Goal reached! {} cycles completed. Keep going or stop.",
+                session.cycles_completed
+            ));
+        } else {
+            model.status_message = Some(message);
+        }
+    }
+}
+
+/// Create a task from quick add input, applying parsed metadata
+fn create_task_from_quick_add(
+    input: &str,
+    model: &Model,
+    parent_id: Option<TaskId>,
+) -> crate::domain::Task {
+    let parsed = parse_quick_add(input);
+
+    // Use parsed title, or original input if title is empty
+    let title = if parsed.title.is_empty() {
+        input.to_string()
+    } else {
+        parsed.title
+    };
+
+    // Start with basic task
+    let mut task = crate::domain::Task::new(title);
+
+    // Apply parent if provided
+    if let Some(pid) = parent_id {
+        task = task.with_parent(pid);
+    }
+
+    // Apply parsed priority, or default priority if none specified
+    if let Some(priority) = parsed.priority {
+        task.priority = priority;
+    } else {
+        task.priority = model.default_priority;
+    }
+
+    // Apply tags
+    if !parsed.tags.is_empty() {
+        task = task.with_tags(parsed.tags);
+    }
+
+    // Apply due date
+    if let Some(due) = parsed.due_date {
+        task = task.with_due_date(due);
+    }
+
+    // Apply scheduled date
+    if let Some(sched) = parsed.scheduled_date {
+        task.scheduled_date = Some(sched);
+    }
+
+    // Apply project by name (find matching project)
+    if let Some(ref project_name) = parsed.project_name {
+        let project_name_lower = project_name.to_lowercase();
+        if let Some(project_id) = model
+            .projects
+            .values()
+            .find(|p| p.name.to_lowercase() == project_name_lower)
+            .map(|p| p.id.clone())
+        {
+            task.project_id = Some(project_id);
+        }
+    }
+
+    task
+}
+
+/// Handle keybindings editor messages
+fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::ShowKeybindingsEditor => {
+            model.show_keybindings_editor = true;
+            model.keybinding_selected = 0;
+            model.keybinding_capturing = false;
+        }
+        UiMessage::HideKeybindingsEditor => {
+            model.show_keybindings_editor = false;
+            model.keybinding_capturing = false;
+        }
+        UiMessage::KeybindingsUp => {
+            if model.keybinding_selected > 0 {
+                model.keybinding_selected -= 1;
+            }
+        }
+        UiMessage::KeybindingsDown => {
+            let bindings = model.keybindings.sorted_bindings();
+            if model.keybinding_selected < bindings.len().saturating_sub(1) {
+                model.keybinding_selected += 1;
+            }
+        }
+        UiMessage::StartEditKeybinding => {
+            model.keybinding_capturing = true;
+            model.status_message = Some("Press a key combination...".to_string());
+        }
+        UiMessage::CancelEditKeybinding => {
+            model.keybinding_capturing = false;
+            model.status_message = None;
+        }
+        UiMessage::ApplyKeybinding(new_key) => {
+            let bindings = model.keybindings.sorted_bindings();
+            if let Some((_, action)) = bindings.get(model.keybinding_selected) {
+                // Check for conflict
+                if let Some(existing_action) = model.keybindings.get_action(&new_key) {
+                    if existing_action != action {
+                        model.status_message = Some(format!(
+                            "Key '{new_key}' already bound to {:?}. Overwriting...",
+                            existing_action
+                        ));
+                    }
+                }
+                model
+                    .keybindings
+                    .set_binding(new_key.clone(), action.clone());
+                model.status_message = Some(format!("Bound '{new_key}' to {:?}", action));
+            }
+            model.keybinding_capturing = false;
+        }
+        UiMessage::ResetKeybinding => {
+            let bindings = model.keybindings.sorted_bindings();
+            if let Some((_, action)) = bindings.get(model.keybinding_selected) {
+                // Find the default key for this action
+                let defaults = crate::config::Keybindings::default();
+                if let Some(default_key) = defaults.key_for_action(action) {
+                    model
+                        .keybindings
+                        .set_binding(default_key.clone(), action.clone());
+                    model.status_message = Some(format!(
+                        "Reset {:?} to default key '{}'",
+                        action, default_key
+                    ));
+                } else {
+                    model.status_message = Some("No default binding for this action".to_string());
+                }
+            }
+        }
+        UiMessage::ResetAllKeybindings => {
+            model.keybindings = crate::config::Keybindings::default();
+            model.status_message = Some("All keybindings reset to defaults".to_string());
+        }
+        UiMessage::SaveKeybindings => match model.keybindings.save() {
+            Ok(()) => {
+                model.status_message = Some("Keybindings saved".to_string());
+            }
+            Err(e) => {
+                model.status_message = Some(format!("Failed to save keybindings: {e}"));
+            }
+        },
+        _ => {}
     }
 }
 
@@ -1958,15 +2583,15 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 5; // Dashboard (before separator at 6)
+        model.sidebar_selected = 10; // Recent (before separator at 11)
 
-        // Move down should skip separator (6) and go to Projects header (7)
+        // Move down should skip separator (11) and go to Projects header (12)
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 7);
+        assert_eq!(model.sidebar_selected, 12);
 
-        // Move up should skip separator and go back to Dashboard (5)
+        // Move up should skip separator and go back to Recent (10)
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 5);
+        assert_eq!(model.sidebar_selected, 10);
     }
 
     #[test]
@@ -2023,7 +2648,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 8; // First project (index 8 = after header items including Dashboard)
+        model.sidebar_selected = 13; // First project (index 13 = after 11 views + separator + Projects header)
 
         update(
             &mut model,
@@ -3575,5 +4200,547 @@ mod tests {
         update(&mut model, Message::System(SystemMessage::Undo));
 
         assert!(model.tasks.get(&task_id).unwrap().recurrence.is_none());
+    }
+
+    // Task chain tests
+    #[test]
+    fn test_start_link_task_enters_editing_mode() {
+        let mut model = create_test_model_with_tasks();
+        assert_eq!(model.input_mode, InputMode::Normal);
+
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(model.input_target, InputTarget::LinkTask(_)));
+    }
+
+    #[test]
+    fn test_start_link_task_shows_current_link() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let target_id = model.visible_tasks[1].clone();
+        let target_title = model.tasks.get(&target_id).unwrap().title.clone();
+
+        // Set existing link
+        model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id.clone());
+
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+
+        // Should show the linked task title
+        assert_eq!(
+            model.input_buffer,
+            format!("Currently linked to: {target_title}")
+        );
+    }
+
+    #[test]
+    fn test_link_task_by_number() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let target_id = model.visible_tasks[2].clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+
+        // Enter task number "3" (1-indexed)
+        model.input_buffer = "3".to_string();
+        model.cursor_position = 1;
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should link to the third task
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().next_task_id,
+            Some(target_id)
+        );
+    }
+
+    #[test]
+    fn test_link_task_by_title_search() {
+        let mut model = Model::new();
+
+        // Create tasks with distinct titles
+        let task1 = Task::new("First task");
+        let task2 = Task::new("Second task");
+        let task3 = Task::new("Target unique title");
+        let task1_id = task1.id.clone();
+        let task3_id = task3.id.clone();
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task3.id.clone(), task3);
+        model.refresh_visible_tasks();
+
+        // Find the visible index for task1
+        let task1_visible_idx = model
+            .visible_tasks
+            .iter()
+            .position(|id| *id == task1_id)
+            .expect("task1 should be in visible_tasks");
+        model.selected_index = task1_visible_idx;
+
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+
+        // Enter part of target title
+        model.input_buffer = "Target unique".to_string();
+        model.cursor_position = model.input_buffer.len();
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should link to the task with matching title
+        assert_eq!(
+            model.tasks.get(&task1_id).unwrap().next_task_id,
+            Some(task3_id)
+        );
+    }
+
+    #[test]
+    fn test_link_task_prevents_self_linking() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+
+        // Try to link task 1 to itself
+        model.input_buffer = "1".to_string();
+        model.cursor_position = 1;
+
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should NOT create self-link
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+    }
+
+    #[test]
+    fn test_link_task_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let target_id = model.visible_tasks[1].clone();
+
+        // Link task
+        update(&mut model, Message::Ui(UiMessage::StartLinkTask));
+        model.input_buffer = "2".to_string();
+        model.cursor_position = 1;
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().next_task_id,
+            Some(target_id)
+        );
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+    }
+
+    #[test]
+    fn test_unlink_task_removes_link() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let target_id = model.visible_tasks[1].clone();
+
+        // Set existing link
+        model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id);
+
+        update(&mut model, Message::Ui(UiMessage::UnlinkTask));
+
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+    }
+
+    #[test]
+    fn test_unlink_task_when_not_linked_is_noop() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+
+        // Ensure no link exists
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+
+        update(&mut model, Message::Ui(UiMessage::UnlinkTask));
+
+        // Should still be None, no error
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+    }
+
+    #[test]
+    fn test_unlink_task_undo() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let target_id = model.visible_tasks[1].clone();
+
+        // Set existing link
+        model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id.clone());
+
+        // Unlink
+        update(&mut model, Message::Ui(UiMessage::UnlinkTask));
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+
+        assert_eq!(
+            model.tasks.get(&task_id).unwrap().next_task_id,
+            Some(target_id)
+        );
+    }
+
+    #[test]
+    fn test_completing_chained_task_schedules_next() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let next_id = model.visible_tasks[1].clone();
+
+        // Link tasks
+        model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(next_id.clone());
+
+        // Next task should have no scheduled date initially
+        assert!(model.tasks.get(&next_id).unwrap().scheduled_date.is_none());
+
+        // Complete the first task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Next task should now be scheduled for today (local time)
+        let today = chrono::Local::now().date_naive();
+        assert_eq!(
+            model.tasks.get(&next_id).unwrap().scheduled_date,
+            Some(today)
+        );
+    }
+
+    #[test]
+    fn test_completing_unchained_task_no_scheduling() {
+        let mut model = create_test_model_with_tasks();
+        let task_id = model.visible_tasks[0].clone();
+        let other_id = model.visible_tasks[1].clone();
+
+        // No link - task is standalone
+        assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
+
+        // Other task has no scheduled date
+        assert!(model.tasks.get(&other_id).unwrap().scheduled_date.is_none());
+
+        // Complete the first task
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Other task should NOT be scheduled
+        assert!(model.tasks.get(&other_id).unwrap().scheduled_date.is_none());
+    }
+
+    // === Pomodoro Timer Tests ===
+
+    #[test]
+    fn test_pomodoro_start() {
+        let mut model = create_test_model_with_tasks();
+
+        assert!(model.pomodoro_session.is_none());
+        assert!(!model.focus_mode);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        assert!(model.pomodoro_session.is_some());
+        assert!(model.focus_mode);
+
+        let session = model.pomodoro_session.as_ref().unwrap();
+        assert_eq!(session.session_goal, 4);
+        assert_eq!(session.cycles_completed, 0);
+        assert!(!session.paused);
+    }
+
+    #[test]
+    fn test_pomodoro_pause_resume() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Pause));
+        assert!(model.pomodoro_session.as_ref().unwrap().paused);
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Resume));
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+    }
+
+    #[test]
+    fn test_pomodoro_toggle_pause() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::TogglePause));
+        assert!(model.pomodoro_session.as_ref().unwrap().paused);
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::TogglePause));
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+    }
+
+    #[test]
+    fn test_pomodoro_stop() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        assert!(model.pomodoro_session.is_some());
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Stop));
+        assert!(model.pomodoro_session.is_none());
+    }
+
+    #[test]
+    fn test_pomodoro_tick_decrements_time() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        let initial_remaining = model.pomodoro_session.as_ref().unwrap().remaining_secs;
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Tick));
+
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().remaining_secs,
+            initial_remaining - 1
+        );
+    }
+
+    #[test]
+    fn test_pomodoro_tick_paused_no_decrement() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Pause));
+
+        let initial_remaining = model.pomodoro_session.as_ref().unwrap().remaining_secs;
+
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Tick));
+
+        // Time should not decrement when paused
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().remaining_secs,
+            initial_remaining
+        );
+    }
+
+    #[test]
+    fn test_pomodoro_skip_phase() {
+        use crate::domain::PomodoroPhase;
+
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        // Should be in Work phase
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().phase,
+            PomodoroPhase::Work
+        );
+
+        // Skip to break
+        update(&mut model, Message::Pomodoro(PomodoroMessage::Skip));
+
+        // Should now be in ShortBreak phase and cycle completed
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().phase,
+            PomodoroPhase::ShortBreak
+        );
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().cycles_completed, 1);
+    }
+
+    #[test]
+    fn test_pomodoro_goal_adjustment() {
+        let mut model = create_test_model_with_tasks();
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        );
+
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 4);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::IncrementGoal),
+        );
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 5);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::DecrementGoal),
+        );
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 4);
+
+        // Cannot go below 1
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::DecrementGoal),
+        );
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::DecrementGoal),
+        );
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::DecrementGoal),
+        );
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::DecrementGoal),
+        );
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 1);
+    }
+
+    #[test]
+    fn test_pomodoro_config_changes() {
+        let mut model = Model::new();
+
+        assert_eq!(model.pomodoro_config.work_duration_mins, 25);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::SetWorkDuration(30)),
+        );
+        assert_eq!(model.pomodoro_config.work_duration_mins, 30);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::SetShortBreak(10)),
+        );
+        assert_eq!(model.pomodoro_config.short_break_mins, 10);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::SetLongBreak(20)),
+        );
+        assert_eq!(model.pomodoro_config.long_break_mins, 20);
+
+        update(
+            &mut model,
+            Message::Pomodoro(PomodoroMessage::SetCyclesBeforeLongBreak(3)),
+        );
+        assert_eq!(model.pomodoro_config.cycles_before_long_break, 3);
+    }
+
+    // ============ Keybindings Editor Tests ============
+
+    #[test]
+    fn test_show_keybindings_editor() {
+        let mut model = Model::new();
+        assert!(!model.show_keybindings_editor);
+
+        update(&mut model, Message::Ui(UiMessage::ShowKeybindingsEditor));
+        assert!(model.show_keybindings_editor);
+        assert_eq!(model.keybinding_selected, 0);
+        assert!(!model.keybinding_capturing);
+    }
+
+    #[test]
+    fn test_hide_keybindings_editor() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+        model.keybinding_capturing = true;
+
+        update(&mut model, Message::Ui(UiMessage::HideKeybindingsEditor));
+        assert!(!model.show_keybindings_editor);
+        assert!(!model.keybinding_capturing);
+    }
+
+    #[test]
+    fn test_keybindings_navigation() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+        model.keybinding_selected = 5;
+
+        update(&mut model, Message::Ui(UiMessage::KeybindingsUp));
+        assert_eq!(model.keybinding_selected, 4);
+
+        update(&mut model, Message::Ui(UiMessage::KeybindingsDown));
+        assert_eq!(model.keybinding_selected, 5);
+
+        // Navigate up at 0 should stay at 0
+        model.keybinding_selected = 0;
+        update(&mut model, Message::Ui(UiMessage::KeybindingsUp));
+        assert_eq!(model.keybinding_selected, 0);
+    }
+
+    #[test]
+    fn test_start_edit_keybinding() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+
+        update(&mut model, Message::Ui(UiMessage::StartEditKeybinding));
+        assert!(model.keybinding_capturing);
+        assert!(model.status_message.is_some());
+    }
+
+    #[test]
+    fn test_cancel_edit_keybinding() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+        model.keybinding_capturing = true;
+        model.status_message = Some("Press a key...".to_string());
+
+        update(&mut model, Message::Ui(UiMessage::CancelEditKeybinding));
+        assert!(!model.keybinding_capturing);
+        assert!(model.status_message.is_none());
+    }
+
+    #[test]
+    fn test_apply_keybinding() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+        model.keybinding_capturing = true;
+
+        // Get the first binding's action
+        let bindings = model.keybindings.sorted_bindings();
+        let (_, first_action) = &bindings[0];
+        let original_action = first_action.clone();
+
+        // Apply a new key to that action
+        update(
+            &mut model,
+            Message::Ui(UiMessage::ApplyKeybinding("z".to_string())),
+        );
+
+        assert!(!model.keybinding_capturing);
+        // The action should now be bound to 'z'
+        assert_eq!(model.keybindings.get_action("z"), Some(&original_action));
+    }
+
+    #[test]
+    fn test_reset_all_keybindings() {
+        let mut model = Model::new();
+        model.show_keybindings_editor = true;
+
+        // Modify a keybinding
+        model
+            .keybindings
+            .set_binding("z".to_string(), crate::config::Action::Quit);
+
+        // Verify it was changed
+        assert_eq!(
+            model.keybindings.get_action("z"),
+            Some(&crate::config::Action::Quit)
+        );
+
+        // Reset all
+        update(&mut model, Message::Ui(UiMessage::ResetAllKeybindings));
+
+        // Should be back to default (z is not a default binding)
+        assert_eq!(model.keybindings.get_action("z"), None);
+        assert!(model.status_message.is_some());
     }
 }

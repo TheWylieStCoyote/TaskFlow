@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
+    TimeEntry, TimeEntryId,
+};
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
     TaskRepository, TimeEntryRepository,
@@ -373,6 +376,24 @@ impl StorageBackend for JsonBackend {
 
     fn backend_type(&self) -> &'static str {
         "json"
+    }
+
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
+        self.data.pomodoro_session = session.cloned();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
+        self.data.pomodoro_config = Some(config.clone());
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
+        self.data.pomodoro_stats = Some(stats.clone());
+        self.mark_dirty();
+        Ok(())
     }
 }
 
@@ -773,5 +794,75 @@ mod tests {
         let tasks = backend.list_tasks().unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].title, "Pre-existing task");
+    }
+
+    #[test]
+    fn test_pomodoro_state_persistence() {
+        use crate::domain::{PomodoroConfig, PomodoroSession, PomodoroStats};
+
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+
+        // Create backend and add pomodoro state
+        {
+            let mut backend = JsonBackend::new(&path).unwrap();
+            backend.initialize().unwrap();
+
+            // Create a task for the Pomodoro session
+            let task = Task::new("Work task");
+            backend.create_task(&task).unwrap();
+
+            // Set Pomodoro state
+            let config = PomodoroConfig::default().with_work_duration(30);
+            let session = PomodoroSession::new(task.id.clone(), &config, 4);
+            let mut stats = PomodoroStats::new();
+            stats.record_cycle(25);
+
+            backend.set_pomodoro_config(&config).unwrap();
+            backend.set_pomodoro_session(Some(&session)).unwrap();
+            backend.set_pomodoro_stats(&stats).unwrap();
+            backend.flush().unwrap();
+        }
+
+        // Reload and verify
+        {
+            let mut backend = JsonBackend::new(&path).unwrap();
+            backend.initialize().unwrap();
+
+            let exported = backend.export_all().unwrap();
+
+            assert!(exported.pomodoro_session.is_some());
+            assert!(exported.pomodoro_config.is_some());
+            assert!(exported.pomodoro_stats.is_some());
+
+            let config = exported.pomodoro_config.unwrap();
+            assert_eq!(config.work_duration_mins, 30);
+
+            let stats = exported.pomodoro_stats.unwrap();
+            assert_eq!(stats.total_cycles, 1);
+        }
+    }
+
+    #[test]
+    fn test_pomodoro_session_clear() {
+        use crate::domain::{PomodoroConfig, PomodoroSession};
+
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Work task");
+        backend.create_task(&task).unwrap();
+
+        let config = PomodoroConfig::default();
+        let session = PomodoroSession::new(task.id.clone(), &config, 4);
+
+        // Set session
+        backend.set_pomodoro_session(Some(&session)).unwrap();
+        let exported = backend.export_all().unwrap();
+        assert!(exported.pomodoro_session.is_some());
+
+        // Clear session
+        backend.set_pomodoro_session(None).unwrap();
+        let exported = backend.export_all().unwrap();
+        assert!(exported.pomodoro_session.is_none());
     }
 }

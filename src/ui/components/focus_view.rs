@@ -1,0 +1,393 @@
+use std::time::Duration;
+
+use ratatui::{
+    buffer::Buffer,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Widget, Wrap},
+};
+
+use crate::app::Model;
+use crate::config::Theme;
+use crate::domain::Task;
+
+/// Focus mode view - minimalist single-task view with timer
+pub struct FocusView<'a> {
+    model: &'a Model,
+    theme: &'a Theme,
+}
+
+impl<'a> FocusView<'a> {
+    #[must_use]
+    pub const fn new(model: &'a Model, theme: &'a Theme) -> Self {
+        Self { model, theme }
+    }
+
+    /// Format a duration as HH:MM:SS
+    fn format_duration(duration: Duration) -> String {
+        let total_secs = duration.as_secs();
+        let hours = total_secs / 3600;
+        let minutes = (total_secs % 3600) / 60;
+        let seconds = total_secs % 60;
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    }
+
+    /// Get time tracked for a task including current session
+    fn get_time_tracked(&self, task: &Task) -> Duration {
+        let mut total_minutes: u64 = 0;
+
+        // Sum completed time entries
+        for entry in self.model.time_entries.values() {
+            if entry.task_id == task.id {
+                total_minutes += u64::from(entry.calculated_duration_minutes());
+            }
+        }
+
+        // Add current active session if tracking this task
+        if let Some(active) = self.model.active_time_entry() {
+            if active.task_id == task.id {
+                let now = chrono::Utc::now();
+                let elapsed_secs = (now - active.started_at).num_seconds().max(0) as u64;
+                return Duration::from_secs(total_minutes * 60 + elapsed_secs);
+            }
+        }
+
+        Duration::from_secs(total_minutes * 60)
+    }
+}
+
+impl Widget for FocusView<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = self.theme;
+
+        // Get the selected task
+        let task = match self.model.selected_task() {
+            Some(t) => t,
+            None => {
+                // No task selected - shouldn't happen but handle gracefully
+                let msg = Paragraph::new("No task selected")
+                    .alignment(Alignment::Center)
+                    .style(Style::default().fg(theme.colors.muted.to_color()));
+                msg.render(area, buf);
+                return;
+            }
+        };
+
+        // Create centered layout
+        let outer_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" FOCUS MODE ")
+            .title_alignment(Alignment::Center)
+            .border_style(Style::default().fg(theme.colors.accent.to_color()));
+        let inner = outer_block.inner(area);
+        outer_block.render(area, buf);
+
+        // Layout: padding, content, timer, help
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // Top padding
+                Constraint::Min(6),    // Main content
+                Constraint::Length(3), // Timer
+                Constraint::Length(2), // Help text
+            ])
+            .split(inner);
+
+        // Render task title with status
+        self.render_task_title(task, chunks[1], buf, theme);
+
+        // Render timer
+        self.render_timer(task, chunks[2], buf, theme);
+
+        // Render help
+        self.render_help(chunks[3], buf, theme);
+    }
+}
+
+impl FocusView<'_> {
+    fn render_task_title(&self, task: &Task, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        // Split area for title, metadata, and description
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(2), // Title
+                Constraint::Length(2), // Metadata (priority, due date)
+                Constraint::Min(2),    // Description
+            ])
+            .split(area);
+
+        // Status indicator
+        let status_icon = if task.status.is_complete() {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        let status_style = if task.status.is_complete() {
+            Style::default()
+                .fg(theme.status.done.to_color())
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(theme.colors.foreground.to_color())
+                .add_modifier(Modifier::BOLD)
+        };
+
+        // Title line
+        let title_line = Line::from(vec![
+            Span::styled(format!("  {status_icon} "), status_style),
+            Span::styled(
+                &task.title,
+                Style::default()
+                    .fg(theme.colors.foreground.to_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]);
+        buf.set_line(chunks[0].x, chunks[0].y, &title_line, chunks[0].width);
+
+        // Metadata line: priority and due date
+        let mut meta_spans = vec![Span::raw("      ")]; // Indent to align with title
+
+        // Priority
+        let priority_str = match task.priority {
+            crate::domain::Priority::Urgent => "!!!! Urgent",
+            crate::domain::Priority::High => "!!! High",
+            crate::domain::Priority::Medium => "!! Medium",
+            crate::domain::Priority::Low => "! Low",
+            crate::domain::Priority::None => "",
+        };
+        if !priority_str.is_empty() {
+            let priority_color = match task.priority {
+                crate::domain::Priority::Urgent => theme.priority.urgent.to_color(),
+                crate::domain::Priority::High => theme.priority.high.to_color(),
+                crate::domain::Priority::Medium => theme.priority.medium.to_color(),
+                crate::domain::Priority::Low => theme.priority.low.to_color(),
+                crate::domain::Priority::None => theme.colors.muted.to_color(),
+            };
+            meta_spans.push(Span::styled(
+                priority_str,
+                Style::default().fg(priority_color),
+            ));
+        }
+
+        // Due date
+        if let Some(due) = task.due_date {
+            if !priority_str.is_empty() {
+                meta_spans.push(Span::raw("  |  "));
+            }
+            meta_spans.push(Span::styled(
+                format!("Due: {}", due.format("%b %d, %Y")),
+                Style::default().fg(theme.colors.muted.to_color()),
+            ));
+        }
+
+        // Scheduled date
+        if let Some(sched) = task.scheduled_date {
+            meta_spans.push(Span::raw("  |  "));
+            meta_spans.push(Span::styled(
+                format!("Scheduled: {}", sched.format("%b %d, %Y")),
+                Style::default().fg(theme.colors.accent.to_color()),
+            ));
+        }
+
+        let meta_line = Line::from(meta_spans);
+        buf.set_line(chunks[1].x, chunks[1].y, &meta_line, chunks[1].width);
+
+        // Description (if any)
+        if let Some(ref desc) = task.description {
+            if !desc.is_empty() {
+                // Add a separator line
+                let sep = Line::from(Span::styled(
+                    "      ─────────────────────────────────────",
+                    Style::default().fg(theme.colors.border.to_color()),
+                ));
+                buf.set_line(chunks[2].x, chunks[2].y, &sep, chunks[2].width);
+
+                // Render description with wrap
+                let desc_area = Rect {
+                    x: chunks[2].x + 6,
+                    y: chunks[2].y + 1,
+                    width: chunks[2].width.saturating_sub(6),
+                    height: chunks[2].height.saturating_sub(1),
+                };
+                let desc_para = Paragraph::new(desc.as_str())
+                    .style(Style::default().fg(theme.colors.muted.to_color()))
+                    .wrap(Wrap { trim: true });
+                desc_para.render(desc_area, buf);
+            }
+        }
+    }
+
+    fn render_timer(&self, task: &Task, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let time_tracked = self.get_time_tracked(task);
+        let time_str = Self::format_duration(time_tracked);
+
+        let is_tracking = self.model.is_tracking_task(&task.id);
+
+        let timer_style = if is_tracking {
+            Style::default()
+                .fg(theme.colors.accent.to_color())
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.colors.muted.to_color())
+        };
+
+        let icon = "⏱ ";
+
+        let timer_line = Line::from(vec![Span::styled(format!("{icon}{time_str}"), timer_style)])
+            .alignment(Alignment::Center);
+
+        // Center the timer vertically in its area
+        let y = area.y + area.height / 2;
+        buf.set_line(area.x, y, &timer_line, area.width);
+    }
+
+    fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let is_tracking = self.model.active_time_entry.is_some();
+
+        let help_text = if is_tracking {
+            "[t] Stop Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
+        } else {
+            "[t] Start Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
+        };
+
+        let help_line = Line::from(Span::styled(
+            help_text,
+            Style::default().fg(theme.colors.muted.to_color()),
+        ))
+        .alignment(Alignment::Center);
+
+        buf.set_line(area.x, area.y, &help_line, area.width);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+
+    /// Helper to render a widget into a buffer
+    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
+        let area = Rect::new(0, 0, width, height);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+        buffer
+    }
+
+    /// Extract text content from buffer
+    fn buffer_content(buffer: &Buffer) -> String {
+        let mut content = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                content.push(
+                    buffer
+                        .cell((x, y))
+                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+                );
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    #[test]
+    fn test_focus_view_renders_focus_mode_title() {
+        let mut model = Model::new().with_sample_data();
+        model.refresh_visible_tasks();
+        let theme = Theme::default();
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 60, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("FOCUS MODE"),
+            "Focus mode title should be visible"
+        );
+    }
+
+    #[test]
+    fn test_focus_view_shows_task_title() {
+        let mut model = Model::new().with_sample_data();
+        model.refresh_visible_tasks();
+        let theme = Theme::default();
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 20);
+        let content = buffer_content(&buffer);
+
+        // Should show a task checkbox
+        assert!(
+            content.contains("[ ]") || content.contains("[x]"),
+            "Task status indicator should be visible"
+        );
+    }
+
+    #[test]
+    fn test_focus_view_shows_timer() {
+        let mut model = Model::new().with_sample_data();
+        model.refresh_visible_tasks();
+        let theme = Theme::default();
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 60, 20);
+        let content = buffer_content(&buffer);
+
+        // Timer shows time in format like 00:00:00
+        assert!(
+            content.contains(':'),
+            "Timer should show colon-separated time"
+        );
+    }
+
+    #[test]
+    fn test_focus_view_shows_help_text() {
+        let mut model = Model::new().with_sample_data();
+        model.refresh_visible_tasks();
+        let theme = Theme::default();
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Exit Focus"),
+            "Help text should mention exiting focus mode"
+        );
+    }
+
+    #[test]
+    fn test_focus_view_no_task_selected() {
+        let model = Model::new(); // No tasks, nothing selected
+        let theme = Theme::default();
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 60, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("No task selected"),
+            "Should show message when no task selected"
+        );
+    }
+
+    #[test]
+    fn test_format_duration() {
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(0)),
+            "00:00:00"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(59)),
+            "00:00:59"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(60)),
+            "00:01:00"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(3661)),
+            "01:01:01"
+        );
+        assert_eq!(
+            FocusView::format_duration(Duration::from_secs(7200)),
+            "02:00:00"
+        );
+    }
+}

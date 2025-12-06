@@ -99,6 +99,10 @@ impl Widget for HelpPopup {
                 Span::raw("         Edit tags"),
             ]),
             Line::from(vec![
+                Span::styled("S", Style::default().fg(Color::Cyan)),
+                Span::raw("         Edit scheduled date"),
+            ]),
+            Line::from(vec![
                 Span::styled("n", Style::default().fg(Color::Cyan)),
                 Span::raw("         Edit description/notes"),
             ]),
@@ -109,6 +113,18 @@ impl Widget for HelpPopup {
             Line::from(vec![
                 Span::styled("t", Style::default().fg(Color::Cyan)),
                 Span::raw("         Toggle time tracking"),
+            ]),
+            Line::from(vec![
+                Span::styled("f", Style::default().fg(Color::Cyan)),
+                Span::raw("         Toggle focus mode"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+↑", Style::default().fg(Color::Cyan)),
+                Span::raw("    Move task up"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+↓", Style::default().fg(Color::Cyan)),
+                Span::raw("    Move task down"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
@@ -137,8 +153,8 @@ impl Widget for HelpPopup {
                 Span::raw("         Search tasks"),
             ]),
             Line::from(vec![
-                Span::styled("Ctrl+l", Style::default().fg(Color::Cyan)),
-                Span::raw("    Clear search"),
+                Span::styled("Esc", Style::default().fg(Color::Cyan)),
+                Span::raw("       Clear search (in search mode)"),
             ]),
             Line::from(vec![
                 Span::styled("#", Style::default().fg(Color::Cyan)),
@@ -151,10 +167,6 @@ impl Widget for HelpPopup {
             Line::from(vec![
                 Span::styled("s", Style::default().fg(Color::Cyan)),
                 Span::raw("         Cycle sort field"),
-            ]),
-            Line::from(vec![
-                Span::styled("S", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle sort order"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
@@ -189,6 +201,19 @@ impl Widget for HelpPopup {
             Line::from(vec![
                 Span::styled("R", Style::default().fg(Color::Cyan)),
                 Span::raw("         Set recurrence (d/w/m/y/0)"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Task Chains",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("Ctrl+l", Style::default().fg(Color::Cyan)),
+                Span::raw("    Link to next task"),
+            ]),
+            Line::from(vec![
+                Span::styled("Ctrl+L", Style::default().fg(Color::Cyan)),
+                Span::raw("    Unlink from chain"),
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(

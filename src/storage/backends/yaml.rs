@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
+    TimeEntry, TimeEntryId,
+};
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
     TaskRepository, TimeEntryRepository,
@@ -365,6 +368,24 @@ impl StorageBackend for YamlBackend {
 
     fn backend_type(&self) -> &'static str {
         "yaml"
+    }
+
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
+        self.data.pomodoro_session = session.cloned();
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
+        self.data.pomodoro_config = Some(config.clone());
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
+        self.data.pomodoro_stats = Some(stats.clone());
+        self.mark_dirty();
+        Ok(())
     }
 }
 

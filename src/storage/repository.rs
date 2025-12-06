@@ -1,4 +1,7 @@
-use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
+    TimeEntry, TimeEntryId,
+};
 
 use super::error::StorageResult;
 
@@ -190,6 +193,15 @@ pub struct ExportData {
     pub tags: Vec<Tag>,
     pub time_entries: Vec<TimeEntry>,
     pub version: u32,
+    /// Active Pomodoro session (if any)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pomodoro_session: Option<PomodoroSession>,
+    /// Pomodoro configuration
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pomodoro_config: Option<PomodoroConfig>,
+    /// Pomodoro statistics
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pomodoro_stats: Option<PomodoroStats>,
 }
 
 impl Default for ExportData {
@@ -200,6 +212,9 @@ impl Default for ExportData {
             tags: Vec::new(),
             time_entries: Vec::new(),
             version: 1,
+            pomodoro_session: None,
+            pomodoro_config: None,
+            pomodoro_stats: None,
         }
     }
 }
@@ -238,4 +253,25 @@ pub trait StorageBackend:
 
     /// Returns the storage backend type name.
     fn backend_type(&self) -> &'static str;
+
+    /// Sets the active Pomodoro session.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the session cannot be saved.
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()>;
+
+    /// Sets the Pomodoro configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the config cannot be saved.
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()>;
+
+    /// Sets the Pomodoro statistics.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the stats cannot be saved.
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()>;
 }

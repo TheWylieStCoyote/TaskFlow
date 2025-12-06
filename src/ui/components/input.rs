@@ -33,6 +33,7 @@ pub enum InputTarget {
     BulkSetStatus,
     EditDependencies(TaskId),
     EditRecurrence(TaskId),
+    LinkTask(TaskId), // Linking current task to next task in chain
 }
 
 /// Input dialog for creating/editing items

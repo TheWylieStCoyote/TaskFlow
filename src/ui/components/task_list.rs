@@ -22,6 +22,7 @@ enum ListEntry<'a> {
         is_multi_selected: bool,
         has_dependencies: bool,
         is_recurring: bool,
+        has_chain: bool, // Task is linked to another task (has next_task_id)
         subtask_progress: (usize, usize), // (completed, total) - only shown if total > 0
     },
     ProjectHeader {
@@ -65,6 +66,7 @@ impl<'a> TaskList<'a> {
                 let is_multi_selected = model.selected_tasks.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
                 let is_recurring = task.recurrence.is_some();
+                let has_chain = task.next_task_id.is_some();
                 let subtask_progress = model.subtask_progress(task_id);
                 entries.push(ListEntry::Task {
                     task,
@@ -74,6 +76,7 @@ impl<'a> TaskList<'a> {
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
+                    has_chain,
                     subtask_progress,
                 });
                 row_to_task_index.push(Some(idx));
@@ -121,6 +124,7 @@ impl<'a> TaskList<'a> {
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
                     let is_recurring = task.recurrence.is_some();
+                    let has_chain = task.next_task_id.is_some();
                     let subtask_progress = model.subtask_progress(&task_id);
                     entries.push(ListEntry::Task {
                         task,
@@ -130,6 +134,7 @@ impl<'a> TaskList<'a> {
                         is_multi_selected,
                         has_dependencies,
                         is_recurring,
+                        has_chain,
                         subtask_progress,
                     });
                     row_to_task_index.push(Some(idx));
@@ -172,6 +177,7 @@ impl Widget for TaskList<'_> {
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
+                    has_chain,
                     subtask_progress,
                 } => {
                     let ctx = TaskItemContext {
@@ -183,6 +189,7 @@ impl Widget for TaskList<'_> {
                         is_multi_selected: *is_multi_selected,
                         has_dependencies: *has_dependencies,
                         is_recurring: *is_recurring,
+                        has_chain: *has_chain,
                         subtask_progress: *subtask_progress,
                         theme,
                     };
@@ -230,6 +237,7 @@ struct TaskItemContext<'a> {
     is_multi_selected: bool,
     has_dependencies: bool,
     is_recurring: bool,
+    has_chain: bool,                  // Task is linked to another task
     subtask_progress: (usize, usize), // (completed, total)
     theme: &'a Theme,
 }
@@ -398,6 +406,13 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("")
     };
 
+    // Chain indicator (→) - shows task is linked to next task in sequence
+    let chain_span = if ctx.has_chain {
+        Span::styled(" →", Style::default().fg(theme.colors.accent.to_color()))
+    } else {
+        Span::raw("")
+    };
+
     // Subtask progress indicator (only show if task has subtasks)
     let progress_span = if ctx.subtask_progress.1 > 0 {
         let (completed, total) = ctx.subtask_progress;
@@ -423,6 +438,7 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         desc_span,
         dep_span,
         recur_span,
+        chain_span,
         due_span,
         sched_span,
         time_span,

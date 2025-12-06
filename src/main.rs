@@ -250,6 +250,13 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         return Message::Ui(UiMessage::HideHelp);
     }
 
+    // If focus mode is active, Esc exits it
+    if model.focus_mode && key.code == KeyCode::Esc {
+        return Message::Ui(UiMessage::ToggleFocusMode);
+    }
+    // In focus mode, still allow some keybindings (t, x, f, etc.)
+    // Fall through to normal key handling
+
     // If template picker is showing, handle navigation and selection
     if model.show_templates {
         return match key.code {
@@ -276,6 +283,32 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
                     Message::None
                 }
             }
+            _ => Message::None,
+        };
+    }
+
+    // If keybindings editor is showing, handle navigation and editing
+    if model.show_keybindings_editor {
+        // If capturing a key, any key except Esc sets the keybinding
+        if model.keybinding_capturing {
+            return match key.code {
+                KeyCode::Esc => Message::Ui(UiMessage::CancelEditKeybinding),
+                _ => {
+                    let key_str = key_event_to_string(&key);
+                    Message::Ui(UiMessage::ApplyKeybinding(key_str))
+                }
+            };
+        }
+
+        // Normal keybindings editor navigation
+        return match key.code {
+            KeyCode::Esc => Message::Ui(UiMessage::HideKeybindingsEditor),
+            KeyCode::Enter => Message::Ui(UiMessage::StartEditKeybinding),
+            KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::KeybindingsUp),
+            KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::KeybindingsDown),
+            KeyCode::Char('r') => Message::Ui(UiMessage::ResetKeybinding),
+            KeyCode::Char('R') => Message::Ui(UiMessage::ResetAllKeybindings),
+            KeyCode::Char('s') => Message::Ui(UiMessage::SaveKeybindings),
             _ => Message::None,
         };
     }
@@ -416,6 +449,10 @@ const fn action_to_message(action: &Action) -> Message {
         Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
         Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
         Action::EditRecurrence => Message::Ui(UiMessage::StartEditRecurrence),
+        Action::MoveTaskUp => Message::Ui(UiMessage::MoveTaskUp),
+        Action::MoveTaskDown => Message::Ui(UiMessage::MoveTaskDown),
+        Action::LinkTask => Message::Ui(UiMessage::StartLinkTask),
+        Action::UnlinkTask => Message::Ui(UiMessage::UnlinkTask),
         Action::CalendarPrevMonth => Message::Navigation(NavigationMessage::CalendarPrevMonth),
         Action::CalendarNextMonth => Message::Navigation(NavigationMessage::CalendarNextMonth),
         Action::CalendarPrevDay => Message::Ui(UiMessage::CalendarPrevDay),
@@ -426,6 +463,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::Quit => Message::System(SystemMessage::Quit),
         Action::ExportCsv => Message::System(SystemMessage::ExportCsv),
         Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
+        Action::ExportChainsDot => Message::System(SystemMessage::ExportChainsDot),
+        Action::ExportChainsMermaid => Message::System(SystemMessage::ExportChainsMermaid),
         Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),
         Action::StopRecordMacro => Message::Ui(UiMessage::StopRecordMacro),
         Action::PlayMacro0 => Message::Ui(UiMessage::PlayMacro(0)),
@@ -439,6 +478,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
         Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
+        Action::ToggleFocusMode => Message::Ui(UiMessage::ToggleFocusMode),
+        Action::ShowKeybindingsEditor => Message::Ui(UiMessage::ShowKeybindingsEditor),
     }
 }
 

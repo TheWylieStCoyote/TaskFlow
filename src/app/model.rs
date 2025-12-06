@@ -191,6 +191,8 @@ pub struct Model {
     pub show_sidebar: bool,
     /// Whether help overlay is visible
     pub show_help: bool,
+    /// Whether focus mode is active (single-task view)
+    pub focus_mode: bool,
     /// Current terminal dimensions (width, height)
     pub terminal_size: (u16, u16),
     /// Which pane currently has keyboard focus
@@ -255,6 +257,24 @@ pub struct Model {
     pub show_templates: bool,
     /// Index of selected template in picker
     pub template_selected: usize,
+
+    // Pomodoro timer
+    /// Active Pomodoro session (if any)
+    pub pomodoro_session: Option<crate::domain::PomodoroSession>,
+    /// Pomodoro timer configuration
+    pub pomodoro_config: crate::domain::PomodoroConfig,
+    /// Pomodoro statistics
+    pub pomodoro_stats: crate::domain::PomodoroStats,
+
+    // Keybindings editor
+    /// Whether keybindings editor is visible
+    pub show_keybindings_editor: bool,
+    /// Selected keybinding index in editor
+    pub keybinding_selected: usize,
+    /// Whether currently capturing a new key
+    pub keybinding_capturing: bool,
+    /// Keybindings configuration (mutable for editing)
+    pub keybindings: crate::config::Keybindings,
 }
 
 impl Model {
@@ -291,6 +311,7 @@ impl Model {
             show_completed: false,
             show_sidebar: true,
             show_help: false,
+            focus_mode: false,
             terminal_size: (80, 24),
             focus_pane: FocusPane::default(),
             sidebar_selected: 0,
@@ -314,6 +335,13 @@ impl Model {
             template_manager: TemplateManager::new(),
             show_templates: false,
             template_selected: 0,
+            pomodoro_session: None,
+            pomodoro_config: crate::domain::PomodoroConfig::default(),
+            pomodoro_stats: crate::domain::PomodoroStats::default(),
+            show_keybindings_editor: false,
+            keybinding_selected: 0,
+            keybinding_capturing: false,
+            keybindings: crate::config::Keybindings::load(),
         }
     }
 
@@ -328,11 +356,12 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Includes: 6 views + 1 separator + 1 "Projects" header + project count.
+    /// Includes: 11 views + 1 separator + 1 "Projects" header + project count.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
-        // 6 views (All Tasks, Today, Upcoming, Overdue, Calendar, Dashboard) + 1 separator + 1 "Projects" header + projects count
-        8 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // 11 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard, Blocked, Untagged, No Project, Recent)
+        // + 1 separator + 1 "Projects" header + projects count
+        13 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Returns all tasks due on a specific day.
@@ -408,6 +437,29 @@ impl Model {
             self.projects.insert(project.id.clone(), project);
         }
 
+        // Load Pomodoro state
+        let export_data = backend.export_all()?;
+        if let Some(mut session) = export_data.pomodoro_session {
+            // Recalculate remaining time based on elapsed time since last save
+            let config = export_data
+                .pomodoro_config
+                .as_ref()
+                .unwrap_or(&self.pomodoro_config);
+            session.recalculate_remaining_time(config);
+
+            // Validate that the task still exists
+            if self.tasks.contains_key(&session.task_id) {
+                self.pomodoro_session = Some(session);
+            }
+            // If task doesn't exist, discard the session
+        }
+        if let Some(config) = export_data.pomodoro_config {
+            self.pomodoro_config = config;
+        }
+        if let Some(stats) = export_data.pomodoro_stats {
+            self.pomodoro_stats = stats;
+        }
+
         self.storage = Some(backend);
         self.data_path = Some(path);
         self.refresh_visible_tasks();
@@ -425,6 +477,11 @@ impl Model {
     /// Returns an error if the storage backend fails to flush data.
     pub fn save(&mut self) -> anyhow::Result<()> {
         if let Some(ref mut backend) = self.storage {
+            // Sync Pomodoro state before flushing
+            backend.set_pomodoro_session(self.pomodoro_session.as_ref())?;
+            backend.set_pomodoro_config(&self.pomodoro_config)?;
+            backend.set_pomodoro_stats(&self.pomodoro_stats)?;
+
             backend.flush()?;
             self.dirty = false;
         }
@@ -631,7 +688,7 @@ impl Model {
         let sort_order = self.sort.order;
 
         let sort_fn = |a: &&Task, b: &&Task| {
-            let cmp = match sort_field {
+            let primary_cmp = match sort_field {
                 SortField::CreatedAt => a.created_at.cmp(&b.created_at),
                 SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
                 SortField::DueDate => {
@@ -664,6 +721,19 @@ impl Model {
                     };
                     status_order(&a.status).cmp(&status_order(&b.status))
                 }
+            };
+
+            // Use sort_order as secondary sort key when primary values are equal
+            // Tasks with sort_order come before tasks without
+            let cmp = if primary_cmp == std::cmp::Ordering::Equal {
+                match (a.sort_order, b.sort_order) {
+                    (Some(oa), Some(ob)) => oa.cmp(&ob),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                }
+            } else {
+                primary_cmp
             };
 
             match sort_order {
@@ -777,6 +847,10 @@ impl Model {
                 task.due_date
                     .is_some_and(|d| d < chrono::Utc::now().date_naive())
             }
+            ViewId::Scheduled => {
+                // Show tasks with scheduled dates
+                task.scheduled_date.is_some()
+            }
             ViewId::Calendar => {
                 // Show tasks for the selected day in calendar (if any)
                 self.calendar_state.selected_day.map_or_else(
@@ -800,6 +874,28 @@ impl Model {
             ViewId::Projects => {
                 // Show tasks that belong to a project
                 task.project_id.is_some()
+            }
+            ViewId::Blocked => {
+                // Show tasks with incomplete dependencies
+                !task.dependencies.is_empty()
+                    && task.dependencies.iter().any(|dep_id| {
+                        self.tasks
+                            .get(dep_id)
+                            .is_none_or(|d| !d.status.is_complete())
+                    })
+            }
+            ViewId::Untagged => {
+                // Show tasks without any tags
+                task.tags.is_empty()
+            }
+            ViewId::NoProject => {
+                // Show tasks not assigned to any project
+                task.project_id.is_none()
+            }
+            ViewId::RecentlyModified => {
+                // Show tasks modified in the last 7 days
+                let week_ago = chrono::Utc::now() - chrono::Duration::days(7);
+                task.updated_at >= week_ago
             }
         }
     }
@@ -1989,5 +2085,130 @@ mod tests {
         assert_eq!(task_ids[0], task_a_id);
         assert_eq!(task_ids[1], task_b_id);
         assert_eq!(task_ids[2], task_c_id);
+    }
+
+    #[test]
+    fn test_view_blocked_shows_tasks_with_unmet_dependencies() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Blocked;
+
+        // Task A is a prerequisite (incomplete)
+        let task_a = Task::new("Prerequisite task");
+        let task_a_id = task_a.id.clone();
+
+        // Task B depends on task A (blocked because A is not done)
+        let mut task_b = Task::new("Blocked task");
+        task_b.dependencies.push(task_a_id.clone());
+
+        // Task C has no dependencies
+        let task_c = Task::new("Independent task");
+
+        let task_b_id = task_b.id.clone();
+        model.tasks.insert(task_a.id.clone(), task_a);
+        model.tasks.insert(task_b.id.clone(), task_b);
+        model.tasks.insert(task_c.id.clone(), task_c);
+
+        model.refresh_visible_tasks();
+
+        // Only task B should be visible (blocked because task A is not done)
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_b_id);
+    }
+
+    #[test]
+    fn test_view_blocked_excludes_tasks_with_completed_dependencies() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Blocked;
+
+        // Task A is a completed prerequisite
+        let task_a = Task::new("Done prerequisite").with_status(TaskStatus::Done);
+        let task_a_id = task_a.id.clone();
+
+        // Task B depends on task A (NOT blocked because A is done)
+        let mut task_b = Task::new("Unblocked task");
+        task_b.dependencies.push(task_a_id.clone());
+
+        model.tasks.insert(task_a.id.clone(), task_a);
+        model.tasks.insert(task_b.id.clone(), task_b);
+
+        model.show_completed = true; // Include completed tasks
+        model.refresh_visible_tasks();
+
+        // Task B should NOT be visible in Blocked view since its dependency is complete
+        assert!(!model.visible_tasks.iter().any(|id| {
+            model
+                .tasks
+                .get(id)
+                .map_or(false, |t| t.title == "Unblocked task")
+        }));
+    }
+
+    #[test]
+    fn test_view_untagged_shows_tasks_without_tags() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Untagged;
+
+        let task_with_tags = Task::new("Has tags").with_tags(vec!["work".to_string()]);
+        let task_no_tags = Task::new("No tags");
+
+        model
+            .tasks
+            .insert(task_with_tags.id.clone(), task_with_tags);
+        model
+            .tasks
+            .insert(task_no_tags.id.clone(), task_no_tags.clone());
+
+        model.refresh_visible_tasks();
+
+        // Only the task without tags should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_no_tags.id);
+    }
+
+    #[test]
+    fn test_view_no_project_shows_tasks_without_project() {
+        let mut model = Model::new();
+        model.current_view = ViewId::NoProject;
+
+        let project_id = crate::domain::ProjectId::new();
+        let task_with_project = Task::new("Has project").with_project(project_id);
+        let task_no_project = Task::new("No project");
+
+        model
+            .tasks
+            .insert(task_with_project.id.clone(), task_with_project);
+        model
+            .tasks
+            .insert(task_no_project.id.clone(), task_no_project.clone());
+
+        model.refresh_visible_tasks();
+
+        // Only the task without a project should be visible
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], task_no_project.id);
+    }
+
+    #[test]
+    fn test_view_recently_modified_filters_by_date() {
+        let mut model = Model::new();
+        model.current_view = ViewId::RecentlyModified;
+
+        // Create a task modified now (recent)
+        let recent_task = Task::new("Recent task");
+
+        // Create a task and modify its updated_at to be old
+        let mut old_task = Task::new("Old task");
+        old_task.updated_at = chrono::Utc::now() - chrono::Duration::days(14);
+
+        model
+            .tasks
+            .insert(recent_task.id.clone(), recent_task.clone());
+        model.tasks.insert(old_task.id.clone(), old_task);
+
+        model.refresh_visible_tasks();
+
+        // Only the recent task should be visible (modified within 7 days)
+        assert_eq!(model.visible_tasks.len(), 1);
+        assert_eq!(model.visible_tasks[0], recent_task.id);
     }
 }

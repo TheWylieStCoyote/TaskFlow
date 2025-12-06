@@ -101,7 +101,10 @@ pub mod export;
 mod repository;
 
 pub use error::*;
-pub use export::{export_to_csv, export_to_ics, export_to_string, ExportFormat};
+pub use export::{
+    export_chains_to_string, export_to_csv, export_to_dot, export_to_ics, export_to_mermaid,
+    export_to_string, ExportFormat,
+};
 pub use repository::*;
 
 use std::path::Path;

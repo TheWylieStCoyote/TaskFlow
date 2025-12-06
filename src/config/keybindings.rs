@@ -38,6 +38,7 @@ pub enum Action {
     ToggleSidebar,
     ToggleShowCompleted,
     ShowHelp,
+    ToggleFocusMode,
     FocusSidebar,
     FocusTaskList,
     Select,
@@ -63,6 +64,14 @@ pub enum Action {
     // Recurrence
     EditRecurrence,
 
+    // Manual ordering
+    MoveTaskUp,
+    MoveTaskDown,
+
+    // Task chains
+    LinkTask,
+    UnlinkTask,
+
     // Calendar navigation
     CalendarPrevMonth,
     CalendarNextMonth,
@@ -78,6 +87,8 @@ pub enum Action {
     // Export
     ExportCsv,
     ExportIcs,
+    ExportChainsDot,
+    ExportChainsMermaid,
 
     // Macros
     RecordMacro,
@@ -95,6 +106,9 @@ pub enum Action {
 
     // Templates
     ShowTemplates,
+
+    // Keybindings editor
+    ShowKeybindingsEditor,
 }
 
 /// Key modifier
@@ -188,6 +202,7 @@ impl Default for Keybindings {
         bindings.insert("b".to_string(), Action::ToggleSidebar);
         bindings.insert("c".to_string(), Action::ToggleShowCompleted);
         bindings.insert("?".to_string(), Action::ShowHelp);
+        bindings.insert("f".to_string(), Action::ToggleFocusMode);
         bindings.insert("h".to_string(), Action::FocusSidebar);
         bindings.insert("l".to_string(), Action::FocusTaskList);
         bindings.insert("left".to_string(), Action::FocusSidebar);
@@ -198,7 +213,7 @@ impl Default for Keybindings {
         bindings.insert("#".to_string(), Action::FilterByTag);
         bindings.insert("ctrl+t".to_string(), Action::ClearTagFilter);
         bindings.insert("s".to_string(), Action::CycleSortField);
-        bindings.insert("S".to_string(), Action::ToggleSortOrder);
+        bindings.insert("ctrl+s".to_string(), Action::ToggleSortOrder);
 
         // Multi-select / Bulk operations
         bindings.insert("v".to_string(), Action::ToggleMultiSelect);
@@ -210,6 +225,14 @@ impl Default for Keybindings {
 
         // Recurrence
         bindings.insert("R".to_string(), Action::EditRecurrence);
+
+        // Manual ordering
+        bindings.insert("ctrl+up".to_string(), Action::MoveTaskUp);
+        bindings.insert("ctrl+down".to_string(), Action::MoveTaskDown);
+
+        // Task chains
+        bindings.insert("ctrl+l".to_string(), Action::LinkTask);
+        bindings.insert("ctrl+shift+l".to_string(), Action::UnlinkTask);
 
         // Calendar navigation
         bindings.insert("<".to_string(), Action::CalendarPrevMonth);
@@ -227,6 +250,8 @@ impl Default for Keybindings {
         // Export
         bindings.insert("ctrl+e".to_string(), Action::ExportCsv);
         bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
+        bindings.insert("ctrl+g".to_string(), Action::ExportChainsDot);
+        bindings.insert("ctrl+m".to_string(), Action::ExportChainsMermaid);
 
         // Macros - q to record, Q to stop, @0-9 to play
         bindings.insert("ctrl+q".to_string(), Action::RecordMacro);
@@ -244,6 +269,9 @@ impl Default for Keybindings {
 
         // Templates
         bindings.insert("ctrl+n".to_string(), Action::ShowTemplates);
+
+        // Keybindings editor
+        bindings.insert("ctrl+k".to_string(), Action::ShowKeybindingsEditor);
 
         Self { bindings }
     }
@@ -281,6 +309,50 @@ impl Keybindings {
     #[must_use]
     pub fn get_action(&self, key: &str) -> Option<&Action> {
         self.bindings.get(key)
+    }
+
+    /// Returns a sorted list of (key, action) pairs for display
+    #[must_use]
+    pub fn sorted_bindings(&self) -> Vec<(String, Action)> {
+        let mut pairs: Vec<_> = self
+            .bindings
+            .iter()
+            .map(|(k, a)| (k.clone(), a.clone()))
+            .collect();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        pairs
+    }
+
+    /// Set a keybinding for an action
+    pub fn set_binding(&mut self, key: String, action: Action) {
+        // Remove any existing binding for this action
+        self.bindings.retain(|_, a| a != &action);
+        // Add the new binding
+        self.bindings.insert(key, action);
+    }
+
+    /// Find the key bound to an action
+    #[must_use]
+    pub fn key_for_action(&self, action: &Action) -> Option<&String> {
+        self.bindings
+            .iter()
+            .find(|(_, a)| *a == action)
+            .map(|(k, _)| k)
+    }
+
+    /// Save keybindings to the config file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub fn save(&self) -> std::io::Result<()> {
+        let path = Self::config_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, content)
     }
 }
 

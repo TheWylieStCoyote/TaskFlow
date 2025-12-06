@@ -17,6 +17,7 @@ impl Tag {
         }
     }
 
+    #[must_use]
     pub fn with_color(mut self, color: impl Into<String>) -> Self {
         self.color = Some(color.into());
         self

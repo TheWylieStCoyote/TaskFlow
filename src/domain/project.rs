@@ -161,16 +161,19 @@ impl Project {
         }
     }
 
+    #[must_use]
     pub fn with_color(mut self, color: impl Into<String>) -> Self {
         self.color = Some(color.into());
         self
     }
 
+    #[must_use]
     pub fn with_parent(mut self, parent_id: ProjectId) -> Self {
         self.parent_id = Some(parent_id);
         self
     }
 
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.status == ProjectStatus::Active
     }

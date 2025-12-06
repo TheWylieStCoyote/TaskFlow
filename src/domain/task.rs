@@ -357,11 +357,13 @@ impl Task {
         }
     }
 
+    #[must_use]
     pub fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
 
+    #[must_use]
     pub fn with_status(mut self, status: TaskStatus) -> Self {
         self.status = status;
         if status.is_complete() && self.completed_at.is_none() {
@@ -370,31 +372,37 @@ impl Task {
         self
     }
 
+    #[must_use]
     pub fn with_due_date(mut self, date: NaiveDate) -> Self {
         self.due_date = Some(date);
         self
     }
 
+    #[must_use]
     pub fn with_project(mut self, project_id: ProjectId) -> Self {
         self.project_id = Some(project_id);
         self
     }
 
+    #[must_use]
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
 
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    #[must_use]
     pub fn with_parent(mut self, parent_id: TaskId) -> Self {
         self.parent_task_id = Some(parent_id);
         self
     }
 
+    #[must_use]
     pub fn with_recurrence(mut self, recurrence: Option<Recurrence>) -> Self {
         self.recurrence = recurrence;
         self

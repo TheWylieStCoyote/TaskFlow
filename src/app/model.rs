@@ -80,6 +80,8 @@ pub struct CalendarState {
     pub month: u32,
     /// The selected day within the month (if any)
     pub selected_day: Option<u32>,
+    /// Whether focus is on the task list (true) or calendar grid (false)
+    pub focus_task_list: bool,
 }
 
 impl Default for CalendarState {
@@ -89,6 +91,7 @@ impl Default for CalendarState {
             year: today.year(),
             month: today.month(),
             selected_day: Some(today.day()),
+            focus_task_list: false,
         }
     }
 }
@@ -373,6 +376,21 @@ impl Model {
             .values()
             .filter(|t| t.due_date == Some(date))
             .collect()
+    }
+
+    /// Returns all tasks due on the currently selected calendar day.
+    ///
+    /// Returns an empty vector if no day is selected.
+    #[must_use]
+    pub fn tasks_for_selected_day(&self) -> Vec<&Task> {
+        if let Some(day) = self.calendar_state.selected_day {
+            if let Some(date) =
+                NaiveDate::from_ymd_opt(self.calendar_state.year, self.calendar_state.month, day)
+            {
+                return self.tasks_for_day(date);
+            }
+        }
+        Vec::new()
     }
 
     /// Returns the count of visible tasks for a specific day.

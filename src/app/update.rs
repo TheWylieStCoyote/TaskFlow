@@ -32,8 +32,15 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::Up => match model.focus_pane {
             FocusPane::TaskList => {
                 if model.current_view == ViewId::Calendar {
-                    // In calendar view, up moves to previous week (or wraps)
-                    handle_calendar_up(model);
+                    if model.calendar_state.focus_task_list {
+                        // Navigate tasks in calendar task list
+                        if model.selected_index > 0 {
+                            model.selected_index -= 1;
+                        }
+                    } else {
+                        // In calendar grid, up moves to previous week (or wraps)
+                        handle_calendar_up(model);
+                    }
                 } else if model.selected_index > 0 {
                     model.selected_index -= 1;
                 }
@@ -51,8 +58,16 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::Down => match model.focus_pane {
             FocusPane::TaskList => {
                 if model.current_view == ViewId::Calendar {
-                    // In calendar view, down moves to next week (or wraps)
-                    handle_calendar_down(model);
+                    if model.calendar_state.focus_task_list {
+                        // Navigate tasks in calendar task list
+                        let task_count = model.tasks_for_selected_day().len();
+                        if model.selected_index < task_count.saturating_sub(1) {
+                            model.selected_index += 1;
+                        }
+                    } else {
+                        // In calendar grid, down moves to next week (or wraps)
+                        handle_calendar_down(model);
+                    }
                 } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
                 }
@@ -160,8 +175,21 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         }
         NavigationMessage::CalendarSelectDay(day) => {
             model.calendar_state.selected_day = Some(day);
+            model.calendar_state.focus_task_list = false; // Reset focus to grid
             model.selected_index = 0;
             model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarFocusTaskList => {
+            if model.current_view == ViewId::Calendar {
+                // Only focus task list if there are tasks for the selected day
+                if !model.tasks_for_selected_day().is_empty() {
+                    model.calendar_state.focus_task_list = true;
+                    model.selected_index = 0;
+                }
+            }
+        }
+        NavigationMessage::CalendarFocusGrid => {
+            model.calendar_state.focus_task_list = false;
         }
     }
 }
@@ -197,6 +225,7 @@ fn handle_calendar_up(model: &mut Model) {
             let new_day = days - (7 - day);
             model.calendar_state.selected_day = Some(new_day.max(1));
         }
+        model.calendar_state.focus_task_list = false; // Reset focus to grid
         model.selected_index = 0;
         model.refresh_visible_tasks();
     }
@@ -220,6 +249,7 @@ fn handle_calendar_down(model: &mut Model) {
             let new_day = (day + 7) - days;
             model.calendar_state.selected_day = Some(new_day.min(7));
         }
+        model.calendar_state.focus_task_list = false; // Reset focus to grid
         model.selected_index = 0;
         model.refresh_visible_tasks();
     }
@@ -4742,5 +4772,145 @@ mod tests {
         // Should be back to default (z is not a default binding)
         assert_eq!(model.keybindings.get_action("z"), None);
         assert!(model.status_message.is_some());
+    }
+
+    // Calendar focus tests
+
+    #[test]
+    fn test_calendar_focus_toggle() {
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Calendar;
+        model.refresh_visible_tasks();
+
+        // Initially focus should be on calendar grid
+        assert!(!model.calendar_state.focus_task_list);
+
+        // Focus task list (should work if there are tasks)
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusTaskList),
+        );
+
+        // Should be focused on task list if there are tasks for the day
+        if !model.tasks_for_selected_day().is_empty() {
+            assert!(model.calendar_state.focus_task_list);
+        }
+
+        // Focus back to grid
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusGrid),
+        );
+        assert!(!model.calendar_state.focus_task_list);
+    }
+
+    #[test]
+    fn test_calendar_task_navigation() {
+        use chrono::Datelike;
+
+        let mut model = Model::new();
+
+        // Add multiple tasks for the same day
+        let today = chrono::Utc::now().date_naive();
+        let task1 = crate::domain::Task::new("Task 1").with_due_date(today);
+        let task2 = crate::domain::Task::new("Task 2").with_due_date(today);
+        let task3 = crate::domain::Task::new("Task 3").with_due_date(today);
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task3.id.clone(), task3);
+
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(today.day());
+        model.calendar_state.year = today.year();
+        model.calendar_state.month = today.month();
+        model.refresh_visible_tasks();
+
+        // Focus on task list
+        model.calendar_state.focus_task_list = true;
+        model.selected_index = 0;
+
+        // Navigate down
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 1);
+
+        // Navigate down again
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 2);
+
+        // Navigate down at end should stay at end
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 2);
+
+        // Navigate up
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+        assert_eq!(model.selected_index, 1);
+    }
+
+    #[test]
+    fn test_calendar_focus_reset_on_day_change() {
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(15);
+        model.calendar_state.focus_task_list = true;
+
+        // Select a new day
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarSelectDay(20)),
+        );
+
+        // Focus should be reset to grid
+        assert!(!model.calendar_state.focus_task_list);
+        assert_eq!(model.calendar_state.selected_day, Some(20));
+    }
+
+    #[test]
+    fn test_calendar_focus_only_with_tasks() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(15);
+        model.refresh_visible_tasks();
+
+        // No tasks for the day, focus should not switch
+        assert!(!model.calendar_state.focus_task_list);
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusTaskList),
+        );
+
+        // Should still be on grid since there are no tasks
+        assert!(!model.calendar_state.focus_task_list);
+    }
+
+    #[test]
+    fn test_calendar_task_actions_when_focused() {
+        use chrono::Datelike;
+
+        let mut model = Model::new();
+
+        // Add a task for today
+        let today = chrono::Utc::now().date_naive();
+        let task = crate::domain::Task::new("Test task").with_due_date(today);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(today.day());
+        model.calendar_state.year = today.year();
+        model.calendar_state.month = today.month();
+        model.calendar_state.focus_task_list = true;
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        // Task should be Todo initially
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
+
+        // Toggle complete
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Task should now be Done
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
     }
 }

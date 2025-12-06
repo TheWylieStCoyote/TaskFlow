@@ -318,16 +318,42 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         return Message::Ui(UiMessage::ToggleTaskSelection);
     }
 
-    // In calendar view, arrow keys navigate days/weeks
+    // In calendar view, handle focus switching and navigation
     if model.current_view == taskflow::app::ViewId::Calendar
         && model.focus_pane == taskflow::app::FocusPane::TaskList
     {
-        match key.code {
-            KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
-            KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
-            KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
-            KeyCode::Char('l') => return Message::Ui(UiMessage::CalendarNextDay),
-            _ => {}
+        // Tab toggles focus between calendar grid and task list
+        if key.code == KeyCode::Tab {
+            return if model.calendar_state.focus_task_list {
+                Message::Navigation(NavigationMessage::CalendarFocusGrid)
+            } else {
+                Message::Navigation(NavigationMessage::CalendarFocusTaskList)
+            };
+        }
+
+        if model.calendar_state.focus_task_list {
+            // When focused on task list, h goes back to calendar grid
+            match key.code {
+                KeyCode::Char('h') | KeyCode::Left => {
+                    return Message::Navigation(NavigationMessage::CalendarFocusGrid);
+                }
+                _ => {}
+            }
+        } else {
+            // When focused on calendar grid, navigate days
+            match key.code {
+                KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
+                KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
+                KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
+                KeyCode::Char('l') => {
+                    // l moves to task list if there are tasks, otherwise next day
+                    if !model.tasks_for_selected_day().is_empty() {
+                        return Message::Navigation(NavigationMessage::CalendarFocusTaskList);
+                    }
+                    return Message::Ui(UiMessage::CalendarNextDay);
+                }
+                _ => {}
+            }
         }
     }
 

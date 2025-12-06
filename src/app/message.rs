@@ -128,6 +128,10 @@ pub enum NavigationMessage {
     CalendarNextMonth,
     /// Select a specific day in calendar
     CalendarSelectDay(u32),
+    /// Focus the task list panel in calendar view
+    CalendarFocusTaskList,
+    /// Focus the calendar grid in calendar view
+    CalendarFocusGrid,
 }
 
 /// View identifiers for different application screens.

@@ -58,6 +58,30 @@ TaskFlow is a CLI TUI project management application built with Rust using:
 - Visual indicators in task list (red dot for active tracking, cyan duration display)
 - Automatic timer stop on quit
 
+### Phase 6: Pomodoro Timer (Complete)
+- Built-in Pomodoro technique support
+- Configurable work/break durations
+- Automatic phase transitions
+- Session statistics tracking
+- Persistence across application restarts
+
+### Phase 7: Scripting System (Complete)
+- Rhai-based scripting engine for automation
+- Event-driven hooks (task created, completed, status changed, etc.)
+- Custom commands definable in hooks.toml
+- API for task manipulation, time tracking, and notifications
+- Sandboxed execution with resource limits and timeouts
+- Support for external script files
+
+**Files:**
+- `src/scripting/mod.rs` - Scripting module root
+- `src/scripting/engine.rs` - Rhai engine wrapper and execution
+- `src/scripting/api.rs` - Functions exposed to scripts
+- `src/scripting/config.rs` - hooks.toml configuration parsing
+- `src/scripting/event.rs` - Hook event types (HookEvent enum)
+- `src/scripting/actions.rs` - Script action types (ScriptAction enum)
+- `src/scripting/error.rs` - Scripting error types
+
 ## Keybindings
 
 | Key | Action |
@@ -139,6 +163,15 @@ src/
 │       ├── sqlite.rs       # SQLite backend
 │       └── markdown.rs     # Markdown backend
 │
+├── scripting/
+│   ├── mod.rs              # Scripting module root
+│   ├── engine.rs           # Rhai engine and execution
+│   ├── api.rs              # Script API functions
+│   ├── config.rs           # hooks.toml parsing
+│   ├── event.rs            # HookEvent enum
+│   ├── actions.rs          # ScriptAction enum
+│   └── error.rs            # Error types
+│
 └── config/
     ├── mod.rs
     ├── settings.rs         # Main settings
@@ -152,7 +185,9 @@ Configuration files are stored in `~/.config/taskflow/`:
 
 - `config.toml` - Main settings
 - `keybindings.toml` - Custom key mappings
+- `hooks.toml` - Scripting hooks and custom commands
 - `themes/*.toml` - Custom themes
+- `scripts/*.rhai` - External script files (optional)
 
 ### Example config.toml
 
@@ -177,3 +212,4 @@ default_priority = "none"
 - `clap` - CLI argument parsing
 - `directories` - Platform-specific paths
 - `thiserror` / `anyhow` - Error handling
+- `rhai` - Embedded scripting language (with `sync` feature)

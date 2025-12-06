@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 
-use crate::domain::TaskId;
+use crate::domain::{Priority, Task, TaskId};
+use crate::scripting::{HookEvent, ScriptAction};
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
@@ -374,6 +375,12 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     }
                 });
 
+                // Track if we're completing (for hook)
+                let was_incomplete = model
+                    .tasks
+                    .get(&id)
+                    .is_some_and(|t| !t.status.is_complete());
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -383,6 +390,13 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         before: Box::new(before),
                         after: Box::new(after),
                     });
+                }
+
+                // Fire task completed hook if we just completed the task
+                if was_incomplete {
+                    if let Some(task) = model.tasks.get(&id).cloned() {
+                        execute_hook(model, HookEvent::TaskCompleted { task });
+                    }
                 }
 
                 // Add the next recurring task if one was created
@@ -412,6 +426,8 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             model.refresh_visible_tasks();
         }
         TaskMessage::SetStatus(task_id, status) => {
+            let old_status = model.tasks.get(&task_id).map(|t| t.status);
+
             if let Some(task) = model.tasks.get_mut(&task_id) {
                 let before = task.clone();
                 task.status = status;
@@ -423,9 +439,28 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     after: Box::new(after),
                 });
             }
+
+            // Fire status changed hook
+            if let Some(old) = old_status {
+                if old != status {
+                    if let Some(task) = model.tasks.get(&task_id).cloned() {
+                        execute_hook(
+                            model,
+                            HookEvent::TaskStatusChanged {
+                                task,
+                                old_status: old,
+                                new_status: status,
+                            },
+                        );
+                    }
+                }
+            }
+
             model.refresh_visible_tasks();
         }
         TaskMessage::SetPriority(task_id, priority) => {
+            let old_priority = model.tasks.get(&task_id).map(|t| t.priority);
+
             if let Some(task) = model.tasks.get_mut(&task_id) {
                 let before = task.clone();
                 task.priority = priority;
@@ -437,13 +472,31 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     after: Box::new(after),
                 });
             }
+
+            // Fire priority changed hook
+            if let Some(old) = old_priority {
+                if old != priority {
+                    if let Some(task) = model.tasks.get(&task_id).cloned() {
+                        execute_hook(
+                            model,
+                            HookEvent::TaskPriorityChanged {
+                                task,
+                                old_priority: old,
+                                new_priority: priority,
+                            },
+                        );
+                    }
+                }
+            }
+
             model.refresh_visible_tasks();
         }
         TaskMessage::CyclePriority => {
-            use crate::domain::Priority;
             let task_id = model.visible_tasks.get(model.selected_index).cloned();
 
             if let Some(id) = task_id {
+                let old_priority = model.tasks.get(&id).map(|t| t.priority);
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.priority = match task.priority {
@@ -461,6 +514,26 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         after: Box::new(after),
                     });
                 }
+
+                // Fire priority changed hook
+                if let Some(old) = old_priority {
+                    if let Some(task) = model.tasks.get(&id).cloned() {
+                        if old != task.priority {
+                            execute_hook(
+                                model,
+                                HookEvent::TaskPriorityChanged {
+                                    task,
+                                    old_priority: old,
+                                    new_priority: model
+                                        .tasks
+                                        .get(&id)
+                                        .map(|t| t.priority)
+                                        .unwrap_or(old),
+                                },
+                            );
+                        }
+                    }
+                }
             }
             model.refresh_visible_tasks();
         }
@@ -470,7 +543,11 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
             model
                 .undo_stack
                 .push(UndoAction::TaskCreated(Box::new(task.clone())));
-            model.tasks.insert(task.id.clone(), task);
+            model.tasks.insert(task.id.clone(), task.clone());
+
+            // Fire task created hook
+            execute_hook(model, HookEvent::TaskCreated { task });
+
             model.refresh_visible_tasks();
         }
         TaskMessage::Delete(task_id) => {
@@ -478,7 +555,10 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                 model.delete_task_from_storage(&task_id);
                 model
                     .undo_stack
-                    .push(UndoAction::TaskDeleted(Box::new(task)));
+                    .push(UndoAction::TaskDeleted(Box::new(task.clone())));
+
+                // Fire task deleted hook
+                execute_hook(model, HookEvent::TaskDeleted { task });
             }
             model.refresh_visible_tasks();
         }
@@ -772,7 +852,14 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.refresh_visible_tasks();
                 }
                 InputTarget::EditTags(task_id) => {
-                    if let Some(task) = model.tasks.get_mut(task_id) {
+                    let task_id = task_id.clone();
+                    let old_tags = model
+                        .tasks
+                        .get(&task_id)
+                        .map(|t| t.tags.clone())
+                        .unwrap_or_default();
+
+                    if let Some(task) = model.tasks.get_mut(&task_id) {
                         let before = task.clone();
                         // Parse comma-separated tags, trim whitespace, filter empty
                         task.tags = input
@@ -788,6 +875,35 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             after: Box::new(after),
                         });
                     }
+
+                    // Fire tag hooks for added/removed tags
+                    if let Some(task) = model.tasks.get(&task_id).cloned() {
+                        // Tags that were added
+                        for tag in &task.tags {
+                            if !old_tags.contains(tag) {
+                                execute_hook(
+                                    model,
+                                    HookEvent::TagAdded {
+                                        task: task.clone(),
+                                        tag: tag.clone(),
+                                    },
+                                );
+                            }
+                        }
+                        // Tags that were removed
+                        for tag in &old_tags {
+                            if !task.tags.contains(tag) {
+                                execute_hook(
+                                    model,
+                                    HookEvent::TagRemoved {
+                                        task: task.clone(),
+                                        tag: tag.clone(),
+                                    },
+                                );
+                            }
+                        }
+                    }
+
                     model.refresh_visible_tasks();
                 }
                 InputTarget::EditDescription(task_id) => {
@@ -1555,18 +1671,62 @@ fn handle_time(model: &mut Model, msg: TimeMessage) {
     match msg {
         TimeMessage::StartTracking => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
-                model.start_time_tracking(task_id);
+                // Fire time tracking started hook
+                if let Some(task) = model.tasks.get(&task_id).cloned() {
+                    model.start_time_tracking(task_id);
+                    execute_hook(model, HookEvent::TimeTrackingStarted { task });
+                }
             }
         }
         TimeMessage::StopTracking => {
+            // Get the currently tracked task before stopping
+            let tracked_info = model.active_time_entry().map(|entry| {
+                let duration_mins = entry.calculated_duration_minutes();
+                let task = model.tasks.get(&entry.task_id).cloned();
+                (task, duration_mins)
+            });
+
             model.stop_time_tracking();
+
+            // Fire time tracking stopped hook
+            if let Some((Some(task), duration_mins)) = tracked_info {
+                execute_hook(
+                    model,
+                    HookEvent::TimeTrackingStopped {
+                        task,
+                        duration_mins,
+                    },
+                );
+            }
         }
         TimeMessage::ToggleTracking => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if model.is_tracking_task(&task_id) {
+                    // Get the task and duration before stopping
+                    let tracked_info = model.active_time_entry().map(|entry| {
+                        let duration_mins = entry.calculated_duration_minutes();
+                        let task = model.tasks.get(&entry.task_id).cloned();
+                        (task, duration_mins)
+                    });
+
                     model.stop_time_tracking();
+
+                    // Fire time tracking stopped hook
+                    if let Some((Some(task), duration_mins)) = tracked_info {
+                        execute_hook(
+                            model,
+                            HookEvent::TimeTrackingStopped {
+                                task,
+                                duration_mins,
+                            },
+                        );
+                    }
                 } else {
-                    model.start_time_tracking(task_id);
+                    // Fire time tracking started hook
+                    if let Some(task) = model.tasks.get(&task_id).cloned() {
+                        model.start_time_tracking(task_id);
+                        execute_hook(model, HookEvent::TimeTrackingStarted { task });
+                    }
                 }
             }
         }
@@ -1900,6 +2060,16 @@ fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
 fn transition_pomodoro_phase(model: &mut Model) {
     use crate::domain::PomodoroPhase;
 
+    // Capture info for hook before modifying session
+    let (completed_phase, task_for_hook) = model
+        .pomodoro_session
+        .as_ref()
+        .map(|s| {
+            let task = model.tasks.get(&s.task_id).cloned();
+            (s.phase, task)
+        })
+        .unwrap_or((PomodoroPhase::Work, None));
+
     let (next_phase, next_remaining, cycles_completed, message) = {
         let session = match model.pomodoro_session.as_ref() {
             Some(s) => s,
@@ -1962,6 +2132,17 @@ fn transition_pomodoro_phase(model: &mut Model) {
         } else {
             model.status_message = Some(message);
         }
+    }
+
+    // Fire pomodoro phase completed hook
+    if let Some(task) = task_for_hook {
+        execute_hook(
+            model,
+            HookEvent::PomodoroPhaseCompleted {
+                phase: completed_phase,
+                task,
+            },
+        );
     }
 }
 
@@ -2107,6 +2288,182 @@ fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
             }
         },
         _ => {}
+    }
+}
+
+// ============================================================================
+// Scripting/Hook Helpers
+// ============================================================================
+
+/// Executes a hook and processes any resulting script actions.
+///
+/// This is the main entry point for triggering hooks from event handlers.
+/// It runs the hook script and processes each action the script produces.
+fn execute_hook(model: &mut Model, event: HookEvent) {
+    let Some(ref engine) = model.script_engine else {
+        return;
+    };
+
+    match engine.execute_hook(&event) {
+        Ok(actions) => {
+            for action in actions {
+                process_script_action(model, action);
+            }
+        }
+        Err(e) => {
+            if engine.is_debug() {
+                model.status_message = Some(format!("[script error] {e}"));
+            }
+        }
+    }
+}
+
+/// Processes a single script action, applying it to the model.
+fn process_script_action(model: &mut Model, action: ScriptAction) {
+    match action {
+        ScriptAction::CreateTask {
+            title,
+            priority,
+            due_in_days,
+            tags,
+            project_name,
+        } => {
+            let mut task = Task::new(title);
+
+            if let Some(p) = priority {
+                task.priority = p;
+            }
+
+            if let Some(days) = due_in_days {
+                let due = chrono::Utc::now().date_naive() + chrono::Duration::days(i64::from(days));
+                task = task.with_due_date(due);
+            }
+
+            if !tags.is_empty() {
+                task = task.with_tags(tags);
+            }
+
+            // Find project by name if specified
+            if let Some(name) = project_name {
+                let name_lower = name.to_lowercase();
+                if let Some(project_id) = model
+                    .projects
+                    .values()
+                    .find(|p| p.name.to_lowercase() == name_lower)
+                    .map(|p| p.id.clone())
+                {
+                    task.project_id = Some(project_id);
+                }
+            }
+
+            model.sync_task(&task);
+            model
+                .undo_stack
+                .push(UndoAction::TaskCreated(Box::new(task.clone())));
+            model.tasks.insert(task.id.clone(), task);
+            model.refresh_visible_tasks();
+        }
+
+        ScriptAction::CompleteTask { task_id } => {
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                if !task.status.is_complete() {
+                    let before = task.clone();
+                    task.status = crate::domain::TaskStatus::Done;
+                    task.completed_at = Some(chrono::Utc::now());
+                    task.updated_at = chrono::Utc::now();
+                    let after = task.clone();
+                    model.sync_task(&after);
+                    model.undo_stack.push(UndoAction::TaskModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
+
+        ScriptAction::SetTaskStatus { task_id, status } => {
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                let before = task.clone();
+                task.status = status;
+                task.updated_at = chrono::Utc::now();
+                if status.is_complete() {
+                    task.completed_at = Some(chrono::Utc::now());
+                }
+                let after = task.clone();
+                model.sync_task(&after);
+                model.undo_stack.push(UndoAction::TaskModified {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
+                model.refresh_visible_tasks();
+            }
+        }
+
+        ScriptAction::SetTaskPriority { task_id, priority } => {
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                let before = task.clone();
+                task.priority = priority;
+                task.updated_at = chrono::Utc::now();
+                let after = task.clone();
+                model.sync_task(&after);
+                model.undo_stack.push(UndoAction::TaskModified {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
+                model.refresh_visible_tasks();
+            }
+        }
+
+        ScriptAction::AddTag { task_id, tag } => {
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                if !task.tags.contains(&tag) {
+                    let before = task.clone();
+                    task.tags.push(tag);
+                    task.updated_at = chrono::Utc::now();
+                    let after = task.clone();
+                    model.sync_task(&after);
+                    model.undo_stack.push(UndoAction::TaskModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
+                }
+            }
+        }
+
+        ScriptAction::RemoveTag { task_id, tag } => {
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                if let Some(pos) = task.tags.iter().position(|t| t == &tag) {
+                    let before = task.clone();
+                    task.tags.remove(pos);
+                    task.updated_at = chrono::Utc::now();
+                    let after = task.clone();
+                    model.sync_task(&after);
+                    model.undo_stack.push(UndoAction::TaskModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
+                }
+            }
+        }
+
+        ScriptAction::StartTracking { task_id } => {
+            if model.tasks.contains_key(&task_id) {
+                model.start_time_tracking(task_id);
+            }
+        }
+
+        ScriptAction::StopTracking => {
+            model.stop_time_tracking();
+        }
+
+        ScriptAction::Log { message } => {
+            eprintln!("[script] {message}");
+        }
+
+        ScriptAction::Notify { message } => {
+            model.status_message = Some(message);
+        }
     }
 }
 

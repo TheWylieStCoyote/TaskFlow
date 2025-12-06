@@ -10,11 +10,13 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Project Organization**: Group related tasks under projects with sidebar navigation
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer
+- **Pomodoro Timer**: Built-in Pomodoro technique with configurable work/break intervals
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
 - **Sorting**: Sort tasks by priority, due date, title, status, or creation date
 - **Undo Support**: Undo task and project operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
 - **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown
+- **Scripting System**: Automate workflows with Rhai scripts and event hooks
 - **Customizable**: Themes, keybindings, and settings via config files
 
 ## Installation
@@ -329,6 +331,9 @@ TaskFlow stores configuration in `~/.config/taskflow/`:
 ~/.config/taskflow/
 ├── config.toml        # General settings
 ├── keybindings.toml   # Custom key mappings
+├── hooks.toml         # Scripting hooks and commands
+├── scripts/           # External script files (optional)
+│   └── *.rhai
 └── themes/
     └── default.toml   # Color themes
 ```
@@ -362,6 +367,121 @@ j = "move_down"
 k = "move_up"
 q = "quit"
 # ... customize as needed
+```
+
+### Scripting (hooks.toml)
+
+TaskFlow includes a **Rhai-based scripting system** that lets you automate workflows and extend functionality without modifying the source code.
+
+Create `~/.config/taskflow/hooks.toml` to define scripts:
+
+```toml
+[settings]
+enabled = true
+timeout = 5       # Max execution time in seconds
+debug = false     # Enable debug logging
+
+# Hook that runs when a task is completed
+[hooks.on_task_completed]
+script = """
+    if task.has_tag("recurring") {
+        create_task("Follow-up: " + task.title);
+    }
+"""
+
+# Hook that auto-starts time tracking when status changes to in-progress
+[hooks.on_task_status_changed]
+script = """
+    if new_status == "inprogress" {
+        start_tracking(task.id);
+    }
+    if old_status == "inprogress" {
+        stop_tracking();
+    }
+"""
+
+# Custom command accessible via scripting API
+[commands.archive_done]
+description = "Archive all completed tasks"
+script = """
+    // Custom commands can perform bulk operations
+    log("Archiving completed tasks...");
+"""
+```
+
+#### Available Hooks
+
+| Hook | Trigger | Variables |
+|------|---------|-----------|
+| `on_task_created` | Task created | `task` |
+| `on_task_completed` | Task marked done | `task` |
+| `on_task_deleted` | Task deleted | `task` |
+| `on_task_status_changed` | Status changes | `task`, `old_status`, `new_status` |
+| `on_task_priority_changed` | Priority changes | `task`, `old_priority`, `new_priority` |
+| `on_time_tracking_started` | Timer started | `task` |
+| `on_time_tracking_stopped` | Timer stopped | `task`, `duration_minutes` |
+| `on_pomodoro_phase_completed` | Pomodoro phase ends | `task`, `phase` |
+| `on_tag_added` | Tag added to task | `task`, `tag` |
+| `on_tag_removed` | Tag removed from task | `task`, `tag` |
+
+#### Script API Functions
+
+**Task Operations:**
+- `create_task(title)` - Create a new task
+- `create_task_with_options(title, options)` - Create task with options map
+- `complete_task(id)` - Mark a task as complete
+- `set_status(id, status)` - Set task status ("todo", "inprogress", "blocked", "done", "cancelled")
+- `set_priority(id, priority)` - Set priority ("urgent", "high", "medium", "low", "none")
+- `add_tag(id, tag)` - Add a tag to a task
+- `remove_tag(id, tag)` - Remove a tag from a task
+
+**Time Tracking:**
+- `start_tracking(id)` - Start time tracking for a task
+- `stop_tracking()` - Stop current time tracking
+
+**Utilities:**
+- `log(message)` - Log a message (debug output)
+- `notify(message)` - Show a notification in the status bar
+- `today()` - Returns 0 (for due_in_days)
+- `tomorrow()` - Returns 1
+- `next_week()` - Returns 7
+
+#### Task Object Properties
+
+Scripts receive a `task` object with these properties:
+- `task.id` - UUID string
+- `task.title` - Task title
+- `task.status` - Status string (lowercase)
+- `task.priority` - Priority string (lowercase)
+- `task.tags` - Array of tag strings
+- `task.is_complete` - Boolean
+- `task.is_overdue` - Boolean
+- `task.is_due_today` - Boolean
+- `task.has_tag(name)` - Method to check for a tag
+
+#### External Script Files
+
+Instead of inline scripts, you can reference external files:
+
+```toml
+[hooks.on_task_completed]
+script_file = "scripts/on_complete.rhai"
+```
+
+#### Example: Auto-Create Follow-up Tasks
+
+```toml
+[hooks.on_task_completed]
+script = """
+    // Create follow-up for meeting tasks
+    if task.has_tag("meeting") {
+        create_task_with_options("Send meeting notes: " + task.title, #{
+            priority: "high",
+            due_in_days: tomorrow(),
+            tags: ["follow-up", "email"]
+        });
+    }
+"""
 ```
 
 ## Architecture
@@ -401,6 +521,7 @@ taskflow/
 │   │   ├── project.rs    # Project model
 │   │   ├── tag.rs        # Tag model
 │   │   ├── time_entry.rs # Time tracking
+│   │   ├── pomodoro.rs   # Pomodoro timer
 │   │   └── filter.rs     # Query filters
 │   ├── app/              # TEA architecture
 │   │   ├── model.rs      # Application state
@@ -411,6 +532,12 @@ taskflow/
 │   │   ├── settings.rs   # App settings
 │   │   ├── keybindings.rs# Key mappings
 │   │   └── theme.rs      # Color themes
+│   ├── scripting/        # Rhai scripting system
+│   │   ├── engine.rs     # Script execution engine
+│   │   ├── api.rs        # Functions exposed to scripts
+│   │   ├── config.rs     # hooks.toml parsing
+│   │   ├── event.rs      # Hook event types
+│   │   └── actions.rs    # Script action types
 │   ├── storage/          # Persistence
 │   │   └── backends/     # JSON, YAML, SQLite, Markdown
 │   └── ui/               # User interface

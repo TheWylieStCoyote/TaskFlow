@@ -53,6 +53,7 @@ use chrono::{Datelike, NaiveDate, Utc};
 use crate::domain::{
     Filter, Priority, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId,
 };
+use crate::scripting::ScriptEngine;
 #[allow(unused_imports)]
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::{InputMode, InputTarget};
@@ -275,6 +276,10 @@ pub struct Model {
     pub keybinding_capturing: bool,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
+
+    // Scripting engine
+    /// Rhai scripting engine for hooks and custom commands
+    pub script_engine: Option<ScriptEngine>,
 }
 
 impl Model {
@@ -342,6 +347,7 @@ impl Model {
             keybinding_selected: 0,
             keybinding_capturing: false,
             keybindings: crate::config::Keybindings::load(),
+            script_engine: None,
         }
     }
 
@@ -465,6 +471,42 @@ impl Model {
         self.refresh_visible_tasks();
 
         Ok(self)
+    }
+
+    /// Configures scripting engine from a configuration file.
+    ///
+    /// Loads the scripting configuration (hooks and custom commands) from
+    /// the specified TOML file. If loading fails, logs a warning and
+    /// continues without scripting.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use taskflow::app::Model;
+    /// use std::path::PathBuf;
+    ///
+    /// let model = Model::new()
+    ///     .with_scripting(PathBuf::from("~/.config/taskflow/hooks.toml"));
+    /// ```
+    #[must_use]
+    pub fn with_scripting(mut self, config_path: PathBuf) -> Self {
+        match ScriptEngine::load(&config_path) {
+            Ok(engine) => {
+                self.script_engine = Some(engine);
+            }
+            Err(e) => {
+                eprintln!("[scripting] Failed to load config: {e}");
+            }
+        }
+        self
+    }
+
+    /// Returns whether the scripting engine is available and enabled.
+    #[must_use]
+    pub fn has_scripting(&self) -> bool {
+        self.script_engine
+            .as_ref()
+            .is_some_and(ScriptEngine::is_enabled)
     }
 
     /// Saves current state to storage.

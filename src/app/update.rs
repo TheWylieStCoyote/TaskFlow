@@ -497,6 +497,20 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::StartEditScheduledDate => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditScheduledDate(task_id);
+                    // Pre-fill with existing scheduled date or empty
+                    model.input_buffer = task
+                        .scheduled_date
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
         UiMessage::StartEditTags => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.get(&task_id) {
@@ -654,6 +668,27 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             task.due_date = None;
                         } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
                             task.due_date = Some(date);
+                        }
+                        // If parsing fails, just ignore (keep old date)
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                    model.refresh_visible_tasks();
+                }
+                InputTarget::EditScheduledDate(task_id) => {
+                    use chrono::NaiveDate;
+                    if let Some(task) = model.tasks.get_mut(task_id) {
+                        let before = task.clone();
+                        // Empty input clears the scheduled date
+                        if input.is_empty() {
+                            task.scheduled_date = None;
+                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                            task.scheduled_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
                         task.updated_at = chrono::Utc::now();

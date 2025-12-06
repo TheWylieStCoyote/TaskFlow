@@ -267,6 +267,8 @@ pub enum UiMessage {
     StartEditTask,
     /// Enter input mode to edit due date
     StartEditDueDate,
+    /// Enter input mode to edit scheduled date
+    StartEditScheduledDate,
     /// Enter input mode to edit tags
     StartEditTags,
     /// Enter input mode to edit description

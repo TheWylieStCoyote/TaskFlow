@@ -334,6 +334,16 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("")
     };
 
+    // Add scheduled date if present (shows when task is planned to be worked on)
+    let sched_span = if let Some(sched) = task.scheduled_date {
+        Span::styled(
+            format!(" 📅{}", sched.format("%m/%d")),
+            Style::default().fg(theme.colors.accent.to_color()),
+        )
+    } else {
+        Span::raw("")
+    };
+
     // Time spent indicator
     let time_span = if ctx.time_spent > 0 {
         let hours = ctx.time_spent / 60;
@@ -414,6 +424,7 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         dep_span,
         recur_span,
         due_span,
+        sched_span,
         time_span,
         tags_span,
     ]);

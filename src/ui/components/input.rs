@@ -22,6 +22,7 @@ pub enum InputTarget {
     Subtask(TaskId), // Creating a subtask under the given parent
     EditTask(TaskId),
     EditDueDate(TaskId),
+    EditScheduledDate(TaskId),
     EditTags(TaskId),
     EditDescription(TaskId),
     Project,

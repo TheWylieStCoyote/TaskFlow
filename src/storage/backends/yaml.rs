@@ -22,7 +22,7 @@ impl YamlBackend {
     ///
     /// # Errors
     ///
-    /// Returns a [`StorageError`](crate::storage::StorageError) if the backend cannot be created.
+    /// Returns a [`StorageError`] if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             path: path.to_path_buf(),

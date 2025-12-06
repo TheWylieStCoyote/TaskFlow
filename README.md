@@ -479,6 +479,131 @@ Each task becomes a VTODO component with:
 - Status (NEEDS-ACTION, IN-PROCESS, COMPLETED, CANCELLED)
 - Categories (tags)
 
+## Library Usage
+
+TaskFlow can also be used as a library in your Rust projects:
+
+### Add to Cargo.toml
+
+```toml
+[dependencies]
+taskflow = { path = "path/to/taskflow" }
+```
+
+### Creating Tasks
+
+```rust
+use taskflow::domain::{Task, Priority, TaskStatus};
+use chrono::Utc;
+
+// Create a simple task
+let task = Task::new("Write documentation");
+
+// Create a task with builder pattern
+let today = Utc::now().date_naive();
+let task = Task::new("Fix critical bug")
+    .with_priority(Priority::Urgent)
+    .with_due_date(today)
+    .with_tags(vec!["bug".into(), "critical".into()])
+    .with_description("Users can't login via SSO".to_string());
+
+// Toggle completion
+let mut task = task;
+task.toggle_complete();
+assert_eq!(task.status, TaskStatus::Done);
+```
+
+### Working with Projects
+
+```rust
+use taskflow::domain::{Project, Task};
+
+// Create a project
+let project = Project::new("Backend API")
+    .with_color("#3498db");
+
+// Assign tasks to the project
+let task = Task::new("Implement REST endpoints")
+    .with_project(project.id.clone());
+```
+
+### Time Tracking
+
+```rust
+use taskflow::domain::{Task, TimeEntry};
+
+let task = Task::new("Code review");
+
+// Start tracking
+let mut entry = TimeEntry::start(task.id.clone());
+assert!(entry.is_running());
+
+// ... do some work ...
+
+// Stop and get duration
+entry.stop();
+println!("Time spent: {}", entry.formatted_duration());
+```
+
+### Using Storage Backends
+
+```rust
+use taskflow::storage::{create_backend, BackendType, StorageBackend};
+use taskflow::domain::Task;
+use std::path::Path;
+
+// Create a backend
+let mut backend = create_backend(
+    BackendType::Json,
+    Path::new("tasks.json")
+)?;
+
+// Save a task
+let task = Task::new("My task");
+backend.create_task(&task)?;
+
+// Load all tasks
+let tasks = backend.list_tasks()?;
+```
+
+### Exporting Tasks
+
+```rust
+use taskflow::storage::{export_to_string, ExportFormat};
+use taskflow::domain::{Task, Priority};
+
+let tasks = vec![
+    Task::new("Task 1").with_priority(Priority::High),
+    Task::new("Task 2").with_priority(Priority::Low),
+];
+
+// Export to CSV
+let csv = export_to_string(&tasks, ExportFormat::Csv);
+
+// Export to iCalendar
+let ics = export_to_string(&tasks, ExportFormat::Ics);
+```
+
+### Using Themes
+
+```rust
+use taskflow::config::{Theme, ColorSpec};
+use ratatui::style::Color;
+
+// Load default theme
+let theme = Theme::default();
+
+// Access colors
+let accent = theme.colors.accent.to_color();
+let urgent = theme.priority.urgent.to_color();
+
+// Create custom colors
+let custom = ColorSpec::Hex("#ff5500".to_string());
+let rgb = ColorSpec::Rgb { r: 100, g: 150, b: 200 };
+```
+
+For more examples, see the [documentation](https://docs.rs/taskflow) or the `tests/` directory.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.

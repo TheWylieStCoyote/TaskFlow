@@ -1,13 +1,31 @@
+//! Project entity and related types.
+//!
+//! Projects provide a way to organize related tasks into logical groups.
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-/// Unique identifier for projects
+/// Unique identifier for projects.
+///
+/// Each project has a UUID-based identifier that remains stable across
+/// serialization and storage operations.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::ProjectId;
+///
+/// let id = ProjectId::new();
+/// println!("Project ID: {}", id);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {
+    /// Creates a new unique project identifier.
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -25,18 +43,33 @@ impl std::fmt::Display for ProjectId {
     }
 }
 
-/// Project status
+/// Project lifecycle status.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::ProjectStatus;
+///
+/// let status = ProjectStatus::Active;
+/// assert_eq!(status.as_str(), "active");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectStatus {
+    /// Project is actively being worked on (default)
     #[default]
     Active,
+    /// Project is temporarily paused
     OnHold,
+    /// Project has been finished
     Completed,
+    /// Project is no longer active but kept for reference
     Archived,
 }
 
 impl ProjectStatus {
+    /// Returns the status as a lowercase string.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             ProjectStatus::Active => "active",
@@ -47,7 +80,39 @@ impl ProjectStatus {
     }
 }
 
-/// Project entity for grouping related tasks
+/// A project groups related tasks together.
+///
+/// Projects help organize work by providing a container for tasks
+/// that share a common goal or context.
+///
+/// # Examples
+///
+/// ## Creating Projects
+///
+/// ```
+/// use taskflow::domain::Project;
+///
+/// // Simple project
+/// let project = Project::new("Backend API");
+///
+/// // Project with color and metadata
+/// let project = Project::new("Frontend UI")
+///     .with_color("#3498db");
+///
+/// assert!(project.is_active());
+/// ```
+///
+/// ## Project Hierarchy
+///
+/// ```
+/// use taskflow::domain::Project;
+///
+/// let parent = Project::new("Engineering");
+/// let child = Project::new("Backend Team")
+///     .with_parent(parent.id.clone());
+///
+/// assert_eq!(child.parent_id, Some(parent.id));
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,

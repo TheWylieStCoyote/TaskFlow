@@ -1,14 +1,20 @@
+//! Time tracking entries for tasks.
+//!
+//! Time entries record how much time is spent on individual tasks.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::TaskId;
 
-/// Unique identifier for time entries
+/// Unique identifier for time entries.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TimeEntryId(pub Uuid);
 
 impl TimeEntryId {
+    /// Creates a new unique time entry identifier.
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -20,7 +26,46 @@ impl Default for TimeEntryId {
     }
 }
 
-/// Time tracking entry
+/// A time tracking entry associated with a task.
+///
+/// Time entries record the duration spent working on a specific task.
+/// They can be started and stopped, or have a duration manually set.
+///
+/// # Examples
+///
+/// ## Basic Time Tracking
+///
+/// ```
+/// use taskflow::domain::{Task, TimeEntry};
+///
+/// let task = Task::new("Write documentation");
+///
+/// // Start tracking
+/// let mut entry = TimeEntry::start(task.id.clone());
+/// assert!(entry.is_running());
+///
+/// // Do some work...
+///
+/// // Stop tracking
+/// entry.stop();
+/// assert!(!entry.is_running());
+///
+/// // Get the duration
+/// println!("Time spent: {}", entry.formatted_duration());
+/// ```
+///
+/// ## Manual Duration
+///
+/// ```
+/// use taskflow::domain::{Task, TimeEntry};
+///
+/// let task = Task::new("Meeting");
+/// let mut entry = TimeEntry::start(task.id);
+///
+/// // Set duration manually (e.g., for a 30-minute meeting)
+/// entry.duration_minutes = Some(30);
+/// assert_eq!(entry.calculated_duration_minutes(), 30);
+/// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimeEntry {
     pub id: TimeEntryId,

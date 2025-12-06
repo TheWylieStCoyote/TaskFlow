@@ -314,16 +314,12 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
 
             if let Some(id) = task_id {
                 // Check if completing a recurring task
-                let next_task = if let Some(task) = model.tasks.get(&id) {
-                    if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
+                let next_task = model.tasks.get(&id).map_or(None, |task| if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
                         // Create next occurrence
                         Some(create_next_recurring_task(task))
                     } else {
                         None
-                    }
-                } else {
-                    None
-                };
+                    });
 
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
@@ -776,7 +772,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         for task_id in tasks_to_move {
                             if let Some(task) = model.tasks.get_mut(&task_id) {
                                 let before = task.clone();
-                                task.project_id = target_project.clone();
+                                task.project_id.clone_from(&target_project);
                                 task.updated_at = chrono::Utc::now();
                                 let after = task.clone();
                                 model.sync_task(&after);
@@ -875,8 +871,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                                 day: today.day(),
                             })
                         }
-                        '0' | 'n' | 'N' => None,
-                        _ => None, // Invalid input clears recurrence
+                        '0' | 'n' | 'N' | _ => None, // Invalid input clears recurrence
                     };
 
                     if let Some(task) = model.tasks.get_mut(task_id) {
@@ -1026,7 +1021,8 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             if let Some(t) = model.tasks.get(id) {
                                 let is_dep = task.dependencies.contains(id);
                                 let marker = if is_dep { "*" } else { "" };
-                                buffer.push_str(&format!("{}{}: {}, ", marker, i + 1, t.title));
+                                use std::fmt::Write;
+                                let _ = write!(buffer, "{}{}: {}, ", marker, i + 1, t.title);
                             }
                         }
                     }
@@ -1228,8 +1224,8 @@ fn create_next_recurring_task(task: &crate::domain::Task) -> crate::domain::Task
                 let current_weekday = today.weekday();
                 let mut min_days = 7i64;
                 for day in days {
-                    let days_until = (day.num_days_from_monday() as i64
-                        - current_weekday.num_days_from_monday() as i64
+                    let days_until = (i64::from(day.num_days_from_monday())
+                        - i64::from(current_weekday.num_days_from_monday())
                         + 7)
                         % 7;
                     let days_until = if days_until == 0 { 7 } else { days_until };

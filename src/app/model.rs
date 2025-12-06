@@ -598,39 +598,20 @@ impl Model {
     /// This should be called after any change that affects which tasks
     /// are visible (adding/removing tasks, changing filters, switching views).
     /// Updates `visible_tasks` with the filtered and sorted task IDs.
-    ///
-    /// Subtasks are displayed directly after their parent task.
     pub fn refresh_visible_tasks(&mut self) {
         use crate::domain::{SortField, SortOrder};
-        use std::collections::HashMap;
 
-        // Collect all tasks that pass the filter
-        let filtered_tasks: Vec<_> = self
+        let mut tasks: Vec<_> = self
             .tasks
             .values()
             .filter(|task| self.task_matches_filter(task))
             .collect();
 
-        // Separate into parent tasks and subtasks
-        let mut parent_tasks: Vec<_> = filtered_tasks
-            .iter()
-            .filter(|t| t.parent_task_id.is_none())
-            .copied()
-            .collect();
-
-        // Build a map of parent_id -> subtasks for quick lookup
-        let mut subtasks_by_parent: HashMap<&TaskId, Vec<&Task>> = HashMap::new();
-        for task in &filtered_tasks {
-            if let Some(ref parent_id) = task.parent_task_id {
-                subtasks_by_parent.entry(parent_id).or_default().push(task);
-            }
-        }
-
-        // Sort parent tasks based on SortSpec
+        // Sort based on SortSpec
         let sort_field = self.sort.field;
         let sort_order = self.sort.order;
 
-        let sort_fn = |a: &&Task, b: &&Task| {
+        tasks.sort_by(|a, b| {
             let cmp = match sort_field {
                 SortField::CreatedAt => a.created_at.cmp(&b.created_at),
                 SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
@@ -670,35 +651,9 @@ impl Model {
                 SortOrder::Ascending => cmp,
                 SortOrder::Descending => cmp.reverse(),
             }
-        };
+        });
 
-        parent_tasks.sort_by(sort_fn);
-
-        // Also sort subtasks within each parent group
-        for subtasks in subtasks_by_parent.values_mut() {
-            subtasks.sort_by(sort_fn);
-        }
-
-        // Build final list: parent followed by its subtasks
-        let mut result = Vec::new();
-        for parent in parent_tasks {
-            result.push(parent.id.clone());
-            if let Some(subtasks) = subtasks_by_parent.get(&parent.id) {
-                for subtask in subtasks {
-                    result.push(subtask.id.clone());
-                }
-            }
-        }
-
-        // Handle orphaned subtasks (subtasks whose parent is not visible)
-        // These are shown at the end
-        for task in &filtered_tasks {
-            if task.parent_task_id.is_some() && !result.contains(&task.id) {
-                result.push(task.id.clone());
-            }
-        }
-
-        self.visible_tasks = result;
+        self.visible_tasks = tasks.into_iter().map(|t| t.id.clone()).collect();
 
         // Adjust selection if needed
         if self.selected_index >= self.visible_tasks.len() && !self.visible_tasks.is_empty() {
@@ -1035,50 +990,6 @@ mod tests {
 
         // All tasks should be visible
         assert_eq!(model.visible_tasks.len(), 3);
-    }
-
-    #[test]
-    fn test_model_refresh_visible_tasks_subtasks_follow_parent() {
-        use crate::domain::{SortField, SortOrder};
-
-        let mut model = Model::new();
-
-        // Create a parent task and two subtasks
-        let parent1 = Task::new("Parent 1").with_priority(Priority::High);
-        let subtask1a = Task::new("Subtask 1a").with_parent(parent1.id.clone());
-        let subtask1b = Task::new("Subtask 1b").with_parent(parent1.id.clone());
-
-        let parent2 = Task::new("Parent 2").with_priority(Priority::Low);
-        let subtask2a = Task::new("Subtask 2a").with_parent(parent2.id.clone());
-
-        // Insert in random order
-        model.tasks.insert(subtask1b.id.clone(), subtask1b.clone());
-        model.tasks.insert(parent2.id.clone(), parent2.clone());
-        model.tasks.insert(subtask2a.id.clone(), subtask2a.clone());
-        model.tasks.insert(parent1.id.clone(), parent1.clone());
-        model.tasks.insert(subtask1a.id.clone(), subtask1a.clone());
-
-        // Sort by priority so parent order is deterministic
-        model.sort = SortSpec {
-            field: SortField::Priority,
-            order: SortOrder::Ascending,
-        };
-        model.refresh_visible_tasks();
-
-        // Should be: Parent 1 (High), Subtask 1a, Subtask 1b, Parent 2 (Low), Subtask 2a
-        assert_eq!(model.visible_tasks.len(), 5);
-        assert_eq!(model.visible_tasks[0], parent1.id);
-        // Subtasks of parent1 should immediately follow
-        assert!(
-            model.visible_tasks[1] == subtask1a.id || model.visible_tasks[1] == subtask1b.id,
-            "Subtask 1 should follow parent 1"
-        );
-        assert!(
-            model.visible_tasks[2] == subtask1a.id || model.visible_tasks[2] == subtask1b.id,
-            "Subtask 2 should follow parent 1"
-        );
-        assert_eq!(model.visible_tasks[3], parent2.id);
-        assert_eq!(model.visible_tasks[4], subtask2a.id);
     }
 
     #[test]

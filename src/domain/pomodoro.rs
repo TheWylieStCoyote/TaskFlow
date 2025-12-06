@@ -117,7 +117,7 @@ impl PomodoroPhase {
 }
 
 /// An active Pomodoro session.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PomodoroSession {
     /// The task being worked on
     pub task_id: TaskId,
@@ -133,20 +133,33 @@ pub struct PomodoroSession {
     pub started_at: DateTime<Utc>,
     /// Whether the timer is paused
     pub paused: bool,
+    /// When the current phase started (for time recalculation on load)
+    #[serde(default = "Utc::now")]
+    pub phase_started_at: DateTime<Utc>,
+    /// Total time spent paused in the current phase (in seconds)
+    #[serde(default)]
+    pub paused_duration_secs: u32,
+    /// When the current pause started (None if not paused)
+    #[serde(default)]
+    pub paused_at: Option<DateTime<Utc>>,
 }
 
 impl PomodoroSession {
     /// Creates a new Pomodoro session for the given task.
     #[must_use]
     pub fn new(task_id: TaskId, config: &PomodoroConfig, session_goal: u32) -> Self {
+        let now = Utc::now();
         Self {
             task_id,
             phase: PomodoroPhase::Work,
             remaining_secs: config.work_duration_mins * 60,
             cycles_completed: 0,
             session_goal,
-            started_at: Utc::now(),
+            started_at: now,
             paused: false,
+            phase_started_at: now,
+            paused_duration_secs: 0,
+            paused_at: None,
         }
     }
 
@@ -182,6 +195,41 @@ impl PomodoroSession {
     #[must_use]
     pub fn goal_reached(&self) -> bool {
         self.cycles_completed >= self.session_goal
+    }
+
+    /// Recalculates remaining_secs based on elapsed time since the phase started.
+    /// Call this after deserializing a session to account for time that passed
+    /// while the app was closed.
+    pub fn recalculate_remaining_time(&mut self, config: &PomodoroConfig) {
+        // If currently paused, first account for time spent in current pause
+        if self.paused {
+            if let Some(pause_start) = self.paused_at {
+                let pause_elapsed = (Utc::now() - pause_start).num_seconds().max(0) as u32;
+                self.paused_duration_secs += pause_elapsed;
+                // Reset paused_at to now so we don't double-count
+                self.paused_at = Some(Utc::now());
+            }
+            // When paused, remaining_secs doesn't change (time was paused)
+            return;
+        }
+
+        // Calculate how much time has elapsed in this phase
+        let now = Utc::now();
+        let elapsed_since_phase_start = (now - self.phase_started_at).num_seconds().max(0) as u32;
+        let running_time = elapsed_since_phase_start.saturating_sub(self.paused_duration_secs);
+
+        let phase_duration = self.phase_duration(config);
+
+        // Calculate what remaining_secs should be
+        self.remaining_secs = phase_duration.saturating_sub(running_time);
+    }
+
+    /// Resets phase timing when transitioning to a new phase.
+    pub fn reset_phase_timing(&mut self, new_remaining: u32) {
+        self.remaining_secs = new_remaining;
+        self.phase_started_at = Utc::now();
+        self.paused_duration_secs = 0;
+        self.paused_at = None;
     }
 }
 
@@ -397,5 +445,88 @@ mod tests {
 
         stats.record_cycle(25);
         assert_eq!(stats.current_streak(), 1);
+    }
+
+    #[test]
+    fn test_pomodoro_session_serialization_roundtrip() {
+        let task_id = TaskId::new();
+        let config = PomodoroConfig::default();
+        let session = PomodoroSession::new(task_id.clone(), &config, 4);
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&session).expect("Failed to serialize");
+
+        // Deserialize back
+        let restored: PomodoroSession = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(restored.task_id, task_id);
+        assert_eq!(restored.phase, PomodoroPhase::Work);
+        assert_eq!(restored.remaining_secs, 25 * 60);
+        assert_eq!(restored.cycles_completed, 0);
+        assert_eq!(restored.session_goal, 4);
+        assert!(!restored.paused);
+    }
+
+    #[test]
+    fn test_recalculate_remaining_time_when_paused() {
+        let task_id = TaskId::new();
+        let config = PomodoroConfig::default();
+        let mut session = PomodoroSession::new(task_id, &config, 4);
+
+        // Pause the session
+        session.paused = true;
+        session.paused_at = Some(Utc::now());
+        let original_remaining = session.remaining_secs;
+
+        // Recalculate - should not change remaining time when paused
+        session.recalculate_remaining_time(&config);
+
+        assert_eq!(session.remaining_secs, original_remaining);
+    }
+
+    #[test]
+    fn test_reset_phase_timing() {
+        let task_id = TaskId::new();
+        let config = PomodoroConfig::default();
+        let mut session = PomodoroSession::new(task_id, &config, 4);
+
+        // Simulate some time passing and pausing
+        session.remaining_secs = 100;
+        session.paused_duration_secs = 50;
+        session.paused_at = Some(Utc::now());
+
+        // Reset phase timing
+        let new_remaining = config.short_break_mins * 60;
+        session.reset_phase_timing(new_remaining);
+
+        assert_eq!(session.remaining_secs, new_remaining);
+        assert_eq!(session.paused_duration_secs, 0);
+        assert!(session.paused_at.is_none());
+    }
+
+    #[test]
+    fn test_pomodoro_config_serialization_roundtrip() {
+        let config = PomodoroConfig::default()
+            .with_work_duration(30)
+            .with_short_break(10);
+
+        let json = serde_json::to_string(&config).expect("Failed to serialize");
+        let restored: PomodoroConfig = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(restored.work_duration_mins, 30);
+        assert_eq!(restored.short_break_mins, 10);
+    }
+
+    #[test]
+    fn test_pomodoro_stats_serialization_roundtrip() {
+        let mut stats = PomodoroStats::new();
+        stats.record_cycle(25);
+        stats.record_cycle(25);
+
+        let json = serde_json::to_string(&stats).expect("Failed to serialize");
+        let restored: PomodoroStats = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(restored.total_cycles, 2);
+        assert_eq!(restored.total_work_mins, 50);
     }
 }

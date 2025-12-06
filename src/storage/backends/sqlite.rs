@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry,
-    TimeEntryId,
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Priority, Project, ProjectId,
+    ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId,
 };
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
@@ -100,6 +100,11 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
+
+            CREATE TABLE IF NOT EXISTS pomodoro_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             ",
         )?;
 
@@ -135,6 +140,41 @@ impl SqliteBackend {
             .filter_map(Result::ok)
             .collect();
         Ok(entries)
+    }
+
+    fn get_pomodoro_value<T: serde::de::DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> StorageResult<Option<T>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT value FROM pomodoro_state WHERE key = ?1")?;
+        let value: Option<String> = stmt.query_row(params![key], |row| row.get(0)).optional()?;
+        match value {
+            Some(json) => Ok(serde_json::from_str(&json)?),
+            None => Ok(None),
+        }
+    }
+
+    fn set_pomodoro_value<T: serde::Serialize>(
+        &self,
+        key: &str,
+        value: Option<&T>,
+    ) -> StorageResult<()> {
+        let conn = self.conn()?;
+        match value {
+            Some(v) => {
+                let json = serde_json::to_string(v)
+                    .map_err(|e| StorageError::serialization(e.to_string()))?;
+                conn.execute(
+                    "INSERT OR REPLACE INTO pomodoro_state (key, value) VALUES (?1, ?2)",
+                    params![key, json],
+                )?;
+            }
+            None => {
+                conn.execute("DELETE FROM pomodoro_state WHERE key = ?1", params![key])?;
+            }
+        }
+        Ok(())
     }
 
     fn task_from_row(row: &rusqlite::Row) -> rusqlite::Result<Task> {
@@ -721,6 +761,9 @@ impl StorageBackend for SqliteBackend {
             tags: self.list_tags()?,
             time_entries: self.list_all_time_entries()?,
             version: 1,
+            pomodoro_session: self.get_pomodoro_value("session")?,
+            pomodoro_config: self.get_pomodoro_value("config")?,
+            pomodoro_stats: self.get_pomodoro_value("stats")?,
         })
     }
 
@@ -746,11 +789,32 @@ impl StorageBackend for SqliteBackend {
             self.create_time_entry(entry)?;
         }
 
+        // Import Pomodoro state
+        self.set_pomodoro_session(data.pomodoro_session.as_ref())?;
+        if let Some(ref config) = data.pomodoro_config {
+            self.set_pomodoro_config(config)?;
+        }
+        if let Some(ref stats) = data.pomodoro_stats {
+            self.set_pomodoro_stats(stats)?;
+        }
+
         Ok(())
     }
 
     fn backend_type(&self) -> &'static str {
         "sqlite"
+    }
+
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
+        self.set_pomodoro_value("session", session)
+    }
+
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
+        self.set_pomodoro_value("config", Some(config))
+    }
+
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
+        self.set_pomodoro_value("stats", Some(stats))
     }
 }
 

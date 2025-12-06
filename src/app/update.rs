@@ -1807,17 +1807,42 @@ fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
         }
         PomodoroMessage::Pause => {
             if let Some(ref mut session) = model.pomodoro_session {
-                session.paused = true;
+                if !session.paused {
+                    session.paused = true;
+                    session.paused_at = Some(chrono::Utc::now());
+                }
             }
         }
         PomodoroMessage::Resume => {
             if let Some(ref mut session) = model.pomodoro_session {
-                session.paused = false;
+                if session.paused {
+                    // Add elapsed pause time to total paused duration
+                    if let Some(pause_start) = session.paused_at {
+                        let pause_duration =
+                            (chrono::Utc::now() - pause_start).num_seconds().max(0) as u32;
+                        session.paused_duration_secs += pause_duration;
+                    }
+                    session.paused = false;
+                    session.paused_at = None;
+                }
             }
         }
         PomodoroMessage::TogglePause => {
             if let Some(ref mut session) = model.pomodoro_session {
-                session.paused = !session.paused;
+                if session.paused {
+                    // Resuming - add elapsed pause time
+                    if let Some(pause_start) = session.paused_at {
+                        let pause_duration =
+                            (chrono::Utc::now() - pause_start).num_seconds().max(0) as u32;
+                        session.paused_duration_secs += pause_duration;
+                    }
+                    session.paused = false;
+                    session.paused_at = None;
+                } else {
+                    // Pausing - record pause start
+                    session.paused = true;
+                    session.paused_at = Some(chrono::Utc::now());
+                }
             }
         }
         PomodoroMessage::Skip => {
@@ -1924,8 +1949,9 @@ fn transition_pomodoro_phase(model: &mut Model) {
         }
 
         session.phase = next_phase;
-        session.remaining_secs = next_remaining;
         session.cycles_completed = cycles_completed;
+        // Reset phase timing (sets remaining_secs, phase_started_at, clears pause state)
+        session.reset_phase_timing(next_remaining);
 
         // Check if goal reached
         if session.goal_reached() && next_phase == PomodoroPhase::Work {

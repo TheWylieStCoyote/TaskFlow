@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
+    TimeEntry, TimeEntryId,
+};
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
     TaskRepository, TimeEntryRepository,
@@ -24,6 +27,14 @@ use crate::storage::{
 ///   tags.yaml
 ///   time_entries.yaml
 /// ```
+/// Pomodoro state stored in YAML
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+struct PomodoroState {
+    session: Option<PomodoroSession>,
+    config: Option<PomodoroConfig>,
+    stats: Option<PomodoroStats>,
+}
+
 pub struct MarkdownBackend {
     base_path: PathBuf,
     tasks_dir: PathBuf,
@@ -33,6 +44,7 @@ pub struct MarkdownBackend {
     projects_cache: HashMap<ProjectId, Project>,
     tags: Vec<Tag>,
     time_entries: Vec<TimeEntry>,
+    pomodoro_state: PomodoroState,
     dirty: bool,
 }
 
@@ -51,6 +63,7 @@ impl MarkdownBackend {
             projects_cache: HashMap::new(),
             tags: Vec::new(),
             time_entries: Vec::new(),
+            pomodoro_state: PomodoroState::default(),
             dirty: false,
         })
     }
@@ -141,6 +154,24 @@ impl MarkdownBackend {
         let content = serde_yaml::to_string(&self.time_entries)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
         fs::write(&entries_file, content).map_err(|e| StorageError::io(&entries_file, e))?;
+        Ok(())
+    }
+
+    fn load_pomodoro_state(&mut self) -> StorageResult<()> {
+        let pomodoro_file = self.base_path.join("pomodoro.yaml");
+        if pomodoro_file.exists() {
+            let content = fs::read_to_string(&pomodoro_file)
+                .map_err(|e| StorageError::io(&pomodoro_file, e))?;
+            self.pomodoro_state = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    fn save_pomodoro_state(&self) -> StorageResult<()> {
+        let pomodoro_file = self.base_path.join("pomodoro.yaml");
+        let content = serde_yaml::to_string(&self.pomodoro_state)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&pomodoro_file, content).map_err(|e| StorageError::io(&pomodoro_file, e))?;
         Ok(())
     }
 
@@ -500,6 +531,7 @@ impl StorageBackend for MarkdownBackend {
         self.load_projects()?;
         self.load_tags()?;
         self.load_time_entries()?;
+        self.load_pomodoro_state()?;
         Ok(())
     }
 
@@ -507,6 +539,7 @@ impl StorageBackend for MarkdownBackend {
         // Files are written immediately, but we save auxiliary data
         self.save_tags()?;
         self.save_time_entries()?;
+        self.save_pomodoro_state()?;
         self.dirty = false;
         Ok(())
     }
@@ -518,6 +551,9 @@ impl StorageBackend for MarkdownBackend {
             tags: self.tags.clone(),
             time_entries: self.time_entries.clone(),
             version: 1,
+            pomodoro_session: self.pomodoro_state.session.clone(),
+            pomodoro_config: self.pomodoro_state.config.clone(),
+            pomodoro_stats: self.pomodoro_state.stats.clone(),
         })
     }
 
@@ -551,11 +587,34 @@ impl StorageBackend for MarkdownBackend {
         }
         self.save_time_entries()?;
 
+        // Import Pomodoro state
+        self.pomodoro_state = PomodoroState {
+            session: data.pomodoro_session.clone(),
+            config: data.pomodoro_config.clone(),
+            stats: data.pomodoro_stats.clone(),
+        };
+        self.save_pomodoro_state()?;
+
         Ok(())
     }
 
     fn backend_type(&self) -> &'static str {
         "markdown"
+    }
+
+    fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
+        self.pomodoro_state.session = session.cloned();
+        self.save_pomodoro_state()
+    }
+
+    fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
+        self.pomodoro_state.config = Some(config.clone());
+        self.save_pomodoro_state()
+    }
+
+    fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
+        self.pomodoro_state.stats = Some(stats.clone());
+        self.save_pomodoro_state()
     }
 }
 

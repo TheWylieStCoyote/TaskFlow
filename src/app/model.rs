@@ -437,6 +437,29 @@ impl Model {
             self.projects.insert(project.id.clone(), project);
         }
 
+        // Load Pomodoro state
+        let export_data = backend.export_all()?;
+        if let Some(mut session) = export_data.pomodoro_session {
+            // Recalculate remaining time based on elapsed time since last save
+            let config = export_data
+                .pomodoro_config
+                .as_ref()
+                .unwrap_or(&self.pomodoro_config);
+            session.recalculate_remaining_time(config);
+
+            // Validate that the task still exists
+            if self.tasks.contains_key(&session.task_id) {
+                self.pomodoro_session = Some(session);
+            }
+            // If task doesn't exist, discard the session
+        }
+        if let Some(config) = export_data.pomodoro_config {
+            self.pomodoro_config = config;
+        }
+        if let Some(stats) = export_data.pomodoro_stats {
+            self.pomodoro_stats = stats;
+        }
+
         self.storage = Some(backend);
         self.data_path = Some(path);
         self.refresh_visible_tasks();
@@ -454,6 +477,11 @@ impl Model {
     /// Returns an error if the storage backend fails to flush data.
     pub fn save(&mut self) -> anyhow::Result<()> {
         if let Some(ref mut backend) = self.storage {
+            // Sync Pomodoro state before flushing
+            backend.set_pomodoro_session(self.pomodoro_session.as_ref())?;
+            backend.set_pomodoro_config(&self.pomodoro_config)?;
+            backend.set_pomodoro_stats(&self.pomodoro_stats)?;
+
             backend.flush()?;
             self.dirty = false;
         }

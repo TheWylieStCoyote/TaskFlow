@@ -1,10 +1,11 @@
 use std::fmt::Write as _;
 
+use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
-    FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
-    TimeMessage, UiMessage, UndoAction, ViewId,
+    parse_quick_add, FocusPane, Message, Model, NavigationMessage, RunningState, SystemMessage,
+    TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
 };
 
 /// Main update function - heart of TEA pattern
@@ -231,11 +232,12 @@ fn handle_sidebar_selection(model: &mut Model) {
     // 1: Today
     // 2: Upcoming
     // 3: Overdue
-    // 4: Calendar
-    // 5: Dashboard
-    // 6: Separator (skip)
-    // 7: "Projects" header (skip or go to Projects view)
-    // 8+: Individual projects
+    // 4: Scheduled
+    // 5: Calendar
+    // 6: Dashboard
+    // 7: Separator (skip)
+    // 8: "Projects" header (skip or go to Projects view)
+    // 9+: Individual projects
 
     match selected {
         0 => {
@@ -267,21 +269,28 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         4 => {
-            model.current_view = ViewId::Calendar;
+            model.current_view = ViewId::Scheduled;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
         5 => {
+            model.current_view = ViewId::Calendar;
+            model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.selected_index = 0;
+            model.refresh_visible_tasks();
+        }
+        6 => {
             model.current_view = ViewId::Dashboard;
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        6 => {} // Separator, do nothing
-        7 => {
+        7 => {} // Separator, do nothing
+        8 => {
             // Projects header - go to Projects view showing all project tasks
             model.current_view = ViewId::Projects;
             model.selected_project = None;
@@ -289,9 +298,9 @@ fn handle_sidebar_selection(model: &mut Model) {
             model.selected_index = 0;
             model.refresh_visible_tasks();
         }
-        n if n >= 8 => {
+        n if n >= 9 => {
             // Select a specific project
-            let project_index = n - 8;
+            let project_index = n - 9;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -323,6 +332,15 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                     }
                 });
 
+                // Check for task chain - if completing and has next_task_id, schedule it
+                let chain_next_id = model.tasks.get(&id).and_then(|task| {
+                    if task.status != crate::domain::TaskStatus::Done {
+                        task.next_task_id.clone()
+                    } else {
+                        None
+                    }
+                });
+
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -341,6 +359,21 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
                         .undo_stack
                         .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
                     model.tasks.insert(new_task.id.clone(), new_task);
+                }
+
+                // Auto-schedule the next task in chain for today
+                if let Some(next_id) = chain_next_id {
+                    if let Some(next_task) = model.tasks.get_mut(&next_id) {
+                        let before = next_task.clone();
+                        next_task.scheduled_date = Some(chrono::Local::now().date_naive());
+                        next_task.updated_at = chrono::Utc::now();
+                        let after = next_task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
                 }
             }
             model.refresh_visible_tasks();
@@ -448,6 +481,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::HideHelp => {
             model.show_help = false;
+        }
+        UiMessage::ToggleFocusMode => {
+            // Only toggle focus mode if there's a selected task
+            if model.selected_task().is_some() {
+                model.focus_mode = !model.focus_mode;
+            }
         }
         // Input mode handling
         UiMessage::StartCreateTask => {
@@ -620,8 +659,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
             match &model.input_target {
                 InputTarget::Task => {
                     if !input.is_empty() {
-                        let task =
-                            crate::domain::Task::new(input).with_priority(model.default_priority);
+                        let task = create_task_from_quick_add(&input, model, None);
                         model.sync_task(&task);
                         model
                             .undo_stack
@@ -632,9 +670,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
                 InputTarget::Subtask(parent_id) => {
                     if !input.is_empty() {
-                        let task = crate::domain::Task::new(input)
-                            .with_priority(model.default_priority)
-                            .with_parent(parent_id.clone());
+                        let task = create_task_from_quick_add(&input, model, Some(parent_id.clone()));
                         model.sync_task(&task);
                         model
                             .undo_stack
@@ -925,6 +961,41 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                     model.refresh_visible_tasks();
                 }
+                InputTarget::LinkTask(task_id) => {
+                    // Parse the input - support task number or task title search
+                    let target_task_id = if let Ok(num) = input.parse::<usize>() {
+                        // User entered a task number
+                        model.visible_tasks.get(num.saturating_sub(1)).cloned()
+                    } else {
+                        // User entered a task title - find matching task
+                        let input_lower = input.to_lowercase();
+                        model
+                            .tasks
+                            .iter()
+                            .find(|(id, t)| {
+                                *id != task_id
+                                    && t.title.to_lowercase().contains(&input_lower)
+                            })
+                            .map(|(id, _)| id.clone())
+                    };
+
+                    if let Some(next_id) = target_task_id {
+                        // Don't allow linking to self
+                        if next_id != *task_id {
+                            if let Some(task) = model.tasks.get_mut(task_id) {
+                                let before = task.clone();
+                                task.next_task_id = Some(next_id);
+                                task.updated_at = chrono::Utc::now();
+                                let after = task.clone();
+                                model.sync_task(&after);
+                                model.undo_stack.push(UndoAction::TaskModified {
+                                    before: Box::new(before),
+                                    after: Box::new(after),
+                                });
+                            }
+                        }
+                    }
+                }
             }
             model.input_mode = InputMode::Normal;
             model.input_target = InputTarget::default();
@@ -1089,6 +1160,52 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        // Manual ordering
+        UiMessage::MoveTaskUp => {
+            handle_move_task(model, -1);
+        }
+        UiMessage::MoveTaskDown => {
+            handle_move_task(model, 1);
+        }
+        // Task chains
+        UiMessage::StartLinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    // Show current link if any
+                    if let Some(task) = model.tasks.get(&task_id) {
+                        if let Some(next_id) = &task.next_task_id {
+                            if let Some(next_task) = model.tasks.get(next_id) {
+                                model.input_buffer = format!("Currently linked to: {}", next_task.title);
+                            } else {
+                                model.input_buffer = String::new();
+                            }
+                        } else {
+                            model.input_buffer = String::new();
+                        }
+                    }
+                    model.input_target = InputTarget::LinkTask(task_id);
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::UnlinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    if task.next_task_id.is_some() {
+                        let before = task.clone();
+                        task.next_task_id = None;
+                        task.updated_at = chrono::Utc::now();
+                        let after = task.clone();
+                        model.sync_task(&after);
+                        model.undo_stack.push(UndoAction::TaskModified {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+                }
+            }
+        }
         // Calendar navigation - delegated to helper
         UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
             handle_ui_calendar(model, msg);
@@ -1240,6 +1357,75 @@ fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
         }
         _ => {}
     }
+}
+
+/// Handle moving a task up or down in the list order
+fn handle_move_task(model: &mut Model, direction: i32) {
+    if model.selected_index >= model.visible_tasks.len() {
+        return;
+    }
+
+    let current_task_id = model.visible_tasks[model.selected_index].clone();
+
+    // Get the current task
+    let current_order = model
+        .tasks
+        .get(&current_task_id)
+        .and_then(|t| t.sort_order)
+        .unwrap_or(0);
+
+    // Find the task to swap with
+    let swap_index = if direction < 0 {
+        // Moving up - find previous non-subtask at same level
+        if model.selected_index == 0 {
+            return;
+        }
+        model.selected_index - 1
+    } else {
+        // Moving down - find next task
+        if model.selected_index >= model.visible_tasks.len() - 1 {
+            return;
+        }
+        model.selected_index + 1
+    };
+
+    let swap_task_id = model.visible_tasks[swap_index].clone();
+
+    // Get the swap task's order
+    let swap_order = model
+        .tasks
+        .get(&swap_task_id)
+        .and_then(|t| t.sort_order)
+        .unwrap_or(0);
+
+    // Swap the sort orders
+    if let Some(current_task) = model.tasks.get_mut(&current_task_id) {
+        let before = current_task.clone();
+        current_task.sort_order = Some(swap_order);
+        current_task.updated_at = chrono::Utc::now();
+        let after = current_task.clone();
+        model.sync_task(&after);
+        model.undo_stack.push(UndoAction::TaskModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+    }
+
+    if let Some(swap_task) = model.tasks.get_mut(&swap_task_id) {
+        let before = swap_task.clone();
+        swap_task.sort_order = Some(current_order);
+        swap_task.updated_at = chrono::Utc::now();
+        let after = swap_task.clone();
+        model.sync_task(&after);
+        model.undo_stack.push(UndoAction::TaskModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+    }
+
+    // Update selection to follow the moved task
+    model.selected_index = swap_index;
+    model.refresh_visible_tasks();
 }
 
 /// Create the next occurrence of a recurring task
@@ -1483,6 +1669,67 @@ fn handle_export_ics(model: &mut Model) {
             model.status_message = Some(format!("Export failed: {e}"));
         }
     }
+}
+
+/// Create a task from quick add input, applying parsed metadata
+fn create_task_from_quick_add(
+    input: &str,
+    model: &Model,
+    parent_id: Option<TaskId>,
+) -> crate::domain::Task {
+    let parsed = parse_quick_add(input);
+
+    // Use parsed title, or original input if title is empty
+    let title = if parsed.title.is_empty() {
+        input.to_string()
+    } else {
+        parsed.title
+    };
+
+    // Start with basic task
+    let mut task = crate::domain::Task::new(title);
+
+    // Apply parent if provided
+    if let Some(pid) = parent_id {
+        task = task.with_parent(pid);
+    }
+
+    // Apply parsed priority, or default priority if none specified
+    if let Some(priority) = parsed.priority {
+        task.priority = priority;
+    } else {
+        task.priority = model.default_priority;
+    }
+
+    // Apply tags
+    if !parsed.tags.is_empty() {
+        task = task.with_tags(parsed.tags);
+    }
+
+    // Apply due date
+    if let Some(due) = parsed.due_date {
+        task = task.with_due_date(due);
+    }
+
+    // Apply scheduled date
+    if let Some(sched) = parsed.scheduled_date {
+        task.scheduled_date = Some(sched);
+    }
+
+    // Apply project by name (find matching project)
+    if let Some(ref project_name) = parsed.project_name {
+        let project_name_lower = project_name.to_lowercase();
+        if let Some(project_id) = model
+            .projects
+            .values()
+            .find(|p| p.name.to_lowercase() == project_name_lower)
+            .map(|p| p.id.clone())
+        {
+            task.project_id = Some(project_id);
+        }
+    }
+
+    task
 }
 
 #[cfg(test)]
@@ -2023,7 +2270,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 8; // First project (index 8 = after header items including Dashboard)
+        model.sidebar_selected = 9; // First project (index 9 = after header items including Scheduled)
 
         update(
             &mut model,

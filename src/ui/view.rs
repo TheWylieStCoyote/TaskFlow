@@ -12,8 +12,8 @@ use crate::config::Theme;
 use crate::app::ViewId;
 
 use super::components::{
-    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, HelpPopup,
-    InputDialog, InputMode, InputTarget, Sidebar, TaskList, TemplatePicker,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
+    HelpPopup, InputDialog, InputMode, InputTarget, Sidebar, TaskList, TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -67,6 +67,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditRecurrence(_) => {
                 "Recurrence (d=daily, w=weekly, m=monthly, y=yearly, 0=none)"
             }
+            InputTarget::LinkTask(_) => "Link to next task (task number or title)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -118,6 +119,13 @@ fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
 }
 
 fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+    // Focus mode takes over the entire content area
+    if model.focus_mode {
+        let focus_view = FocusView::new(model, theme);
+        frame.render_widget(focus_view, area);
+        return;
+    }
+
     if model.show_sidebar {
         // Split into sidebar and main content
         let chunks = Layout::default()

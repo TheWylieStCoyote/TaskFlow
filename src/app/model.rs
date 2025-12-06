@@ -191,6 +191,8 @@ pub struct Model {
     pub show_sidebar: bool,
     /// Whether help overlay is visible
     pub show_help: bool,
+    /// Whether focus mode is active (single-task view)
+    pub focus_mode: bool,
     /// Current terminal dimensions (width, height)
     pub terminal_size: (u16, u16),
     /// Which pane currently has keyboard focus
@@ -291,6 +293,7 @@ impl Model {
             show_completed: false,
             show_sidebar: true,
             show_help: false,
+            focus_mode: false,
             terminal_size: (80, 24),
             focus_pane: FocusPane::default(),
             sidebar_selected: 0,
@@ -328,11 +331,11 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Includes: 6 views + 1 separator + 1 "Projects" header + project count.
+    /// Includes: 7 views + 1 separator + 1 "Projects" header + project count.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
-        // 6 views (All Tasks, Today, Upcoming, Overdue, Calendar, Dashboard) + 1 separator + 1 "Projects" header + projects count
-        8 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // 7 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard) + 1 separator + 1 "Projects" header + projects count
+        9 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
     }
 
     /// Returns all tasks due on a specific day.
@@ -631,7 +634,7 @@ impl Model {
         let sort_order = self.sort.order;
 
         let sort_fn = |a: &&Task, b: &&Task| {
-            let cmp = match sort_field {
+            let primary_cmp = match sort_field {
                 SortField::CreatedAt => a.created_at.cmp(&b.created_at),
                 SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
                 SortField::DueDate => {
@@ -664,6 +667,19 @@ impl Model {
                     };
                     status_order(&a.status).cmp(&status_order(&b.status))
                 }
+            };
+
+            // Use sort_order as secondary sort key when primary values are equal
+            // Tasks with sort_order come before tasks without
+            let cmp = if primary_cmp == std::cmp::Ordering::Equal {
+                match (a.sort_order, b.sort_order) {
+                    (Some(oa), Some(ob)) => oa.cmp(&ob),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                }
+            } else {
+                primary_cmp
             };
 
             match sort_order {
@@ -776,6 +792,10 @@ impl Model {
                 // Show tasks with past due dates (before today)
                 task.due_date
                     .is_some_and(|d| d < chrono::Utc::now().date_naive())
+            }
+            ViewId::Scheduled => {
+                // Show tasks with scheduled dates
+                task.scheduled_date.is_some()
             }
             ViewId::Calendar => {
                 // Show tasks for the selected day in calendar (if any)

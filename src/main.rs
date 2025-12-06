@@ -250,6 +250,13 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         return Message::Ui(UiMessage::HideHelp);
     }
 
+    // If focus mode is active, Esc exits it
+    if model.focus_mode && key.code == KeyCode::Esc {
+        return Message::Ui(UiMessage::ToggleFocusMode);
+    }
+    // In focus mode, still allow some keybindings (t, x, f, etc.)
+    // Fall through to normal key handling
+
     // If template picker is showing, handle navigation and selection
     if model.show_templates {
         return match key.code {
@@ -416,6 +423,10 @@ const fn action_to_message(action: &Action) -> Message {
         Action::BulkSetStatus => Message::Ui(UiMessage::StartBulkSetStatus),
         Action::EditDependencies => Message::Ui(UiMessage::StartEditDependencies),
         Action::EditRecurrence => Message::Ui(UiMessage::StartEditRecurrence),
+        Action::MoveTaskUp => Message::Ui(UiMessage::MoveTaskUp),
+        Action::MoveTaskDown => Message::Ui(UiMessage::MoveTaskDown),
+        Action::LinkTask => Message::Ui(UiMessage::StartLinkTask),
+        Action::UnlinkTask => Message::Ui(UiMessage::UnlinkTask),
         Action::CalendarPrevMonth => Message::Navigation(NavigationMessage::CalendarPrevMonth),
         Action::CalendarNextMonth => Message::Navigation(NavigationMessage::CalendarNextMonth),
         Action::CalendarPrevDay => Message::Ui(UiMessage::CalendarPrevDay),
@@ -439,6 +450,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::PlayMacro8 => Message::Ui(UiMessage::PlayMacro(8)),
         Action::PlayMacro9 => Message::Ui(UiMessage::PlayMacro(9)),
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
+        Action::ToggleFocusMode => Message::Ui(UiMessage::ToggleFocusMode),
     }
 }
 

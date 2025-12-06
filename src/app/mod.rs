@@ -112,6 +112,7 @@
 mod macros;
 mod message;
 mod model;
+pub mod quick_add;
 mod templates;
 mod undo;
 mod update;
@@ -119,6 +120,7 @@ mod update;
 pub use macros::*;
 pub use message::*;
 pub use model::*;
+pub use quick_add::parse_quick_add;
 pub use templates::*;
 pub use undo::*;
 pub use update::*;

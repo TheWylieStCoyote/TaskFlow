@@ -156,6 +156,8 @@ pub enum ViewId {
     Upcoming,
     /// Tasks past their due date
     Overdue,
+    /// Tasks with scheduled dates, sorted by scheduled date
+    Scheduled,
     /// Monthly calendar view
     Calendar,
     /// Statistics and overview dashboard
@@ -255,6 +257,8 @@ pub enum UiMessage {
     ShowHelp,
     /// Hide help overlay
     HideHelp,
+    /// Toggle focus mode (single-task view with timer)
+    ToggleFocusMode,
 
     // Input mode - starting various edit operations
     /// Enter input mode to create a new task
@@ -334,9 +338,21 @@ pub enum UiMessage {
     /// Enter input mode to edit task dependencies
     StartEditDependencies,
 
+    // Task chains
+    /// Enter input mode to link current task to next task in chain
+    StartLinkTask,
+    /// Remove the link to next task in chain
+    UnlinkTask,
+
     // Recurrence
     /// Enter input mode to edit task recurrence
     StartEditRecurrence,
+
+    // Manual ordering
+    /// Move selected task up in list order
+    MoveTaskUp,
+    /// Move selected task down in list order
+    MoveTaskDown,
 
     // Calendar navigation
     /// Move to previous day in calendar

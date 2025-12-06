@@ -38,6 +38,7 @@ pub enum Action {
     ToggleSidebar,
     ToggleShowCompleted,
     ShowHelp,
+    ToggleFocusMode,
     FocusSidebar,
     FocusTaskList,
     Select,
@@ -62,6 +63,14 @@ pub enum Action {
 
     // Recurrence
     EditRecurrence,
+
+    // Manual ordering
+    MoveTaskUp,
+    MoveTaskDown,
+
+    // Task chains
+    LinkTask,
+    UnlinkTask,
 
     // Calendar navigation
     CalendarPrevMonth,
@@ -188,6 +197,7 @@ impl Default for Keybindings {
         bindings.insert("b".to_string(), Action::ToggleSidebar);
         bindings.insert("c".to_string(), Action::ToggleShowCompleted);
         bindings.insert("?".to_string(), Action::ShowHelp);
+        bindings.insert("f".to_string(), Action::ToggleFocusMode);
         bindings.insert("h".to_string(), Action::FocusSidebar);
         bindings.insert("l".to_string(), Action::FocusTaskList);
         bindings.insert("left".to_string(), Action::FocusSidebar);
@@ -198,7 +208,7 @@ impl Default for Keybindings {
         bindings.insert("#".to_string(), Action::FilterByTag);
         bindings.insert("ctrl+t".to_string(), Action::ClearTagFilter);
         bindings.insert("s".to_string(), Action::CycleSortField);
-        bindings.insert("S".to_string(), Action::ToggleSortOrder);
+        bindings.insert("ctrl+s".to_string(), Action::ToggleSortOrder);
 
         // Multi-select / Bulk operations
         bindings.insert("v".to_string(), Action::ToggleMultiSelect);
@@ -210,6 +220,14 @@ impl Default for Keybindings {
 
         // Recurrence
         bindings.insert("R".to_string(), Action::EditRecurrence);
+
+        // Manual ordering
+        bindings.insert("ctrl+up".to_string(), Action::MoveTaskUp);
+        bindings.insert("ctrl+down".to_string(), Action::MoveTaskDown);
+
+        // Task chains
+        bindings.insert("ctrl+l".to_string(), Action::LinkTask);
+        bindings.insert("ctrl+shift+l".to_string(), Action::UnlinkTask);
 
         // Calendar navigation
         bindings.insert("<".to_string(), Action::CalendarPrevMonth);

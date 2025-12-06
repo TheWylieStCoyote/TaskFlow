@@ -327,6 +327,14 @@ pub struct Task {
     pub estimated_minutes: Option<u32>,
     pub actual_minutes: u32,
 
+    // Manual ordering (lower values appear first)
+    #[serde(default)]
+    pub sort_order: Option<i32>,
+
+    // Task chains - link to next task in sequence
+    #[serde(default)]
+    pub next_task_id: Option<TaskId>,
+
     // Custom fields for extensibility
     #[serde(default)]
     pub custom_fields: HashMap<String, serde_json::Value>,
@@ -353,6 +361,8 @@ impl Task {
             recurrence: None,
             estimated_minutes: None,
             actual_minutes: 0,
+            sort_order: None,
+            next_task_id: None,
             custom_fields: HashMap::new(),
         }
     }

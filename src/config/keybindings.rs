@@ -93,6 +93,8 @@ pub enum Action {
     ExportIcs,
     ExportChainsDot,
     ExportChainsMermaid,
+    ExportReportMarkdown,
+    ExportReportHtml,
 
     // Import
     ImportCsv,
@@ -260,6 +262,8 @@ impl Default for Keybindings {
         bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
         bindings.insert("ctrl+g".to_string(), Action::ExportChainsDot);
         bindings.insert("ctrl+m".to_string(), Action::ExportChainsMermaid);
+        bindings.insert("ctrl+p".to_string(), Action::ExportReportMarkdown);
+        bindings.insert("ctrl+h".to_string(), Action::ExportReportHtml);
 
         // Import
         bindings.insert("I".to_string(), Action::ImportCsv); // Shift+I for CSV import

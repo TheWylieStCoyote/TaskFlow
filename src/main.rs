@@ -502,6 +502,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
         Action::ExportChainsDot => Message::System(SystemMessage::ExportChainsDot),
         Action::ExportChainsMermaid => Message::System(SystemMessage::ExportChainsMermaid),
+        Action::ExportReportMarkdown => Message::System(SystemMessage::ExportReportMarkdown),
+        Action::ExportReportHtml => Message::System(SystemMessage::ExportReportHtml),
         Action::ImportCsv => Message::System(SystemMessage::StartImportCsv),
         Action::ImportIcs => Message::System(SystemMessage::StartImportIcs),
         Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),

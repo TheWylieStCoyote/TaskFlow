@@ -1634,6 +1634,12 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::ExportChainsMermaid => {
             handle_export_chains_mermaid(model);
         }
+        SystemMessage::ExportReportMarkdown => {
+            handle_export_report_markdown(model);
+        }
+        SystemMessage::ExportReportHtml => {
+            handle_export_report_html(model);
+        }
         SystemMessage::StartImportCsv => {
             handle_start_import(model, crate::storage::ImportFormat::Csv);
         }
@@ -1762,6 +1768,76 @@ fn handle_export_chains_mermaid(model: &mut Model) {
                 Ok(()) => {
                     model.status_message = Some(format!(
                         "Exported task chains to {} (Mermaid diagram)",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_export_report_markdown(model: &mut Model) {
+    use crate::app::analytics::AnalyticsEngine;
+    use crate::domain::analytics::ReportConfig;
+    use crate::storage::export_report_to_markdown_string;
+
+    let config = ReportConfig::last_n_days(30);
+    let engine = AnalyticsEngine::new(model);
+    let report = engine.generate_report(&config);
+
+    match export_report_to_markdown_string(&report) {
+        Ok(content) => {
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("report.md"))
+                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.md"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported analytics report to {}",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_export_report_html(model: &mut Model) {
+    use crate::app::analytics::AnalyticsEngine;
+    use crate::domain::analytics::ReportConfig;
+    use crate::storage::export_report_to_html_string;
+
+    let config = ReportConfig::last_n_days(30);
+    let engine = AnalyticsEngine::new(model);
+    let report = engine.generate_report(&config);
+
+    match export_report_to_html_string(&report) {
+        Ok(content) => {
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("report.html"))
+                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.html"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported analytics report to {}",
                         export_path.display()
                     ));
                 }

@@ -468,6 +468,10 @@ pub enum SystemMessage {
     ExportChainsDot,
     /// Export task chains to Mermaid format
     ExportChainsMermaid,
+    /// Export analytics report to Markdown format
+    ExportReportMarkdown,
+    /// Export analytics report to HTML format
+    ExportReportHtml,
     /// Start import from CSV (opens file path input)
     StartImportCsv,
     /// Start import from ICS (opens file path input)

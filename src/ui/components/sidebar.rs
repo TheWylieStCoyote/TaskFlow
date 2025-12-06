@@ -15,12 +15,14 @@ pub struct Sidebar<'a> {
 }
 
 impl<'a> Sidebar<'a> {
-    pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
+    #[must_use]
+    pub const fn new(model: &'a Model, theme: &'a Theme) -> Self {
         Self { model, theme }
     }
 }
 
 impl Widget for Sidebar<'_> {
+    #[allow(clippy::too_many_lines)]
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         let theme = self.theme;
         let is_focused = self.model.focus_pane == FocusPane::Sidebar;
@@ -118,7 +120,7 @@ impl Widget for Sidebar<'_> {
                 Span::styled("  📁 ", Style::default()),
                 Span::styled(project.name.clone(), name_style),
                 Span::styled(
-                    format!(" ({})", task_count),
+                    format!(" ({task_count})"),
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
             ])));

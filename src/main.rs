@@ -19,7 +19,7 @@ use taskflow::config::{Action, Keybindings, Settings, Theme};
 use taskflow::storage::BackendType;
 use taskflow::ui::{view, InputMode};
 
-/// TaskFlow - A TUI project management application
+/// `TaskFlow` - A TUI project management application
 #[derive(Parser, Debug)]
 #[command(name = "taskflow")]
 #[command(author, version, about, long_about = None)]
@@ -76,10 +76,10 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
     let settings = Settings::load();
 
     // CLI args override config file settings
-    let backend_type = if cli.backend != BackendType::Json {
-        cli.backend
-    } else {
+    let backend_type = if cli.backend == BackendType::Json {
         BackendType::parse(&settings.backend).unwrap_or_default()
+    } else {
+        cli.backend
     };
 
     // Determine data path (CLI > config > default)
@@ -100,7 +100,10 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
                 }
             }
             Err(e) => {
-                eprintln!("Warning: Could not load data from {:?}: {}", data_path, e);
+                eprintln!(
+                    "Warning: Could not load data from {}: {e}",
+                    data_path.display()
+                );
                 eprintln!("Starting with sample data...");
                 Model::new().with_sample_data()
             }
@@ -130,7 +133,7 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Save before exit if storage is configured
     if model.has_storage() && model.dirty {
         if let Err(e) = model.save() {
-            eprintln!("Warning: Could not save data: {}", e);
+            eprintln!("Warning: Could not save data: {e}");
         }
     }
 
@@ -220,10 +223,8 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => Message::Ui(UiMessage::ConfirmDelete),
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
-                Message::Ui(UiMessage::CancelDelete)
-            }
+            KeyCode::Char('y' | 'Y') => Message::Ui(UiMessage::ConfirmDelete),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => Message::Ui(UiMessage::CancelDelete),
             _ => Message::None,
         };
     }
@@ -306,10 +307,9 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
                 if model.macro_state.is_recording() {
                     // Stop recording and save to this slot
                     return Message::Ui(UiMessage::StopRecordMacro);
-                } else {
-                    // Start recording to this slot
-                    return Message::Ui(UiMessage::StartRecordMacro);
                 }
+                // Start recording to this slot
+                return Message::Ui(UiMessage::StartRecordMacro);
             }
         }
         // Escape cancels macro slot selection
@@ -361,7 +361,7 @@ fn key_event_to_string(key: &event::KeyEvent) -> String {
         KeyCode::PageUp => "pageup".to_string(),
         KeyCode::PageDown => "pagedown".to_string(),
         KeyCode::Tab => "tab".to_string(),
-        KeyCode::F(n) => format!("f{}", n),
+        KeyCode::F(n) => format!("f{n}"),
         _ => return String::new(),
     };
 
@@ -374,7 +374,7 @@ fn key_event_to_string(key: &event::KeyEvent) -> String {
 }
 
 /// Convert an Action to a Message
-fn action_to_message(action: &Action) -> Message {
+const fn action_to_message(action: &Action) -> Message {
     match action {
         Action::MoveUp => Message::Navigation(NavigationMessage::Up),
         Action::MoveDown => Message::Navigation(NavigationMessage::Down),

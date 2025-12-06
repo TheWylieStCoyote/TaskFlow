@@ -249,30 +249,34 @@ impl Default for Keybindings {
 
 impl Keybindings {
     /// Load keybindings from the default config path
+    #[must_use]
     pub fn load() -> Self {
         Self::load_from_path(Self::config_path())
     }
 
     /// Load keybindings from a specific path
+    #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         if path.exists() {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(keybindings) => return keybindings,
-                    Err(e) => eprintln!("Warning: Failed to parse keybindings: {}", e),
+                    Err(e) => eprintln!("Warning: Failed to parse keybindings: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read keybindings: {}", e),
+                Err(e) => eprintln!("Warning: Failed to read keybindings: {e}"),
             }
         }
         Self::default()
     }
 
     /// Get the default keybindings file path
+    #[must_use]
     pub fn config_path() -> PathBuf {
         Settings::config_dir().join("keybindings.toml")
     }
 
     /// Look up action for a key
+    #[must_use]
     pub fn get_action(&self, key: &str) -> Option<&Action> {
         self.bindings.get(key)
     }

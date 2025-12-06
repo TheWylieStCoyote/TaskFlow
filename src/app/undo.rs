@@ -73,7 +73,7 @@ pub struct UndoStack {
 
 impl UndoStack {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             undo_actions: Vec::new(),
             redo_actions: Vec::new(),

@@ -11,7 +11,7 @@ use crate::storage::{
     TaskRepository, TimeEntryRepository,
 };
 
-/// SQLite database storage backend
+/// `SQLite` database storage backend
 ///
 /// Best for larger datasets with complex queries. Provides ACID guarantees
 /// and efficient indexing.
@@ -21,6 +21,11 @@ pub struct SqliteBackend {
 }
 
 impl SqliteBackend {
+    /// Creates a new `SQLite` backend at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`] if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             path: path.to_path_buf(),
@@ -125,7 +130,7 @@ impl SqliteBackend {
                         .map(|m| m as u32),
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(entries)
     }
@@ -335,7 +340,7 @@ impl TaskRepository for SqliteBackend {
         let mut stmt = conn.prepare("SELECT * FROM tasks")?;
         let tasks = stmt
             .query_map([], Self::task_from_row)?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(tasks)
     }
@@ -382,7 +387,7 @@ impl TaskRepository for SqliteBackend {
         let mut stmt = conn.prepare("SELECT * FROM tasks WHERE project_id = ?1")?;
         let tasks = stmt
             .query_map(params![project_id.0.to_string()], Self::task_from_row)?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(tasks)
     }
@@ -478,7 +483,7 @@ impl ProjectRepository for SqliteBackend {
         let mut stmt = conn.prepare("SELECT * FROM projects")?;
         let projects = stmt
             .query_map([], Self::project_from_row)?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(projects)
     }
@@ -488,7 +493,7 @@ impl ProjectRepository for SqliteBackend {
         let mut stmt = conn.prepare("SELECT * FROM projects WHERE parent_id = ?1")?;
         let projects = stmt
             .query_map(params![parent_id.0.to_string()], Self::project_from_row)?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(projects)
     }
@@ -539,7 +544,7 @@ impl TagRepository for SqliteBackend {
                     description: row.get("description")?,
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(tags)
     }
@@ -652,7 +657,7 @@ impl TimeEntryRepository for SqliteBackend {
                         .map(|m| m as u32),
                 })
             })?
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
         Ok(entries)
     }
@@ -763,7 +768,7 @@ mod tests {
             .unwrap()
             .query_map([], |row| row.get(0))
             .unwrap()
-            .filter_map(|r| r.ok())
+            .filter_map(Result::ok)
             .collect();
 
         assert!(tables.contains(&"tasks".to_string()));

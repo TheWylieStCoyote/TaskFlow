@@ -19,9 +19,10 @@ pub enum ColorSpec {
 
 impl ColorSpec {
     /// Convert to ratatui Color
+    #[must_use]
     pub fn to_color(&self) -> Color {
         match self {
-            ColorSpec::Named(name) => match name.to_lowercase().as_str() {
+            Self::Named(name) => match name.to_lowercase().as_str() {
                 "black" => Color::Black,
                 "red" => Color::Red,
                 "green" => Color::Green,
@@ -41,7 +42,7 @@ impl ColorSpec {
                 "reset" => Color::Reset,
                 _ => Color::Reset,
             },
-            ColorSpec::Hex(hex) => {
+            Self::Hex(hex) => {
                 let hex = hex.trim_start_matches('#');
                 if hex.len() == 6 {
                     let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
@@ -52,14 +53,14 @@ impl ColorSpec {
                     Color::Reset
                 }
             }
-            ColorSpec::Rgb { r, g, b } => Color::Rgb(*r, *g, *b),
+            Self::Rgb { r, g, b } => Color::Rgb(*r, *g, *b),
         }
     }
 }
 
 impl Default for ColorSpec {
     fn default() -> Self {
-        ColorSpec::Named("reset".to_string())
+        Self::Named("reset".to_string())
     }
 }
 
@@ -185,6 +186,7 @@ impl Default for Theme {
 
 impl Theme {
     /// Load theme from a name (looks in themes directory)
+    #[must_use]
     pub fn load(name: &str) -> Self {
         if name == "default" {
             return Self::default();
@@ -195,27 +197,30 @@ impl Theme {
     }
 
     /// Load theme from a specific path
+    #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         if path.exists() {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(theme) => return theme,
-                    Err(e) => eprintln!("Warning: Failed to parse theme: {}", e),
+                    Err(e) => eprintln!("Warning: Failed to parse theme: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read theme: {}", e),
+                Err(e) => eprintln!("Warning: Failed to read theme: {e}"),
             }
         }
         Self::default()
     }
 
     /// Get the path for a theme by name
+    #[must_use]
     pub fn theme_path(name: &str) -> PathBuf {
         Settings::config_dir()
             .join("themes")
-            .join(format!("{}.toml", name))
+            .join(format!("{name}.toml"))
     }
 
     /// Get the themes directory
+    #[must_use]
     pub fn themes_dir() -> PathBuf {
         Settings::config_dir().join("themes")
     }

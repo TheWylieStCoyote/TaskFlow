@@ -47,30 +47,40 @@ impl Default for Settings {
 
 impl Settings {
     /// Load settings from the default config path
+    #[must_use]
     pub fn load() -> Self {
         Self::load_from_path(Self::config_path())
     }
 
     /// Load settings from a specific path
+    #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         if path.exists() {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(settings) => return settings,
-                    Err(e) => eprintln!("Warning: Failed to parse config: {}", e),
+                    Err(e) => eprintln!("Warning: Failed to parse config: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read config: {}", e),
+                Err(e) => eprintln!("Warning: Failed to read config: {e}"),
             }
         }
         Self::default()
     }
 
-    /// Save settings to the default config path
+    /// Saves settings to the default config path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save(&self) -> anyhow::Result<()> {
         self.save_to_path(Self::config_path())
     }
 
-    /// Save settings to a specific path
+    /// Saves settings to a specific path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
     pub fn save_to_path(&self, path: PathBuf) -> anyhow::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -81,6 +91,7 @@ impl Settings {
     }
 
     /// Get the default config directory
+    #[must_use]
     pub fn config_dir() -> PathBuf {
         directories::ProjectDirs::from("com", "taskflow", "taskflow")
             .map(|dirs| dirs.config_dir().to_path_buf())
@@ -88,16 +99,19 @@ impl Settings {
     }
 
     /// Get the default config file path
+    #[must_use]
     pub fn config_path() -> PathBuf {
         Self::config_dir().join("config.toml")
     }
 
     /// Get the backend type
+    #[must_use]
     pub fn backend_type(&self) -> BackendType {
         BackendType::parse(&self.backend).unwrap_or_default()
     }
 
     /// Get the data path, using defaults if not set
+    #[must_use]
     pub fn get_data_path(&self) -> PathBuf {
         self.data_path.clone().unwrap_or_else(|| {
             let data_dir = directories::ProjectDirs::from("com", "taskflow", "taskflow")
@@ -105,11 +119,12 @@ impl Settings {
                 .unwrap_or_else(|| PathBuf::from("."));
 
             let ext = self.backend_type().file_extension();
-            data_dir.join(format!("tasks.{}", ext))
+            data_dir.join(format!("tasks.{ext}"))
         })
     }
 
     /// Get the default priority for new tasks
+    #[must_use]
     pub fn default_priority(&self) -> Priority {
         Priority::parse(&self.default_priority).unwrap_or_default()
     }

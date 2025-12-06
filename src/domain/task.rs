@@ -1,3 +1,8 @@
+//! Task entity and related types.
+//!
+//! This module contains the core [`Task`] type along with supporting
+//! types like [`TaskId`], [`Priority`], [`TaskStatus`], and [`Recurrence`].
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -5,11 +10,29 @@ use uuid::Uuid;
 
 use super::ProjectId;
 
-/// Unique identifier for tasks
+/// Unique identifier for tasks.
+///
+/// Each task has a UUID-based identifier that remains stable across
+/// serialization and storage operations.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::TaskId;
+///
+/// let id1 = TaskId::new();
+/// let id2 = TaskId::new();
+/// assert_ne!(id1, id2); // Each ID is unique
+///
+/// // Can be displayed as a string
+/// println!("Task ID: {}", id1);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TaskId(pub Uuid);
 
 impl TaskId {
+    /// Creates a new unique task identifier.
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
@@ -27,101 +50,256 @@ impl std::fmt::Display for TaskId {
     }
 }
 
-/// Task priority levels
+/// Task priority levels from lowest to highest urgency.
+///
+/// Priority helps organize tasks by importance. Each level has an
+/// associated symbol displayed in the UI.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::Priority;
+///
+/// let priority = Priority::High;
+/// assert_eq!(priority.symbol(), "!!!");
+/// assert_eq!(priority.as_str(), "high");
+///
+/// // Parse from string (case-insensitive)
+/// assert_eq!(Priority::parse("HIGH"), Some(Priority::High));
+/// assert_eq!(Priority::parse("med"), Some(Priority::Medium));
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Priority {
+    /// No priority assigned (default)
     #[default]
     None,
+    /// Low priority - nice to have, backlog items
     Low,
+    /// Medium priority - standard work items
     Medium,
+    /// High priority - important features, upcoming deadlines
     High,
+    /// Urgent priority - critical issues, production bugs
     Urgent,
 }
 
 impl Priority {
-    pub fn as_str(&self) -> &'static str {
+    /// Returns the priority as a lowercase string.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            Priority::None => "none",
-            Priority::Low => "low",
-            Priority::Medium => "medium",
-            Priority::High => "high",
-            Priority::Urgent => "urgent",
+            Self::None => "none",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Urgent => "urgent",
         }
     }
 
+    /// Parses a priority from a string (case-insensitive).
+    ///
+    /// Accepts "med" as a shorthand for "medium".
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "none" => Some(Priority::None),
-            "low" => Some(Priority::Low),
-            "medium" | "med" => Some(Priority::Medium),
-            "high" => Some(Priority::High),
-            "urgent" => Some(Priority::Urgent),
+            "none" => Some(Self::None),
+            "low" => Some(Self::Low),
+            "medium" | "med" => Some(Self::Medium),
+            "high" => Some(Self::High),
+            "urgent" => Some(Self::Urgent),
             _ => None,
         }
     }
 
-    pub fn symbol(&self) -> &'static str {
+    /// Returns the visual symbol for this priority level.
+    ///
+    /// Used in the UI to show priority at a glance.
+    #[must_use]
+    pub const fn symbol(&self) -> &'static str {
         match self {
-            Priority::None => " ",
-            Priority::Low => "!",
-            Priority::Medium => "!!",
-            Priority::High => "!!!",
-            Priority::Urgent => "!!!!",
+            Self::None => " ",
+            Self::Low => "!",
+            Self::Medium => "!!",
+            Self::High => "!!!",
+            Self::Urgent => "!!!!",
         }
     }
 }
 
-/// Task status
+/// Task completion status.
+///
+/// Represents the current state of a task in its lifecycle.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::TaskStatus;
+///
+/// let status = TaskStatus::InProgress;
+/// assert_eq!(status.symbol(), "[~]");
+/// assert!(!status.is_complete());
+///
+/// let done = TaskStatus::Done;
+/// assert!(done.is_complete());
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
+    /// Task has not been started (default)
     #[default]
     Todo,
+    /// Task is currently being worked on
     InProgress,
+    /// Task is waiting on something else
     Blocked,
+    /// Task has been completed successfully
     Done,
+    /// Task was cancelled and won't be done
     Cancelled,
 }
 
 impl TaskStatus {
-    pub fn as_str(&self) -> &'static str {
+    /// Returns the status as a lowercase string.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
-            TaskStatus::Todo => "todo",
-            TaskStatus::InProgress => "in_progress",
-            TaskStatus::Blocked => "blocked",
-            TaskStatus::Done => "done",
-            TaskStatus::Cancelled => "cancelled",
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::Blocked => "blocked",
+            Self::Done => "done",
+            Self::Cancelled => "cancelled",
         }
     }
 
-    pub fn symbol(&self) -> &'static str {
+    /// Returns the visual symbol for this status.
+    ///
+    /// Used in the UI to show status at a glance.
+    #[must_use]
+    pub const fn symbol(&self) -> &'static str {
         match self {
-            TaskStatus::Todo => "[ ]",
-            TaskStatus::InProgress => "[~]",
-            TaskStatus::Blocked => "[!]",
-            TaskStatus::Done => "[x]",
-            TaskStatus::Cancelled => "[-]",
+            Self::Todo => "[ ]",
+            Self::InProgress => "[~]",
+            Self::Blocked => "[!]",
+            Self::Done => "[x]",
+            Self::Cancelled => "[-]",
         }
     }
 
-    pub fn is_complete(&self) -> bool {
-        matches!(self, TaskStatus::Done | TaskStatus::Cancelled)
+    /// Returns true if the task is in a terminal state (Done or Cancelled).
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        matches!(self, Self::Done | Self::Cancelled)
     }
 }
 
-/// Recurrence pattern for repeating tasks
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Recurrence pattern for repeating tasks.
+///
+/// When a recurring task is completed, a new instance is automatically
+/// created based on the recurrence pattern.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::Recurrence;
+/// use chrono::Weekday;
+///
+/// // Daily tasks (e.g., standup)
+/// let daily = Recurrence::Daily;
+///
+/// // Weekly on specific days (e.g., team sync on Mon/Wed/Fri)
+/// let weekly = Recurrence::Weekly {
+///     days: vec![Weekday::Mon, Weekday::Wed, Weekday::Fri]
+/// };
+///
+/// // Monthly on a specific day (e.g., monthly report on the 15th)
+/// let monthly = Recurrence::Monthly { day: 15 };
+///
+/// // Yearly (e.g., annual review on March 1st)
+/// let yearly = Recurrence::Yearly { month: 3, day: 1 };
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Recurrence {
+    /// Repeats every day
     Daily,
-    Weekly { days: Vec<chrono::Weekday> },
-    Monthly { day: u32 },
-    Yearly { month: u32, day: u32 },
+    /// Repeats on specific days of the week
+    Weekly {
+        /// Days of the week when the task recurs
+        days: Vec<chrono::Weekday>,
+    },
+    /// Repeats on a specific day each month
+    Monthly {
+        /// Day of the month (1-31)
+        day: u32,
+    },
+    /// Repeats on a specific date each year
+    Yearly {
+        /// Month (1-12)
+        month: u32,
+        /// Day of the month (1-31)
+        day: u32,
+    },
 }
 
-/// Core task entity
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// A task represents a unit of work to be done.
+///
+/// Tasks are the core entity in `TaskFlow`. They have a title, status,
+/// priority, and various optional metadata like due dates, tags,
+/// descriptions, and time tracking.
+///
+/// # Examples
+///
+/// ## Creating Tasks
+///
+/// ```
+/// use taskflow::domain::{Task, Priority, TaskStatus};
+/// use chrono::Utc;
+///
+/// // Simple task
+/// let task = Task::new("Buy groceries");
+///
+/// // Task with builder pattern
+/// let today = Utc::now().date_naive();
+/// let task = Task::new("Fix login bug")
+///     .with_priority(Priority::Urgent)
+///     .with_due_date(today)
+///     .with_tags(vec!["bug".into(), "auth".into()])
+///     .with_description("Users can't login with SSO".to_string());
+///
+/// assert_eq!(task.priority, Priority::Urgent);
+/// assert!(task.is_due_today());
+/// ```
+///
+/// ## Task Completion
+///
+/// ```
+/// use taskflow::domain::{Task, TaskStatus};
+///
+/// let mut task = Task::new("Review PR");
+/// assert_eq!(task.status, TaskStatus::Todo);
+///
+/// task.toggle_complete();
+/// assert_eq!(task.status, TaskStatus::Done);
+/// assert!(task.completed_at.is_some());
+///
+/// // Toggle back to incomplete
+/// task.toggle_complete();
+/// assert_eq!(task.status, TaskStatus::Todo);
+/// ```
+///
+/// ## Subtasks
+///
+/// ```
+/// use taskflow::domain::Task;
+///
+/// let parent = Task::new("Release v2.0");
+/// let subtask = Task::new("Write changelog")
+///     .with_parent(parent.id.clone());
+///
+/// assert_eq!(subtask.parent_task_id, Some(parent.id));
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     pub id: TaskId,
     pub title: String,
@@ -179,11 +357,13 @@ impl Task {
         }
     }
 
-    pub fn with_priority(mut self, priority: Priority) -> Self {
+    #[must_use]
+    pub const fn with_priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
 
+    #[must_use]
     pub fn with_status(mut self, status: TaskStatus) -> Self {
         self.status = status;
         if status.is_complete() && self.completed_at.is_none() {
@@ -192,46 +372,55 @@ impl Task {
         self
     }
 
-    pub fn with_due_date(mut self, date: NaiveDate) -> Self {
+    #[must_use]
+    pub const fn with_due_date(mut self, date: NaiveDate) -> Self {
         self.due_date = Some(date);
         self
     }
 
-    pub fn with_project(mut self, project_id: ProjectId) -> Self {
+    #[must_use]
+    pub const fn with_project(mut self, project_id: ProjectId) -> Self {
         self.project_id = Some(project_id);
         self
     }
 
+    #[must_use]
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
 
+    #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    pub fn with_parent(mut self, parent_id: TaskId) -> Self {
+    #[must_use]
+    pub const fn with_parent(mut self, parent_id: TaskId) -> Self {
         self.parent_task_id = Some(parent_id);
         self
     }
 
+    #[must_use]
     pub fn with_recurrence(mut self, recurrence: Option<Recurrence>) -> Self {
         self.recurrence = recurrence;
         self
     }
 
-    pub fn with_project_opt(mut self, project_id: Option<super::ProjectId>) -> Self {
+    #[must_use]
+    pub const fn with_project_opt(mut self, project_id: Option<super::ProjectId>) -> Self {
         self.project_id = project_id;
         self
     }
 
+    #[must_use]
     pub fn with_description_opt(mut self, description: Option<String>) -> Self {
         self.description = description;
         self
     }
 
+    #[must_use]
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
             return due < Utc::now().date_naive() && !self.status.is_complete();
@@ -239,6 +428,7 @@ impl Task {
         false
     }
 
+    #[must_use]
     pub fn is_due_today(&self) -> bool {
         if let Some(due) = self.due_date {
             return due == Utc::now().date_naive();

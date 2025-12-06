@@ -33,7 +33,7 @@ enum ListEntry<'a> {
 pub struct TaskList<'a> {
     entries: Vec<ListEntry<'a>>,
     selected: usize,
-    /// Maps display row to visible_tasks index (None for headers)
+    /// Maps display row to `visible_tasks` index (None for headers)
     row_to_task_index: Vec<Option<usize>>,
     active_tracking: Option<&'a TaskId>,
     theme: &'a Theme,
@@ -41,6 +41,7 @@ pub struct TaskList<'a> {
 }
 
 impl<'a> TaskList<'a> {
+    #[must_use]
     pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
         let active_tracking = model.active_time_entry().map(|e| &e.task_id);
         let is_grouped = model.current_view == ViewId::Projects;
@@ -235,13 +236,14 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
     let line = Line::from(vec![
         Span::styled("── ", Style::default().fg(theme.colors.muted.to_color())),
         Span::styled(name.to_string(), header_style),
-        Span::styled(format!(" ({}) ", task_count), count_style),
+        Span::styled(format!(" ({task_count}) "), count_style),
         Span::styled("──", Style::default().fg(theme.colors.muted.to_color())),
     ]);
 
     ListItem::new(line)
 }
 
+#[allow(clippy::too_many_lines)]
 fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
     let task = ctx.task;
     let theme = ctx.theme;
@@ -312,13 +314,12 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
 
     // Add due date if present
     let due_span = if let Some(due) = task.due_date {
+        use std::cmp::Ordering;
         let today = chrono::Utc::now().date_naive();
-        let style = if due < today {
-            Style::default().fg(theme.colors.danger.to_color()) // Overdue
-        } else if due == today {
-            Style::default().fg(theme.colors.warning.to_color()) // Due today
-        } else {
-            Style::default().fg(theme.colors.muted.to_color())
+        let style = match due.cmp(&today) {
+            Ordering::Less => Style::default().fg(theme.colors.danger.to_color()), // Overdue
+            Ordering::Equal => Style::default().fg(theme.colors.warning.to_color()), // Due today
+            Ordering::Greater => Style::default().fg(theme.colors.muted.to_color()),
         };
         Span::styled(format!(" [{}]", due.format("%m/%d")), style)
     } else {
@@ -330,9 +331,9 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         let hours = ctx.time_spent / 60;
         let mins = ctx.time_spent % 60;
         let time_str = if hours > 0 {
-            format!(" ({}h {}m)", hours, mins)
+            format!(" ({hours}h {mins}m)")
         } else {
-            format!(" ({}m)", mins)
+            format!(" ({mins}m)")
         };
         Span::styled(
             time_str,
@@ -343,19 +344,19 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
     };
 
     // Tags display
-    let tags_span = if !task.tags.is_empty() {
+    let tags_span = if task.tags.is_empty() {
+        Span::raw("")
+    } else {
         let tags_str = task
             .tags
             .iter()
-            .map(|t| format!("#{}", t))
+            .map(|t| format!("#{t}"))
             .collect::<Vec<_>>()
             .join(" ");
         Span::styled(
-            format!(" {}", tags_str),
+            format!(" {tags_str}"),
             Style::default().fg(theme.colors.muted.to_color()),
         )
-    } else {
-        Span::raw("")
     };
 
     // Description indicator (shows if task has a note)

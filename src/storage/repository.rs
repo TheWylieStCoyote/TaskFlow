@@ -2,87 +2,183 @@ use crate::domain::{Filter, Project, ProjectId, Tag, Task, TaskId, TimeEntry, Ti
 
 use super::error::StorageResult;
 
-/// Repository trait for task operations
+/// Repository trait for task operations.
 pub trait TaskRepository {
-    /// Create a new task
+    /// Creates a new task in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the task cannot be persisted.
     fn create_task(&mut self, task: &Task) -> StorageResult<()>;
 
-    /// Get task by ID
+    /// Retrieves a task by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_task(&self, id: &TaskId) -> StorageResult<Option<Task>>;
 
-    /// Update an existing task
+    /// Updates an existing task.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the task cannot be updated.
     fn update_task(&mut self, task: &Task) -> StorageResult<()>;
 
-    /// Delete a task by ID
+    /// Deletes a task by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the task cannot be deleted.
     fn delete_task(&mut self, id: &TaskId) -> StorageResult<()>;
 
-    /// List all tasks
+    /// Lists all tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn list_tasks(&self) -> StorageResult<Vec<Task>>;
 
-    /// List tasks with optional filtering
+    /// Lists tasks matching the given filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>>;
 
-    /// Get tasks by project
+    /// Gets all tasks belonging to a project.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_tasks_by_project(&self, project_id: &ProjectId) -> StorageResult<Vec<Task>>;
 
-    /// Get tasks by tag
+    /// Gets all tasks with a specific tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>>;
 }
 
-/// Repository trait for project operations
+/// Repository trait for project operations.
 pub trait ProjectRepository {
-    /// Create a new project
+    /// Creates a new project in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the project cannot be persisted.
     fn create_project(&mut self, project: &Project) -> StorageResult<()>;
 
-    /// Get project by ID
+    /// Retrieves a project by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_project(&self, id: &ProjectId) -> StorageResult<Option<Project>>;
 
-    /// Update an existing project
+    /// Updates an existing project.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the project cannot be updated.
     fn update_project(&mut self, project: &Project) -> StorageResult<()>;
 
-    /// Delete a project by ID
+    /// Deletes a project by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the project cannot be deleted.
     fn delete_project(&mut self, id: &ProjectId) -> StorageResult<()>;
 
-    /// List all projects
+    /// Lists all projects.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn list_projects(&self) -> StorageResult<Vec<Project>>;
 
-    /// Get child projects of a parent
+    /// Gets child projects of a parent.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_subprojects(&self, parent_id: &ProjectId) -> StorageResult<Vec<Project>>;
 }
 
-/// Repository trait for tag operations
+/// Repository trait for tag operations.
 pub trait TagRepository {
-    /// Create or update a tag
+    /// Creates or updates a tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the tag cannot be persisted.
     fn save_tag(&mut self, tag: &Tag) -> StorageResult<()>;
 
-    /// Get tag by name
+    /// Retrieves a tag by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_tag(&self, name: &str) -> StorageResult<Option<Tag>>;
 
-    /// Delete a tag by name
+    /// Deletes a tag by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the tag cannot be deleted.
     fn delete_tag(&mut self, name: &str) -> StorageResult<()>;
 
-    /// List all tags
+    /// Lists all tags.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn list_tags(&self) -> StorageResult<Vec<Tag>>;
 }
 
-/// Repository trait for time entry operations
+/// Repository trait for time entry operations.
 pub trait TimeEntryRepository {
-    /// Create a new time entry
+    /// Creates a new time entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be persisted.
     fn create_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()>;
 
-    /// Get time entry by ID
+    /// Retrieves a time entry by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_time_entry(&self, id: &TimeEntryId) -> StorageResult<Option<TimeEntry>>;
 
-    /// Update an existing time entry
+    /// Updates an existing time entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be updated.
     fn update_time_entry(&mut self, entry: &TimeEntry) -> StorageResult<()>;
 
-    /// Delete a time entry by ID
+    /// Deletes a time entry by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be deleted.
     fn delete_time_entry(&mut self, id: &TimeEntryId) -> StorageResult<()>;
 
-    /// Get all time entries for a task
+    /// Gets all time entries for a task.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_entries_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<TimeEntry>>;
 
-    /// Get the currently running time entry (if any)
+    /// Gets the currently running time entry (if any).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
     fn get_active_entry(&self) -> StorageResult<Option<TimeEntry>>;
 }
 
@@ -108,22 +204,38 @@ impl Default for ExportData {
     }
 }
 
-/// Unified storage backend trait combining all repositories
+/// Unified storage backend trait combining all repositories.
 pub trait StorageBackend:
     TaskRepository + ProjectRepository + TagRepository + TimeEntryRepository
 {
-    /// Initialize the storage backend (create files/tables, etc.)
+    /// Initializes the storage backend (creates files/tables, etc.).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if initialization fails.
     fn initialize(&mut self) -> StorageResult<()>;
 
-    /// Flush any pending changes to disk
+    /// Flushes any pending changes to disk.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if flushing fails.
     fn flush(&mut self) -> StorageResult<()>;
 
-    /// Export all data (for migration)
+    /// Exports all data for migration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if export fails.
     fn export_all(&self) -> StorageResult<ExportData>;
 
-    /// Import data (for migration)
+    /// Imports data for migration.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if import fails.
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()>;
 
-    /// Get the storage backend type name
+    /// Returns the storage backend type name.
     fn backend_type(&self) -> &'static str;
 }

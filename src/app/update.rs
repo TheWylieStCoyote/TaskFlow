@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
@@ -22,6 +24,7 @@ pub fn update(model: &mut Model, message: Message) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
     match msg {
         NavigationMessage::Up => match model.focus_pane {
@@ -179,8 +182,6 @@ fn handle_calendar_up(model: &mut Model) {
     if let Some(day) = model.calendar_state.selected_day {
         if day > 7 {
             model.calendar_state.selected_day = Some(day - 7);
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         } else {
             // Move to previous month, last row
             if model.calendar_state.month == 1 {
@@ -193,9 +194,9 @@ fn handle_calendar_up(model: &mut Model) {
             // Try to land on same weekday in last week
             let new_day = days - (7 - day);
             model.calendar_state.selected_day = Some(new_day.max(1));
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         }
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
     }
 }
 
@@ -205,8 +206,6 @@ fn handle_calendar_down(model: &mut Model) {
         let days = days_in_month(model.calendar_state.year, model.calendar_state.month);
         if day + 7 <= days {
             model.calendar_state.selected_day = Some(day + 7);
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         } else {
             // Move to next month, first row
             if model.calendar_state.month == 12 {
@@ -218,9 +217,9 @@ fn handle_calendar_down(model: &mut Model) {
             // Try to land on same weekday in first week
             let new_day = (day + 7) - days;
             model.calendar_state.selected_day = Some(new_day.min(7));
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
         }
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
     }
 }
 
@@ -306,6 +305,7 @@ fn handle_sidebar_selection(model: &mut Model) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_task(model: &mut Model, msg: TaskMessage) {
     match msg {
         TaskMessage::ToggleComplete => {
@@ -314,16 +314,14 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
 
             if let Some(id) = task_id {
                 // Check if completing a recurring task
-                let next_task = if let Some(task) = model.tasks.get(&id) {
+                let next_task = model.tasks.get(&id).and_then(|task| {
                     if task.status != crate::domain::TaskStatus::Done && task.recurrence.is_some() {
                         // Create next occurrence
                         Some(create_next_recurring_task(task))
                     } else {
                         None
                     }
-                } else {
-                    None
-                };
+                });
 
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
@@ -435,6 +433,7 @@ fn handle_task(model: &mut Model, msg: TaskMessage) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_ui(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ToggleShowCompleted => {
@@ -776,7 +775,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         for task_id in tasks_to_move {
                             if let Some(task) = model.tasks.get_mut(&task_id) {
                                 let before = task.clone();
-                                task.project_id = target_project.clone();
+                                task.project_id.clone_from(&target_project);
                                 task.updated_at = chrono::Utc::now();
                                 let after = task.clone();
                                 model.sync_task(&after);
@@ -875,8 +874,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                                 day: today.day(),
                             })
                         }
-                        '0' | 'n' | 'N' => None,
-                        _ => None, // Invalid input clears recurrence
+                        _ => None, // Invalid input or explicit 0/n/N clears recurrence
                     };
 
                     if let Some(task) = model.tasks.get_mut(task_id) {
@@ -1026,7 +1024,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             if let Some(t) = model.tasks.get(id) {
                                 let is_dep = task.dependencies.contains(id);
                                 let marker = if is_dep { "*" } else { "" };
-                                buffer.push_str(&format!("{}{}: {}, ", marker, i + 1, t.title));
+                                let _ = write!(buffer, "{}{}: {}, ", marker, i + 1, t.title);
                             }
                         }
                     }
@@ -1051,7 +1049,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                         Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
                         None => "0 (none)",
                     };
-                    model.input_buffer = format!("Current: {}", current);
+                    model.input_buffer = format!("Current: {current}");
                     model.cursor_position = model.input_buffer.len();
                 }
             }
@@ -1228,8 +1226,8 @@ fn create_next_recurring_task(task: &crate::domain::Task) -> crate::domain::Task
                 let current_weekday = today.weekday();
                 let mut min_days = 7i64;
                 for day in days {
-                    let days_until = (day.num_days_from_monday() as i64
-                        - current_weekday.num_days_from_monday() as i64
+                    let days_until = (i64::from(day.num_days_from_monday())
+                        - i64::from(current_weekday.num_days_from_monday())
                         + 7)
                         % 7;
                     let days_until = if days_until == 0 { 7 } else { days_until };
@@ -1410,12 +1408,12 @@ fn handle_export_csv(model: &mut Model) {
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {}", e));
+                    model.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {}", e));
+            model.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -1442,12 +1440,12 @@ fn handle_export_ics(model: &mut Model) {
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {}", e));
+                    model.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {}", e));
+            model.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }

@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
-use crate::domain::{Priority, TaskStatus};
+use crate::domain::{Priority, TaskStatus, TimeEntry};
 
 /// Statistics dashboard widget
 pub struct Dashboard<'a> {
@@ -18,7 +18,8 @@ pub struct Dashboard<'a> {
 }
 
 impl<'a> Dashboard<'a> {
-    pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
+    #[must_use]
+    pub const fn new(model: &'a Model, theme: &'a Theme) -> Self {
         Self { model, theme }
     }
 
@@ -55,7 +56,7 @@ impl<'a> Dashboard<'a> {
         self.model
             .time_entries
             .values()
-            .map(|e| e.calculated_duration_minutes())
+            .map(TimeEntry::calculated_duration_minutes)
             .sum()
     }
 
@@ -67,8 +68,7 @@ impl<'a> Dashboard<'a> {
             .values()
             .filter(|t| {
                 t.due_date
-                    .map(|d| d < today && !t.status.is_complete())
-                    .unwrap_or(false)
+                    .is_some_and(|d| d < today && !t.status.is_complete())
             })
             .count()
     }
@@ -116,11 +116,7 @@ impl<'a> Dashboard<'a> {
         self.model
             .tasks
             .values()
-            .filter(|t| {
-                t.completed_at
-                    .map(|d| d.date_naive() >= week_start)
-                    .unwrap_or(false)
-            })
+            .filter(|t| t.completed_at.is_some_and(|d| d.date_naive() >= week_start))
             .count()
     }
 
@@ -129,9 +125,9 @@ impl<'a> Dashboard<'a> {
         let hours = minutes / 60;
         let mins = minutes % 60;
         if hours > 0 {
-            format!("{}h {}m", hours, mins)
+            format!("{hours}h {mins}m")
         } else {
-            format!("{}m", mins)
+            format!("{mins}m")
         }
     }
 }
@@ -202,7 +198,7 @@ impl Dashboard<'_> {
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{:.0}%", rate),
+                    format!("{rate:.0}%"),
                     Style::default().fg(rate_color).add_modifier(Modifier::BOLD),
                 ),
             ]),
@@ -212,7 +208,7 @@ impl Dashboard<'_> {
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{}", overdue),
+                    format!("{overdue}"),
                     Style::default().fg(if overdue > 0 {
                         theme.colors.danger.to_color()
                     } else {
@@ -246,11 +242,11 @@ impl Dashboard<'_> {
 
         Line::from(vec![
             Span::styled(
-                format!("{}: ", label),
+                format!("{label}: "),
                 Style::default().fg(theme.colors.muted.to_color()),
             ),
             Span::styled(
-                format!("{}/{} ({:.0}%)", completed, total, rate),
+                format!("{completed}/{total} ({rate:.0}%)"),
                 Style::default(),
             ),
         ])
@@ -384,7 +380,7 @@ impl Dashboard<'_> {
             let line = Line::from(vec![
                 Span::styled(name, Style::default()),
                 Span::styled(" ", Style::default()),
-                Span::styled(format!("{:.0}%", rate), Style::default().fg(rate_color)),
+                Span::styled(format!("{rate:.0}%"), Style::default().fg(rate_color)),
             ]);
 
             buf.set_line(inner.x, inner.y + i as u16, &line, inner.width);
@@ -429,8 +425,8 @@ impl Dashboard<'_> {
             let bar = "█".repeat(bar_width.min(20));
 
             let line = Line::from(vec![
-                Span::styled(format!("{:<11}", label), Style::default()),
-                Span::styled(format!("{:>3} ", count), Style::default().fg(*color)),
+                Span::styled(format!("{label:<11}"), Style::default()),
+                Span::styled(format!("{count:>3} "), Style::default().fg(*color)),
                 Span::styled(bar, Style::default().fg(*color)),
             ]);
 
@@ -463,7 +459,7 @@ impl Dashboard<'_> {
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{}", created),
+                    format!("{created}"),
                     Style::default().fg(theme.colors.accent.to_color()),
                 ),
             ]),
@@ -472,7 +468,7 @@ impl Dashboard<'_> {
                     "Completed: ",
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
-                Span::styled(format!("{}", completed), Style::default().fg(Color::Green)),
+                Span::styled(format!("{completed}"), Style::default().fg(Color::Green)),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -480,7 +476,7 @@ impl Dashboard<'_> {
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{}", active_tasks),
+                    format!("{active_tasks}"),
                     Style::default().fg(theme.status.in_progress.to_color()),
                 ),
             ]),
@@ -489,7 +485,7 @@ impl Dashboard<'_> {
                     "Total: ",
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
-                Span::styled(format!("{}", total_tasks), Style::default()),
+                Span::styled(format!("{total_tasks}"), Style::default()),
             ]),
         ];
 

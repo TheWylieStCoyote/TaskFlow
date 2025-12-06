@@ -18,6 +18,11 @@ pub struct YamlBackend {
 }
 
 impl YamlBackend {
+    /// Creates a new YAML backend at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`] if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             path: path.to_path_buf(),
@@ -54,7 +59,7 @@ impl YamlBackend {
         Ok(())
     }
 
-    fn mark_dirty(&mut self) {
+    const fn mark_dirty(&mut self) {
         self.dirty = true;
     }
 }
@@ -161,8 +166,7 @@ impl TaskRepository for YamlBackend {
                     let desc_matches = task
                         .description
                         .as_ref()
-                        .map(|d| d.to_lowercase().contains(&search_lower))
-                        .unwrap_or(false);
+                        .is_some_and(|d| d.to_lowercase().contains(&search_lower));
                     if !title_matches && !desc_matches {
                         return false;
                     }

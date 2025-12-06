@@ -17,7 +17,8 @@ pub struct TemplatePicker<'a> {
 }
 
 impl<'a> TemplatePicker<'a> {
-    pub fn new(templates: &'a TemplateManager, selected: usize, theme: &'a Theme) -> Self {
+    #[must_use]
+    pub const fn new(templates: &'a TemplateManager, selected: usize, theme: &'a Theme) -> Self {
         Self {
             templates,
             selected,
@@ -41,7 +42,7 @@ impl Widget for TemplatePicker<'_> {
             .enumerate()
             .map(|(i, template)| {
                 let number = if i < 10 {
-                    format!("{}. ", i)
+                    format!("{i}. ")
                 } else {
                     "   ".to_string()
                 };
@@ -68,7 +69,7 @@ impl Widget for TemplatePicker<'_> {
                         } else if d == 1 {
                             " (tomorrow)".to_string()
                         } else {
-                            format!(" (+{} days)", d)
+                            format!(" (+{d} days)")
                         }
                     })
                     .unwrap_or_default();

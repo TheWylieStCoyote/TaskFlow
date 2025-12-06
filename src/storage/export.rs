@@ -10,6 +10,7 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "csv" => Some(Self::Csv),
@@ -18,7 +19,8 @@ impl ExportFormat {
         }
     }
 
-    pub fn file_extension(&self) -> &'static str {
+    #[must_use]
+    pub const fn file_extension(&self) -> &'static str {
         match self {
             Self::Csv => "csv",
             Self::Ics => "ics",
@@ -26,7 +28,11 @@ impl ExportFormat {
     }
 }
 
-/// Export tasks to CSV format
+/// Exports tasks to CSV format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
 pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Result<()> {
     // Write header
     writeln!(
@@ -59,17 +65,7 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
 
         writeln!(
             writer,
-            "{},{},{},{},{},{},{},{},{},{}",
-            id,
-            title,
-            status,
-            priority,
-            due_date,
-            tags,
-            project_id,
-            description,
-            created,
-            completed
+            "{id},{title},{status},{priority},{due_date},{tags},{project_id},{description},{created},{completed}"
         )?;
     }
 
@@ -85,7 +81,11 @@ fn escape_csv(s: &str) -> String {
     }
 }
 
-/// Export tasks to ICS (iCalendar) format
+/// Exports tasks to ICS (iCalendar) format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if writing fails.
 pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Result<()> {
     // Write calendar header
     writeln!(writer, "BEGIN:VCALENDAR")?;
@@ -99,18 +99,19 @@ pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
         writeln!(writer, "BEGIN:VTODO")?;
 
         // UID (unique identifier)
-        writeln!(writer, "UID:{}", task.id.0)?;
+        let uid = task.id.0;
+        writeln!(writer, "UID:{uid}")?;
 
         // DTSTAMP (timestamp)
         let dtstamp = task.created_at.format("%Y%m%dT%H%M%SZ");
-        writeln!(writer, "DTSTAMP:{}", dtstamp)?;
+        writeln!(writer, "DTSTAMP:{dtstamp}")?;
 
         // CREATED
-        writeln!(writer, "CREATED:{}", dtstamp)?;
+        writeln!(writer, "CREATED:{dtstamp}")?;
 
         // LAST-MODIFIED
         let last_modified = task.updated_at.format("%Y%m%dT%H%M%SZ");
-        writeln!(writer, "LAST-MODIFIED:{}", last_modified)?;
+        writeln!(writer, "LAST-MODIFIED:{last_modified}")?;
 
         // SUMMARY (title)
         writeln!(writer, "SUMMARY:{}", escape_ics(&task.title))?;
@@ -133,7 +134,7 @@ pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
             TaskStatus::Done => "COMPLETED",
             TaskStatus::Cancelled => "CANCELLED",
         };
-        writeln!(writer, "STATUS:{}", ics_status)?;
+        writeln!(writer, "STATUS:{ics_status}")?;
 
         // PRIORITY (1-9 in ICS, 1 is highest)
         let ics_priority = match task.priority {
@@ -143,7 +144,7 @@ pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
             Priority::Low => 7,
             Priority::None => 9,
         };
-        writeln!(writer, "PRIORITY:{}", ics_priority)?;
+        writeln!(writer, "PRIORITY:{ics_priority}")?;
 
         // COMPLETED timestamp
         if let Some(completed) = task.completed_at {
@@ -158,7 +159,7 @@ pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
             TaskStatus::Done => 100,
             TaskStatus::Cancelled => 100,
         };
-        writeln!(writer, "PERCENT-COMPLETE:{}", percent)?;
+        writeln!(writer, "PERCENT-COMPLETE:{percent}")?;
 
         // CATEGORIES (tags)
         if !task.tags.is_empty() {
@@ -180,7 +181,11 @@ fn escape_ics(s: &str) -> String {
         .replace('\n', "\\n")
 }
 
-/// Export tasks to a string in the specified format
+/// Exports tasks to a string in the specified format.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`](std::io::Error) if formatting fails.
 pub fn export_to_string(tasks: &[Task], format: ExportFormat) -> std::io::Result<String> {
     let mut buffer = Vec::new();
     match format {

@@ -13,8 +13,8 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
-    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, Sidebar, TaskList,
-    TemplatePicker,
+    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, ReportsView, Sidebar,
+    TaskList, TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -69,6 +69,10 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
                 "Recurrence (d=daily, w=weekly, m=monthly, y=yearly, 0=none)"
             }
             InputTarget::LinkTask(_) => "Link to next task (task number or title)",
+            InputTarget::ImportFilePath(format) => match format {
+                crate::storage::ImportFormat::Csv => "Import CSV: Enter file path",
+                crate::storage::ImportFormat::Ics => "Import ICS: Enter file path",
+            },
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -88,6 +92,20 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?")),
             confirm_area,
         );
+    }
+
+    // Render import preview dialog
+    if model.show_import_preview {
+        if let Some(ref result) = model.pending_import {
+            let confirm_area = centered_rect_fixed_height(60, 7, area);
+            let message = format!(
+                "Tasks to import: {}\nSkipped: {}\nErrors: {}",
+                result.imported.len(),
+                result.skipped.len(),
+                result.errors.len()
+            );
+            frame.render_widget(ConfirmDialog::new("Import Preview", &message), confirm_area);
+        }
     }
 
     // Render template picker
@@ -174,6 +192,10 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
         ViewId::Dashboard => {
             let dashboard = Dashboard::new(model, theme);
             frame.render_widget(dashboard, area);
+        }
+        ViewId::Reports => {
+            let reports = ReportsView::new(model, model.report_panel);
+            frame.render_widget(reports, area);
         }
         _ => {
             let task_list = TaskList::new(model, theme);

@@ -59,6 +59,32 @@ use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
+// ============================================================================
+// Sidebar Layout Constants
+// ============================================================================
+// These constants define the sidebar structure. When adding/removing views,
+// update SIDEBAR_VIEW_COUNT and the indices will adjust automatically.
+//
+// Layout:
+//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (All Tasks, Today, etc.)
+//   SIDEBAR_SEPARATOR_INDEX       = Separator line
+//   SIDEBAR_PROJECTS_HEADER_INDEX = "Projects" header
+//   SIDEBAR_FIRST_PROJECT_INDEX+  = Individual projects
+
+/// Number of view items in the sidebar (before the separator).
+/// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
+///        Dashboard, Reports, Blocked, Untagged, No Project, Recent
+pub const SIDEBAR_VIEW_COUNT: usize = 12;
+
+/// Index of the separator line in the sidebar.
+pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
+
+/// Index of the "Projects" header in the sidebar.
+pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1; // 13
+
+/// Index where individual projects start in the sidebar.
+pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1; // 14
+
 /// State for the calendar view.
 ///
 /// Tracks the currently displayed month and selected day.
@@ -80,6 +106,8 @@ pub struct CalendarState {
     pub month: u32,
     /// The selected day within the month (if any)
     pub selected_day: Option<u32>,
+    /// Whether focus is on the task list (true) or calendar grid (false)
+    pub focus_task_list: bool,
 }
 
 impl Default for CalendarState {
@@ -89,6 +117,7 @@ impl Default for CalendarState {
             year: today.year(),
             month: today.month(),
             selected_day: Some(today.day()),
+            focus_task_list: false,
         }
     }
 }
@@ -275,6 +304,16 @@ pub struct Model {
     pub keybinding_capturing: bool,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
+
+    // Reports state
+    /// Selected panel in the reports view
+    pub report_panel: crate::ui::ReportPanel,
+
+    // Import state
+    /// Pending import result awaiting confirmation
+    pub pending_import: Option<crate::storage::ImportResult>,
+    /// Whether import preview dialog is showing
+    pub show_import_preview: bool,
 }
 
 impl Model {
@@ -342,6 +381,9 @@ impl Model {
             keybinding_selected: 0,
             keybinding_capturing: false,
             keybindings: crate::config::Keybindings::load(),
+            report_panel: crate::ui::ReportPanel::default(),
+            pending_import: None,
+            show_import_preview: false,
         }
     }
 
@@ -356,12 +398,11 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Includes: 11 views + 1 separator + 1 "Projects" header + project count.
+    /// Uses [`SIDEBAR_FIRST_PROJECT_INDEX`] as the base count, plus projects.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
-        // 11 views (All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar, Dashboard, Blocked, Untagged, No Project, Recent)
-        // + 1 separator + 1 "Projects" header + projects count
-        13 + self.projects.len().max(1) // At least 1 for "No projects" placeholder
+        // Base items (views + separator + Projects header) + project count
+        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1)
     }
 
     /// Returns all tasks due on a specific day.
@@ -373,6 +414,21 @@ impl Model {
             .values()
             .filter(|t| t.due_date == Some(date))
             .collect()
+    }
+
+    /// Returns all tasks due on the currently selected calendar day.
+    ///
+    /// Returns an empty vector if no day is selected.
+    #[must_use]
+    pub fn tasks_for_selected_day(&self) -> Vec<&Task> {
+        if let Some(day) = self.calendar_state.selected_day {
+            if let Some(date) =
+                NaiveDate::from_ymd_opt(self.calendar_state.year, self.calendar_state.month, day)
+            {
+                return self.tasks_for_day(date);
+            }
+        }
+        Vec::new()
     }
 
     /// Returns the count of visible tasks for a specific day.
@@ -896,6 +952,10 @@ impl Model {
                 // Show tasks modified in the last 7 days
                 let week_ago = chrono::Utc::now() - chrono::Duration::days(7);
                 task.updated_at >= week_ago
+            }
+            ViewId::Reports => {
+                // Reports view shows all tasks (used for analytics)
+                true
             }
         }
     }

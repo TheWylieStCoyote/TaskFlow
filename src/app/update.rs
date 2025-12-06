@@ -4,8 +4,9 @@ use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
 use super::{
-    parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage, RunningState,
-    SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
+    parse_date, parse_quick_add, FocusPane, Message, Model, NavigationMessage, PomodoroMessage,
+    RunningState, SystemMessage, TaskMessage, TimeMessage, UiMessage, UndoAction, ViewId,
+    SIDEBAR_FIRST_PROJECT_INDEX, SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
 };
 
 /// Main update function - heart of TEA pattern
@@ -32,8 +33,15 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::Up => match model.focus_pane {
             FocusPane::TaskList => {
                 if model.current_view == ViewId::Calendar {
-                    // In calendar view, up moves to previous week (or wraps)
-                    handle_calendar_up(model);
+                    if model.calendar_state.focus_task_list {
+                        // Navigate tasks in calendar task list
+                        if model.selected_index > 0 {
+                            model.selected_index -= 1;
+                        }
+                    } else {
+                        // In calendar grid, up moves to previous week (or wraps)
+                        handle_calendar_up(model);
+                    }
                 } else if model.selected_index > 0 {
                     model.selected_index -= 1;
                 }
@@ -41,9 +49,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator (index 11)
-                    if model.sidebar_selected == 11 {
-                        model.sidebar_selected = 10;
+                    // Skip separator
+                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
+                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
                     }
                 }
             }
@@ -51,8 +59,16 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::Down => match model.focus_pane {
             FocusPane::TaskList => {
                 if model.current_view == ViewId::Calendar {
-                    // In calendar view, down moves to next week (or wraps)
-                    handle_calendar_down(model);
+                    if model.calendar_state.focus_task_list {
+                        // Navigate tasks in calendar task list
+                        let task_count = model.tasks_for_selected_day().len();
+                        if model.selected_index < task_count.saturating_sub(1) {
+                            model.selected_index += 1;
+                        }
+                    } else {
+                        // In calendar grid, down moves to next week (or wraps)
+                        handle_calendar_down(model);
+                    }
                 } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
                 }
@@ -61,9 +77,9 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator (index 11)
-                    if model.sidebar_selected == 11 {
-                        model.sidebar_selected = 12;
+                    // Skip separator
+                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
+                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX + 1;
                     }
                 }
             }
@@ -160,8 +176,31 @@ fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         }
         NavigationMessage::CalendarSelectDay(day) => {
             model.calendar_state.selected_day = Some(day);
+            model.calendar_state.focus_task_list = false; // Reset focus to grid
             model.selected_index = 0;
             model.refresh_visible_tasks();
+        }
+        NavigationMessage::CalendarFocusTaskList => {
+            if model.current_view == ViewId::Calendar {
+                // Only focus task list if there are tasks for the selected day
+                if !model.tasks_for_selected_day().is_empty() {
+                    model.calendar_state.focus_task_list = true;
+                    model.selected_index = 0;
+                }
+            }
+        }
+        NavigationMessage::CalendarFocusGrid => {
+            model.calendar_state.focus_task_list = false;
+        }
+        NavigationMessage::ReportsNextPanel => {
+            if model.current_view == ViewId::Reports {
+                model.report_panel = model.report_panel.next();
+            }
+        }
+        NavigationMessage::ReportsPrevPanel => {
+            if model.current_view == ViewId::Reports {
+                model.report_panel = model.report_panel.prev();
+            }
         }
     }
 }
@@ -197,6 +236,7 @@ fn handle_calendar_up(model: &mut Model) {
             let new_day = days - (7 - day);
             model.calendar_state.selected_day = Some(new_day.max(1));
         }
+        model.calendar_state.focus_task_list = false; // Reset focus to grid
         model.selected_index = 0;
         model.refresh_visible_tasks();
     }
@@ -220,6 +260,7 @@ fn handle_calendar_down(model: &mut Model) {
             let new_day = (day + 7) - days;
             model.calendar_state.selected_day = Some(new_day.min(7));
         }
+        model.calendar_state.focus_task_list = false; // Reset focus to grid
         model.selected_index = 0;
         model.refresh_visible_tasks();
     }
@@ -228,112 +269,43 @@ fn handle_calendar_down(model: &mut Model) {
 fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
-    // Sidebar layout:
-    // 0: All Tasks (TaskList view)
-    // 1: Today
-    // 2: Upcoming
-    // 3: Overdue
-    // 4: Scheduled
-    // 5: Calendar
-    // 6: Dashboard
-    // 7: Blocked
-    // 8: Untagged
-    // 9: No Project
-    // 10: Recently Modified
-    // 11: Separator (skip)
-    // 12: "Projects" header (skip or go to Projects view)
-    // 13+: Individual projects
+    // Sidebar layout - see SIDEBAR_* constants in model.rs:
+    // 0-11: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
+    //       Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent)
+    // SIDEBAR_SEPARATOR_INDEX (12): Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX (13): "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+ (14+): Individual projects
+
+    // Helper to activate a view
+    let activate_view = |model: &mut Model, view: ViewId| {
+        model.current_view = view;
+        model.selected_project = None;
+        model.focus_pane = FocusPane::TaskList;
+        model.selected_index = 0;
+        model.refresh_visible_tasks();
+    };
 
     match selected {
-        0 => {
-            model.current_view = ViewId::TaskList;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        1 => {
-            model.current_view = ViewId::Today;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        2 => {
-            model.current_view = ViewId::Upcoming;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        3 => {
-            model.current_view = ViewId::Overdue;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        4 => {
-            model.current_view = ViewId::Scheduled;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        5 => {
-            model.current_view = ViewId::Calendar;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        6 => {
-            model.current_view = ViewId::Dashboard;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        7 => {
-            model.current_view = ViewId::Blocked;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        8 => {
-            model.current_view = ViewId::Untagged;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        9 => {
-            model.current_view = ViewId::NoProject;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        10 => {
-            model.current_view = ViewId::RecentlyModified;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
-        }
-        11 => {} // Separator, do nothing
-        12 => {
+        0 => activate_view(model, ViewId::TaskList),
+        1 => activate_view(model, ViewId::Today),
+        2 => activate_view(model, ViewId::Upcoming),
+        3 => activate_view(model, ViewId::Overdue),
+        4 => activate_view(model, ViewId::Scheduled),
+        5 => activate_view(model, ViewId::Calendar),
+        6 => activate_view(model, ViewId::Dashboard),
+        7 => activate_view(model, ViewId::Reports),
+        8 => activate_view(model, ViewId::Blocked),
+        9 => activate_view(model, ViewId::Untagged),
+        10 => activate_view(model, ViewId::NoProject),
+        11 => activate_view(model, ViewId::RecentlyModified),
+        n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
+        n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks
-            model.current_view = ViewId::Projects;
-            model.selected_project = None;
-            model.focus_pane = FocusPane::TaskList;
-            model.selected_index = 0;
-            model.refresh_visible_tasks();
+            activate_view(model, ViewId::Projects);
         }
-        n if n >= 13 => {
+        n if n >= SIDEBAR_FIRST_PROJECT_INDEX => {
             // Select a specific project
-            let project_index = n - 13;
+            let project_index = n - SIDEBAR_FIRST_PROJECT_INDEX;
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
@@ -730,13 +702,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
                 }
                 InputTarget::EditDueDate(task_id) => {
-                    use chrono::NaiveDate;
                     if let Some(task) = model.tasks.get_mut(task_id) {
                         let before = task.clone();
                         // Empty input clears the due date
                         if input.is_empty() {
                             task.due_date = None;
-                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                        } else if let Some(date) = parse_date(&input) {
                             task.due_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
@@ -751,13 +722,12 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.refresh_visible_tasks();
                 }
                 InputTarget::EditScheduledDate(task_id) => {
-                    use chrono::NaiveDate;
                     if let Some(task) = model.tasks.get_mut(task_id) {
                         let before = task.clone();
                         // Empty input clears the scheduled date
                         if input.is_empty() {
                             task.scheduled_date = None;
-                        } else if let Ok(date) = NaiveDate::parse_from_str(&input, "%Y-%m-%d") {
+                        } else if let Some(date) = parse_date(&input) {
                             task.scheduled_date = Some(date);
                         }
                         // If parsing fails, just ignore (keep old date)
@@ -1028,6 +998,13 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
                             }
                         }
                     }
+                }
+                InputTarget::ImportFilePath(_format) => {
+                    // File path entered, execute the import
+                    handle_execute_import(model);
+                    // Don't reset input mode here - handle_execute_import does it
+                    // and may show preview dialog
+                    return;
                 }
             }
             model.input_mode = InputMode::Normal;
@@ -1657,6 +1634,27 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::ExportChainsMermaid => {
             handle_export_chains_mermaid(model);
         }
+        SystemMessage::ExportReportMarkdown => {
+            handle_export_report_markdown(model);
+        }
+        SystemMessage::ExportReportHtml => {
+            handle_export_report_html(model);
+        }
+        SystemMessage::StartImportCsv => {
+            handle_start_import(model, crate::storage::ImportFormat::Csv);
+        }
+        SystemMessage::StartImportIcs => {
+            handle_start_import(model, crate::storage::ImportFormat::Ics);
+        }
+        SystemMessage::ExecuteImport => {
+            handle_execute_import(model);
+        }
+        SystemMessage::ConfirmImport => {
+            handle_confirm_import(model);
+        }
+        SystemMessage::CancelImport => {
+            handle_cancel_import(model);
+        }
     }
 }
 
@@ -1782,6 +1780,197 @@ fn handle_export_chains_mermaid(model: &mut Model) {
             model.status_message = Some(format!("Export failed: {e}"));
         }
     }
+}
+
+fn handle_export_report_markdown(model: &mut Model) {
+    use crate::app::analytics::AnalyticsEngine;
+    use crate::domain::analytics::ReportConfig;
+    use crate::storage::export_report_to_markdown_string;
+
+    let config = ReportConfig::last_n_days(30);
+    let engine = AnalyticsEngine::new(model);
+    let report = engine.generate_report(&config);
+
+    match export_report_to_markdown_string(&report) {
+        Ok(content) => {
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("report.md"))
+                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.md"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported analytics report to {}",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_export_report_html(model: &mut Model) {
+    use crate::app::analytics::AnalyticsEngine;
+    use crate::domain::analytics::ReportConfig;
+    use crate::storage::export_report_to_html_string;
+
+    let config = ReportConfig::last_n_days(30);
+    let engine = AnalyticsEngine::new(model);
+    let report = engine.generate_report(&config);
+
+    match export_report_to_html_string(&report) {
+        Ok(content) => {
+            let export_path = model
+                .data_path
+                .as_ref()
+                .map(|p| p.with_extension("report.html"))
+                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.html"));
+
+            match std::fs::write(&export_path, content) {
+                Ok(()) => {
+                    model.status_message = Some(format!(
+                        "Exported analytics report to {}",
+                        export_path.display()
+                    ));
+                }
+                Err(e) => {
+                    model.status_message = Some(format!("Export failed: {e}"));
+                }
+            }
+        }
+        Err(e) => {
+            model.status_message = Some(format!("Export failed: {e}"));
+        }
+    }
+}
+
+fn handle_start_import(model: &mut Model, format: crate::storage::ImportFormat) {
+    use crate::ui::InputTarget;
+
+    model.input_mode = InputMode::Editing;
+    model.input_target = InputTarget::ImportFilePath(format);
+    model.input_buffer.clear();
+    model.cursor_position = 0;
+}
+
+fn handle_execute_import(model: &mut Model) {
+    use crate::storage::{
+        apply_merge_strategy, import_from_csv, import_from_ics, ImportFormat, ImportOptions,
+        MergeStrategy,
+    };
+    use crate::ui::InputTarget;
+    use std::fs::File;
+    use std::io::BufReader;
+
+    let format = match &model.input_target {
+        InputTarget::ImportFilePath(fmt) => *fmt,
+        _ => return,
+    };
+
+    let file_path = model.input_buffer.trim();
+    if file_path.is_empty() {
+        model.status_message = Some("No file path provided".to_string());
+        model.input_mode = InputMode::Normal;
+        model.input_target = InputTarget::Task;
+        return;
+    }
+
+    // Open the file
+    let file = match File::open(file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            model.status_message = Some(format!("Failed to open file: {e}"));
+            model.input_mode = InputMode::Normal;
+            model.input_target = InputTarget::Task;
+            return;
+        }
+    };
+
+    let reader = BufReader::new(file);
+    let options = ImportOptions {
+        merge_strategy: MergeStrategy::Skip,
+        validate: true,
+        dry_run: false,
+    };
+
+    // Parse the file
+    let mut result = match format {
+        ImportFormat::Csv => match import_from_csv(reader, &options) {
+            Ok(r) => r,
+            Err(e) => {
+                model.status_message = Some(format!("Import failed: {e}"));
+                model.input_mode = InputMode::Normal;
+                model.input_target = InputTarget::Task;
+                return;
+            }
+        },
+        ImportFormat::Ics => match import_from_ics(reader, &options) {
+            Ok(r) => r,
+            Err(e) => {
+                model.status_message = Some(format!("Import failed: {e}"));
+                model.input_mode = InputMode::Normal;
+                model.input_target = InputTarget::Task;
+                return;
+            }
+        },
+    };
+
+    // Apply duplicate detection
+    apply_merge_strategy(&mut result, &model.tasks, options.merge_strategy);
+
+    // Reset input mode
+    model.input_mode = InputMode::Normal;
+    model.input_target = InputTarget::Task;
+    model.input_buffer.clear();
+
+    // If there are tasks to import, show preview
+    if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {
+        model.status_message = Some("No tasks found in file".to_string());
+        return;
+    }
+
+    // Store the result and show preview
+    let import_count = result.imported.len();
+    let skip_count = result.skipped.len();
+    let error_count = result.errors.len();
+
+    model.pending_import = Some(result);
+    model.show_import_preview = true;
+    model.status_message = Some(format!(
+        "Preview: {} to import, {} skipped, {} errors. Press Enter to confirm, Esc to cancel.",
+        import_count, skip_count, error_count
+    ));
+}
+
+fn handle_confirm_import(model: &mut Model) {
+    if let Some(result) = model.pending_import.take() {
+        let count = result.imported.len();
+
+        // Add all imported tasks
+        for task in result.imported {
+            model.sync_task(&task);
+            model.tasks.insert(task.id.clone(), task);
+        }
+
+        model.dirty = true;
+        model.show_import_preview = false;
+        model.refresh_visible_tasks();
+        model.status_message = Some(format!("Imported {} tasks", count));
+    }
+}
+
+fn handle_cancel_import(model: &mut Model) {
+    model.pending_import = None;
+    model.show_import_preview = false;
+    model.status_message = Some("Import cancelled".to_string());
 }
 
 fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
@@ -2583,15 +2772,16 @@ mod tests {
     fn test_sidebar_navigation_skips_separator() {
         let mut model = Model::new().with_sample_data();
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 10; // Recent (before separator at 11)
+        // Position at last view item (just before separator)
+        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
 
-        // Move down should skip separator (11) and go to Projects header (12)
+        // Move down should skip separator and go to Projects header
         update(&mut model, Message::Navigation(NavigationMessage::Down));
-        assert_eq!(model.sidebar_selected, 12);
+        assert_eq!(model.sidebar_selected, SIDEBAR_PROJECTS_HEADER_INDEX);
 
-        // Move up should skip separator and go back to Recent (10)
+        // Move up should skip separator and go back to last view item
         update(&mut model, Message::Navigation(NavigationMessage::Up));
-        assert_eq!(model.sidebar_selected, 10);
+        assert_eq!(model.sidebar_selected, SIDEBAR_SEPARATOR_INDEX - 1);
     }
 
     #[test]
@@ -2648,7 +2838,7 @@ mod tests {
         assert_eq!(model.visible_tasks.len(), 2);
 
         model.focus_pane = FocusPane::Sidebar;
-        model.sidebar_selected = 13; // First project (index 13 = after 11 views + separator + Projects header)
+        model.sidebar_selected = SIDEBAR_FIRST_PROJECT_INDEX; // First project
 
         update(
             &mut model,
@@ -4742,5 +4932,331 @@ mod tests {
         // Should be back to default (z is not a default binding)
         assert_eq!(model.keybindings.get_action("z"), None);
         assert!(model.status_message.is_some());
+    }
+
+    // Calendar focus tests
+
+    #[test]
+    fn test_calendar_focus_toggle() {
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Calendar;
+        model.refresh_visible_tasks();
+
+        // Initially focus should be on calendar grid
+        assert!(!model.calendar_state.focus_task_list);
+
+        // Focus task list (should work if there are tasks)
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusTaskList),
+        );
+
+        // Should be focused on task list if there are tasks for the day
+        if !model.tasks_for_selected_day().is_empty() {
+            assert!(model.calendar_state.focus_task_list);
+        }
+
+        // Focus back to grid
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusGrid),
+        );
+        assert!(!model.calendar_state.focus_task_list);
+    }
+
+    #[test]
+    fn test_calendar_task_navigation() {
+        use chrono::Datelike;
+
+        let mut model = Model::new();
+
+        // Add multiple tasks for the same day
+        let today = chrono::Utc::now().date_naive();
+        let task1 = crate::domain::Task::new("Task 1").with_due_date(today);
+        let task2 = crate::domain::Task::new("Task 2").with_due_date(today);
+        let task3 = crate::domain::Task::new("Task 3").with_due_date(today);
+
+        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task3.id.clone(), task3);
+
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(today.day());
+        model.calendar_state.year = today.year();
+        model.calendar_state.month = today.month();
+        model.refresh_visible_tasks();
+
+        // Focus on task list
+        model.calendar_state.focus_task_list = true;
+        model.selected_index = 0;
+
+        // Navigate down
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 1);
+
+        // Navigate down again
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 2);
+
+        // Navigate down at end should stay at end
+        update(&mut model, Message::Navigation(NavigationMessage::Down));
+        assert_eq!(model.selected_index, 2);
+
+        // Navigate up
+        update(&mut model, Message::Navigation(NavigationMessage::Up));
+        assert_eq!(model.selected_index, 1);
+    }
+
+    #[test]
+    fn test_calendar_focus_reset_on_day_change() {
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(15);
+        model.calendar_state.focus_task_list = true;
+
+        // Select a new day
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarSelectDay(20)),
+        );
+
+        // Focus should be reset to grid
+        assert!(!model.calendar_state.focus_task_list);
+        assert_eq!(model.calendar_state.selected_day, Some(20));
+    }
+
+    #[test]
+    fn test_calendar_focus_only_with_tasks() {
+        let mut model = Model::new();
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(15);
+        model.refresh_visible_tasks();
+
+        // No tasks for the day, focus should not switch
+        assert!(!model.calendar_state.focus_task_list);
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::CalendarFocusTaskList),
+        );
+
+        // Should still be on grid since there are no tasks
+        assert!(!model.calendar_state.focus_task_list);
+    }
+
+    #[test]
+    fn test_calendar_task_actions_when_focused() {
+        use chrono::Datelike;
+
+        let mut model = Model::new();
+
+        // Add a task for today
+        let today = chrono::Utc::now().date_naive();
+        let task = crate::domain::Task::new("Test task").with_due_date(today);
+        let task_id = task.id.clone();
+        model.tasks.insert(task_id.clone(), task);
+
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.selected_day = Some(today.day());
+        model.calendar_state.year = today.year();
+        model.calendar_state.month = today.month();
+        model.calendar_state.focus_task_list = true;
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        // Task should be Todo initially
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
+
+        // Toggle complete
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+
+        // Task should now be Done
+        assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
+    }
+
+    // Import tests
+    #[test]
+    fn test_start_import_csv_sets_input_mode() {
+        let mut model = Model::new();
+
+        update(&mut model, Message::System(SystemMessage::StartImportCsv));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv)
+        ));
+        assert!(model.input_buffer.is_empty());
+    }
+
+    #[test]
+    fn test_start_import_ics_sets_input_mode() {
+        let mut model = Model::new();
+
+        update(&mut model, Message::System(SystemMessage::StartImportIcs));
+
+        assert_eq!(model.input_mode, InputMode::Editing);
+        assert!(matches!(
+            model.input_target,
+            InputTarget::ImportFilePath(crate::storage::ImportFormat::Ics)
+        ));
+    }
+
+    #[test]
+    fn test_cancel_import_resets_state() {
+        let mut model = Model::new();
+
+        // Set up pending import state
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::CancelImport));
+
+        assert!(!model.show_import_preview);
+        assert!(model.pending_import.is_none());
+        assert!(model.status_message.is_some());
+        assert!(model.status_message.as_ref().unwrap().contains("cancelled"));
+    }
+
+    #[test]
+    fn test_confirm_import_adds_tasks() {
+        let mut model = Model::new();
+
+        // Create a task to import
+        let task = Task::new("Imported Task");
+
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![task.clone()],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::ConfirmImport));
+
+        assert!(!model.show_import_preview);
+        assert!(model.pending_import.is_none());
+        assert_eq!(model.tasks.len(), 1);
+        assert!(model.tasks.values().any(|t| t.title == "Imported Task"));
+        assert!(model.status_message.is_some());
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("Imported 1"));
+    }
+
+    #[test]
+    fn test_confirm_import_multiple_tasks() {
+        let mut model = Model::new();
+
+        // Create multiple tasks to import
+        let task1 = Task::new("Task 1");
+        let task2 = Task::new("Task 2");
+        let task3 = Task::new("Task 3");
+
+        model.show_import_preview = true;
+        model.pending_import = Some(crate::storage::ImportResult {
+            imported: vec![task1, task2, task3],
+            skipped: vec![],
+            errors: vec![],
+        });
+
+        update(&mut model, Message::System(SystemMessage::ConfirmImport));
+
+        assert_eq!(model.tasks.len(), 3);
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("Imported 3"));
+    }
+
+    #[test]
+    fn test_import_empty_path_shows_error() {
+        use crate::ui::InputTarget;
+
+        let mut model = Model::new();
+
+        // Set up for file path input
+        model.input_mode = InputMode::Editing;
+        model.input_target = InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv);
+        model.input_buffer = "   ".to_string(); // Whitespace only
+
+        // Submit the input
+        update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+        // Should show error, not crash
+        assert!(model.status_message.is_some());
+        assert!(model
+            .status_message
+            .as_ref()
+            .unwrap()
+            .contains("No file path"));
+    }
+
+    #[test]
+    fn test_reports_panel_navigation() {
+        use crate::ui::ReportPanel;
+
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::Reports;
+        assert_eq!(model.report_panel, ReportPanel::Overview);
+
+        // Navigate to next panel
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Velocity);
+
+        // Navigate to next panel again
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Tags);
+
+        // Navigate back
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsPrevPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Velocity);
+    }
+
+    #[test]
+    fn test_reports_navigation_only_works_in_reports_view() {
+        use crate::ui::ReportPanel;
+
+        let mut model = Model::new().with_sample_data();
+        model.current_view = ViewId::TaskList; // Not in reports view
+        assert_eq!(model.report_panel, ReportPanel::Overview);
+
+        // Try to navigate - should have no effect
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::ReportsNextPanel),
+        );
+        assert_eq!(model.report_panel, ReportPanel::Overview); // Unchanged
+    }
+
+    #[test]
+    fn test_sidebar_select_reports_view() {
+        let mut model = Model::new().with_sample_data();
+        model.focus_pane = FocusPane::Sidebar;
+        model.sidebar_selected = 7; // Reports view index
+
+        update(
+            &mut model,
+            Message::Navigation(NavigationMessage::SelectSidebarItem),
+        );
+
+        assert_eq!(model.current_view, ViewId::Reports);
+        assert_eq!(model.focus_pane, FocusPane::TaskList);
     }
 }

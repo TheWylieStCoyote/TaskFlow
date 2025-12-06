@@ -109,6 +109,7 @@
 //! - **System**: Save, quit, undo/redo, export
 //! - **Time**: Time tracking start/stop
 
+pub mod analytics;
 mod macros;
 mod message;
 mod model;
@@ -120,7 +121,7 @@ mod update;
 pub use macros::*;
 pub use message::*;
 pub use model::*;
-pub use quick_add::parse_quick_add;
+pub use quick_add::{parse_date, parse_date_with_reference, parse_quick_add};
 pub use templates::*;
 pub use undo::*;
 pub use update::*;

@@ -103,10 +103,17 @@ impl Calendar<'_> {
             self.model.calendar_state.year
         );
 
+        // Highlight border when calendar grid has focus
+        let border_color = if self.model.calendar_state.focus_task_list {
+            theme.colors.muted.to_color()
+        } else {
+            theme.colors.accent.to_color()
+        };
+
         let block = Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+            .border_style(Style::default().fg(border_color));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -232,10 +239,17 @@ impl Calendar<'_> {
             " Tasks ".to_string()
         };
 
+        // Highlight border when task list has focus
+        let border_color = if self.model.calendar_state.focus_task_list {
+            theme.colors.accent.to_color()
+        } else {
+            theme.colors.muted.to_color()
+        };
+
         let block = Block::default()
             .borders(Borders::ALL)
             .title(title)
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+            .border_style(Style::default().fg(border_color));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -244,9 +258,14 @@ impl Calendar<'_> {
             return;
         }
 
-        // Get tasks for the selected day
-        let tasks: Vec<_> = if let Some(d) = date {
-            self.model.tasks_for_day(d)
+        // Get tasks for the selected day using visible_tasks for consistency with selection
+        // This ensures selected_index refers to the same task in both rendering and actions
+        let tasks: Vec<_> = if date.is_some() {
+            self.model
+                .visible_tasks
+                .iter()
+                .filter_map(|id| self.model.tasks.get(id))
+                .collect()
         } else {
             Vec::new()
         };
@@ -480,6 +499,8 @@ mod tests {
 
     #[test]
     fn test_calendar_renders_tasks_for_selected_day() {
+        use chrono::Datelike;
+
         let mut model = Model::new();
         let today = Utc::now().date_naive();
 
@@ -488,6 +509,10 @@ mod tests {
         let task_id = task.id.clone();
         model.tasks.insert(task_id, task);
         model.calendar_state.selected_day = Some(today.day());
+        model.calendar_state.year = today.year();
+        model.calendar_state.month = today.month();
+        model.current_view = crate::app::ViewId::Calendar;
+        model.refresh_visible_tasks();
 
         let theme = Theme::default();
         let calendar = Calendar::new(&model, &theme);

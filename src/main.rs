@@ -229,6 +229,17 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         };
     }
 
+    // Handle import preview dialog
+    if model.show_import_preview {
+        return match key.code {
+            KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
+                Message::System(SystemMessage::ConfirmImport)
+            }
+            KeyCode::Esc | KeyCode::Char('n' | 'N') => Message::System(SystemMessage::CancelImport),
+            _ => Message::None,
+        };
+    }
+
     // Handle input mode
     if model.input_mode == InputMode::Editing {
         return match key.code {
@@ -318,16 +329,42 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         return Message::Ui(UiMessage::ToggleTaskSelection);
     }
 
-    // In calendar view, arrow keys navigate days/weeks
+    // In calendar view, handle focus switching and navigation
     if model.current_view == taskflow::app::ViewId::Calendar
         && model.focus_pane == taskflow::app::FocusPane::TaskList
     {
-        match key.code {
-            KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
-            KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
-            KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
-            KeyCode::Char('l') => return Message::Ui(UiMessage::CalendarNextDay),
-            _ => {}
+        // Tab toggles focus between calendar grid and task list
+        if key.code == KeyCode::Tab {
+            return if model.calendar_state.focus_task_list {
+                Message::Navigation(NavigationMessage::CalendarFocusGrid)
+            } else {
+                Message::Navigation(NavigationMessage::CalendarFocusTaskList)
+            };
+        }
+
+        if model.calendar_state.focus_task_list {
+            // When focused on task list, h goes back to calendar grid
+            match key.code {
+                KeyCode::Char('h') | KeyCode::Left => {
+                    return Message::Navigation(NavigationMessage::CalendarFocusGrid);
+                }
+                _ => {}
+            }
+        } else {
+            // When focused on calendar grid, navigate days
+            match key.code {
+                KeyCode::Left => return Message::Ui(UiMessage::CalendarPrevDay),
+                KeyCode::Right => return Message::Ui(UiMessage::CalendarNextDay),
+                KeyCode::Char('h') => return Message::Ui(UiMessage::CalendarPrevDay),
+                KeyCode::Char('l') => {
+                    // l moves to task list if there are tasks, otherwise next day
+                    if !model.tasks_for_selected_day().is_empty() {
+                        return Message::Navigation(NavigationMessage::CalendarFocusTaskList);
+                    }
+                    return Message::Ui(UiMessage::CalendarNextDay);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -465,6 +502,10 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ExportIcs => Message::System(SystemMessage::ExportIcs),
         Action::ExportChainsDot => Message::System(SystemMessage::ExportChainsDot),
         Action::ExportChainsMermaid => Message::System(SystemMessage::ExportChainsMermaid),
+        Action::ExportReportMarkdown => Message::System(SystemMessage::ExportReportMarkdown),
+        Action::ExportReportHtml => Message::System(SystemMessage::ExportReportHtml),
+        Action::ImportCsv => Message::System(SystemMessage::StartImportCsv),
+        Action::ImportIcs => Message::System(SystemMessage::StartImportIcs),
         Action::RecordMacro => Message::Ui(UiMessage::StartRecordMacro),
         Action::StopRecordMacro => Message::Ui(UiMessage::StopRecordMacro),
         Action::PlayMacro0 => Message::Ui(UiMessage::PlayMacro(0)),
@@ -480,6 +521,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
         Action::ToggleFocusMode => Message::Ui(UiMessage::ToggleFocusMode),
         Action::ShowKeybindingsEditor => Message::Ui(UiMessage::ShowKeybindingsEditor),
+        Action::ReportsNextPanel => Message::Navigation(NavigationMessage::ReportsNextPanel),
+        Action::ReportsPrevPanel => Message::Navigation(NavigationMessage::ReportsPrevPanel),
     }
 }
 

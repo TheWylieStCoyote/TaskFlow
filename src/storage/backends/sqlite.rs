@@ -102,12 +102,88 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 
+            -- Junction table for normalized task-tag relationships
+            -- Note: No foreign key on tag_name because tasks can use tags that
+            -- aren't in the tags table (tags table only stores metadata like colors)
+            CREATE TABLE IF NOT EXISTS task_tags (
+                task_id TEXT NOT NULL,
+                tag_name TEXT NOT NULL,
+                PRIMARY KEY (task_id, tag_name),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_name);
+
             CREATE TABLE IF NOT EXISTS pomodoro_state (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
             ",
         )?;
+
+        Ok(())
+    }
+
+    /// Migrate existing JSON tags to the junction table.
+    ///
+    /// This is idempotent - it only inserts tags that aren't already in the junction table.
+    fn migrate_tags_to_junction_table(&self) -> StorageResult<()> {
+        let conn = self.conn()?;
+
+        // Check if migration is needed by seeing if task_tags is empty but tasks have tags
+        let task_tags_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM task_tags", [], |row| row.get(0))?;
+        let tasks_with_tags_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE tags != '[]' AND tags IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // If junction table has data or no tasks have tags, skip migration
+        if task_tags_count > 0 || tasks_with_tags_count == 0 {
+            return Ok(());
+        }
+
+        // Migrate tags from JSON to junction table
+        let mut stmt = conn.prepare("SELECT id, tags FROM tasks WHERE tags != '[]'")?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(Result::ok)
+            .collect();
+
+        for (task_id, tags_json) in rows {
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            for tag in tags {
+                // Use INSERT OR IGNORE to handle duplicates gracefully
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO task_tags (task_id, tag_name) VALUES (?1, ?2)",
+                    params![task_id, tag],
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Sync task tags to the junction table.
+    ///
+    /// Removes old tags and inserts new ones for the given task.
+    fn sync_task_tags(&self, task_id: &TaskId, tags: &[String]) -> StorageResult<()> {
+        let conn = self.conn()?;
+        let task_id_str = task_id.0.to_string();
+
+        // Delete existing tags for this task
+        conn.execute(
+            "DELETE FROM task_tags WHERE task_id = ?1",
+            params![task_id_str],
+        )?;
+
+        // Insert new tags
+        for tag in tags {
+            conn.execute(
+                "INSERT OR IGNORE INTO task_tags (task_id, tag_name) VALUES (?1, ?2)",
+                params![task_id_str, tag],
+            )?;
+        }
 
         Ok(())
     }
@@ -321,6 +397,8 @@ impl TaskRepository for SqliteBackend {
                 serde_json::to_string(&task.custom_fields).unwrap_or_default(),
             ],
         )?;
+        // Sync tags to junction table
+        self.sync_task_tags(&task.id, &task.tags)?;
         Ok(())
     }
 
@@ -378,6 +456,8 @@ impl TaskRepository for SqliteBackend {
         if rows == 0 {
             return Err(StorageError::not_found("Task", task.id.to_string()));
         }
+        // Sync tags to junction table
+        self.sync_task_tags(&task.id, &task.tags)?;
         Ok(())
     }
 
@@ -404,8 +484,57 @@ impl TaskRepository for SqliteBackend {
         let conn = self.conn()?;
 
         // Build dynamic SQL query with WHERE clauses
-        let mut sql = String::from("SELECT * FROM tasks WHERE 1=1");
+        // Use DISTINCT because tag JOINs can produce duplicates
+        let mut sql = String::from("SELECT DISTINCT t.* FROM tasks t");
         let mut params: Vec<String> = Vec::new();
+
+        // Tag filtering via junction table
+        let tag_filter_active = filter.tags.as_ref().is_some_and(|tags| !tags.is_empty());
+
+        if tag_filter_active {
+            let tags = filter.tags.as_ref().unwrap();
+            match filter.tags_mode {
+                crate::domain::TagFilterMode::Any => {
+                    // ANY mode: task has at least one of the specified tags
+                    let placeholders: Vec<String> = tags
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                        .collect();
+                    sql.push_str(&format!(
+                        " INNER JOIN task_tags tt ON t.id = tt.task_id AND tt.tag_name IN ({})",
+                        placeholders.join(",")
+                    ));
+                    for tag in tags {
+                        params.push(tag.clone());
+                    }
+                }
+                crate::domain::TagFilterMode::All => {
+                    // ALL mode: task has ALL of the specified tags
+                    // Use subquery with GROUP BY and HAVING COUNT
+                    let placeholders: Vec<String> = tags
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                        .collect();
+                    sql.push_str(&format!(
+                        " INNER JOIN (
+                            SELECT task_id FROM task_tags
+                            WHERE tag_name IN ({})
+                            GROUP BY task_id
+                            HAVING COUNT(DISTINCT tag_name) = {}
+                        ) tt ON t.id = tt.task_id",
+                        placeholders.join(","),
+                        tags.len()
+                    ));
+                    for tag in tags {
+                        params.push(tag.clone());
+                    }
+                }
+            }
+        }
+
+        sql.push_str(" WHERE 1=1");
 
         // Status filter
         if let Some(ref statuses) = filter.status {
@@ -415,7 +544,7 @@ impl TaskRepository for SqliteBackend {
                     .enumerate()
                     .map(|(i, _)| format!("?{}", params.len() + i + 1))
                     .collect();
-                sql.push_str(&format!(" AND status IN ({})", placeholders.join(",")));
+                sql.push_str(&format!(" AND t.status IN ({})", placeholders.join(",")));
                 for s in statuses {
                     params.push(s.as_str().to_string());
                 }
@@ -430,7 +559,7 @@ impl TaskRepository for SqliteBackend {
                     .enumerate()
                     .map(|(i, _)| format!("?{}", params.len() + i + 1))
                     .collect();
-                sql.push_str(&format!(" AND priority IN ({})", placeholders.join(",")));
+                sql.push_str(&format!(" AND t.priority IN ({})", placeholders.join(",")));
                 for p in priorities {
                     params.push(p.as_str().to_string());
                 }
@@ -439,26 +568,26 @@ impl TaskRepository for SqliteBackend {
 
         // Project filter
         if let Some(ref project_id) = filter.project_id {
-            sql.push_str(&format!(" AND project_id = ?{}", params.len() + 1));
+            sql.push_str(&format!(" AND t.project_id = ?{}", params.len() + 1));
             params.push(project_id.0.to_string());
         }
 
         // Exclude completed tasks
         if !filter.include_completed {
-            sql.push_str(" AND status NOT IN ('done', 'cancelled')");
+            sql.push_str(" AND t.status NOT IN ('done', 'cancelled')");
         }
 
         // Due date filters
         if let Some(ref due_before) = filter.due_before {
             sql.push_str(&format!(
-                " AND due_date IS NOT NULL AND due_date < ?{}",
+                " AND t.due_date IS NOT NULL AND t.due_date < ?{}",
                 params.len() + 1
             ));
             params.push(due_before.to_string());
         }
         if let Some(ref due_after) = filter.due_after {
             sql.push_str(&format!(
-                " AND due_date IS NOT NULL AND due_date > ?{}",
+                " AND t.due_date IS NOT NULL AND t.due_date > ?{}",
                 params.len() + 1
             ));
             params.push(due_after.to_string());
@@ -468,7 +597,7 @@ impl TaskRepository for SqliteBackend {
         if let Some(ref search) = filter.search_text {
             let pattern = format!("%{}%", search.to_lowercase());
             sql.push_str(&format!(
-                " AND (LOWER(title) LIKE ?{} OR LOWER(COALESCE(description, '')) LIKE ?{})",
+                " AND (LOWER(t.title) LIKE ?{} OR LOWER(COALESCE(t.description, '')) LIKE ?{})",
                 params.len() + 1,
                 params.len() + 2
             ));
@@ -485,27 +614,6 @@ impl TaskRepository for SqliteBackend {
             .filter_map(Result::ok)
             .collect();
 
-        // Apply tag filtering in memory (JSON columns are complex in SQL)
-        let tasks = if let Some(ref tags) = filter.tags {
-            if !tags.is_empty() {
-                let filtered: Vec<Task> = tasks;
-                match filter.tags_mode {
-                    crate::domain::TagFilterMode::Any => filtered
-                        .into_iter()
-                        .filter(|t| tags.iter().any(|tag| t.tags.contains(tag)))
-                        .collect(),
-                    crate::domain::TagFilterMode::All => filtered
-                        .into_iter()
-                        .filter(|t| tags.iter().all(|tag| t.tags.contains(tag)))
-                        .collect(),
-                }
-            } else {
-                tasks
-            }
-        } else {
-            tasks
-        };
-
         Ok(tasks)
     }
 
@@ -521,21 +629,14 @@ impl TaskRepository for SqliteBackend {
 
     fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>> {
         let conn = self.conn()?;
-        // Use LIKE to search for tag in JSON array string (e.g., ["tag1","tag2"])
-        // Match patterns:
-        // - ["tag"] - single element array (ends with "tag"])
-        // - ["tag","other"] - first element (has "tag", after)
-        // - ["other","tag"] - last element (ends with "tag"])
-        // - ["a","tag","b"] - middle element (has "tag", after)
-        let pattern_with_comma = format!("%\"{}\",%", tag); // First or middle element
-        let pattern_at_end = format!("%\"{}\"]", tag); // Last element (including single)
-
-        let mut stmt = conn.prepare("SELECT * FROM tasks WHERE tags LIKE ?1 OR tags LIKE ?2")?;
+        // Use JOIN on task_tags junction table for efficient and reliable tag queries
+        let mut stmt = conn.prepare(
+            r"SELECT DISTINCT t.* FROM tasks t
+              INNER JOIN task_tags tt ON t.id = tt.task_id
+              WHERE tt.tag_name = ?1",
+        )?;
         let tasks = stmt
-            .query_map(
-                params![pattern_with_comma, pattern_at_end],
-                Self::task_from_row,
-            )?
+            .query_map(params![tag], Self::task_from_row)?
             .filter_map(Result::ok)
             .collect();
         Ok(tasks)
@@ -832,7 +933,9 @@ impl StorageBackend for SqliteBackend {
             std::fs::create_dir_all(parent).map_err(|e| StorageError::io(parent, e))?;
         }
         self.conn = Some(Connection::open(&self.path)?);
-        self.create_tables()
+        self.create_tables()?;
+        // Migrate existing JSON tags to junction table (idempotent)
+        self.migrate_tags_to_junction_table()
     }
 
     fn flush(&mut self) -> StorageResult<()> {
@@ -1203,5 +1306,230 @@ mod tests {
 
         let subprojects = backend.get_subprojects(&parent.id).unwrap();
         assert_eq!(subprojects.len(), 2);
+    }
+
+    #[test]
+    fn test_sqlite_get_tasks_by_tag_with_junction_table() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create tasks with various tags
+        let task1 = Task::new("Task 1").with_tags(vec!["work".to_string(), "urgent".to_string()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["work".to_string(), "low".to_string()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["personal".to_string()]);
+
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+
+        // Query by single tag
+        let work_tasks = backend.get_tasks_by_tag("work").unwrap();
+        assert_eq!(work_tasks.len(), 2);
+
+        let personal_tasks = backend.get_tasks_by_tag("personal").unwrap();
+        assert_eq!(personal_tasks.len(), 1);
+        assert_eq!(personal_tasks[0].title, "Task 3");
+
+        // Query non-existent tag
+        let empty = backend.get_tasks_by_tag("nonexistent").unwrap();
+        assert!(empty.is_empty());
+    }
+
+    #[test]
+    fn test_sqlite_tag_query_special_characters() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create tasks with tags containing special characters
+        // These would break the old LIKE-based pattern matching
+        let task1 = Task::new("Task 1").with_tags(vec![
+            "tag\"with\"quotes".to_string(),
+            "tag,with,commas".to_string(),
+        ]);
+        let task2 = Task::new("Task 2")
+            .with_tags(vec!["tag[with]brackets".to_string(), "100%".to_string()]);
+        let task3 = Task::new("Task 3").with_tags(vec![
+            "tag'with'apostrophes".to_string(),
+            "tag\\with\\backslash".to_string(),
+        ]);
+
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+
+        // Query by tags with special characters - should work correctly with junction table
+        let quotes = backend.get_tasks_by_tag("tag\"with\"quotes").unwrap();
+        assert_eq!(quotes.len(), 1);
+        assert_eq!(quotes[0].title, "Task 1");
+
+        let commas = backend.get_tasks_by_tag("tag,with,commas").unwrap();
+        assert_eq!(commas.len(), 1);
+
+        let brackets = backend.get_tasks_by_tag("tag[with]brackets").unwrap();
+        assert_eq!(brackets.len(), 1);
+
+        let percent = backend.get_tasks_by_tag("100%").unwrap();
+        assert_eq!(percent.len(), 1);
+
+        let apostrophes = backend.get_tasks_by_tag("tag'with'apostrophes").unwrap();
+        assert_eq!(apostrophes.len(), 1);
+    }
+
+    #[test]
+    fn test_sqlite_filtered_tags_any_mode() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 = Task::new("Task 1").with_tags(vec!["a".to_string(), "b".to_string()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["b".to_string(), "c".to_string()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["c".to_string(), "d".to_string()]);
+        let task4 = Task::new("Task 4").with_tags(vec!["e".to_string()]);
+
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+        backend.create_task(&task4).unwrap();
+
+        // Filter by tags in ANY mode (task has at least one of the tags)
+        let filter = Filter {
+            tags: Some(vec!["a".to_string(), "c".to_string()]),
+            tags_mode: crate::domain::TagFilterMode::Any,
+            include_completed: true,
+            ..Default::default()
+        };
+
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+        // Should match task1 (has a), task2 (has c), task3 (has c)
+        assert_eq!(filtered.len(), 3);
+    }
+
+    #[test]
+    fn test_sqlite_filtered_tags_all_mode() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task1 =
+            Task::new("Task 1").with_tags(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["a".to_string(), "b".to_string()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["a".to_string()]);
+        let task4 = Task::new("Task 4").with_tags(vec!["b".to_string(), "c".to_string()]);
+
+        backend.create_task(&task1).unwrap();
+        backend.create_task(&task2).unwrap();
+        backend.create_task(&task3).unwrap();
+        backend.create_task(&task4).unwrap();
+
+        // Filter by tags in ALL mode (task has ALL of the tags)
+        let filter = Filter {
+            tags: Some(vec!["a".to_string(), "b".to_string()]),
+            tags_mode: crate::domain::TagFilterMode::All,
+            include_completed: true,
+            ..Default::default()
+        };
+
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+        // Should match task1 (has a,b,c) and task2 (has a,b)
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn test_sqlite_tag_update_syncs_junction_table() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create task with initial tags
+        let mut task = Task::new("Test").with_tags(vec!["initial".to_string()]);
+        backend.create_task(&task).unwrap();
+
+        // Verify initial tag query works
+        let initial_tasks = backend.get_tasks_by_tag("initial").unwrap();
+        assert_eq!(initial_tasks.len(), 1);
+
+        // Update task with new tags
+        task.tags = vec!["updated".to_string(), "new".to_string()];
+        backend.update_task(&task).unwrap();
+
+        // Old tag should no longer match
+        let old_tag_tasks = backend.get_tasks_by_tag("initial").unwrap();
+        assert!(old_tag_tasks.is_empty());
+
+        // New tags should match
+        let updated_tasks = backend.get_tasks_by_tag("updated").unwrap();
+        assert_eq!(updated_tasks.len(), 1);
+
+        let new_tasks = backend.get_tasks_by_tag("new").unwrap();
+        assert_eq!(new_tasks.len(), 1);
+    }
+
+    #[test]
+    fn test_sqlite_task_tags_table_created() {
+        let (_dir, backend) = create_test_backend();
+        let conn = backend.conn().unwrap();
+
+        // Check task_tags table exists
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(Result::ok)
+            .collect();
+
+        assert!(tables.contains(&"task_tags".to_string()));
+    }
+
+    #[test]
+    fn test_sqlite_tag_migration_from_json() {
+        // This test simulates opening an existing database with JSON tags
+        // and verifying migration populates the junction table
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.db");
+
+        // First, create database without migration (simulate old data)
+        {
+            let conn = Connection::open(&path).unwrap();
+            // Create old schema without task_tags table
+            conn.execute_batch(
+                r"
+                CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    status TEXT NOT NULL DEFAULT 'todo',
+                    priority TEXT NOT NULL DEFAULT 'none',
+                    project_id TEXT,
+                    parent_task_id TEXT,
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    dependencies TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    due_date TEXT,
+                    scheduled_date TEXT,
+                    completed_at TEXT,
+                    recurrence TEXT,
+                    estimated_minutes INTEGER,
+                    actual_minutes INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER,
+                    next_task_id TEXT,
+                    custom_fields TEXT NOT NULL DEFAULT '{}'
+                );
+                ",
+            )
+            .unwrap();
+
+            // Insert task with JSON tags
+            conn.execute(
+                "INSERT INTO tasks (id, title, tags, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params!["test-id", "Test Task", r#"["tag1","tag2"]"#, "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z"],
+            )
+            .unwrap();
+        }
+
+        // Now open with our backend (should trigger migration)
+        let mut backend = SqliteBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+
+        // Verify migration created the junction table and populated it
+        let tag1_tasks = backend.get_tasks_by_tag("tag1").unwrap();
+        assert_eq!(tag1_tasks.len(), 1);
+        assert_eq!(tag1_tasks[0].title, "Test Task");
+
+        let tag2_tasks = backend.get_tasks_by_tag("tag2").unwrap();
+        assert_eq!(tag2_tasks.len(), 1);
     }
 }

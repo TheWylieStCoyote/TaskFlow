@@ -677,7 +677,8 @@ mod tests {
             !trend.completions_by_day.is_empty()
                 || model.tasks.values().all(|t| t.completed_at.is_none())
         );
-        assert!(trend.total_completed() >= 0);
+        // total_completed returns u32, so just verify it's callable
+        let _ = trend.total_completed();
     }
 
     #[test]
@@ -722,8 +723,8 @@ mod tests {
 
         let analytics = engine.compute_time_analytics(start, end);
 
-        // Should have tracked some time
-        assert!(analytics.total_minutes >= 0);
+        // total_minutes is u32, verify analytics computation completes
+        let _ = analytics.total_minutes;
     }
 
     #[test]

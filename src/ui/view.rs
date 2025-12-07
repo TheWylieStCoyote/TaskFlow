@@ -285,6 +285,40 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
         ));
     }
 
+    // Add Pomodoro timer display if active
+    if let Some(ref session) = model.pomodoro_session {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+
+        // Show phase icon and timer
+        let phase_icon = session.phase.icon();
+        let time_display = session.formatted_remaining();
+        let pause_indicator = if session.paused { " ⏸" } else { "" };
+
+        // Color based on phase: work = accent, break = success
+        let timer_color = if session.phase.is_break() {
+            theme.colors.success.to_color()
+        } else {
+            theme.colors.accent.to_color()
+        };
+
+        spans.push(Span::styled(
+            format!(
+                "{} {} [{}/{}]{}",
+                phase_icon,
+                time_display,
+                session.cycles_completed,
+                session.session_goal,
+                pause_indicator
+            ),
+            Style::default()
+                .fg(timer_color)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
     // Add show mode and help
     spans.push(Span::styled(
         " | ",

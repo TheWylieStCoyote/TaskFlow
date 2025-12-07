@@ -119,6 +119,14 @@ pub enum Action {
 
     // Keybindings editor
     ShowKeybindingsEditor,
+
+    // Pomodoro timer
+    PomodoroStart,
+    PomodoroPause,
+    PomodoroResume,
+    PomodoroTogglePause,
+    PomodoroSkip,
+    PomodoroStop,
 }
 
 /// Key modifier
@@ -292,6 +300,12 @@ impl Default for Keybindings {
 
         // Keybindings editor
         bindings.insert("ctrl+k".to_string(), Action::ShowKeybindingsEditor);
+
+        // Pomodoro timer
+        bindings.insert("f5".to_string(), Action::PomodoroStart);
+        bindings.insert("f6".to_string(), Action::PomodoroTogglePause);
+        bindings.insert("f7".to_string(), Action::PomodoroSkip);
+        bindings.insert("f8".to_string(), Action::PomodoroStop);
 
         Self { bindings }
     }

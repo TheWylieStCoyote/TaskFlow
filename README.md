@@ -237,6 +237,21 @@ Record a sequence of actions and replay them later:
 
 The footer shows `[REC]` when recording is active.
 
+#### Pomodoro Timer
+
+| Key | Action |
+|-----|--------|
+| `F5` | Start Pomodoro session (4 cycles) |
+| `F6` | Pause/Resume timer |
+| `F7` | Skip current phase (work/break) |
+| `F8` | Stop Pomodoro session |
+
+The Pomodoro timer appears in the status bar when active, showing:
+- Phase icon: 🍅 (work), ☕ (short break), 🌴 (long break)
+- Remaining time (MM:SS)
+- Cycle progress [completed/goal]
+- Pause indicator (⏸) when paused
+
 #### Templates
 
 | Key | Action |

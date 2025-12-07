@@ -1620,6 +1620,16 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
                         model.projects.remove(&project.id);
                         model.dirty = true;
                     }
+                    UndoAction::ProjectDeleted(project) => {
+                        // Undo project delete by restoring it
+                        model.sync_project(&project);
+                        model.projects.insert(project.id.clone(), *project);
+                    }
+                    UndoAction::ProjectModified { before, after: _ } => {
+                        // Undo modify by restoring previous state
+                        model.sync_project(&before);
+                        model.projects.insert(before.id.clone(), *before);
+                    }
                 }
                 model.refresh_visible_tasks();
             }
@@ -1646,6 +1656,16 @@ fn handle_system(model: &mut Model, msg: SystemMessage) {
                         // Redo project create by restoring it
                         model.sync_project(&project);
                         model.projects.insert(project.id.clone(), *project);
+                    }
+                    UndoAction::ProjectDeleted(project) => {
+                        // Redo project delete by removing it
+                        model.projects.remove(&project.id);
+                        model.dirty = true;
+                    }
+                    UndoAction::ProjectModified { before, after: _ } => {
+                        // Redo modify: the redo stack holds the inverse, so "before" is the state we want
+                        model.sync_project(&before);
+                        model.projects.insert(before.id.clone(), *before);
                     }
                 }
                 model.refresh_visible_tasks();

@@ -14,6 +14,13 @@ pub enum UndoAction {
     TaskModified { before: Box<Task>, after: Box<Task> },
     /// Project was created - undo by deleting it
     ProjectCreated(Box<Project>),
+    /// Project was deleted - undo by restoring it
+    ProjectDeleted(Box<Project>),
+    /// Project was modified - undo by restoring previous state
+    ProjectModified {
+        before: Box<Project>,
+        after: Box<Project>,
+    },
 }
 
 impl UndoAction {
@@ -33,6 +40,12 @@ impl UndoAction {
             Self::ProjectCreated(project) => {
                 format!("Create project \"{}\"", truncate(&project.name, 20))
             }
+            Self::ProjectDeleted(project) => {
+                format!("Delete project \"{}\"", truncate(&project.name, 20))
+            }
+            Self::ProjectModified { before, .. } => {
+                format!("Modify project \"{}\"", truncate(&before.name, 20))
+            }
         }
     }
 
@@ -51,6 +64,13 @@ impl UndoAction {
             },
             // Undo project create = delete, so redo = create again
             Self::ProjectCreated(project) => Self::ProjectCreated(project.clone()),
+            // Undo project delete = restore, so redo = delete again
+            Self::ProjectDeleted(project) => Self::ProjectDeleted(project.clone()),
+            // Undo project modify swaps before/after, so redo swaps them back
+            Self::ProjectModified { before, after } => Self::ProjectModified {
+                before: after.clone(),
+                after: before.clone(),
+            },
         }
     }
 }
@@ -365,5 +385,58 @@ mod tests {
         stack.clear();
         assert!(stack.is_empty());
         assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn test_project_deleted_description() {
+        let project = Project::new("My project");
+        let action = UndoAction::ProjectDeleted(Box::new(project));
+        assert!(action.description().contains("Delete project"));
+    }
+
+    #[test]
+    fn test_project_modified_description() {
+        let before = Project::new("Before");
+        let after = Project::new("After");
+        let action = UndoAction::ProjectModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        };
+        assert!(action.description().contains("Modify project"));
+    }
+
+    #[test]
+    fn test_project_deleted_inverse() {
+        let project = Project::new("Test project");
+        let action = UndoAction::ProjectDeleted(Box::new(project.clone()));
+        let inverse = action.inverse();
+        if let UndoAction::ProjectDeleted(inv_project) = inverse {
+            assert_eq!(inv_project.name, "Test project");
+        } else {
+            panic!("Expected ProjectDeleted");
+        }
+    }
+
+    #[test]
+    fn test_project_modified_inverse() {
+        let before = Project::new("Before");
+        let after = Project::new("After");
+        let action = UndoAction::ProjectModified {
+            before: Box::new(before),
+            after: Box::new(after),
+        };
+
+        let inverse = action.inverse();
+        if let UndoAction::ProjectModified {
+            before: inv_before,
+            after: inv_after,
+        } = inverse
+        {
+            // Inverse swaps before and after
+            assert_eq!(inv_before.name, "After");
+            assert_eq!(inv_after.name, "Before");
+        } else {
+            panic!("Expected ProjectModified");
+        }
     }
 }

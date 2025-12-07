@@ -77,10 +77,14 @@ fn handle_undo(model: &mut Model) {
                 model.delete_task_from_storage(&task.id);
                 model.tasks.remove(&task.id);
             }
-            UndoAction::TaskDeleted(task) => {
+            UndoAction::TaskDeleted { task, time_entries } => {
                 // Undo delete by restoring the task
                 model.sync_task(&task);
                 model.tasks.insert(task.id.clone(), *task);
+                // Restore time entries
+                for entry in time_entries {
+                    model.restore_time_entry(entry);
+                }
             }
             UndoAction::TaskModified { before, after: _ } => {
                 // Undo modify by restoring previous state
@@ -127,8 +131,12 @@ fn handle_redo(model: &mut Model) {
                 model.sync_task(&task);
                 model.tasks.insert(task.id.clone(), *task);
             }
-            UndoAction::TaskDeleted(task) => {
-                // Redo delete by removing the task
+            UndoAction::TaskDeleted { task, time_entries } => {
+                // Redo delete by removing the task and its time entries
+                // Delete time entries first
+                for entry in &time_entries {
+                    model.delete_time_entry(&entry.id);
+                }
                 model.delete_task_from_storage(&task.id);
                 model.tasks.remove(&task.id);
             }

@@ -305,10 +305,35 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ConfirmDelete => {
             if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.remove(&id) {
+                    // Collect time entries for this task before deleting
+                    let task_entries: Vec<_> = model
+                        .time_entries
+                        .values()
+                        .filter(|e| e.task_id == id)
+                        .cloned()
+                        .collect();
+
+                    // Clear active time entry if it belongs to this task
+                    if model
+                        .active_time_entry
+                        .as_ref()
+                        .and_then(|entry_id| model.time_entries.get(entry_id))
+                        .is_some_and(|e| e.task_id == id)
+                    {
+                        model.active_time_entry = None;
+                    }
+
+                    // Delete time entries (collect IDs first to avoid borrow issues)
+                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                    for entry_id in entry_ids {
+                        model.delete_time_entry(&entry_id);
+                    }
+
                     model.delete_task_from_storage(&id);
-                    model
-                        .undo_stack
-                        .push(UndoAction::TaskDeleted(Box::new(task)));
+                    model.undo_stack.push(UndoAction::TaskDeleted {
+                        task: Box::new(task),
+                        time_entries: task_entries,
+                    });
                 }
                 model.refresh_visible_tasks();
             }
@@ -350,10 +375,35 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
                 for task_id in tasks_to_delete {
                     if let Some(task) = model.tasks.remove(&task_id) {
+                        // Collect time entries for this task before deleting
+                        let task_entries: Vec<_> = model
+                            .time_entries
+                            .values()
+                            .filter(|e| e.task_id == task_id)
+                            .cloned()
+                            .collect();
+
+                        // Clear active time entry if it belongs to this task
+                        if model
+                            .active_time_entry
+                            .as_ref()
+                            .and_then(|id| model.time_entries.get(id))
+                            .is_some_and(|e| e.task_id == task_id)
+                        {
+                            model.active_time_entry = None;
+                        }
+
+                        // Delete time entries (collect IDs first to avoid borrow issues)
+                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                        for entry_id in entry_ids {
+                            model.delete_time_entry(&entry_id);
+                        }
+
                         model.delete_task_from_storage(&task_id);
-                        model
-                            .undo_stack
-                            .push(UndoAction::TaskDeleted(Box::new(task)));
+                        model.undo_stack.push(UndoAction::TaskDeleted {
+                            task: Box::new(task),
+                            time_entries: task_entries,
+                        });
                     }
                 }
                 model.selected_tasks.clear();

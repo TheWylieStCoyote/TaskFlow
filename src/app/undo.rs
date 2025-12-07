@@ -8,8 +8,11 @@ pub const MAX_UNDO_HISTORY: usize = 50;
 pub enum UndoAction {
     /// Task was created - undo by deleting it
     TaskCreated(Box<Task>),
-    /// Task was deleted - undo by restoring it
-    TaskDeleted(Box<Task>),
+    /// Task was deleted - undo by restoring it (includes associated time entries)
+    TaskDeleted {
+        task: Box<Task>,
+        time_entries: Vec<TimeEntry>,
+    },
     /// Task was modified - undo by restoring previous state
     TaskModified { before: Box<Task>, after: Box<Task> },
     /// Project was created - undo by deleting it
@@ -40,7 +43,7 @@ impl UndoAction {
             Self::TaskCreated(task) => {
                 format!("Create task \"{}\"", truncate(&task.title, 20))
             }
-            Self::TaskDeleted(task) => {
+            Self::TaskDeleted { task, .. } => {
                 format!("Delete task \"{}\"", truncate(&task.title, 20))
             }
             Self::TaskModified { before, .. } => {
@@ -68,7 +71,10 @@ impl UndoAction {
             // Undo create = delete, so redo = create again
             Self::TaskCreated(task) => Self::TaskCreated(task.clone()),
             // Undo delete = restore, so redo = delete again
-            Self::TaskDeleted(task) => Self::TaskDeleted(task.clone()),
+            Self::TaskDeleted { task, time_entries } => Self::TaskDeleted {
+                task: task.clone(),
+                time_entries: time_entries.clone(),
+            },
             // Undo modify swaps before/after, so redo swaps them back
             Self::TaskModified { before, after } => Self::TaskModified {
                 before: after.clone(),

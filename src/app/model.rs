@@ -57,7 +57,7 @@ use crate::domain::{
 use crate::storage::{self, BackendType, ProjectRepository, StorageBackend, TaskRepository};
 use crate::ui::{InputMode, InputTarget};
 
-use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
+use super::{FocusPane, MacroState, TemplateManager, UndoAction, UndoStack, ViewId};
 
 // ============================================================================
 // Sidebar Layout Constants
@@ -605,6 +605,74 @@ impl Model {
                 let _ = backend.create_time_entry(entry);
             }
             self.dirty = true;
+        }
+    }
+
+    /// Modifies a task with undo support.
+    ///
+    /// This helper method centralizes the common pattern of:
+    /// 1. Cloning the task for the "before" state
+    /// 2. Applying modifications via the provided closure
+    /// 3. Setting the updated_at timestamp
+    /// 4. Syncing to storage
+    /// 5. Pushing the undo action
+    ///
+    /// Returns true if the task was found and modified, false otherwise.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_id` - The ID of the task to modify
+    /// * `modifier` - A closure that takes a mutable reference to the task and modifies it
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// model.modify_task_with_undo(&task_id, |task| {
+    ///     task.title = "New title".to_string();
+    /// });
+    /// ```
+    pub fn modify_task_with_undo<F>(&mut self, task_id: &TaskId, modifier: F) -> bool
+    where
+        F: FnOnce(&mut Task),
+    {
+        if let Some(task) = self.tasks.get_mut(task_id) {
+            let before = task.clone();
+            modifier(task);
+            task.updated_at = Utc::now();
+            let after = task.clone();
+            self.sync_task(&after);
+            self.undo_stack.push(UndoAction::TaskModified {
+                before: Box::new(before),
+                after: Box::new(after),
+            });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Modifies a project with undo support.
+    ///
+    /// Similar to `modify_task_with_undo`, this centralizes the project modification pattern.
+    ///
+    /// Returns true if the project was found and modified, false otherwise.
+    pub fn modify_project_with_undo<F>(&mut self, project_id: &ProjectId, modifier: F) -> bool
+    where
+        F: FnOnce(&mut Project),
+    {
+        if let Some(project) = self.projects.get_mut(project_id) {
+            let before = project.clone();
+            modifier(project);
+            project.updated_at = Utc::now();
+            let after = project.clone();
+            self.sync_project(&after);
+            self.undo_stack.push(UndoAction::ProjectModified {
+                before: Box::new(before),
+                after: Box::new(after),
+            });
+            true
+        } else {
+            false
         }
     }
 

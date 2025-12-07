@@ -184,18 +184,20 @@ impl Widget for Sparkline<'_> {
                 .add_modifier(Modifier::BOLD),
         );
 
-        // Find min/max for scaling
+        // Find min/max for scaling (filter out NaN values)
         let min_val = self
             .data
             .iter()
             .copied()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .filter(|v| !v.is_nan())
+            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(0.0);
         let max_val = self
             .data
             .iter()
             .copied()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .filter(|v| !v.is_nan())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(1.0);
         let range = (max_val - min_val).max(0.001); // Avoid division by zero
 
@@ -278,13 +280,14 @@ impl Widget for BurndownChart<'_> {
             return;
         }
 
-        // Find max value for scaling
+        // Find max value for scaling (handle NaN values safely)
         let max_val = self
             .scope
             .iter()
             .chain(self.completed.iter())
             .copied()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .filter(|v| !v.is_nan())
+            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .unwrap_or(1.0)
             .max(1.0);
 

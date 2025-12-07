@@ -28,18 +28,25 @@ use regex::Regex;
 use crate::domain::Priority;
 
 // Pre-compiled regex patterns for quick add parsing (compiled once at startup)
-static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#(\w+)").unwrap());
-static PRIORITY_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"!(\w+)").unwrap());
-static DUE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"due:(\S+)").unwrap());
-static SCHED_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"sched:(\S+)").unwrap());
-static PROJECT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@(\w+)").unwrap());
+// These patterns are compile-time constants and will never fail
+static TAG_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"#(\w+)").expect("valid regex pattern"));
+static PRIORITY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"!(\w+)").expect("valid regex pattern"));
+static DUE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"due:(\S+)").expect("valid regex pattern"));
+static SCHED_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"sched:(\S+)").expect("valid regex pattern"));
+static PROJECT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"@(\w+)").expect("valid regex pattern"));
 
 // Pre-compiled regex patterns for date parsing
 static RELATIVE_DURATION_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^in\s+(\d+)\s*(d|day|days|w|week|weeks|m|month|months)$").unwrap()
+    Regex::new(r"^in\s+(\d+)\s*(d|day|days|w|week|weeks|m|month|months)$")
+        .expect("valid regex pattern")
 });
 static ORDINAL_DAY_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(\d{1,2})(st|nd|rd|th)$").unwrap());
+    LazyLock::new(|| Regex::new(r"^(\d{1,2})(st|nd|rd|th)$").expect("valid regex pattern"));
 
 /// Result of parsing a quick add string
 #[derive(Debug, Clone, Default)]

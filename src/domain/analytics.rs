@@ -350,7 +350,8 @@ impl ReportConfig {
     #[must_use]
     pub fn current_month() -> Self {
         let today = chrono::Local::now().date_naive();
-        let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();
+        let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+            .expect("day 1 of current month always exists");
         Self {
             start_date: start,
             end_date: today,

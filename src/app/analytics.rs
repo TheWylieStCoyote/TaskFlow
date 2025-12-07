@@ -166,7 +166,7 @@ impl<'a> AnalyticsEngine<'a> {
                     // Get start of month
                     let month_start =
                         NaiveDate::from_ymd_opt(completed_date.year(), completed_date.month(), 1)
-                            .unwrap();
+                            .expect("day 1 of any month always exists");
                     *monthly.entry(month_start).or_insert(0) += 1;
                 }
             }

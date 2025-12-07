@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
     Frame,
@@ -13,8 +13,8 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
-    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, ReportsView, Sidebar,
-    TaskList, TemplatePicker,
+    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, OverdueAlert, ReportsView,
+    Sidebar, TaskList, TemplatePicker,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -135,6 +135,16 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             editor_area,
         );
     }
+
+    // Render overdue alert popup (shown at startup if there are overdue tasks)
+    if model.show_overdue_alert {
+        let (count, overdue_tasks) = model.overdue_summary();
+        let task_titles: Vec<String> = overdue_tasks.iter().map(|t| t.title.clone()).collect();
+        // Height: 4 + min(5, count) + 2 for header/footer
+        let height = (6 + count.min(5)) as u16;
+        let alert_area = centered_rect_fixed_height(50, height.max(7), area);
+        frame.render_widget(OverdueAlert::new(count, task_titles), alert_area);
+    }
 }
 
 fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
@@ -206,39 +216,93 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     // Show status message if available, otherwise show normal footer
-    let footer_text = if let Some(ref msg) = model.status_message {
-        msg.clone()
-    } else if model.macro_state.is_recording() {
-        " [REC] Recording macro... Press Ctrl+Q then 0-9 to save ".to_string()
-    } else {
-        let task_count = model.visible_tasks.len();
-        let completed = model
-            .tasks
-            .values()
-            .filter(|t| t.status.is_complete())
-            .count();
+    if let Some(ref msg) = model.status_message {
+        let footer =
+            Paragraph::new(msg.clone()).style(Style::default().fg(theme.colors.accent.to_color()));
+        frame.render_widget(footer, area);
+        return;
+    }
 
-        format!(
-            " {} tasks ({} completed) | {} | Press ? for help ",
-            task_count,
-            completed,
-            if model.show_completed {
-                "showing all"
-            } else {
-                "hiding completed"
-            }
-        )
-    };
+    if model.macro_state.is_recording() {
+        let footer = Paragraph::new(" [REC] Recording macro... Press Ctrl+Q then 0-9 to save ")
+            .style(Style::default().fg(theme.colors.danger.to_color()));
+        frame.render_widget(footer, area);
+        return;
+    }
 
-    let footer_style = if model.status_message.is_some() {
-        Style::default().fg(theme.colors.accent.to_color())
-    } else if model.macro_state.is_recording() {
-        Style::default().fg(theme.colors.danger.to_color())
-    } else {
-        Style::default().fg(theme.colors.muted.to_color())
-    };
+    // Calculate counts
+    let task_count = model.visible_tasks.len();
+    let completed = model
+        .tasks
+        .values()
+        .filter(|t| t.status.is_complete())
+        .count();
+    let overdue = model.tasks.values().filter(|t| t.is_overdue()).count();
+    let due_today = model
+        .tasks
+        .values()
+        .filter(|t| t.is_due_today() && !t.status.is_complete())
+        .count();
 
-    let footer = Paragraph::new(footer_text).style(footer_style);
+    // Build footer with styled spans
+    let mut spans = vec![
+        Span::styled(" ", Style::default()),
+        Span::styled(
+            format!("{task_count} tasks"),
+            Style::default().fg(theme.colors.muted.to_color()),
+        ),
+        Span::styled(
+            format!(" ({completed} completed)"),
+            Style::default().fg(theme.colors.muted.to_color()),
+        ),
+    ];
 
+    // Add overdue indicator (red)
+    if overdue > 0 {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+        spans.push(Span::styled(
+            format!("{overdue} overdue"),
+            Style::default()
+                .fg(theme.colors.danger.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    // Add due today indicator (yellow)
+    if due_today > 0 {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+        spans.push(Span::styled(
+            format!("{due_today} due today"),
+            Style::default()
+                .fg(theme.colors.warning.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    // Add show mode and help
+    spans.push(Span::styled(
+        " | ",
+        Style::default().fg(theme.colors.muted.to_color()),
+    ));
+    spans.push(Span::styled(
+        if model.show_completed {
+            "showing all"
+        } else {
+            "hiding completed"
+        },
+        Style::default().fg(theme.colors.muted.to_color()),
+    ));
+    spans.push(Span::styled(
+        " | Press ? for help ",
+        Style::default().fg(theme.colors.muted.to_color()),
+    ));
+
+    let footer = Paragraph::new(Line::from(spans));
     frame.render_widget(footer, area);
 }

@@ -116,6 +116,9 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
     model.default_priority = settings.default_priority();
     model.refresh_visible_tasks();
 
+    // Check for overdue tasks and show alert at startup
+    model.check_overdue_alert();
+
     // Load keybindings and theme
     let keybindings = Keybindings::load();
     let theme = Theme::load(&settings.theme);
@@ -254,6 +257,11 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
             KeyCode::Char(c) => Message::Ui(UiMessage::InputChar(c)),
             _ => Message::None,
         };
+    }
+
+    // If overdue alert is showing, any key dismisses it
+    if model.show_overdue_alert {
+        return Message::Ui(UiMessage::DismissOverdueAlert);
     }
 
     // If help is showing, any key closes it

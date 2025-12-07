@@ -130,6 +130,51 @@ impl<'a> Dashboard<'a> {
             format!("{mins}m")
         }
     }
+
+    /// Calculate estimation accuracy statistics
+    /// Returns (total_estimated, total_actual, over_count, under_count, on_target_count, avg_accuracy)
+    fn estimation_stats(&self) -> (u32, u32, usize, usize, usize, Option<f64>) {
+        let mut total_estimated: u32 = 0;
+        let mut total_actual: u32 = 0;
+        let mut over_count = 0;
+        let mut under_count = 0;
+        let mut on_target_count = 0;
+        let mut accuracies: Vec<f64> = Vec::new();
+
+        for task in self.model.tasks.values() {
+            if let Some(est) = task.estimated_minutes {
+                total_estimated = total_estimated.saturating_add(est);
+                total_actual = total_actual.saturating_add(task.actual_minutes);
+
+                if let Some(variance) = task.time_variance() {
+                    match variance.cmp(&0) {
+                        std::cmp::Ordering::Greater => over_count += 1,
+                        std::cmp::Ordering::Less => under_count += 1,
+                        std::cmp::Ordering::Equal => on_target_count += 1,
+                    }
+                }
+
+                if let Some(accuracy) = task.estimation_accuracy() {
+                    accuracies.push(accuracy);
+                }
+            }
+        }
+
+        let avg_accuracy = if accuracies.is_empty() {
+            None
+        } else {
+            Some(accuracies.iter().sum::<f64>() / accuracies.len() as f64)
+        };
+
+        (
+            total_estimated,
+            total_actual,
+            over_count,
+            under_count,
+            on_target_count,
+            avg_accuracy,
+        )
+    }
 }
 
 impl Widget for Dashboard<'_> {
@@ -152,11 +197,12 @@ impl Widget for Dashboard<'_> {
             ])
             .split(columns[0]);
 
-        // Right column: 2 panels
+        // Right column: 3 panels
         let right_panels = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(8), // Status Distribution
+                Constraint::Length(7), // Estimation
                 Constraint::Min(5),    // Weekly Activity
             ])
             .split(columns[1]);
@@ -166,7 +212,8 @@ impl Widget for Dashboard<'_> {
         self.render_time_panel(left_panels[1], buf, theme);
         self.render_projects_panel(left_panels[2], buf, theme);
         self.render_status_panel(right_panels[0], buf, theme);
-        self.render_activity_panel(right_panels[1], buf, theme);
+        self.render_estimation_panel(right_panels[1], buf, theme);
+        self.render_activity_panel(right_panels[2], buf, theme);
     }
 }
 
@@ -486,6 +533,99 @@ impl Dashboard<'_> {
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(format!("{total_tasks}"), Style::default()),
+            ]),
+        ];
+
+        for (i, line) in lines.iter().enumerate() {
+            if (i as u16) < inner.height {
+                buf.set_line(inner.x, inner.y + i as u16, line, inner.width);
+            }
+        }
+    }
+
+    fn render_estimation_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Estimation ")
+            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        let (total_est, total_actual, over, under, on_target, avg_accuracy) =
+            self.estimation_stats();
+
+        // Calculate total variance
+        let total_variance = total_actual as i64 - total_est as i64;
+        let variance_str = if total_variance > 0 {
+            format!("+{}", Self::format_duration(total_variance as u32))
+        } else if total_variance < 0 {
+            format!("-{}", Self::format_duration((-total_variance) as u32))
+        } else {
+            "on target".to_string()
+        };
+        let variance_color = if total_variance > 0 {
+            theme.colors.danger.to_color()
+        } else if total_variance < 0 {
+            Color::Green
+        } else {
+            theme.colors.accent.to_color()
+        };
+
+        // Accuracy color
+        let accuracy_color = avg_accuracy.map_or(theme.colors.muted.to_color(), |acc| {
+            if (90.0..=110.0).contains(&acc) {
+                Color::Green
+            } else if (70.0..=130.0).contains(&acc) {
+                Color::Yellow
+            } else {
+                Color::Red
+            }
+        });
+
+        let lines = [
+            Line::from(vec![
+                Span::styled(
+                    "Accuracy: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(
+                    avg_accuracy.map_or("N/A".to_string(), |a| format!("{a:.0}%")),
+                    Style::default()
+                        .fg(accuracy_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Variance: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(variance_str, Style::default().fg(variance_color)),
+            ]),
+            Line::from(vec![Span::styled(
+                format!(
+                    "Est: {} | Act: {}",
+                    Self::format_duration(total_est),
+                    Self::format_duration(total_actual)
+                ),
+                Style::default().fg(theme.colors.muted.to_color()),
+            )]),
+            Line::from(vec![
+                Span::styled("Over: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    format!("{over}"),
+                    Style::default().fg(theme.colors.danger.to_color()),
+                ),
+                Span::styled(
+                    " Under: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(format!("{under}"), Style::default().fg(Color::Green)),
+                Span::styled(" OK: ", Style::default().fg(theme.colors.muted.to_color())),
+                Span::styled(
+                    format!("{on_target}"),
+                    Style::default().fg(theme.colors.accent.to_color()),
+                ),
             ]),
         ];
 

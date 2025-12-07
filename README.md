@@ -604,6 +604,85 @@ let rgb = ColorSpec::Rgb { r: 100, g: 150, b: 200 };
 
 For more examples, see the [documentation](https://docs.rs/taskflow) or the `tests/` directory.
 
+## Testing
+
+TaskFlow includes unit tests, integration tests, and stress tests.
+
+### Running Tests
+
+```bash
+# Run all tests (unit + integration)
+cargo test
+
+# Run only unit tests
+cargo test --lib
+
+# Run only integration tests
+cargo test --test '*'
+
+# Run tests with output
+cargo test -- --nocapture
+```
+
+### Stress Tests
+
+Stress tests verify performance at multiple scale levels. Located in `tests/stress.rs`:
+
+| Level | Tasks | Description |
+|-------|-------|-------------|
+| 1 | 100 | Quick sanity check |
+| 2 | 1,000 | Standard stress test |
+| 3 | 10,000 | Heavy load |
+| 4 | 100,000 | Extreme load (ignored by default) |
+| 5 | 1,000,000 | Maximum stress (ignored by default) |
+
+```bash
+# Run all non-ignored stress tests (levels 1-3)
+cargo test --test stress
+
+# Run with timing output
+cargo test --test stress -- --nocapture
+
+# Run specific level
+cargo test --test stress level_1
+cargo test --test stress level_2
+cargo test --test stress level_3
+
+# Run ignored slow tests (levels 4-5)
+cargo test --test stress level_4 -- --ignored
+cargo test --test stress level_5 -- --ignored
+
+# Run all levels including slow tests
+cargo test --test stress -- --ignored
+```
+
+**Base performance thresholds (for 1,000 tasks):**
+
+| Operation | Threshold |
+|-----------|-----------|
+| Refresh visible tasks | <200ms |
+| Filter by priority | <100ms |
+| Sort by due date | <100ms |
+| Sort by priority | <100ms |
+| Search tasks | <150ms |
+| Filter by tags | <100ms |
+| Combined operations | <200ms |
+
+Thresholds scale with O(n log n) complexity for larger task counts.
+
+### Code Quality
+
+```bash
+# Run clippy lints
+cargo clippy --all-targets
+
+# Check formatting
+cargo fmt --check
+
+# Build documentation
+cargo doc --no-deps
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.

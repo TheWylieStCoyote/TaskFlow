@@ -522,16 +522,18 @@ impl TaskRepository for SqliteBackend {
     fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>> {
         let conn = self.conn()?;
         // Use LIKE to search for tag in JSON array string (e.g., ["tag1","tag2"])
-        // This matches the tag as a JSON string element
-        let pattern = format!("%\"{}\",%", tag);
-        let pattern_end = format!("%\"{}\"", tag); // For last element without comma
-        let pattern_only = format!("[\"{}\"]", tag); // For single-element array
+        // Match patterns:
+        // - ["tag"] - single element array (ends with "tag"])
+        // - ["tag","other"] - first element (has "tag", after)
+        // - ["other","tag"] - last element (ends with "tag"])
+        // - ["a","tag","b"] - middle element (has "tag", after)
+        let pattern_with_comma = format!("%\"{}\",%", tag); // First or middle element
+        let pattern_at_end = format!("%\"{}\"]", tag); // Last element (including single)
 
-        let mut stmt =
-            conn.prepare("SELECT * FROM tasks WHERE tags LIKE ?1 OR tags LIKE ?2 OR tags = ?3")?;
+        let mut stmt = conn.prepare("SELECT * FROM tasks WHERE tags LIKE ?1 OR tags LIKE ?2")?;
         let tasks = stmt
             .query_map(
-                params![pattern, pattern_end, pattern_only],
+                params![pattern_with_comma, pattern_at_end],
                 Self::task_from_row,
             )?
             .filter_map(Result::ok)

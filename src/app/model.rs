@@ -1260,14 +1260,23 @@ impl Model {
 
     /// Restores a time entry (used for undo).
     ///
-    /// If the entry is still running (no ended_at), it becomes the active entry.
+    /// If the entry is still running (no ended_at), it becomes the active entry,
+    /// but only if:
+    /// - The associated task still exists
+    /// - There's no current active entry (to avoid stealing the timer)
     pub fn restore_time_entry(&mut self, entry: TimeEntry) {
         let is_running = entry.ended_at.is_none();
+        let task_exists = self.tasks.contains_key(&entry.task_id);
+        let no_active_entry = self.active_time_entry.is_none();
         let entry_id = entry.id.clone();
+
         self.time_entries.insert(entry_id.clone(), entry.clone());
-        if is_running {
+
+        // Only make active if: running, task exists, AND no current active entry
+        if is_running && task_exists && no_active_entry {
             self.active_time_entry = Some(entry_id);
         }
+
         self.sync_time_entry(&entry);
         self.dirty = true;
     }

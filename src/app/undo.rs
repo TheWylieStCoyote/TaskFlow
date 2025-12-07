@@ -33,6 +33,17 @@ pub enum UndoAction {
     },
     /// Time entry was deleted - undo by restoring it
     TimeEntryDeleted(Box<TimeEntry>),
+    /// Time entry was modified - undo by restoring previous state
+    TimeEntryModified {
+        before: Box<TimeEntry>,
+        after: Box<TimeEntry>,
+    },
+    /// Timer was switched from one task to another - undo both in one operation
+    TimerSwitched {
+        stopped_entry_before: Box<TimeEntry>,
+        stopped_entry_after: Box<TimeEntry>,
+        started_entry: Box<TimeEntry>,
+    },
 }
 
 impl UndoAction {
@@ -61,6 +72,8 @@ impl UndoAction {
             Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
+            Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
+            Self::TimerSwitched { .. } => "Switch timer".to_string(),
         }
     }
 
@@ -98,6 +111,21 @@ impl UndoAction {
             },
             // Undo time entry delete = restore, so redo = delete again
             Self::TimeEntryDeleted(entry) => Self::TimeEntryDeleted(entry.clone()),
+            // Undo time entry modify swaps before/after, so redo swaps them back
+            Self::TimeEntryModified { before, after } => Self::TimeEntryModified {
+                before: after.clone(),
+                after: before.clone(),
+            },
+            // Timer switch inverse keeps the same data (undo/redo logic handles it)
+            Self::TimerSwitched {
+                stopped_entry_before,
+                stopped_entry_after,
+                started_entry,
+            } => Self::TimerSwitched {
+                stopped_entry_before: stopped_entry_before.clone(),
+                stopped_entry_after: stopped_entry_after.clone(),
+                started_entry: started_entry.clone(),
+            },
         }
     }
 }

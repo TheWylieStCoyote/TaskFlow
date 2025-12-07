@@ -118,6 +118,19 @@ fn handle_undo(model: &mut Model) {
                 // Undo delete by restoring the entry
                 model.restore_time_entry(*entry);
             }
+            UndoAction::TimeEntryModified { before, after: _ } => {
+                // Undo modification by restoring previous state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimerSwitched {
+                stopped_entry_before,
+                stopped_entry_after: _,
+                started_entry,
+            } => {
+                // Undo timer switch: delete new entry, restore old entry to running state
+                model.delete_time_entry(&started_entry.id);
+                model.restore_time_entry(*stopped_entry_before);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -171,6 +184,23 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TimeEntryDeleted(entry) => {
                 // Redo delete by removing the entry
                 model.delete_time_entry(&entry.id);
+            }
+            UndoAction::TimeEntryModified { before, after: _ } => {
+                // Redo modification: inverse has swapped before/after, so "before" is now the new state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimerSwitched {
+                stopped_entry_before: _,
+                stopped_entry_after,
+                started_entry,
+            } => {
+                // Redo timer switch: stop old entry, restore new entry
+                // First clear the active entry (the old one that was restored by undo)
+                model.active_time_entry = None;
+                // Restore the stopped state of old entry
+                model.restore_time_entry(*stopped_entry_after);
+                // Restore the new entry (will become active since we cleared active above)
+                model.restore_time_entry(*started_entry);
             }
         }
         model.refresh_visible_tasks();

@@ -270,8 +270,8 @@ impl Default for Keybindings {
         bindings.insert("alt+i".to_string(), Action::ImportIcs); // Alt+I for ICS import
 
         // Reports navigation (Tab/Shift+Tab or l/h when in reports view)
-        bindings.insert("Tab".to_string(), Action::ReportsNextPanel);
-        bindings.insert("shift+Tab".to_string(), Action::ReportsPrevPanel);
+        bindings.insert("tab".to_string(), Action::ReportsNextPanel);
+        bindings.insert("shift+tab".to_string(), Action::ReportsPrevPanel);
 
         // Macros - q to record, Q to stop, @0-9 to play
         bindings.insert("ctrl+q".to_string(), Action::RecordMacro);

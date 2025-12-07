@@ -138,8 +138,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
 
     // Render overdue alert popup (shown at startup if there are overdue tasks)
     if model.show_overdue_alert {
-        let count = model.overdue_count;
-        let task_titles = model.overdue_task_titles.clone();
+        let (count, overdue_tasks) = model.overdue_summary();
+        let task_titles: Vec<String> = overdue_tasks.iter().map(|t| t.title.clone()).collect();
         // Height: 4 + min(5, count) + 2 for header/footer
         let height = (6 + count.min(5)) as u16;
         let alert_area = centered_rect_fixed_height(50, height.max(7), area);

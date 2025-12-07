@@ -3,7 +3,7 @@ use crate::app::{
     SystemMessage, TaskMessage, TimeMessage, UiMessage, ViewId, SIDEBAR_FIRST_PROJECT_INDEX,
     SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
 };
-use crate::domain::{Priority, Task, TaskStatus};
+use crate::domain::{Priority, Task, TaskStatus, TimeEntry};
 use crate::ui::{InputMode, InputTarget};
 
 fn create_test_model_with_tasks() -> Model {
@@ -353,7 +353,7 @@ fn test_ui_cancel_input() {
 
 // System tests
 #[test]
-fn test_system_quit_stops_timer() {
+fn test_system_quit_preserves_timer() {
     let mut model = create_test_model_with_tasks();
     let task_id = model.visible_tasks[0].clone();
     model.start_time_tracking(task_id);
@@ -362,7 +362,8 @@ fn test_system_quit_stops_timer() {
 
     update(&mut model, Message::System(SystemMessage::Quit));
 
-    assert!(model.active_time_entry.is_none());
+    // Timer should persist across quit (for restart persistence)
+    assert!(model.active_time_entry.is_some());
     assert_eq!(model.running, RunningState::Quitting);
 }
 
@@ -3325,4 +3326,367 @@ fn test_delete_project_requires_selection() {
     assert_eq!(model.projects.len(), 1);
     // Should show error message
     assert!(model.status_message.is_some());
+}
+
+// Time tracking undo tests
+#[test]
+fn test_time_tracking_start_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Start time tracking
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+
+    // Verify tracking started
+    assert!(model.active_time_entry.is_some());
+    assert!(model.is_tracking_task(&task_id));
+    let entry_id = model.active_time_entry.clone().unwrap();
+    assert!(model.time_entries.contains_key(&entry_id));
+
+    // Undo should stop tracking and remove entry
+    update(&mut model, Message::System(SystemMessage::Undo));
+
+    assert!(model.active_time_entry.is_none());
+    assert!(!model.time_entries.contains_key(&entry_id));
+
+    // Redo should restore tracking
+    update(&mut model, Message::System(SystemMessage::Redo));
+
+    assert!(model.active_time_entry.is_some());
+    assert!(model.is_tracking_task(&task_id));
+}
+
+#[test]
+fn test_time_tracking_stop_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Start tracking
+    model.start_time_tracking(task_id.clone());
+    assert!(model.active_time_entry.is_some());
+    let entry_id = model.active_time_entry.clone().unwrap();
+
+    // Stop tracking
+    update(&mut model, Message::Time(TimeMessage::StopTracking));
+
+    // Verify stopped
+    assert!(model.active_time_entry.is_none());
+    let stopped_entry = model.time_entries.get(&entry_id).unwrap();
+    assert!(!stopped_entry.is_running());
+
+    // Undo should restore running state
+    update(&mut model, Message::System(SystemMessage::Undo));
+
+    assert!(model.active_time_entry.is_some());
+    let running_entry = model.time_entries.get(&entry_id).unwrap();
+    assert!(running_entry.is_running());
+}
+
+#[test]
+fn test_time_tracking_toggle_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Toggle to start
+    update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+    assert!(model.is_tracking_task(&task_id));
+
+    // Toggle to stop
+    update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+    assert!(!model.is_tracking_task(&task_id));
+
+    // Undo stop - should be tracking again
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert!(model.is_tracking_task(&task_id));
+
+    // Undo start - should not be tracking
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert!(!model.is_tracking_task(&task_id));
+}
+
+#[test]
+fn test_time_tracking_actual_minutes_update() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Check initial actual_minutes is 0
+    assert_eq!(model.tasks.get(&task_id).unwrap().actual_minutes, 0);
+
+    // Create a time entry with known duration (simulate past entry)
+    let mut entry = TimeEntry::start(task_id.clone());
+    entry.stop();
+    entry.duration_minutes = Some(30); // 30 minutes
+    model.time_entries.insert(entry.id.clone(), entry);
+
+    // Recalculate
+    let total = model.total_time_for_task(&task_id);
+    assert_eq!(total, 30);
+}
+
+#[test]
+fn test_time_tracking_persistence_simulation() {
+    // Simulate first session: start tracking
+    let mut model1 = create_test_model_with_tasks();
+    let task_id = model1.visible_tasks[0].clone();
+
+    // Start tracking
+    update(&mut model1, Message::Time(TimeMessage::StartTracking));
+    assert!(model1.active_time_entry.is_some());
+
+    // Get the running entry
+    let running_entry = model1.active_time_entry().unwrap().clone();
+    assert!(running_entry.is_running());
+
+    // Simulate "restart" by creating new model and loading entry
+    let mut model2 = create_test_model_with_tasks();
+
+    // Load the running entry (simulating storage restore)
+    model2
+        .time_entries
+        .insert(running_entry.id.clone(), running_entry.clone());
+    if running_entry.is_running() {
+        model2.active_time_entry = Some(running_entry.id.clone());
+    }
+
+    // Verify tracking is still active after "restart"
+    assert!(model2.active_time_entry.is_some());
+    assert!(model2.is_tracking_task(&task_id));
+
+    // The entry should still be running
+    let restored_entry = model2.active_time_entry().unwrap();
+    assert!(restored_entry.is_running());
+
+    // Duration should calculate from original start time (just verify it works)
+    let _duration = restored_entry.calculated_duration_minutes();
+}
+
+#[test]
+fn test_time_tracking_switch_task() {
+    let mut model = create_test_model_with_tasks();
+    let task_id_1 = model.visible_tasks[0].clone();
+    let task_id_2 = model.visible_tasks[1].clone();
+
+    // Start tracking task 1
+    model.selected_index = 0;
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+    assert!(model.is_tracking_task(&task_id_1));
+    let entry1_id = model.active_time_entry.clone().unwrap();
+
+    // Switch to task 2 (should stop task 1 and start task 2)
+    model.selected_index = 1;
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+
+    // Task 2 should now be tracked
+    assert!(model.is_tracking_task(&task_id_2));
+    assert!(!model.is_tracking_task(&task_id_1));
+
+    // First entry should be stopped
+    let entry1 = model.time_entries.get(&entry1_id).unwrap();
+    assert!(!entry1.is_running());
+
+    // Undo should restore task 1 tracking
+    update(&mut model, Message::System(SystemMessage::Undo)); // undo start task 2
+    update(&mut model, Message::System(SystemMessage::Undo)); // undo stop task 1
+
+    assert!(model.is_tracking_task(&task_id_1));
+}
+
+// Time Log Editor Tests
+
+#[test]
+fn test_time_log_show_hide() {
+    let mut model = create_test_model_with_tasks();
+
+    // Initially hidden
+    assert!(!model.show_time_log);
+
+    // Show time log
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+    assert!(model.show_time_log);
+    assert_eq!(model.time_log_selected, 0);
+
+    // Hide time log
+    update(&mut model, Message::Ui(UiMessage::HideTimeLog));
+    assert!(!model.show_time_log);
+}
+
+#[test]
+fn test_time_log_navigation() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Create some time entries for the task
+    let mut entry1 = crate::domain::TimeEntry::start(task_id.clone());
+    entry1.stop();
+    model.time_entries.insert(entry1.id.clone(), entry1);
+
+    let mut entry2 = crate::domain::TimeEntry::start(task_id.clone());
+    entry2.stop();
+    model.time_entries.insert(entry2.id.clone(), entry2);
+
+    // Show time log
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+
+    // Navigate down
+    update(&mut model, Message::Ui(UiMessage::TimeLogDown));
+    assert_eq!(model.time_log_selected, 1);
+
+    // Navigate up
+    update(&mut model, Message::Ui(UiMessage::TimeLogUp));
+    assert_eq!(model.time_log_selected, 0);
+
+    // Can't go above 0
+    update(&mut model, Message::Ui(UiMessage::TimeLogUp));
+    assert_eq!(model.time_log_selected, 0);
+}
+
+#[test]
+fn test_time_log_add_entry() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Show time log
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+
+    // Add entry
+    let initial_count = model.time_entries_for_task(&task_id).len();
+    update(&mut model, Message::Ui(UiMessage::TimeLogAddEntry));
+
+    // Should have one more entry
+    assert_eq!(
+        model.time_entries_for_task(&task_id).len(),
+        initial_count + 1
+    );
+
+    // Undo should remove it
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert_eq!(model.time_entries_for_task(&task_id).len(), initial_count);
+}
+
+#[test]
+fn test_time_log_delete_entry() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Create a time entry
+    let mut entry = crate::domain::TimeEntry::start(task_id.clone());
+    entry.stop();
+    let entry_id = entry.id.clone();
+    model.time_entries.insert(entry_id.clone(), entry);
+
+    // Show time log
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+
+    // Request delete (should enter confirm mode)
+    update(&mut model, Message::Ui(UiMessage::TimeLogConfirmDelete));
+    assert_eq!(model.time_log_mode, crate::ui::TimeLogMode::ConfirmDelete);
+
+    // Confirm delete
+    update(&mut model, Message::Ui(UiMessage::TimeLogDelete));
+    assert!(!model.time_entries.contains_key(&entry_id));
+
+    // Undo should restore it
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert!(model.time_entries.contains_key(&entry_id));
+}
+
+#[test]
+fn test_time_log_edit_start_time() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Create a time entry
+    let mut entry = crate::domain::TimeEntry::start(task_id.clone());
+    entry.stop();
+    let entry_id = entry.id.clone();
+    model.time_entries.insert(entry_id.clone(), entry);
+
+    // Show time log
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+
+    // Start editing start time
+    update(&mut model, Message::Ui(UiMessage::TimeLogEditStart));
+    assert_eq!(model.time_log_mode, crate::ui::TimeLogMode::EditStart);
+    assert!(!model.time_log_buffer.is_empty());
+
+    // Clear buffer and set new time
+    model.time_log_buffer.clear();
+    update(&mut model, Message::Ui(UiMessage::InputChar('1')));
+    update(&mut model, Message::Ui(UiMessage::InputChar('0')));
+    update(&mut model, Message::Ui(UiMessage::InputChar(':')));
+    update(&mut model, Message::Ui(UiMessage::InputChar('3')));
+    update(&mut model, Message::Ui(UiMessage::InputChar('0')));
+    assert_eq!(model.time_log_buffer, "10:30");
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::TimeLogSubmit));
+    assert_eq!(model.time_log_mode, crate::ui::TimeLogMode::Browse);
+
+    // Check that start time was updated
+    let entry = model.time_entries.get(&entry_id).unwrap();
+    assert_eq!(entry.started_at.format("%H:%M").to_string(), "10:30");
+}
+
+#[test]
+fn test_time_log_cancel_edit() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Create a time entry
+    let mut entry = crate::domain::TimeEntry::start(task_id.clone());
+    entry.stop();
+    let entry_id = entry.id.clone();
+    let original_start = entry.started_at;
+    model.time_entries.insert(entry_id.clone(), entry);
+
+    // Show time log and start editing
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+    update(&mut model, Message::Ui(UiMessage::TimeLogEditStart));
+
+    // Modify buffer
+    model.time_log_buffer = "99:99".to_string();
+
+    // Cancel
+    update(&mut model, Message::Ui(UiMessage::TimeLogCancel));
+    assert_eq!(model.time_log_mode, crate::ui::TimeLogMode::Browse);
+
+    // Original time should be unchanged
+    let entry = model.time_entries.get(&entry_id).unwrap();
+    assert_eq!(entry.started_at, original_start);
+}
+
+#[test]
+fn test_time_log_edit_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Create a time entry
+    let mut entry = crate::domain::TimeEntry::start(task_id.clone());
+    entry.stop();
+    let entry_id = entry.id.clone();
+    let original_start = entry.started_at;
+    model.time_entries.insert(entry_id.clone(), entry);
+
+    // Show time log and edit
+    model.selected_index = 0;
+    update(&mut model, Message::Ui(UiMessage::ShowTimeLog));
+    update(&mut model, Message::Ui(UiMessage::TimeLogEditStart));
+
+    // Set new time
+    model.time_log_buffer = "10:30".to_string();
+    update(&mut model, Message::Ui(UiMessage::TimeLogSubmit));
+
+    // Verify change was made
+    let entry = model.time_entries.get(&entry_id).unwrap();
+    assert_eq!(entry.started_at.format("%H:%M").to_string(), "10:30");
+
+    // Undo should restore original time
+    update(&mut model, Message::System(SystemMessage::Undo));
+    let entry = model.time_entries.get(&entry_id).unwrap();
+    assert_eq!(entry.started_at, original_start);
 }

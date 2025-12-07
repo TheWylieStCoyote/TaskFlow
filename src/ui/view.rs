@@ -14,7 +14,7 @@ use crate::app::ViewId;
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
     HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, OverdueAlert, ReportsView,
-    Sidebar, TaskList, TemplatePicker,
+    Sidebar, TaskList, TemplatePicker, TimeLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -43,7 +43,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     // Render popups
     if model.show_help {
         let popup_area = centered_rect(50, 70, area);
-        frame.render_widget(HelpPopup::new(), popup_area);
+        frame.render_widget(HelpPopup::new(&model.keybindings), popup_area);
     }
 
     // Render input dialog if in editing mode
@@ -135,6 +135,26 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             ),
             editor_area,
         );
+    }
+
+    // Render time log editor
+    if model.show_time_log {
+        if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
+            let entries = model.time_entries_for_task(task_id);
+            // Height: min 5, max 15 depending on entries
+            let height = (entries.len() as u16 + 4).clamp(5, 15);
+            let editor_area = centered_rect_fixed_height(70, height, area);
+            frame.render_widget(
+                TimeLogEditor::new(
+                    entries,
+                    model.time_log_selected,
+                    model.time_log_mode,
+                    &model.time_log_buffer,
+                    theme,
+                ),
+                editor_area,
+            );
+        }
     }
 
     // Render overdue alert popup (shown at startup if there are overdue tasks)

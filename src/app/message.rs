@@ -422,6 +422,30 @@ pub enum UiMessage {
     /// Save modified keybindings
     SaveKeybindings,
 
+    // Time log editor
+    /// Show the time log editor
+    ShowTimeLog,
+    /// Hide the time log editor
+    HideTimeLog,
+    /// Navigate up in time log
+    TimeLogUp,
+    /// Navigate down in time log
+    TimeLogDown,
+    /// Start editing start time
+    TimeLogEditStart,
+    /// Start editing end time
+    TimeLogEditEnd,
+    /// Confirm delete time entry
+    TimeLogConfirmDelete,
+    /// Cancel time log operation
+    TimeLogCancel,
+    /// Submit time log edit
+    TimeLogSubmit,
+    /// Add new time entry for selected task
+    TimeLogAddEntry,
+    /// Delete the selected time entry
+    TimeLogDelete,
+
     // Overdue alert
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,

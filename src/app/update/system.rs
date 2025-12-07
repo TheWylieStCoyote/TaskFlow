@@ -12,8 +12,8 @@ use crate::ui::{InputMode, InputTarget};
 pub fn handle_system(model: &mut Model, msg: SystemMessage) {
     match msg {
         SystemMessage::Quit => {
-            // Stop any running timer before quitting
-            model.stop_time_tracking();
+            // Don't stop time tracking - let it persist across app restarts
+            // The running entry will be restored when the app reopens
             model.running = RunningState::Quitting;
         }
         SystemMessage::Save => {
@@ -114,6 +114,11 @@ fn handle_undo(model: &mut Model) {
                 // Undo delete by restoring the entry
                 model.restore_time_entry(*entry);
             }
+            UndoAction::TimeEntryModified { before, after: _ } => {
+                // Undo modify by restoring previous state
+                model.sync_time_entry(&before);
+                model.time_entries.insert(before.id.clone(), *before);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -163,6 +168,11 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TimeEntryDeleted(entry) => {
                 // Redo delete by removing the entry
                 model.delete_time_entry(&entry.id);
+            }
+            UndoAction::TimeEntryModified { before, after: _ } => {
+                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
+                model.sync_time_entry(&before);
+                model.time_entries.insert(before.id.clone(), *before);
             }
         }
         model.refresh_visible_tasks();

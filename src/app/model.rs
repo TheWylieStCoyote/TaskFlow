@@ -2423,8 +2423,8 @@ mod tests {
         let orphan = Task::new("Orphan").with_parent(orphan_parent_id);
         model.tasks.insert(orphan.id.clone(), orphan.clone());
 
-        // Returns 1 because the task has a parent_task_id set (even though parent doesn't exist)
-        // The depth counts the parent reference attempt before discovering parent is missing
+        // Returns 1 because the function counts parent hops: orphan → missing parent (1 hop).
+        // Note that orphaned tasks will display indented even though their parent doesn't exist.
         assert_eq!(model.task_depth(&orphan.id), 1);
     }
 

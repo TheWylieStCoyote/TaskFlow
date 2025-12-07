@@ -20,10 +20,26 @@
 //! assert!(parsed.due_date.is_some());
 //! ```
 
+use std::sync::LazyLock;
+
 use chrono::{Datelike, NaiveDate, Utc, Weekday};
 use regex::Regex;
 
 use crate::domain::Priority;
+
+// Pre-compiled regex patterns for quick add parsing (compiled once at startup)
+static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"#(\w+)").unwrap());
+static PRIORITY_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"!(\w+)").unwrap());
+static DUE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"due:(\S+)").unwrap());
+static SCHED_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"sched:(\S+)").unwrap());
+static PROJECT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"@(\w+)").unwrap());
+
+// Pre-compiled regex patterns for date parsing
+static RELATIVE_DURATION_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^in\s+(\d+)\s*(d|day|days|w|week|weeks|m|month|months)$").unwrap()
+});
+static ORDINAL_DAY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(\d{1,2})(st|nd|rd|th)$").unwrap());
 
 /// Result of parsing a quick add string
 #[derive(Debug, Clone, Default)]
@@ -66,40 +82,35 @@ pub fn parse_quick_add(input: &str) -> ParsedTask {
     let mut result = ParsedTask::default();
     let mut remaining = input.to_string();
 
-    // Extract tags (#tag)
-    let tag_re = Regex::new(r"#(\w+)").unwrap();
-    for cap in tag_re.captures_iter(input) {
+    // Extract tags (#tag) - using pre-compiled regex
+    for cap in TAG_RE.captures_iter(input) {
         result.tags.push(cap[1].to_string());
     }
-    remaining = tag_re.replace_all(&remaining, "").to_string();
+    remaining = TAG_RE.replace_all(&remaining, "").to_string();
 
-    // Extract priority (!priority)
-    let priority_re = Regex::new(r"!(\w+)").unwrap();
-    if let Some(cap) = priority_re.captures(input) {
+    // Extract priority (!priority) - using pre-compiled regex
+    if let Some(cap) = PRIORITY_RE.captures(input) {
         result.priority = parse_priority(&cap[1]);
     }
-    remaining = priority_re.replace_all(&remaining, "").to_string();
+    remaining = PRIORITY_RE.replace_all(&remaining, "").to_string();
 
-    // Extract due date (due:date)
-    let due_re = Regex::new(r"due:(\S+)").unwrap();
-    if let Some(cap) = due_re.captures(input) {
+    // Extract due date (due:date) - using pre-compiled regex
+    if let Some(cap) = DUE_RE.captures(input) {
         result.due_date = parse_date(&cap[1]);
     }
-    remaining = due_re.replace_all(&remaining, "").to_string();
+    remaining = DUE_RE.replace_all(&remaining, "").to_string();
 
-    // Extract scheduled date (sched:date)
-    let sched_re = Regex::new(r"sched:(\S+)").unwrap();
-    if let Some(cap) = sched_re.captures(input) {
+    // Extract scheduled date (sched:date) - using pre-compiled regex
+    if let Some(cap) = SCHED_RE.captures(input) {
         result.scheduled_date = parse_date(&cap[1]);
     }
-    remaining = sched_re.replace_all(&remaining, "").to_string();
+    remaining = SCHED_RE.replace_all(&remaining, "").to_string();
 
-    // Extract project (@project)
-    let project_re = Regex::new(r"@(\w+)").unwrap();
-    if let Some(cap) = project_re.captures(input) {
+    // Extract project (@project) - using pre-compiled regex
+    if let Some(cap) = PROJECT_RE.captures(input) {
         result.project_name = Some(cap[1].to_string());
     }
-    remaining = project_re.replace_all(&remaining, "").to_string();
+    remaining = PROJECT_RE.replace_all(&remaining, "").to_string();
 
     // Clean up title: collapse multiple spaces and trim
     result.title = remaining.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -242,8 +253,7 @@ fn parse_month_day(s: &str, sep: char, year: i32) -> Option<NaiveDate> {
 /// Parse relative duration expressions like "in 3 days", "in 2 weeks", "in 1 month"
 fn parse_relative_duration(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     let s_lower = s.to_lowercase();
-    let re = Regex::new(r"^in\s+(\d+)\s*(d|day|days|w|week|weeks|m|month|months)$").ok()?;
-    let caps = re.captures(&s_lower)?;
+    let caps = RELATIVE_DURATION_RE.captures(&s_lower)?;
 
     let count: i64 = caps.get(1)?.as_str().parse().ok()?;
     let unit = caps.get(2)?.as_str();
@@ -330,8 +340,7 @@ fn parse_ordinal_day(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     }
 
     // Parse ordinal numbers like "1st", "2nd", "3rd", "4th", "15th", "22nd"
-    let re = Regex::new(r"^(\d{1,2})(st|nd|rd|th)$").ok()?;
-    let caps = re.captures(&s_lower)?;
+    let caps = ORDINAL_DAY_RE.captures(&s_lower)?;
 
     let day: u32 = caps.get(1)?.as_str().parse().ok()?;
 

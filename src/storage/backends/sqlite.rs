@@ -99,6 +99,7 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+            CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 
             CREATE TABLE IF NOT EXISTS pomodoro_state (

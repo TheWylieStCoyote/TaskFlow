@@ -450,9 +450,10 @@ impl Task {
     /// Returns None if no estimated time is set.
     #[must_use]
     pub fn time_variance(&self) -> Option<i32> {
-        self.estimated_minutes.map(|est| {
-            i32::try_from(self.actual_minutes).unwrap_or(i32::MAX)
-                - i32::try_from(est).unwrap_or(i32::MAX)
+        self.estimated_minutes.and_then(|est| {
+            let actual = i32::try_from(self.actual_minutes).ok()?;
+            let estimate = i32::try_from(est).ok()?;
+            Some(actual - estimate)
         })
     }
 

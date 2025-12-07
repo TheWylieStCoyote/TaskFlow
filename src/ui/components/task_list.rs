@@ -319,14 +319,45 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
 
     let status_span = Span::styled(format!("{} ", task.status.symbol()), status_style);
 
-    let title_style = if task.status.is_complete() {
-        Style::default()
-            .fg(theme.colors.muted.to_color())
-            .add_modifier(Modifier::CROSSED_OUT)
+    // Determine title style based on due date urgency
+    let (title_style, urgency_prefix) = if task.status.is_complete() {
+        (
+            Style::default()
+                .fg(theme.colors.muted.to_color())
+                .add_modifier(Modifier::CROSSED_OUT),
+            Span::raw(""),
+        )
+    } else if task.is_overdue() {
+        // Overdue: red text, bold, slow blink, warning prefix
+        (
+            Style::default()
+                .fg(theme.colors.danger.to_color())
+                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::SLOW_BLINK),
+            Span::styled(
+                "⚠ ",
+                Style::default()
+                    .fg(theme.colors.danger.to_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
+    } else if task.is_due_today() {
+        // Due today: yellow text, bold, exclamation prefix
+        (
+            Style::default()
+                .fg(theme.colors.warning.to_color())
+                .add_modifier(Modifier::BOLD),
+            Span::styled(
+                "! ",
+                Style::default()
+                    .fg(theme.colors.warning.to_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
+        )
     } else if ctx.is_selected {
-        Style::default().add_modifier(Modifier::BOLD)
+        (Style::default().add_modifier(Modifier::BOLD), Span::raw(""))
     } else {
-        Style::default()
+        (Style::default(), Span::raw(""))
     };
 
     let title_span = Span::styled(task.title.clone(), title_style);
@@ -368,6 +399,24 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
             time_str,
             Style::default().fg(theme.colors.accent.to_color()),
         )
+    } else {
+        Span::raw("")
+    };
+
+    // Estimation variance indicator (only shown if task has estimate)
+    let variance_span = if let Some(variance_text) = task.time_variance_display() {
+        let variance = task.time_variance().unwrap_or(0);
+        let style = if variance > 0 {
+            // Over estimate - red
+            Style::default().fg(theme.colors.danger.to_color())
+        } else if variance < 0 {
+            // Under estimate - green (success)
+            Style::default().fg(theme.status.done.to_color())
+        } else {
+            // On target - accent
+            Style::default().fg(theme.colors.accent.to_color())
+        };
+        Span::styled(format!(" [{variance_text}]"), style)
     } else {
         Span::raw("")
     };
@@ -437,6 +486,7 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         tracking_span,
         priority_span,
         status_span,
+        urgency_prefix,
         title_span,
         progress_span,
         desc_span,
@@ -446,6 +496,7 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         due_span,
         sched_span,
         time_span,
+        variance_span,
         tags_span,
     ]);
 

@@ -69,7 +69,7 @@ impl Settings {
     /// Load settings from the default config path.
     ///
     /// Returns default settings if the config file doesn't exist or can't be parsed.
-    /// Use [`try_load`] for explicit error handling.
+    /// Use [`Self::try_load`] for explicit error handling.
     #[must_use]
     pub fn load() -> Self {
         Self::load_from_path(Self::config_path())
@@ -91,7 +91,7 @@ impl Settings {
     ///
     /// Returns default settings if the file doesn't exist or can't be parsed.
     /// Prints warnings to stderr on errors (for backward compatibility).
-    /// Use [`try_load_from_path`] for explicit error handling.
+    /// Use [`Self::try_load_from_path`] for explicit error handling.
     #[must_use]
     pub fn load_from_path(path: PathBuf) -> Self {
         match Self::try_load_from_path(path) {

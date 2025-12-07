@@ -65,6 +65,57 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
+        UiMessage::StartEditProject => {
+            // Edit the currently selected project (from sidebar)
+            if let Some(ref project_id) = model.selected_project.clone() {
+                if let Some(project) = model.projects.get(project_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditProject(project_id.clone());
+                    model.input_buffer = project.name.clone();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            } else {
+                model.status_message = Some("Select a project from the sidebar first".to_string());
+            }
+        }
+        UiMessage::DeleteProject => {
+            // Delete the currently selected project (from sidebar)
+            if let Some(ref project_id) = model.selected_project.clone() {
+                if let Some(project) = model.projects.remove(project_id) {
+                    // Find tasks in this project
+                    let tasks_to_unassign: Vec<_> = model
+                        .tasks
+                        .iter()
+                        .filter(|(_, task)| task.project_id.as_ref() == Some(project_id))
+                        .map(|(id, _)| id.clone())
+                        .collect();
+
+                    // Unassign tasks from this project
+                    for task_id in tasks_to_unassign {
+                        if let Some(task) = model.tasks.get_mut(&task_id) {
+                            task.project_id = None;
+                            let task_clone = task.clone();
+                            model.sync_task(&task_clone);
+                        }
+                    }
+
+                    // Push undo action
+                    model
+                        .undo_stack
+                        .push(UndoAction::ProjectDeleted(Box::new(project.clone())));
+                    // Clear selected project
+                    model.selected_project = None;
+                    model.dirty = true;
+                    model.refresh_visible_tasks();
+                    model.status_message = Some(format!(
+                        "Deleted project '{}' (tasks unassigned)",
+                        project.name
+                    ));
+                }
+            } else {
+                model.status_message = Some("Select a project from the sidebar first".to_string());
+            }
+        }
         UiMessage::StartEditTask => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.get(&task_id) {
@@ -579,6 +630,22 @@ fn handle_submit_input(model: &mut Model) {
                     .undo_stack
                     .push(UndoAction::ProjectCreated(Box::new(project.clone())));
                 model.projects.insert(project.id.clone(), project);
+            }
+        }
+        InputTarget::EditProject(project_id) => {
+            if let Some(project) = model.projects.get_mut(project_id) {
+                if !input.is_empty() && input != project.name {
+                    let before = project.clone();
+                    project.name = input.clone();
+                    project.updated_at = chrono::Utc::now();
+                    let after = project.clone();
+                    model.sync_project(&after);
+                    model.undo_stack.push(UndoAction::ProjectModified {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
+                    model.status_message = Some(format!("Renamed project to '{}'", input));
+                }
             }
         }
         InputTarget::Search => {

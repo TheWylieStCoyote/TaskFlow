@@ -3185,3 +3185,144 @@ fn test_delete_subtask_allowed() {
     // Confirm dialog should be shown
     assert!(model.show_confirm_delete);
 }
+
+#[test]
+fn test_edit_project_with_undo() {
+    let mut model = Model::new();
+
+    // Create a project first
+    update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+    for c in "Original Name".chars() {
+        update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+    }
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+    assert_eq!(model.projects.len(), 1);
+
+    let project_id = model.projects.keys().next().unwrap().clone();
+    assert_eq!(
+        model.projects.get(&project_id).unwrap().name,
+        "Original Name"
+    );
+
+    // Select the project (simulate sidebar selection)
+    model.selected_project = Some(project_id.clone());
+
+    // Start editing the project
+    update(&mut model, Message::Ui(UiMessage::StartEditProject));
+    assert!(matches!(model.input_target, InputTarget::EditProject(_)));
+
+    // Clear buffer and type new name
+    model.input_buffer.clear();
+    model.cursor_position = 0;
+    for c in "New Name".chars() {
+        update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+    }
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Project should be renamed
+    assert_eq!(model.projects.get(&project_id).unwrap().name, "New Name");
+
+    // Undo should restore original name
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert_eq!(
+        model.projects.get(&project_id).unwrap().name,
+        "Original Name"
+    );
+
+    // Redo should apply the rename again
+    update(&mut model, Message::System(SystemMessage::Redo));
+    assert_eq!(model.projects.get(&project_id).unwrap().name, "New Name");
+}
+
+#[test]
+fn test_delete_project_with_undo() {
+    let mut model = Model::new();
+
+    // Create a project
+    update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+    for c in "Test Project".chars() {
+        update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+    }
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+    assert_eq!(model.projects.len(), 1);
+
+    let project_id = model.projects.keys().next().unwrap().clone();
+
+    // Create a task in the project
+    update(
+        &mut model,
+        Message::Task(TaskMessage::Create("Task in project".to_string())),
+    );
+    let task_id = model.tasks.keys().next().unwrap().clone();
+
+    // Assign task to project
+    if let Some(task) = model.tasks.get_mut(&task_id) {
+        task.project_id = Some(project_id.clone());
+    }
+
+    // Select the project
+    model.selected_project = Some(project_id.clone());
+
+    // Delete the project
+    update(&mut model, Message::Ui(UiMessage::DeleteProject));
+
+    // Project should be deleted
+    assert!(model.projects.is_empty());
+    // Task should be unassigned
+    assert!(model.tasks.get(&task_id).unwrap().project_id.is_none());
+    // Selected project should be cleared
+    assert!(model.selected_project.is_none());
+
+    // Undo should restore the project
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert_eq!(model.projects.len(), 1);
+    assert!(model.projects.contains_key(&project_id));
+    assert_eq!(
+        model.projects.get(&project_id).unwrap().name,
+        "Test Project"
+    );
+
+    // Note: task assignment is not restored by project undo (tasks were modified separately)
+}
+
+#[test]
+fn test_edit_project_requires_selection() {
+    let mut model = Model::new();
+
+    // Create a project but don't select it
+    update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+    for c in "Test".chars() {
+        update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+    }
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Try to edit without selection
+    model.selected_project = None;
+    update(&mut model, Message::Ui(UiMessage::StartEditProject));
+
+    // Should show error message, not enter edit mode
+    assert!(model.status_message.is_some());
+    assert!(!matches!(model.input_target, InputTarget::EditProject(_)));
+}
+
+#[test]
+fn test_delete_project_requires_selection() {
+    let mut model = Model::new();
+
+    // Create a project but don't select it
+    update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+    for c in "Test".chars() {
+        update(&mut model, Message::Ui(UiMessage::InputChar(c)));
+    }
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+    assert_eq!(model.projects.len(), 1);
+
+    // Try to delete without selection
+    model.selected_project = None;
+    update(&mut model, Message::Ui(UiMessage::DeleteProject));
+
+    // Project should still exist
+    assert_eq!(model.projects.len(), 1);
+    // Should show error message
+    assert!(model.status_message.is_some());
+}

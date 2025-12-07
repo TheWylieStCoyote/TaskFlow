@@ -18,7 +18,7 @@ enum ListEntry<'a> {
         task: &'a Task,
         index: usize, // Index in visible_tasks for selection tracking
         time_spent: u32,
-        is_subtask: bool,
+        nesting_depth: usize, // 0 for root, 1+ for subtasks
         is_multi_selected: bool,
         has_dependencies: bool,
         is_recurring: bool,
@@ -62,7 +62,7 @@ impl<'a> TaskList<'a> {
         for (idx, task_id) in model.visible_tasks.iter().enumerate() {
             if let Some(task) = model.tasks.get(task_id) {
                 let time_spent = model.total_time_for_task(task_id);
-                let is_subtask = task.parent_task_id.is_some();
+                let nesting_depth = model.task_depth(task_id);
                 let is_multi_selected = model.selected_tasks.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
                 let is_recurring = task.recurrence.is_some();
@@ -72,7 +72,7 @@ impl<'a> TaskList<'a> {
                     task,
                     index: idx,
                     time_spent,
-                    is_subtask,
+                    nesting_depth,
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
@@ -120,7 +120,7 @@ impl<'a> TaskList<'a> {
                         .position(|id| id == &task_id)
                         .unwrap_or(0);
                     let time_spent = model.total_time_for_task(&task_id);
-                    let is_subtask = task.parent_task_id.is_some();
+                    let nesting_depth = model.task_depth(&task_id);
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
                     let is_recurring = task.recurrence.is_some();
@@ -130,7 +130,7 @@ impl<'a> TaskList<'a> {
                         task,
                         index: idx,
                         time_spent,
-                        is_subtask,
+                        nesting_depth,
                         is_multi_selected,
                         has_dependencies,
                         is_recurring,
@@ -173,7 +173,7 @@ impl Widget for TaskList<'_> {
                     task,
                     index,
                     time_spent,
-                    is_subtask,
+                    nesting_depth,
                     is_multi_selected,
                     has_dependencies,
                     is_recurring,
@@ -185,7 +185,7 @@ impl Widget for TaskList<'_> {
                         is_selected: *index == self.selected,
                         is_tracking: self.active_tracking == Some(&task.id),
                         time_spent: *time_spent,
-                        is_subtask: *is_subtask,
+                        nesting_depth: *nesting_depth,
                         is_multi_selected: *is_multi_selected,
                         has_dependencies: *has_dependencies,
                         is_recurring: *is_recurring,
@@ -233,7 +233,7 @@ struct TaskItemContext<'a> {
     is_selected: bool,
     is_tracking: bool,
     time_spent: u32,
-    is_subtask: bool,
+    nesting_depth: usize, // 0 for root, 1+ for subtasks
     is_multi_selected: bool,
     has_dependencies: bool,
     is_recurring: bool,
@@ -271,9 +271,12 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("  ")
     };
 
-    // Subtask indentation prefix
-    let indent_span = if ctx.is_subtask {
-        Span::styled("└─ ", Style::default().fg(theme.colors.muted.to_color()))
+    // Subtask indentation prefix - supports multi-level nesting
+    let indent_span = if ctx.nesting_depth > 0 {
+        // Add spaces for each level of nesting, then the branch character
+        let spaces = "  ".repeat(ctx.nesting_depth.saturating_sub(1));
+        let indent = format!("{spaces}└─ ");
+        Span::styled(indent, Style::default().fg(theme.colors.muted.to_color()))
     } else {
         Span::raw("")
     };
@@ -413,16 +416,17 @@ fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
         Span::raw("")
     };
 
-    // Subtask progress indicator (only show if task has subtasks)
+    // Subtask progress indicator - shows percentage if task has subtasks
     let progress_span = if ctx.subtask_progress.1 > 0 {
         let (completed, total) = ctx.subtask_progress;
+        let percentage = (completed * 100) / total;
         let style = if completed == total {
             // All done - show in success/done color
             Style::default().fg(theme.status.done.to_color())
         } else {
             Style::default().fg(theme.colors.muted.to_color())
         };
-        Span::styled(format!(" [{completed}/{total}]"), style)
+        Span::styled(format!(" [{percentage}%]"), style)
     } else {
         Span::raw("")
     };

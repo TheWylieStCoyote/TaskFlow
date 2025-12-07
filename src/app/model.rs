@@ -805,15 +805,25 @@ impl Model {
             subtasks.sort_by(sort_fn);
         }
 
-        // Build final list: parent followed by its subtasks
+        // Build final list: parent followed by its subtasks (recursively)
         let mut result = Vec::new();
-        for parent in parent_tasks {
-            result.push(parent.id.clone());
-            if let Some(subtasks) = subtasks_by_parent.get(&parent.id) {
-                for subtask in subtasks {
-                    result.push(subtask.id.clone());
+
+        // Recursive helper to add a task and all its descendants
+        fn add_with_descendants(
+            task_id: &TaskId,
+            subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
+            result: &mut Vec<TaskId>,
+        ) {
+            result.push(task_id.clone());
+            if let Some(children) = subtasks_by_parent.get(task_id) {
+                for child in children {
+                    add_with_descendants(&child.id, subtasks_by_parent, result);
                 }
             }
+        }
+
+        for parent in parent_tasks {
+            add_with_descendants(&parent.id, &subtasks_by_parent, &mut result);
         }
 
         // Handle orphaned subtasks (subtasks whose parent is not visible)
@@ -1112,13 +1122,118 @@ impl Model {
     /// ```
     #[must_use]
     pub fn subtask_progress(&self, task_id: &TaskId) -> (usize, usize) {
-        let subtasks: Vec<_> = self
-            .tasks
+        let descendants = self.get_all_descendants(task_id);
+        let total = descendants.len();
+        let completed = descendants
+            .iter()
+            .filter(|id| self.tasks.get(*id).is_some_and(|t| t.status.is_complete()))
+            .count();
+        (completed, total)
+    }
+
+    /// Returns the nesting depth of a task (0 for root tasks, 1 for direct children, etc.)
+    ///
+    /// Includes cycle detection to prevent infinite loops from corrupted data.
+    #[must_use]
+    pub fn task_depth(&self, task_id: &TaskId) -> usize {
+        let mut depth = 0;
+        let mut current_id = task_id.clone();
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some(task) = self.tasks.get(&current_id) {
+            if let Some(ref parent_id) = task.parent_task_id {
+                if visited.contains(parent_id) {
+                    // Circular reference detected - break to prevent infinite loop
+                    break;
+                }
+                visited.insert(current_id.clone());
+                depth += 1;
+                current_id = parent_id.clone();
+            } else {
+                break;
+            }
+        }
+        depth
+    }
+
+    /// Returns all descendant task IDs (children, grandchildren, etc.)
+    ///
+    /// Uses iterative approach with cycle detection.
+    #[must_use]
+    pub fn get_all_descendants(&self, task_id: &TaskId) -> Vec<TaskId> {
+        let mut descendants = Vec::new();
+        let mut stack = vec![task_id.clone()];
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some(current_id) = stack.pop() {
+            if visited.contains(&current_id) {
+                continue; // Prevent cycles
+            }
+            visited.insert(current_id.clone());
+
+            for (id, task) in &self.tasks {
+                if task.parent_task_id.as_ref() == Some(&current_id) {
+                    descendants.push(id.clone());
+                    stack.push(id.clone());
+                }
+            }
+        }
+        descendants
+    }
+
+    /// Returns all ancestor task IDs (parent, grandparent, etc.)
+    ///
+    /// Uses iterative approach with cycle detection.
+    #[must_use]
+    pub fn get_all_ancestors(&self, task_id: &TaskId) -> Vec<TaskId> {
+        let mut ancestors = Vec::new();
+        let mut current_id = task_id.clone();
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some(task) = self.tasks.get(&current_id) {
+            if let Some(ref parent_id) = task.parent_task_id {
+                if visited.contains(parent_id) {
+                    break; // Circular reference
+                }
+                visited.insert(current_id.clone());
+                ancestors.push(parent_id.clone());
+                current_id = parent_id.clone();
+            } else {
+                break;
+            }
+        }
+        ancestors
+    }
+
+    /// Checks if setting `new_parent_id` as parent of `task_id` would create a circular reference.
+    #[must_use]
+    pub fn would_create_cycle(&self, task_id: &TaskId, new_parent_id: &TaskId) -> bool {
+        if task_id == new_parent_id {
+            return true;
+        }
+        // Check if new_parent is a descendant of task_id
+        self.get_all_descendants(task_id).contains(new_parent_id)
+    }
+
+    /// Returns true if the task has any subtasks (direct children).
+    #[must_use]
+    pub fn has_subtasks(&self, task_id: &TaskId) -> bool {
+        self.tasks
             .values()
-            .filter(|t| t.parent_task_id.as_ref() == Some(task_id))
-            .collect();
-        let completed = subtasks.iter().filter(|t| t.status.is_complete()).count();
-        (completed, subtasks.len())
+            .any(|t| t.parent_task_id.as_ref() == Some(task_id))
+    }
+
+    /// Returns recursive subtask completion as a percentage (0-100).
+    ///
+    /// Returns `None` if the task has no subtasks.
+    #[must_use]
+    pub fn subtask_percentage(&self, task_id: &TaskId) -> Option<u8> {
+        let (completed, total) = self.subtask_progress(task_id);
+        if total == 0 {
+            None
+        } else {
+            Some(((completed * 100) / total) as u8)
+        }
     }
 }
 
@@ -2270,5 +2385,269 @@ mod tests {
         // Only the recent task should be visible (modified within 7 days)
         assert_eq!(model.visible_tasks.len(), 1);
         assert_eq!(model.visible_tasks[0], recent_task.id);
+    }
+
+    // ==================== Hierarchy Helper Method Tests ====================
+
+    #[test]
+    fn test_task_depth_root_task() {
+        let mut model = Model::new();
+        let task = Task::new("Root");
+        model.tasks.insert(task.id.clone(), task.clone());
+        assert_eq!(model.task_depth(&task.id), 0);
+    }
+
+    #[test]
+    fn test_task_depth_nested() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child = Task::new("Child").with_parent(root.id.clone());
+        let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child.id.clone(), child.clone());
+        model
+            .tasks
+            .insert(grandchild.id.clone(), grandchild.clone());
+
+        assert_eq!(model.task_depth(&root.id), 0);
+        assert_eq!(model.task_depth(&child.id), 1);
+        assert_eq!(model.task_depth(&grandchild.id), 2);
+    }
+
+    #[test]
+    fn test_task_depth_missing_parent() {
+        let mut model = Model::new();
+        // Create a task with a parent_task_id that doesn't exist
+        let orphan_parent_id = TaskId::new();
+        let orphan = Task::new("Orphan").with_parent(orphan_parent_id);
+        model.tasks.insert(orphan.id.clone(), orphan.clone());
+
+        // Returns 1 because the task has a parent_task_id set (even though parent doesn't exist)
+        // The depth counts the parent reference attempt before discovering parent is missing
+        assert_eq!(model.task_depth(&orphan.id), 1);
+    }
+
+    #[test]
+    fn test_get_all_descendants_empty() {
+        let mut model = Model::new();
+        let task = Task::new("Standalone");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        let descendants = model.get_all_descendants(&task.id);
+        assert!(descendants.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_descendants_nested() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child1 = Task::new("Child1").with_parent(root.id.clone());
+        let child2 = Task::new("Child2").with_parent(root.id.clone());
+        let grandchild = Task::new("Grandchild").with_parent(child1.id.clone());
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child1.id.clone(), child1.clone());
+        model.tasks.insert(child2.id.clone(), child2.clone());
+        model
+            .tasks
+            .insert(grandchild.id.clone(), grandchild.clone());
+
+        let descendants = model.get_all_descendants(&root.id);
+        assert_eq!(descendants.len(), 3);
+        assert!(descendants.contains(&child1.id));
+        assert!(descendants.contains(&child2.id));
+        assert!(descendants.contains(&grandchild.id));
+    }
+
+    #[test]
+    fn test_get_all_ancestors_empty() {
+        let mut model = Model::new();
+        let task = Task::new("Root");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        let ancestors = model.get_all_ancestors(&task.id);
+        assert!(ancestors.is_empty());
+    }
+
+    #[test]
+    fn test_get_all_ancestors_nested() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child = Task::new("Child").with_parent(root.id.clone());
+        let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child.id.clone(), child.clone());
+        model
+            .tasks
+            .insert(grandchild.id.clone(), grandchild.clone());
+
+        let ancestors = model.get_all_ancestors(&grandchild.id);
+        assert_eq!(ancestors.len(), 2);
+        assert_eq!(ancestors[0], child.id); // Direct parent first
+        assert_eq!(ancestors[1], root.id); // Then grandparent
+    }
+
+    #[test]
+    fn test_would_create_cycle_self_reference() {
+        let mut model = Model::new();
+        let task = Task::new("Task");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        assert!(model.would_create_cycle(&task.id, &task.id));
+    }
+
+    #[test]
+    fn test_would_create_cycle_descendant() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child = Task::new("Child").with_parent(root.id.clone());
+        let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child.id.clone(), child.clone());
+        model
+            .tasks
+            .insert(grandchild.id.clone(), grandchild.clone());
+
+        // Setting root's parent to grandchild would create a cycle
+        assert!(model.would_create_cycle(&root.id, &grandchild.id));
+        assert!(model.would_create_cycle(&root.id, &child.id));
+
+        // Setting grandchild's parent to a new task is fine
+        let new_task = Task::new("New");
+        model.tasks.insert(new_task.id.clone(), new_task.clone());
+        assert!(!model.would_create_cycle(&grandchild.id, &new_task.id));
+    }
+
+    #[test]
+    fn test_has_subtasks() {
+        let mut model = Model::new();
+        let parent = Task::new("Parent");
+        let child = Task::new("Child").with_parent(parent.id.clone());
+        let standalone = Task::new("Standalone");
+
+        model.tasks.insert(parent.id.clone(), parent.clone());
+        model.tasks.insert(child.id.clone(), child);
+        model
+            .tasks
+            .insert(standalone.id.clone(), standalone.clone());
+
+        assert!(model.has_subtasks(&parent.id));
+        assert!(!model.has_subtasks(&standalone.id));
+    }
+
+    #[test]
+    fn test_subtask_progress_recursive() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child1 = Task::new("Child1")
+            .with_parent(root.id.clone())
+            .with_status(TaskStatus::Done);
+        let child2 = Task::new("Child2").with_parent(root.id.clone());
+        let grandchild = Task::new("Grandchild")
+            .with_parent(child2.id.clone())
+            .with_status(TaskStatus::Done);
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child1.id.clone(), child1);
+        model.tasks.insert(child2.id.clone(), child2);
+        model.tasks.insert(grandchild.id.clone(), grandchild);
+
+        let (completed, total) = model.subtask_progress(&root.id);
+        assert_eq!(total, 3); // child1, child2, grandchild
+        assert_eq!(completed, 2); // child1, grandchild
+    }
+
+    #[test]
+    fn test_subtask_percentage() {
+        let mut model = Model::new();
+        let root = Task::new("Root");
+        let child1 = Task::new("Child1")
+            .with_parent(root.id.clone())
+            .with_status(TaskStatus::Done);
+        let child2 = Task::new("Child2").with_parent(root.id.clone());
+
+        model.tasks.insert(root.id.clone(), root.clone());
+        model.tasks.insert(child1.id.clone(), child1);
+        model.tasks.insert(child2.id.clone(), child2);
+
+        // 1 of 2 completed = 50%
+        assert_eq!(model.subtask_percentage(&root.id), Some(50));
+    }
+
+    #[test]
+    fn test_subtask_percentage_no_subtasks() {
+        let mut model = Model::new();
+        let task = Task::new("Standalone");
+        model.tasks.insert(task.id.clone(), task.clone());
+
+        assert_eq!(model.subtask_percentage(&task.id), None);
+    }
+
+    #[test]
+    fn test_refresh_visible_tasks_deep_nesting_order() {
+        // Test that visible_tasks orders: Root -> Child -> Grandchild -> Root2
+        let mut model = Model::new();
+
+        let root1 = Task::new("Root1");
+        let child1 = Task::new("Child1").with_parent(root1.id.clone());
+        let grandchild = Task::new("Grandchild").with_parent(child1.id.clone());
+        let root2 = Task::new("Root2");
+
+        let root1_id = root1.id.clone();
+        let child1_id = child1.id.clone();
+        let grandchild_id = grandchild.id.clone();
+        let root2_id = root2.id.clone();
+
+        // Insert in random order
+        model.tasks.insert(grandchild.id.clone(), grandchild);
+        model.tasks.insert(root2.id.clone(), root2);
+        model.tasks.insert(child1.id.clone(), child1);
+        model.tasks.insert(root1.id.clone(), root1);
+
+        model.refresh_visible_tasks();
+
+        // Check ordering: should be Root1 -> Child1 -> Grandchild -> Root2
+        // (roots sorted by created_at, subtasks inserted after their parents)
+        let root1_pos = model
+            .visible_tasks
+            .iter()
+            .position(|id| id == &root1_id)
+            .unwrap();
+        let child1_pos = model
+            .visible_tasks
+            .iter()
+            .position(|id| id == &child1_id)
+            .unwrap();
+        let grandchild_pos = model
+            .visible_tasks
+            .iter()
+            .position(|id| id == &grandchild_id)
+            .unwrap();
+        let root2_pos = model
+            .visible_tasks
+            .iter()
+            .position(|id| id == &root2_id)
+            .unwrap();
+
+        // Child1 should come after Root1
+        assert!(child1_pos > root1_pos, "Child1 should appear after Root1");
+
+        // Grandchild should come after Child1
+        assert!(
+            grandchild_pos > child1_pos,
+            "Grandchild should appear after Child1"
+        );
+
+        // Grandchild should come before Root2 (if Root2 comes after Root1)
+        // This ensures the hierarchy is kept together
+        if root2_pos > root1_pos {
+            assert!(
+                grandchild_pos < root2_pos,
+                "Grandchild should appear before Root2"
+            );
+        }
     }
 }

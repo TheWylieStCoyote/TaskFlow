@@ -12,8 +12,8 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use taskflow::app::{
-    update, Message, Model, NavigationMessage, RunningState, SystemMessage, TaskMessage,
-    TimeMessage, UiMessage,
+    update, Message, Model, NavigationMessage, PomodoroMessage, RunningState, SystemMessage,
+    TaskMessage, TimeMessage, UiMessage,
 };
 use taskflow::config::{Action, Keybindings, Settings, Theme};
 use taskflow::storage::BackendType;
@@ -171,6 +171,7 @@ fn run_app(
         None
     };
     let mut last_save = Instant::now();
+    let mut last_pomodoro_tick = Instant::now();
 
     loop {
         // Draw UI
@@ -187,6 +188,16 @@ fn run_app(
                 let _ = model.save();
                 last_save = Instant::now();
             }
+        }
+
+        // Tick Pomodoro timer every second if active and not paused
+        if last_pomodoro_tick.elapsed() >= Duration::from_secs(1) {
+            if let Some(ref session) = model.pomodoro_session {
+                if !session.paused {
+                    update(model, Message::Pomodoro(PomodoroMessage::Tick));
+                }
+            }
+            last_pomodoro_tick = Instant::now();
         }
 
         // Handle events with timeout for potential async operations
@@ -464,6 +475,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
         Action::CreateSubtask => Message::Ui(UiMessage::StartCreateSubtask),
         Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
+        Action::EditProject => Message::Ui(UiMessage::StartEditProject),
+        Action::DeleteProject => Message::Ui(UiMessage::DeleteProject),
         Action::EditTask => Message::Ui(UiMessage::StartEditTask),
         Action::EditDueDate => Message::Ui(UiMessage::StartEditDueDate),
         Action::EditScheduledDate => Message::Ui(UiMessage::StartEditScheduledDate),
@@ -531,6 +544,12 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ShowKeybindingsEditor => Message::Ui(UiMessage::ShowKeybindingsEditor),
         Action::ReportsNextPanel => Message::Navigation(NavigationMessage::ReportsNextPanel),
         Action::ReportsPrevPanel => Message::Navigation(NavigationMessage::ReportsPrevPanel),
+        Action::PomodoroStart => Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),
+        Action::PomodoroPause => Message::Pomodoro(PomodoroMessage::Pause),
+        Action::PomodoroResume => Message::Pomodoro(PomodoroMessage::Resume),
+        Action::PomodoroTogglePause => Message::Pomodoro(PomodoroMessage::TogglePause),
+        Action::PomodoroSkip => Message::Pomodoro(PomodoroMessage::Skip),
+        Action::PomodoroStop => Message::Pomodoro(PomodoroMessage::Stop),
     }
 }
 

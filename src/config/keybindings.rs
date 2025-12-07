@@ -22,6 +22,8 @@ pub enum Action {
     CreateTask,
     CreateSubtask,
     CreateProject,
+    EditProject,
+    DeleteProject,
     EditTask,
     EditDueDate,
     EditScheduledDate,
@@ -119,6 +121,14 @@ pub enum Action {
 
     // Keybindings editor
     ShowKeybindingsEditor,
+
+    // Pomodoro timer
+    PomodoroStart,
+    PomodoroPause,
+    PomodoroResume,
+    PomodoroTogglePause,
+    PomodoroSkip,
+    PomodoroStop,
 }
 
 /// Key modifier
@@ -196,6 +206,8 @@ impl Default for Keybindings {
         bindings.insert("a".to_string(), Action::CreateTask);
         bindings.insert("A".to_string(), Action::CreateSubtask);
         bindings.insert("P".to_string(), Action::CreateProject);
+        bindings.insert("E".to_string(), Action::EditProject);
+        bindings.insert("X".to_string(), Action::DeleteProject);
         bindings.insert("e".to_string(), Action::EditTask);
         bindings.insert("D".to_string(), Action::EditDueDate);
         bindings.insert("S".to_string(), Action::EditScheduledDate);
@@ -293,6 +305,12 @@ impl Default for Keybindings {
         // Keybindings editor
         bindings.insert("ctrl+k".to_string(), Action::ShowKeybindingsEditor);
 
+        // Pomodoro timer
+        bindings.insert("f5".to_string(), Action::PomodoroStart);
+        bindings.insert("f6".to_string(), Action::PomodoroTogglePause);
+        bindings.insert("f7".to_string(), Action::PomodoroSkip);
+        bindings.insert("f8".to_string(), Action::PomodoroStop);
+
         Self { bindings }
     }
 }
@@ -373,6 +391,53 @@ impl Keybindings {
         let content = toml::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         std::fs::write(path, content)
+    }
+
+    /// Check if a key is already bound to an action
+    ///
+    /// Returns the conflicting action if the key is already bound.
+    #[must_use]
+    pub fn find_conflict(&self, key: &str) -> Option<&Action> {
+        self.bindings.get(key)
+    }
+
+    /// Set a binding with conflict detection
+    ///
+    /// Returns the previous action if the key was already bound (conflict).
+    /// The binding is still set - caller should handle the conflict.
+    pub fn set_binding_checked(&mut self, key: String, action: Action) -> Option<Action> {
+        // First, check if this key is already bound to something else
+        let previous = self.bindings.get(&key).cloned();
+
+        // Remove any existing binding for this action (an action can only have one key)
+        self.bindings.retain(|_, a| a != &action);
+
+        // Add the new binding
+        self.bindings.insert(key, action);
+
+        // Return the previous action if there was one (and it was different)
+        previous
+    }
+
+    /// Swap bindings between two keys
+    ///
+    /// If key1 is bound to action1 and key2 is bound to action2,
+    /// after swap: key1 -> action2, key2 -> action1
+    pub fn swap_bindings(&mut self, key1: &str, key2: &str) {
+        let action1 = self.bindings.get(key1).cloned();
+        let action2 = self.bindings.get(key2).cloned();
+
+        if let Some(a1) = action1 {
+            if let Some(a2) = action2 {
+                self.bindings.insert(key1.to_string(), a2);
+                self.bindings.insert(key2.to_string(), a1);
+            }
+        }
+    }
+
+    /// Remove binding for a specific key
+    pub fn remove_binding(&mut self, key: &str) -> Option<Action> {
+        self.bindings.remove(key)
     }
 }
 
@@ -484,5 +549,88 @@ z = "quit"
     fn test_modifier_default() {
         let modifier = Modifier::default();
         assert_eq!(modifier, Modifier::None);
+    }
+
+    #[test]
+    fn test_find_conflict_exists() {
+        let kb = Keybindings::default();
+
+        // "j" is bound to MoveDown by default
+        assert_eq!(kb.find_conflict("j"), Some(&Action::MoveDown));
+    }
+
+    #[test]
+    fn test_find_conflict_none() {
+        let kb = Keybindings::default();
+
+        // "z" is not bound by default
+        assert_eq!(kb.find_conflict("z"), None);
+    }
+
+    #[test]
+    fn test_set_binding_checked_no_conflict() {
+        let mut kb = Keybindings::default();
+
+        // "z" is not bound, so no conflict
+        let previous = kb.set_binding_checked("z".to_string(), Action::Quit);
+        assert!(previous.is_none());
+        assert_eq!(kb.get_action("z"), Some(&Action::Quit));
+    }
+
+    #[test]
+    fn test_set_binding_checked_with_conflict() {
+        let mut kb = Keybindings::default();
+
+        // "j" is already bound to MoveDown
+        let previous = kb.set_binding_checked("j".to_string(), Action::Search);
+        assert_eq!(previous, Some(Action::MoveDown));
+        assert_eq!(kb.get_action("j"), Some(&Action::Search));
+    }
+
+    #[test]
+    fn test_set_binding_checked_removes_old_action_binding() {
+        let mut kb = Keybindings::default();
+
+        // "j" is bound to MoveDown, now bind "z" to MoveDown
+        let previous = kb.set_binding_checked("z".to_string(), Action::MoveDown);
+        assert!(previous.is_none()); // "z" wasn't bound before
+
+        // "j" should no longer be bound to MoveDown (action can only have one key)
+        assert_eq!(kb.get_action("j"), None);
+        assert_eq!(kb.get_action("z"), Some(&Action::MoveDown));
+    }
+
+    #[test]
+    fn test_swap_bindings() {
+        let mut kb = Keybindings::default();
+
+        // "j" = MoveDown, "k" = MoveUp
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("k"), Some(&Action::MoveUp));
+
+        kb.swap_bindings("j", "k");
+
+        // After swap: "j" = MoveUp, "k" = MoveDown
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveUp));
+        assert_eq!(kb.get_action("k"), Some(&Action::MoveDown));
+    }
+
+    #[test]
+    fn test_remove_binding() {
+        let mut kb = Keybindings::default();
+
+        assert_eq!(kb.get_action("j"), Some(&Action::MoveDown));
+
+        let removed = kb.remove_binding("j");
+        assert_eq!(removed, Some(Action::MoveDown));
+        assert_eq!(kb.get_action("j"), None);
+    }
+
+    #[test]
+    fn test_remove_binding_nonexistent() {
+        let mut kb = Keybindings::default();
+
+        let removed = kb.remove_binding("nonexistent");
+        assert!(removed.is_none());
     }
 }

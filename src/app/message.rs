@@ -287,6 +287,10 @@ pub enum UiMessage {
     StartCreateSubtask,
     /// Enter input mode to create a new project
     StartCreateProject,
+    /// Enter input mode to edit/rename the selected project
+    StartEditProject,
+    /// Delete the selected project (tasks are unassigned, not deleted)
+    DeleteProject,
     /// Enter input mode to edit task title
     StartEditTask,
     /// Enter input mode to edit due date

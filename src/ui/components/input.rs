@@ -12,7 +12,7 @@ pub enum InputMode {
     Editing,
 }
 
-use crate::domain::TaskId;
+use crate::domain::{ProjectId, TaskId};
 
 use crate::storage::ImportFormat;
 
@@ -28,6 +28,7 @@ pub enum InputTarget {
     EditTags(TaskId),
     EditDescription(TaskId),
     Project,
+    EditProject(ProjectId), // Renaming an existing project
     Search,
     MoveToProject(TaskId),
     FilterByTag,

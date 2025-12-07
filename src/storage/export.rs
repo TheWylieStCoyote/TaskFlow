@@ -313,7 +313,9 @@ pub fn export_to_mermaid<W: Write>(
 
     writeln!(writer, "    %% Nodes")?;
     for task in tasks.values() {
-        let short_id = id_map.get(&task.id).unwrap();
+        let short_id = id_map
+            .get(&task.id)
+            .expect("task ID must exist in id_map built from same task collection");
         let label = escape_mermaid(&task.title);
         let class = match task.status {
             TaskStatus::Done => "done",

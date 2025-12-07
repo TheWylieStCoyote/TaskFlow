@@ -156,6 +156,8 @@ Each task shows:
 | Key | Action |
 |-----|--------|
 | `P` | Create new project |
+| `E` | Edit/rename project (sidebar focus) |
+| `X` | Delete project (sidebar focus) |
 
 #### Search & Filter
 
@@ -236,6 +238,21 @@ Record a sequence of actions and replay them later:
 4. Press `@` followed by the digit to replay the macro
 
 The footer shows `[REC]` when recording is active.
+
+#### Pomodoro Timer
+
+| Key | Action |
+|-----|--------|
+| `F5` | Start Pomodoro session (4 cycles) |
+| `F6` | Pause/Resume timer |
+| `F7` | Skip current phase (work/break) |
+| `F8` | Stop Pomodoro session |
+
+The Pomodoro timer appears in the status bar when active, showing:
+- Phase icon: 🍅 (work), ☕ (short break), 🌴 (long break)
+- Remaining time (MM:SS)
+- Cycle progress [completed/goal]
+- Pause indicator (⏸) when paused
 
 #### Templates
 
@@ -388,6 +405,60 @@ TaskFlow uses **The Elm Architecture (TEA)** pattern:
 - **Message**: Events that can change state (navigation, task actions, etc.)
 - **Update**: Pure function that takes state + message and produces new state
 - **View**: Renders the UI based on current state
+
+### Component Interaction
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              main.rs                                     │
+│                         (Event Loop + Terminal)                          │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+│    config/    │      │     app/      │      │      ui/      │
+│  ─────────────│      │  ─────────────│      │  ─────────────│
+│  settings.rs  │◀────▶│   model.rs    │─────▶│   view.rs     │
+│  keybindings  │      │  message.rs   │      │  components/  │
+│   theme.rs    │      │  update.rs    │      │   sidebar     │
+└───────────────┘      │   undo.rs     │      │   task_list   │
+                       └───────┬───────┘      │   dialogs     │
+                               │              └───────────────┘
+                               ▼
+                       ┌───────────────┐
+                       │   storage/    │
+                       │  ─────────────│
+                       │  backends/    │
+                       │  ├─ json.rs   │
+                       │  ├─ yaml.rs   │
+                       │  ├─ sqlite.rs │
+                       │  └─ markdown  │
+                       │  import.rs    │
+                       │  export.rs    │
+                       └───────────────┘
+                               │
+                       ┌───────┴───────┐
+                       ▼               ▼
+               ┌───────────┐   ┌───────────┐
+               │  domain/  │   │  File     │
+               │  ─────────│   │  System   │
+               │  task.rs  │   └───────────┘
+               │ project.rs│
+               │  tag.rs   │
+               │filter.rs  │
+               └───────────┘
+```
+
+### Data Flow
+
+1. **User Input** → Terminal captures key events
+2. **Key Mapping** → Keybindings translate keys to actions
+3. **Message Dispatch** → Actions become typed messages
+4. **Update** → Model is updated based on message
+5. **Side Effects** → Storage operations, undo stack updates
+6. **View Render** → UI components read model state
+7. **Terminal Draw** → Ratatui renders to terminal
 
 ## Project Structure
 
@@ -682,6 +753,60 @@ cargo fmt --check
 # Build documentation
 cargo doc --no-deps
 ```
+
+## Performance Tuning
+
+TaskFlow is designed for responsive performance up to 10,000+ tasks. Here are tips for optimal performance:
+
+### Storage Backend Selection
+
+| Backend | Read Speed | Write Speed | Best For |
+|---------|------------|-------------|----------|
+| JSON | Fast | Fast | Default, small-medium datasets |
+| YAML | Medium | Medium | Human editing, external tools |
+| SQLite | Very Fast | Fast | Large datasets (1000+ tasks) |
+| Markdown | Slow | Medium | Git integration, external editing |
+
+**Recommendation**: For 1000+ tasks, use SQLite for best filter/sort performance.
+
+### Configuration Tips
+
+1. **Disable auto-save for large datasets**: Set `auto_save_interval = 0` and save manually with `Ctrl+s`
+
+2. **Hide completed tasks**: Keep `show_completed = false` to reduce rendering overhead
+
+3. **Use project filters**: Filter to specific projects rather than viewing all tasks
+
+### Memory Usage
+
+TaskFlow keeps all tasks in memory. Approximate memory usage:
+- ~1KB per task (base overhead)
+- +~100 bytes per tag
+- +~500 bytes per time entry
+- +~2KB for tasks with subtasks
+
+For 10,000 tasks: expect ~15-20MB memory usage.
+
+### Known Limitations
+
+- **Markdown backend**: Not recommended for 500+ tasks (file I/O overhead)
+- **Tag search in SQLite**: Uses string matching (no dedicated index)
+- **Undo stack**: Keeps last 100 actions in memory
+
+## Known Issues
+
+### Current Limitations
+
+1. **Large update.rs file**: The main update logic is in a single 5500-line file. While functional, this makes navigation difficult. A future refactor may split this into modules.
+
+2. **SQLite tag queries**: Tag filtering in SQLite uses JSON string matching rather than a normalized table, which is slower for large datasets.
+
+3. **No external cache invalidation**: The Markdown backend caches parsed files but doesn't detect external modifications until restart.
+
+### Workarounds
+
+- **Slow tag filtering with SQLite**: Use project-based organization instead of heavy tag usage
+- **External Markdown edits**: Restart TaskFlow after editing files externally
 
 ## Contributing
 

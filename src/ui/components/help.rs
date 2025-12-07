@@ -269,6 +269,27 @@ impl Widget for HelpPopup {
             ]),
             Line::from(""),
             Line::from(vec![Span::styled(
+                "Pomodoro Timer",
+                Style::default().add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(vec![
+                Span::styled("F5", Style::default().fg(Color::Cyan)),
+                Span::raw("        Start Pomodoro session"),
+            ]),
+            Line::from(vec![
+                Span::styled("F6", Style::default().fg(Color::Cyan)),
+                Span::raw("        Pause/Resume timer"),
+            ]),
+            Line::from(vec![
+                Span::styled("F7", Style::default().fg(Color::Cyan)),
+                Span::raw("        Skip current phase"),
+            ]),
+            Line::from(vec![
+                Span::styled("F8", Style::default().fg(Color::Cyan)),
+                Span::raw("        Stop Pomodoro session"),
+            ]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
                 "General",
                 Style::default().add_modifier(Modifier::BOLD),
             )]),
@@ -442,7 +463,7 @@ mod tests {
     #[test]
     fn test_help_popup_default_impl() {
         let popup1 = HelpPopup::new();
-        let popup2 = HelpPopup::default();
+        let popup2 = HelpPopup;
 
         // Both should render the same content
         let buffer1 = render_widget(popup1, 40, 20);

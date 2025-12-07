@@ -59,6 +59,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::EditDescription(_) => "Description (empty to clear)",
             InputTarget::Project => "New Project",
+            InputTarget::EditProject(_) => "Rename Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",
             InputTarget::MoveToProject(_) => "Move to Project (enter number)",
             InputTarget::FilterByTag => "Filter by Tag (comma-separated, Ctrl+T to clear)",
@@ -281,6 +282,40 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
             format!("{due_today} due today"),
             Style::default()
                 .fg(theme.colors.warning.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
+    // Add Pomodoro timer display if active
+    if let Some(ref session) = model.pomodoro_session {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+
+        // Show phase icon and timer
+        let phase_icon = session.phase.icon();
+        let time_display = session.formatted_remaining();
+        let pause_indicator = if session.paused { " ⏸" } else { "" };
+
+        // Color based on phase: work = accent, break = success
+        let timer_color = if session.phase.is_break() {
+            theme.colors.success.to_color()
+        } else {
+            theme.colors.accent.to_color()
+        };
+
+        spans.push(Span::styled(
+            format!(
+                "{} {} [{}/{}]{}",
+                phase_icon,
+                time_display,
+                session.cycles_completed,
+                session.session_goal,
+                pause_indicator
+            ),
+            Style::default()
+                .fg(timer_color)
                 .add_modifier(Modifier::BOLD),
         ));
     }

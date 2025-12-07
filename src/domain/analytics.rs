@@ -350,7 +350,8 @@ impl ReportConfig {
     #[must_use]
     pub fn current_month() -> Self {
         let today = chrono::Local::now().date_naive();
-        let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();
+        let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+            .expect("day 1 of current month always exists");
         Self {
             start_date: start,
             end_date: today,
@@ -524,8 +525,10 @@ mod tests {
 
     #[test]
     fn test_time_analytics_total_hours() {
-        let mut analytics = TimeAnalytics::default();
-        analytics.total_minutes = 150;
+        let analytics = TimeAnalytics {
+            total_minutes: 150,
+            ..TimeAnalytics::default()
+        };
 
         assert!((analytics.total_hours() - 2.5).abs() < f64::EPSILON);
     }

@@ -99,6 +99,7 @@ impl SqliteBackend {
             CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+            CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
             CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 
             CREATE TABLE IF NOT EXISTS pomodoro_state (
@@ -400,40 +401,112 @@ impl TaskRepository for SqliteBackend {
     }
 
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
-        // For simplicity, we'll load all and filter in memory
-        // A production implementation would build SQL WHERE clauses
-        let all_tasks = self.list_tasks()?;
-        let filtered = all_tasks
-            .into_iter()
-            .filter(|task| {
-                if let Some(ref statuses) = filter.status {
-                    if !statuses.contains(&task.status) {
-                        return false;
-                    }
+        let conn = self.conn()?;
+
+        // Build dynamic SQL query with WHERE clauses
+        let mut sql = String::from("SELECT * FROM tasks WHERE 1=1");
+        let mut params: Vec<String> = Vec::new();
+
+        // Status filter
+        if let Some(ref statuses) = filter.status {
+            if !statuses.is_empty() {
+                let placeholders: Vec<String> = statuses
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                    .collect();
+                sql.push_str(&format!(" AND status IN ({})", placeholders.join(",")));
+                for s in statuses {
+                    params.push(s.as_str().to_string());
                 }
-                if let Some(ref priorities) = filter.priority {
-                    if !priorities.contains(&task.priority) {
-                        return false;
-                    }
+            }
+        }
+
+        // Priority filter
+        if let Some(ref priorities) = filter.priority {
+            if !priorities.is_empty() {
+                let placeholders: Vec<String> = priorities
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                    .collect();
+                sql.push_str(&format!(" AND priority IN ({})", placeholders.join(",")));
+                for p in priorities {
+                    params.push(p.as_str().to_string());
                 }
-                if let Some(ref project_id) = filter.project_id {
-                    if task.project_id.as_ref() != Some(project_id) {
-                        return false;
-                    }
-                }
-                if !filter.include_completed && task.status.is_complete() {
-                    return false;
-                }
-                if let Some(ref search) = filter.search_text {
-                    let search_lower = search.to_lowercase();
-                    if !task.title.to_lowercase().contains(&search_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
+            }
+        }
+
+        // Project filter
+        if let Some(ref project_id) = filter.project_id {
+            sql.push_str(&format!(" AND project_id = ?{}", params.len() + 1));
+            params.push(project_id.0.to_string());
+        }
+
+        // Exclude completed tasks
+        if !filter.include_completed {
+            sql.push_str(" AND status NOT IN ('done', 'cancelled')");
+        }
+
+        // Due date filters
+        if let Some(ref due_before) = filter.due_before {
+            sql.push_str(&format!(
+                " AND due_date IS NOT NULL AND due_date < ?{}",
+                params.len() + 1
+            ));
+            params.push(due_before.to_string());
+        }
+        if let Some(ref due_after) = filter.due_after {
+            sql.push_str(&format!(
+                " AND due_date IS NOT NULL AND due_date > ?{}",
+                params.len() + 1
+            ));
+            params.push(due_after.to_string());
+        }
+
+        // Search text (title and description)
+        if let Some(ref search) = filter.search_text {
+            let pattern = format!("%{}%", search.to_lowercase());
+            sql.push_str(&format!(
+                " AND (LOWER(title) LIKE ?{} OR LOWER(COALESCE(description, '')) LIKE ?{})",
+                params.len() + 1,
+                params.len() + 2
+            ));
+            params.push(pattern.clone());
+            params.push(pattern);
+        }
+
+        // Execute query with parameters
+        let mut stmt = conn.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let tasks = stmt
+            .query_map(param_refs.as_slice(), Self::task_from_row)?
+            .filter_map(Result::ok)
             .collect();
-        Ok(filtered)
+
+        // Apply tag filtering in memory (JSON columns are complex in SQL)
+        let tasks = if let Some(ref tags) = filter.tags {
+            if !tags.is_empty() {
+                let filtered: Vec<Task> = tasks;
+                match filter.tags_mode {
+                    crate::domain::TagFilterMode::Any => filtered
+                        .into_iter()
+                        .filter(|t| tags.iter().any(|tag| t.tags.contains(tag)))
+                        .collect(),
+                    crate::domain::TagFilterMode::All => filtered
+                        .into_iter()
+                        .filter(|t| tags.iter().all(|tag| t.tags.contains(tag)))
+                        .collect(),
+                }
+            } else {
+                tasks
+            }
+        } else {
+            tasks
+        };
+
+        Ok(tasks)
     }
 
     fn get_tasks_by_project(&self, project_id: &ProjectId) -> StorageResult<Vec<Task>> {
@@ -447,12 +520,25 @@ impl TaskRepository for SqliteBackend {
     }
 
     fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>> {
-        // SQLite JSON functions could be used, but for simplicity we filter in memory
-        let all_tasks = self.list_tasks()?;
-        Ok(all_tasks
-            .into_iter()
-            .filter(|t| t.tags.contains(&tag.to_string()))
-            .collect())
+        let conn = self.conn()?;
+        // Use LIKE to search for tag in JSON array string (e.g., ["tag1","tag2"])
+        // Match patterns:
+        // - ["tag"] - single element array (ends with "tag"])
+        // - ["tag","other"] - first element (has "tag", after)
+        // - ["other","tag"] - last element (ends with "tag"])
+        // - ["a","tag","b"] - middle element (has "tag", after)
+        let pattern_with_comma = format!("%\"{}\",%", tag); // First or middle element
+        let pattern_at_end = format!("%\"{}\"]", tag); // Last element (including single)
+
+        let mut stmt = conn.prepare("SELECT * FROM tasks WHERE tags LIKE ?1 OR tags LIKE ?2")?;
+        let tasks = stmt
+            .query_map(
+                params![pattern_with_comma, pattern_at_end],
+                Self::task_from_row,
+            )?
+            .filter_map(Result::ok)
+            .collect();
+        Ok(tasks)
     }
 }
 

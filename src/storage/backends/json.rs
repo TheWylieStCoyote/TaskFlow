@@ -497,9 +497,11 @@ mod tests {
         backend.create_task(&task1).unwrap();
         backend.create_task(&task2).unwrap();
 
-        let mut filter = Filter::default();
-        filter.status = Some(vec![TaskStatus::Todo]);
-        filter.include_completed = true;
+        let filter = Filter {
+            status: Some(vec![TaskStatus::Todo]),
+            include_completed: true,
+            ..Filter::default()
+        };
 
         let tasks = backend.list_tasks_filtered(&filter).unwrap();
         assert_eq!(tasks.len(), 1);
@@ -515,8 +517,10 @@ mod tests {
         backend.create_task(&task1).unwrap();
         backend.create_task(&task2).unwrap();
 
-        let mut filter = Filter::default();
-        filter.priority = Some(vec![Priority::High]);
+        let filter = Filter {
+            priority: Some(vec![Priority::High]),
+            ..Filter::default()
+        };
 
         let tasks = backend.list_tasks_filtered(&filter).unwrap();
         assert_eq!(tasks.len(), 1);
@@ -535,9 +539,11 @@ mod tests {
         backend.create_task(&task2).unwrap();
         backend.create_task(&task3).unwrap();
 
-        let mut filter = Filter::default();
-        filter.tags = Some(vec!["rust".to_string()]);
-        filter.tags_mode = TagFilterMode::Any;
+        let filter = Filter {
+            tags: Some(vec!["rust".to_string()]),
+            tags_mode: TagFilterMode::Any,
+            ..Filter::default()
+        };
 
         let tasks = backend.list_tasks_filtered(&filter).unwrap();
         assert_eq!(tasks.len(), 2);
@@ -553,9 +559,11 @@ mod tests {
         backend.create_task(&task1).unwrap();
         backend.create_task(&task2).unwrap();
 
-        let mut filter = Filter::default();
-        filter.tags = Some(vec!["rust".to_string(), "important".to_string()]);
-        filter.tags_mode = TagFilterMode::All;
+        let filter = Filter {
+            tags: Some(vec!["rust".to_string(), "important".to_string()]),
+            tags_mode: TagFilterMode::All,
+            ..Filter::default()
+        };
 
         let tasks = backend.list_tasks_filtered(&filter).unwrap();
         assert_eq!(tasks.len(), 1);

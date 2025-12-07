@@ -6,320 +6,69 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
-/// Help popup widget
-pub struct HelpPopup;
+use crate::config::Keybindings;
 
-impl HelpPopup {
+/// Help popup widget that displays keybindings dynamically
+pub struct HelpPopup<'a> {
+    keybindings: &'a Keybindings,
+}
+
+impl<'a> HelpPopup<'a> {
     #[must_use]
-    pub const fn new() -> Self {
-        Self
+    pub const fn new(keybindings: &'a Keybindings) -> Self {
+        Self { keybindings }
     }
 }
 
-impl Default for HelpPopup {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Widget for HelpPopup {
-    #[allow(clippy::too_many_lines)]
+impl Widget for HelpPopup<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Clear the area first
         Clear.render(area, buf);
 
-        let help_text = vec![
-            Line::from(vec![Span::styled(
-                "Navigation",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("j/↓", Style::default().fg(Color::Cyan)),
-                Span::raw("       Move down"),
-            ]),
-            Line::from(vec![
-                Span::styled("k/↑", Style::default().fg(Color::Cyan)),
-                Span::raw("       Move up"),
-            ]),
-            Line::from(vec![
-                Span::styled("g/G", Style::default().fg(Color::Cyan)),
-                Span::raw("       Go to first/last"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+u/d", Style::default().fg(Color::Cyan)),
-                Span::raw("   Page up/down"),
-            ]),
-            Line::from(vec![
-                Span::styled("h/←", Style::default().fg(Color::Cyan)),
-                Span::raw("       Focus sidebar"),
-            ]),
-            Line::from(vec![
-                Span::styled("l/→", Style::default().fg(Color::Cyan)),
-                Span::raw("       Focus task list"),
-            ]),
-            Line::from(vec![
-                Span::styled("Enter", Style::default().fg(Color::Cyan)),
-                Span::raw("     Select item"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Tasks",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("a", Style::default().fg(Color::Cyan)),
-                Span::raw("         Add new task"),
-            ]),
-            Line::from(vec![
-                Span::styled("A", Style::default().fg(Color::Cyan)),
-                Span::raw("         Add subtask"),
-            ]),
-            Line::from(vec![
-                Span::styled("e", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit task title"),
-            ]),
-            Line::from(vec![
-                Span::styled("d", Style::default().fg(Color::Cyan)),
-                Span::raw("         Delete task"),
-            ]),
-            Line::from(vec![
-                Span::styled("x/Space", Style::default().fg(Color::Cyan)),
-                Span::raw("   Toggle complete"),
-            ]),
-            Line::from(vec![
-                Span::styled("p", Style::default().fg(Color::Cyan)),
-                Span::raw("         Cycle priority"),
-            ]),
-            Line::from(vec![
-                Span::styled("D", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit due date"),
-            ]),
-            Line::from(vec![
-                Span::styled("T", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit tags"),
-            ]),
-            Line::from(vec![
-                Span::styled("S", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit scheduled date"),
-            ]),
-            Line::from(vec![
-                Span::styled("n", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit description/notes"),
-            ]),
-            Line::from(vec![
-                Span::styled("m", Style::default().fg(Color::Cyan)),
-                Span::raw("         Move to project"),
-            ]),
-            Line::from(vec![
-                Span::styled("t", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle time tracking"),
-            ]),
-            Line::from(vec![
-                Span::styled("f", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle focus mode"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+↑", Style::default().fg(Color::Cyan)),
-                Span::raw("    Move task up"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+↓", Style::default().fg(Color::Cyan)),
-                Span::raw("    Move task down"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Projects",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("P", Style::default().fg(Color::Cyan)),
-                Span::raw("         Create new project"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "View & Filter",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("b", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle sidebar"),
-            ]),
-            Line::from(vec![
-                Span::styled("c", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle show completed"),
-            ]),
-            Line::from(vec![
-                Span::styled("/", Style::default().fg(Color::Cyan)),
-                Span::raw("         Search tasks"),
-            ]),
-            Line::from(vec![
-                Span::styled("Esc", Style::default().fg(Color::Cyan)),
-                Span::raw("       Clear search (in search mode)"),
-            ]),
-            Line::from(vec![
-                Span::styled("#", Style::default().fg(Color::Cyan)),
-                Span::raw("         Filter by tag"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+t", Style::default().fg(Color::Cyan)),
-                Span::raw("    Clear tag filter"),
-            ]),
-            Line::from(vec![
-                Span::styled("s", Style::default().fg(Color::Cyan)),
-                Span::raw("         Cycle sort field"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Multi-Select",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("v", Style::default().fg(Color::Cyan)),
-                Span::raw("         Toggle multi-select mode"),
-            ]),
-            Line::from(vec![
-                Span::styled("V", Style::default().fg(Color::Cyan)),
-                Span::raw("         Select all tasks"),
-            ]),
-            Line::from(vec![
-                Span::styled("Space", Style::default().fg(Color::Cyan)),
-                Span::raw("     Toggle task selection (in multi-select)"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+v", Style::default().fg(Color::Cyan)),
-                Span::raw("    Clear selection"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Dependencies & Recurrence",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("B", Style::default().fg(Color::Cyan)),
-                Span::raw("         Edit dependencies (blocked by)"),
-            ]),
-            Line::from(vec![
-                Span::styled("R", Style::default().fg(Color::Cyan)),
-                Span::raw("         Set recurrence (d/w/m/y/0)"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Task Chains",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("Ctrl+l", Style::default().fg(Color::Cyan)),
-                Span::raw("    Link to next task"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+L", Style::default().fg(Color::Cyan)),
-                Span::raw("    Unlink from chain"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Calendar View",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("←/→", Style::default().fg(Color::Cyan)),
-                Span::raw("       Navigate days"),
-            ]),
-            Line::from(vec![
-                Span::styled("↑/↓", Style::default().fg(Color::Cyan)),
-                Span::raw("       Navigate weeks"),
-            ]),
-            Line::from(vec![
-                Span::styled("</> ", Style::default().fg(Color::Cyan)),
-                Span::raw("      Previous/Next month"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Export",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("Ctrl+e", Style::default().fg(Color::Cyan)),
-                Span::raw("    Export to CSV"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+i", Style::default().fg(Color::Cyan)),
-                Span::raw("    Export to ICS (calendar)"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Macros",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("Ctrl+q", Style::default().fg(Color::Cyan)),
-                Span::raw("    Record macro (press 0-9 for slot)"),
-            ]),
-            Line::from(vec![
-                Span::styled("@0-9", Style::default().fg(Color::Cyan)),
-                Span::raw("      Play macro from slot"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Templates",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("Ctrl+n", Style::default().fg(Color::Cyan)),
-                Span::raw("    Create task from template"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "Pomodoro Timer",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("F5", Style::default().fg(Color::Cyan)),
-                Span::raw("        Start Pomodoro session"),
-            ]),
-            Line::from(vec![
-                Span::styled("F6", Style::default().fg(Color::Cyan)),
-                Span::raw("        Pause/Resume timer"),
-            ]),
-            Line::from(vec![
-                Span::styled("F7", Style::default().fg(Color::Cyan)),
-                Span::raw("        Skip current phase"),
-            ]),
-            Line::from(vec![
-                Span::styled("F8", Style::default().fg(Color::Cyan)),
-                Span::raw("        Stop Pomodoro session"),
-            ]),
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                "General",
-                Style::default().add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(vec![
-                Span::styled("u/Ctrl+z", Style::default().fg(Color::Cyan)),
-                Span::raw("   Undo"),
-            ]),
-            Line::from(vec![
-                Span::styled("U/Ctrl+r", Style::default().fg(Color::Cyan)),
-                Span::raw("   Redo"),
-            ]),
-            Line::from(vec![
-                Span::styled("Ctrl+s", Style::default().fg(Color::Cyan)),
-                Span::raw("    Save"),
-            ]),
-            Line::from(vec![
-                Span::styled("?", Style::default().fg(Color::Cyan)),
-                Span::raw("         Show/hide help"),
-            ]),
-            Line::from(vec![
-                Span::styled("q/Esc", Style::default().fg(Color::Cyan)),
-                Span::raw("     Quit"),
-            ]),
-        ];
+        // Get bindings grouped by category
+        let grouped = self.keybindings.bindings_by_category();
 
-        let paragraph = Paragraph::new(help_text)
+        let mut help_lines: Vec<Line> = Vec::new();
+
+        for (category, bindings) in grouped {
+            // Add category header
+            help_lines.push(Line::from(vec![Span::styled(
+                category.display_name(),
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
+
+            // Add each binding in this category
+            for (key, _action, description) in bindings {
+                // Format the key for display
+                let display_key = format_key_for_display(&key);
+
+                // Pad key to align descriptions
+                let padded_key = format!("{:<10}", display_key);
+
+                help_lines.push(Line::from(vec![
+                    Span::styled(padded_key, Style::default().fg(Color::Cyan)),
+                    Span::raw(description),
+                ]));
+            }
+
+            // Add empty line between categories
+            help_lines.push(Line::from(""));
+        }
+
+        // Remove trailing empty line if present
+        if help_lines
+            .last()
+            .map(|l| l.spans.is_empty())
+            .unwrap_or(false)
+        {
+            help_lines.pop();
+        }
+
+        let paragraph = Paragraph::new(help_lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Help ")
+                    .title(" Help (press ? or Esc to close) ")
                     .title_alignment(Alignment::Center)
                     .border_style(Style::default().fg(Color::Yellow)),
             )
@@ -327,6 +76,44 @@ impl Widget for HelpPopup {
             .alignment(Alignment::Left);
 
         paragraph.render(area, buf);
+    }
+}
+
+/// Format a key string for display (make it more readable)
+fn format_key_for_display(key: &str) -> String {
+    // Handle special key names
+    match key.to_lowercase().as_str() {
+        "enter" => "Enter".to_string(),
+        "esc" => "Esc".to_string(),
+        "tab" => "Tab".to_string(),
+        "space" => "Space".to_string(),
+        "left" => "←".to_string(),
+        "right" => "→".to_string(),
+        "up" => "↑".to_string(),
+        "down" => "↓".to_string(),
+        _ => {
+            // Handle modifiers
+            if let Some(rest) = key.strip_prefix("ctrl+") {
+                format!("Ctrl+{}", format_key_part(rest))
+            } else if let Some(rest) = key.strip_prefix("alt+") {
+                format!("Alt+{}", format_key_part(rest))
+            } else if let Some(rest) = key.strip_prefix("shift+") {
+                format!("Shift+{}", format_key_part(rest))
+            } else {
+                key.to_string()
+            }
+        }
+    }
+}
+
+/// Format a key part (after modifier)
+fn format_key_part(key: &str) -> String {
+    match key.to_lowercase().as_str() {
+        "up" => "↑".to_string(),
+        "down" => "↓".to_string(),
+        "left" => "←".to_string(),
+        "right" => "→".to_string(),
+        _ => key.to_string(),
     }
 }
 
@@ -424,7 +211,8 @@ mod tests {
 
     #[test]
     fn test_help_popup_renders_title() {
-        let popup = HelpPopup::new();
+        let keybindings = Keybindings::default();
+        let popup = HelpPopup::new(&keybindings);
         let buffer = render_widget(popup, 60, 30);
         let content = buffer_content(&buffer);
 
@@ -432,46 +220,44 @@ mod tests {
     }
 
     #[test]
-    fn test_help_popup_renders_navigation_section() {
-        let popup = HelpPopup::new();
-        let buffer = render_widget(popup, 60, 40);
+    fn test_help_popup_renders_categories() {
+        let keybindings = Keybindings::default();
+        let popup = HelpPopup::new(&keybindings);
+        let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
+        // Check for category headers
         assert!(
             content.contains("Navigation"),
-            "Navigation section header should be visible"
+            "Navigation category should be visible"
         );
         assert!(
-            content.contains("Move down") || content.contains("j"),
-            "Navigation instructions should be visible"
+            content.contains("Tasks"),
+            "Tasks category should be visible"
         );
     }
 
     #[test]
     fn test_help_popup_renders_keybindings() {
-        let popup = HelpPopup::new();
-        let buffer = render_widget(popup, 60, 50);
+        let keybindings = Keybindings::default();
+        let popup = HelpPopup::new(&keybindings);
+        let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
-        // Check for various keybinding categories
+        // Check for some expected keybindings
         assert!(
-            content.contains("Tasks") || content.contains("Add new task"),
-            "Tasks section should be visible"
+            content.contains("Move") || content.contains("up") || content.contains("down"),
+            "Movement instructions should be visible"
         );
     }
 
     #[test]
-    fn test_help_popup_default_impl() {
-        let popup1 = HelpPopup::new();
-        let popup2 = HelpPopup;
-
-        // Both should render the same content
-        let buffer1 = render_widget(popup1, 40, 20);
-        let buffer2 = render_widget(popup2, 40, 20);
-
-        let content1 = buffer_content(&buffer1);
-        let content2 = buffer_content(&buffer2);
-
-        assert_eq!(content1, content2);
+    fn test_format_key_for_display() {
+        assert_eq!(format_key_for_display("enter"), "Enter");
+        assert_eq!(format_key_for_display("esc"), "Esc");
+        assert_eq!(format_key_for_display("ctrl+s"), "Ctrl+s");
+        assert_eq!(format_key_for_display("ctrl+up"), "Ctrl+↑");
+        assert_eq!(format_key_for_display("left"), "←");
+        assert_eq!(format_key_for_display("a"), "a");
     }
 }

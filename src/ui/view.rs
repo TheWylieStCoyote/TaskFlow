@@ -43,7 +43,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     // Render popups
     if model.show_help {
         let popup_area = centered_rect(50, 70, area);
-        frame.render_widget(HelpPopup::new(), popup_area);
+        frame.render_widget(HelpPopup::new(&model.keybindings), popup_area);
     }
 
     // Render input dialog if in editing mode

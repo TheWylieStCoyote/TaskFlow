@@ -132,6 +132,292 @@ pub enum Action {
     PomodoroStop,
 }
 
+/// Category for grouping actions in help display
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ActionCategory {
+    Navigation,
+    Tasks,
+    Projects,
+    TimeTracking,
+    ViewFilter,
+    MultiSelect,
+    Dependencies,
+    Recurrence,
+    TaskChains,
+    Calendar,
+    Reports,
+    Export,
+    Import,
+    Macros,
+    Templates,
+    Pomodoro,
+    System,
+}
+
+impl ActionCategory {
+    /// Get display name for the category
+    #[must_use]
+    pub const fn display_name(&self) -> &'static str {
+        match self {
+            Self::Navigation => "Navigation",
+            Self::Tasks => "Tasks",
+            Self::Projects => "Projects",
+            Self::TimeTracking => "Time Tracking",
+            Self::ViewFilter => "View & Filter",
+            Self::MultiSelect => "Multi-Select",
+            Self::Dependencies => "Dependencies",
+            Self::Recurrence => "Recurrence",
+            Self::TaskChains => "Task Chains",
+            Self::Calendar => "Calendar",
+            Self::Reports => "Reports",
+            Self::Export => "Export",
+            Self::Import => "Import",
+            Self::Macros => "Macros",
+            Self::Templates => "Templates",
+            Self::Pomodoro => "Pomodoro Timer",
+            Self::System => "System",
+        }
+    }
+
+    /// Get display order for sorting categories
+    #[must_use]
+    pub const fn display_order(&self) -> u8 {
+        match self {
+            Self::Navigation => 0,
+            Self::Tasks => 1,
+            Self::Projects => 2,
+            Self::TimeTracking => 3,
+            Self::ViewFilter => 4,
+            Self::MultiSelect => 5,
+            Self::Dependencies => 6,
+            Self::Recurrence => 7,
+            Self::TaskChains => 8,
+            Self::Calendar => 9,
+            Self::Reports => 10,
+            Self::Export => 11,
+            Self::Import => 12,
+            Self::Macros => 13,
+            Self::Templates => 14,
+            Self::Pomodoro => 15,
+            Self::System => 16,
+        }
+    }
+}
+
+impl Action {
+    /// Get a human-readable description of the action
+    #[must_use]
+    pub const fn description(&self) -> &'static str {
+        match self {
+            // Navigation
+            Self::MoveUp => "Move up",
+            Self::MoveDown => "Move down",
+            Self::MoveFirst => "Go to first",
+            Self::MoveLast => "Go to last",
+            Self::PageUp => "Page up",
+            Self::PageDown => "Page down",
+            // Task actions
+            Self::ToggleComplete => "Toggle complete",
+            Self::CreateTask => "Create task",
+            Self::CreateSubtask => "Create subtask",
+            Self::EditTask => "Edit task title",
+            Self::EditDueDate => "Edit due date",
+            Self::EditScheduledDate => "Edit scheduled date",
+            Self::EditTags => "Edit tags",
+            Self::EditDescription => "Edit description",
+            Self::DeleteTask => "Delete task",
+            Self::CyclePriority => "Cycle priority",
+            Self::MoveToProject => "Move to project",
+            // Project actions
+            Self::CreateProject => "Create project",
+            Self::EditProject => "Edit project",
+            Self::DeleteProject => "Delete project",
+            // Time tracking
+            Self::ToggleTimeTracking => "Toggle time tracking",
+            Self::ShowTimeLog => "Show time log",
+            // UI actions
+            Self::ToggleSidebar => "Toggle sidebar",
+            Self::ToggleShowCompleted => "Toggle show completed",
+            Self::ShowHelp => "Show help",
+            Self::ToggleFocusMode => "Toggle focus mode",
+            Self::FocusSidebar => "Focus sidebar",
+            Self::FocusTaskList => "Focus task list",
+            Self::Select => "Select item",
+            Self::Search => "Search tasks",
+            Self::ClearSearch => "Clear search",
+            Self::FilterByTag => "Filter by tag",
+            Self::ClearTagFilter => "Clear tag filter",
+            Self::CycleSortField => "Cycle sort field",
+            Self::ToggleSortOrder => "Toggle sort order",
+            // Multi-select
+            Self::ToggleMultiSelect => "Toggle multi-select",
+            Self::ToggleTaskSelection => "Toggle task selection",
+            Self::SelectAll => "Select all",
+            Self::ClearSelection => "Clear selection",
+            Self::BulkDelete => "Bulk delete",
+            Self::BulkMoveToProject => "Bulk move to project",
+            Self::BulkSetStatus => "Bulk set status",
+            // Dependencies
+            Self::EditDependencies => "Edit dependencies",
+            // Recurrence
+            Self::EditRecurrence => "Edit recurrence",
+            // Manual ordering
+            Self::MoveTaskUp => "Move task up",
+            Self::MoveTaskDown => "Move task down",
+            // Task chains
+            Self::LinkTask => "Link to next task",
+            Self::UnlinkTask => "Unlink from chain",
+            // Calendar
+            Self::CalendarPrevMonth => "Previous month",
+            Self::CalendarNextMonth => "Next month",
+            Self::CalendarPrevDay => "Previous day",
+            Self::CalendarNextDay => "Next day",
+            // Reports
+            Self::ReportsNextPanel => "Next panel",
+            Self::ReportsPrevPanel => "Previous panel",
+            // System
+            Self::Save => "Save",
+            Self::Undo => "Undo",
+            Self::Redo => "Redo",
+            Self::Quit => "Quit",
+            // Export
+            Self::ExportCsv => "Export to CSV",
+            Self::ExportIcs => "Export to ICS",
+            Self::ExportChainsDot => "Export chains (DOT)",
+            Self::ExportChainsMermaid => "Export chains (Mermaid)",
+            Self::ExportReportMarkdown => "Export report (Markdown)",
+            Self::ExportReportHtml => "Export report (HTML)",
+            // Import
+            Self::ImportCsv => "Import from CSV",
+            Self::ImportIcs => "Import from ICS",
+            // Macros
+            Self::RecordMacro => "Record macro",
+            Self::StopRecordMacro => "Stop recording",
+            Self::PlayMacro0 => "Play macro 0",
+            Self::PlayMacro1 => "Play macro 1",
+            Self::PlayMacro2 => "Play macro 2",
+            Self::PlayMacro3 => "Play macro 3",
+            Self::PlayMacro4 => "Play macro 4",
+            Self::PlayMacro5 => "Play macro 5",
+            Self::PlayMacro6 => "Play macro 6",
+            Self::PlayMacro7 => "Play macro 7",
+            Self::PlayMacro8 => "Play macro 8",
+            Self::PlayMacro9 => "Play macro 9",
+            // Templates
+            Self::ShowTemplates => "Show templates",
+            // Keybindings
+            Self::ShowKeybindingsEditor => "Edit keybindings",
+            // Pomodoro
+            Self::PomodoroStart => "Start Pomodoro",
+            Self::PomodoroPause => "Pause timer",
+            Self::PomodoroResume => "Resume timer",
+            Self::PomodoroTogglePause => "Toggle pause",
+            Self::PomodoroSkip => "Skip phase",
+            Self::PomodoroStop => "Stop Pomodoro",
+        }
+    }
+
+    /// Get the category this action belongs to
+    #[must_use]
+    pub const fn category(&self) -> ActionCategory {
+        match self {
+            Self::MoveUp
+            | Self::MoveDown
+            | Self::MoveFirst
+            | Self::MoveLast
+            | Self::PageUp
+            | Self::PageDown => ActionCategory::Navigation,
+
+            Self::ToggleComplete
+            | Self::CreateTask
+            | Self::CreateSubtask
+            | Self::EditTask
+            | Self::EditDueDate
+            | Self::EditScheduledDate
+            | Self::EditTags
+            | Self::EditDescription
+            | Self::DeleteTask
+            | Self::CyclePriority
+            | Self::MoveToProject
+            | Self::MoveTaskUp
+            | Self::MoveTaskDown => ActionCategory::Tasks,
+
+            Self::CreateProject | Self::EditProject | Self::DeleteProject => {
+                ActionCategory::Projects
+            }
+
+            Self::ToggleTimeTracking | Self::ShowTimeLog => ActionCategory::TimeTracking,
+
+            Self::ToggleSidebar
+            | Self::ToggleShowCompleted
+            | Self::ShowHelp
+            | Self::ToggleFocusMode
+            | Self::FocusSidebar
+            | Self::FocusTaskList
+            | Self::Select
+            | Self::Search
+            | Self::ClearSearch
+            | Self::FilterByTag
+            | Self::ClearTagFilter
+            | Self::CycleSortField
+            | Self::ToggleSortOrder => ActionCategory::ViewFilter,
+
+            Self::ToggleMultiSelect
+            | Self::ToggleTaskSelection
+            | Self::SelectAll
+            | Self::ClearSelection
+            | Self::BulkDelete
+            | Self::BulkMoveToProject
+            | Self::BulkSetStatus => ActionCategory::MultiSelect,
+
+            Self::EditDependencies => ActionCategory::Dependencies,
+            Self::EditRecurrence => ActionCategory::Recurrence,
+            Self::LinkTask | Self::UnlinkTask => ActionCategory::TaskChains,
+
+            Self::CalendarPrevMonth
+            | Self::CalendarNextMonth
+            | Self::CalendarPrevDay
+            | Self::CalendarNextDay => ActionCategory::Calendar,
+
+            Self::ReportsNextPanel | Self::ReportsPrevPanel => ActionCategory::Reports,
+
+            Self::ExportCsv
+            | Self::ExportIcs
+            | Self::ExportChainsDot
+            | Self::ExportChainsMermaid
+            | Self::ExportReportMarkdown
+            | Self::ExportReportHtml => ActionCategory::Export,
+
+            Self::ImportCsv | Self::ImportIcs => ActionCategory::Import,
+
+            Self::RecordMacro
+            | Self::StopRecordMacro
+            | Self::PlayMacro0
+            | Self::PlayMacro1
+            | Self::PlayMacro2
+            | Self::PlayMacro3
+            | Self::PlayMacro4
+            | Self::PlayMacro5
+            | Self::PlayMacro6
+            | Self::PlayMacro7
+            | Self::PlayMacro8
+            | Self::PlayMacro9 => ActionCategory::Macros,
+
+            Self::ShowTemplates => ActionCategory::Templates,
+            Self::ShowKeybindingsEditor => ActionCategory::System,
+
+            Self::PomodoroStart
+            | Self::PomodoroPause
+            | Self::PomodoroResume
+            | Self::PomodoroTogglePause
+            | Self::PomodoroSkip
+            | Self::PomodoroStop => ActionCategory::Pomodoro,
+
+            Self::Save | Self::Undo | Self::Redo | Self::Quit => ActionCategory::System,
+        }
+    }
+}
+
 /// Key modifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -378,6 +664,43 @@ impl Keybindings {
             .iter()
             .find(|(_, a)| *a == action)
             .map(|(k, _)| k)
+    }
+
+    /// Get all bindings grouped by category, sorted for display in help
+    ///
+    /// Returns a Vec of (category, Vec<(key, action, description)>) sorted by category order
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn bindings_by_category(
+        &self,
+    ) -> Vec<(ActionCategory, Vec<(String, &Action, &'static str)>)> {
+        use std::collections::BTreeMap;
+
+        // Type alias for the grouped bindings
+        type GroupedBindings<'a> = (ActionCategory, Vec<(String, &'a Action, &'static str)>);
+
+        // Group bindings by category
+        let mut groups: BTreeMap<u8, GroupedBindings<'_>> = BTreeMap::new();
+
+        for (key, action) in &self.bindings {
+            let category = action.category();
+            let order = category.display_order();
+            let description = action.description();
+
+            groups
+                .entry(order)
+                .or_insert_with(|| (category, Vec::new()))
+                .1
+                .push((key.clone(), action, description));
+        }
+
+        // Sort each group's bindings alphabetically by key
+        for (_, (_, bindings)) in groups.iter_mut() {
+            bindings.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+
+        // Convert to Vec, already sorted by category order due to BTreeMap
+        groups.into_values().collect()
     }
 
     /// Save keybindings to the config file

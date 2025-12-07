@@ -12,8 +12,8 @@ use crate::ui::{InputMode, InputTarget};
 pub fn handle_system(model: &mut Model, msg: SystemMessage) {
     match msg {
         SystemMessage::Quit => {
-            // Stop any running timer before quitting
-            model.stop_time_tracking();
+            // Don't stop time tracking - let it persist across app restarts
+            // The running entry will be restored when the app reopens
             model.running = RunningState::Quitting;
         }
         SystemMessage::Save => {

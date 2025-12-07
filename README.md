@@ -156,6 +156,8 @@ Each task shows:
 | Key | Action |
 |-----|--------|
 | `P` | Create new project |
+| `E` | Edit/rename project (sidebar focus) |
+| `X` | Delete project (sidebar focus) |
 
 #### Search & Filter
 

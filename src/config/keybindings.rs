@@ -22,6 +22,8 @@ pub enum Action {
     CreateTask,
     CreateSubtask,
     CreateProject,
+    EditProject,
+    DeleteProject,
     EditTask,
     EditDueDate,
     EditScheduledDate,
@@ -204,6 +206,8 @@ impl Default for Keybindings {
         bindings.insert("a".to_string(), Action::CreateTask);
         bindings.insert("A".to_string(), Action::CreateSubtask);
         bindings.insert("P".to_string(), Action::CreateProject);
+        bindings.insert("E".to_string(), Action::EditProject);
+        bindings.insert("X".to_string(), Action::DeleteProject);
         bindings.insert("e".to_string(), Action::EditTask);
         bindings.insert("D".to_string(), Action::EditDueDate);
         bindings.insert("S".to_string(), Action::EditScheduledDate);

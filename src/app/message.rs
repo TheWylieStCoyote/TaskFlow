@@ -490,6 +490,8 @@ pub enum SystemMessage {
     ConfirmImport,
     /// Cancel pending import
     CancelImport,
+    /// Refresh storage to detect external file changes
+    RefreshStorage,
 }
 
 impl From<NavigationMessage> for Message {

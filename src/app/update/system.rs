@@ -66,6 +66,14 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::CancelImport => {
             handle_cancel_import(model);
         }
+        SystemMessage::RefreshStorage => {
+            let changes = model.refresh_storage();
+            if changes > 0 {
+                model.status_message = Some(format!("Refreshed: {} change(s) detected", changes));
+            } else {
+                model.status_message = Some("No external changes detected".to_string());
+            }
+        }
     }
 }
 

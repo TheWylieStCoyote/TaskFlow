@@ -828,6 +828,13 @@ impl StorageBackend for MarkdownBackend {
         self.pomodoro_state.stats = Some(stats.clone());
         self.save_pomodoro_state()
     }
+
+    fn refresh(&mut self) -> usize {
+        // Delegate to the existing refresh implementation
+        let task_changes = self.scan_for_task_changes();
+        let project_changes = self.scan_for_project_changes();
+        task_changes + project_changes
+    }
 }
 
 #[cfg(test)]
@@ -1251,5 +1258,32 @@ mod tests {
 
         // Mtime should still be tracked
         assert!(backend.task_mtimes.contains_key(&task.id));
+    }
+
+    #[test]
+    fn test_markdown_refresh_via_trait() {
+        use crate::storage::StorageBackend;
+
+        let (dir, mut backend) = create_test_backend();
+
+        // Create a task through normal API
+        let task = Task::new("Original");
+        backend.create_task(&task).unwrap();
+
+        // Externally modify
+        let file_path = dir.path().join("tasks").join(format!("{}.md", task.id.0));
+        let content = fs::read_to_string(&file_path).unwrap();
+        let modified = content.replace("Original", "Modified via trait");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        fs::write(&file_path, modified).unwrap();
+
+        // Call refresh through the trait method
+        let trait_backend: &mut dyn StorageBackend = &mut backend;
+        let changes = trait_backend.refresh();
+        assert!(changes > 0, "Trait refresh should detect changes");
+
+        // Verify the change was picked up
+        let updated = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(updated.title, "Modified via trait");
     }
 }

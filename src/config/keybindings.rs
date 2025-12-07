@@ -89,6 +89,7 @@ pub enum Action {
     Undo,
     Redo,
     Quit,
+    RefreshStorage,
 
     // Export
     ExportCsv,
@@ -268,6 +269,7 @@ impl Default for Keybindings {
         bindings.insert("U".to_string(), Action::Redo);
         bindings.insert("q".to_string(), Action::Quit);
         bindings.insert("esc".to_string(), Action::Quit);
+        bindings.insert("f5".to_string(), Action::RefreshStorage);
 
         // Export
         bindings.insert("ctrl+e".to_string(), Action::ExportCsv);

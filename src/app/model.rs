@@ -608,6 +608,40 @@ impl Model {
         }
     }
 
+    /// Refreshes storage to detect external file changes.
+    ///
+    /// Scans for files that have been modified, added, or deleted externally
+    /// and reloads the data from storage. Returns the number of changes detected.
+    ///
+    /// This is primarily useful for the markdown backend when files are edited
+    /// externally (e.g., by a text editor or git operations).
+    pub fn refresh_storage(&mut self) -> usize {
+        if let Some(ref mut backend) = self.storage {
+            let changes = backend.refresh();
+            if changes > 0 {
+                // Reload all data from storage
+                if let Ok(tasks) = backend.list_tasks() {
+                    self.tasks.clear();
+                    for task in tasks {
+                        self.tasks.insert(task.id.clone(), task);
+                    }
+                }
+                if let Ok(projects) =
+                    crate::storage::ProjectRepository::list_projects(backend.as_mut())
+                {
+                    self.projects.clear();
+                    for project in projects {
+                        self.projects.insert(project.id.clone(), project);
+                    }
+                }
+                self.refresh_visible_tasks();
+            }
+            changes
+        } else {
+            0
+        }
+    }
+
     /// Modifies a task with undo support.
     ///
     /// This helper method centralizes the common pattern of:
@@ -2850,5 +2884,57 @@ mod tests {
                 "Grandchild should appear before Root2"
             );
         }
+    }
+
+    #[test]
+    fn test_model_refresh_storage_without_backend() {
+        let mut model = Model::new();
+        // No storage backend attached
+        assert!(model.storage.is_none());
+
+        // refresh_storage should return 0 when no backend
+        let changes = model.refresh_storage();
+        assert_eq!(changes, 0);
+    }
+
+    #[test]
+    fn test_model_refresh_storage_with_markdown_backend() {
+        use crate::storage::{backends::MarkdownBackend, BackendType, StorageBackend};
+        use std::fs;
+        use tempfile::tempdir;
+
+        let dir = tempdir().unwrap();
+
+        // First, create a task directly in the markdown directory structure
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        backend.initialize().unwrap();
+        let task = Task::new("Original task");
+        backend.create_task(&task).unwrap();
+        backend.flush().unwrap();
+        drop(backend); // Close the backend
+
+        // Create model using the proper API
+        let mut model = Model::new()
+            .with_storage(BackendType::Markdown, dir.path().to_path_buf())
+            .unwrap();
+        assert_eq!(model.tasks.len(), 1);
+        assert_eq!(model.tasks.get(&task.id).unwrap().title, "Original task");
+
+        // Externally modify the file
+        let file_path = dir.path().join("tasks").join(format!("{}.md", task.id.0));
+        let content = fs::read_to_string(&file_path).unwrap();
+        let modified = content.replace("Original task", "Externally modified");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        fs::write(&file_path, modified).unwrap();
+
+        // Refresh should detect the change
+        let changes = model.refresh_storage();
+        assert!(changes > 0, "Should detect external modification");
+
+        // Model should have updated task
+        assert_eq!(
+            model.tasks.get(&task.id).unwrap().title,
+            "Externally modified"
+        );
     }
 }

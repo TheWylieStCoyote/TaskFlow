@@ -550,6 +550,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::PomodoroTogglePause => Message::Pomodoro(PomodoroMessage::TogglePause),
         Action::PomodoroSkip => Message::Pomodoro(PomodoroMessage::Skip),
         Action::PomodoroStop => Message::Pomodoro(PomodoroMessage::Stop),
+        Action::RefreshStorage => Message::System(SystemMessage::RefreshStorage),
     }
 }
 

@@ -126,56 +126,6 @@ impl Widget for ConfirmDialog<'_> {
     }
 }
 
-/// Overdue tasks alert popup shown at startup
-pub struct OverdueAlert {
-    count: usize,
-    task_titles: Vec<String>,
-}
-
-impl OverdueAlert {
-    #[must_use]
-    pub fn new(count: usize, task_titles: Vec<String>) -> Self {
-        Self { count, task_titles }
-    }
-}
-
-impl Widget for OverdueAlert {
-    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
-        Clear.render(area, buf);
-
-        let mut lines = vec![format!(
-            "You have {} overdue task{}!\n",
-            self.count,
-            if self.count == 1 { "" } else { "s" }
-        )];
-
-        // Show up to 5 task titles
-        for (i, title) in self.task_titles.iter().take(5).enumerate() {
-            lines.push(format!("  {}. {}", i + 1, title));
-        }
-        if self.count > 5 {
-            lines.push(format!("  ... and {} more", self.count - 5));
-        }
-
-        lines.push(String::new());
-        lines.push("Press any key to dismiss".to_string());
-
-        let text = lines.join("\n");
-
-        let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
-            .block(
-                Block::default()
-                    .title(" ⚠ Overdue Tasks ")
-                    .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Red)),
-            );
-
-        paragraph.render(area, buf);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

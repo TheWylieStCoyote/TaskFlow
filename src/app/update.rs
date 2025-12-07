@@ -1275,8 +1275,7 @@ fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::ApplyKeybinding(_)
         | UiMessage::ResetKeybinding
         | UiMessage::ResetAllKeybindings
-        | UiMessage::SaveKeybindings
-        | UiMessage::DismissOverdueAlert => {
+        | UiMessage::SaveKeybindings => {
             handle_ui_keybindings(model, msg);
         }
     }
@@ -2332,9 +2331,6 @@ fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                 model.status_message = Some(format!("Failed to save keybindings: {e}"));
             }
         },
-        UiMessage::DismissOverdueAlert => {
-            model.show_overdue_alert = false;
-        }
         _ => {}
     }
 }

@@ -417,10 +417,6 @@ pub enum UiMessage {
     ResetAllKeybindings,
     /// Save modified keybindings
     SaveKeybindings,
-
-    // Overdue alert
-    /// Dismiss the overdue tasks alert
-    DismissOverdueAlert,
 }
 
 /// System-level messages for application control.

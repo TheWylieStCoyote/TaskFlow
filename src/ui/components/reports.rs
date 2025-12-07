@@ -25,7 +25,6 @@ pub enum ReportPanel {
     Tags,
     Time,
     Insights,
-    Estimation,
 }
 
 impl ReportPanel {
@@ -37,8 +36,7 @@ impl ReportPanel {
             Self::Velocity => Self::Tags,
             Self::Tags => Self::Time,
             Self::Time => Self::Insights,
-            Self::Insights => Self::Estimation,
-            Self::Estimation => Self::Overview,
+            Self::Insights => Self::Overview,
         }
     }
 
@@ -46,12 +44,11 @@ impl ReportPanel {
     #[must_use]
     pub const fn prev(self) -> Self {
         match self {
-            Self::Overview => Self::Estimation,
+            Self::Overview => Self::Insights,
             Self::Velocity => Self::Overview,
             Self::Tags => Self::Velocity,
             Self::Time => Self::Tags,
             Self::Insights => Self::Time,
-            Self::Estimation => Self::Insights,
         }
     }
 
@@ -64,21 +61,13 @@ impl ReportPanel {
             Self::Tags => 2,
             Self::Time => 3,
             Self::Insights => 4,
-            Self::Estimation => 5,
         }
     }
 
     /// Get panel names for tabs.
     #[must_use]
-    pub const fn names() -> [&'static str; 6] {
-        [
-            "Overview",
-            "Velocity",
-            "Tags",
-            "Time",
-            "Insights",
-            "Estimation",
-        ]
+    pub const fn names() -> [&'static str; 5] {
+        ["Overview", "Velocity", "Tags", "Time", "Insights"]
     }
 }
 
@@ -146,7 +135,6 @@ impl Widget for ReportsView<'_> {
             ReportPanel::Tags => self.render_tags(chunks[1], buf),
             ReportPanel::Time => self.render_time(chunks[1], buf),
             ReportPanel::Insights => self.render_insights(chunks[1], buf),
-            ReportPanel::Estimation => self.render_estimation(chunks[1], buf),
         }
     }
 }
@@ -531,145 +519,6 @@ impl ReportsView<'_> {
             );
         }
     }
-
-    fn render_estimation(&self, area: Rect, buf: &mut Buffer) {
-        // Calculate estimation statistics
-        let mut total_estimated: u32 = 0;
-        let mut total_actual: u32 = 0;
-        let mut over_count = 0;
-        let mut under_count = 0;
-        let mut on_target_count = 0;
-        let mut accuracies: Vec<f64> = Vec::new();
-
-        for task in self.model.tasks.values() {
-            if let Some(est) = task.estimated_minutes {
-                total_estimated = total_estimated.saturating_add(est);
-                total_actual = total_actual.saturating_add(task.actual_minutes);
-
-                if let Some(variance) = task.time_variance() {
-                    match variance.cmp(&0) {
-                        std::cmp::Ordering::Greater => over_count += 1,
-                        std::cmp::Ordering::Less => under_count += 1,
-                        std::cmp::Ordering::Equal => on_target_count += 1,
-                    }
-                }
-
-                if let Some(accuracy) = task.estimation_accuracy() {
-                    accuracies.push(accuracy);
-                }
-            }
-        }
-
-        let avg_accuracy = if accuracies.is_empty() {
-            None
-        } else {
-            Some(accuracies.iter().sum::<f64>() / accuracies.len() as f64)
-        };
-
-        let tasks_with_estimates = over_count + under_count + on_target_count;
-
-        // Split into stat boxes, gauge, and bar chart
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(4), // Stat boxes
-                Constraint::Length(3), // Accuracy gauge
-                Constraint::Min(0),    // Breakdown chart
-            ])
-            .split(area);
-
-        // Render stat boxes
-        let stat_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
-            ])
-            .split(chunks[0]);
-
-        // Estimated total
-        let est_str = Self::format_duration(total_estimated);
-        let est_stat = StatBox::new("Estimated", &est_str);
-        est_stat.render(stat_chunks[0], buf);
-
-        // Actual total
-        let actual_str = Self::format_duration(total_actual);
-        let actual_stat = StatBox::new("Actual", &actual_str);
-        actual_stat.render(stat_chunks[1], buf);
-
-        // Variance
-        let variance = total_actual as i64 - total_estimated as i64;
-        let variance_str = if variance > 0 {
-            format!("+{}", Self::format_duration(variance as u32))
-        } else if variance < 0 {
-            format!("-{}", Self::format_duration((-variance) as u32))
-        } else {
-            "0m".to_string()
-        };
-        let variance_stat = StatBox::new("Variance", &variance_str);
-        variance_stat.render(stat_chunks[2], buf);
-
-        // Accuracy
-        let accuracy_str = avg_accuracy.map_or("N/A".to_string(), |a| format!("{:.0}%", a));
-        let accuracy_stat = StatBox::new("Accuracy", &accuracy_str);
-        accuracy_stat.render(stat_chunks[3], buf);
-
-        // Render accuracy gauge
-        if chunks[1].height > 0 {
-            let accuracy_ratio = avg_accuracy.map_or(0.0, |a| {
-                // Normalize: 100% accuracy = 1.0, 200% = 0.5, 50% = 0.5
-                if a <= 100.0 {
-                    a / 100.0
-                } else {
-                    100.0 / a
-                }
-            });
-            let gauge = ProgressGauge::new("Estimation Accuracy", accuracy_ratio);
-            gauge.render(chunks[1], buf);
-        }
-
-        // Render breakdown bar chart
-        if chunks[2].height > 2 {
-            let chart_block = Block::default()
-                .title(" Estimation Breakdown ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::DarkGray));
-            let chart_inner = chart_block.inner(chunks[2]);
-            chart_block.render(chunks[2], buf);
-
-            if tasks_with_estimates > 0 {
-                let data = vec![
-                    ("Over".to_string(), over_count as u32),
-                    ("Under".to_string(), under_count as u32),
-                    ("On Target".to_string(), on_target_count as u32),
-                ];
-
-                let chart = BarChart::new("Breakdown", &data);
-                chart.render(chart_inner, buf);
-            } else {
-                let msg = "No tasks with time estimates";
-                buf.set_string(
-                    chart_inner.x + 1,
-                    chart_inner.y,
-                    msg,
-                    Style::default().fg(Color::DarkGray),
-                );
-            }
-        }
-    }
-
-    /// Format minutes as hours and minutes
-    fn format_duration(minutes: u32) -> String {
-        let hours = minutes / 60;
-        let mins = minutes % 60;
-        if hours > 0 {
-            format!("{hours}h {mins}m")
-        } else {
-            format!("{mins}m")
-        }
-    }
 }
 
 #[cfg(test)]
@@ -680,13 +529,13 @@ mod tests {
     fn test_report_panel_navigation() {
         let panel = ReportPanel::Overview;
         assert_eq!(panel.next(), ReportPanel::Velocity);
-        assert_eq!(panel.prev(), ReportPanel::Estimation);
+        assert_eq!(panel.prev(), ReportPanel::Insights);
     }
 
     #[test]
     fn test_report_panel_cycle() {
         let mut panel = ReportPanel::Overview;
-        for _ in 0..6 {
+        for _ in 0..5 {
             panel = panel.next();
         }
         assert_eq!(panel, ReportPanel::Overview);
@@ -699,14 +548,12 @@ mod tests {
         assert_eq!(ReportPanel::Tags.index(), 2);
         assert_eq!(ReportPanel::Time.index(), 3);
         assert_eq!(ReportPanel::Insights.index(), 4);
-        assert_eq!(ReportPanel::Estimation.index(), 5);
     }
 
     #[test]
     fn test_report_panel_names() {
         let names = ReportPanel::names();
-        assert_eq!(names.len(), 6);
+        assert_eq!(names.len(), 5);
         assert_eq!(names[0], "Overview");
-        assert_eq!(names[5], "Estimation");
     }
 }

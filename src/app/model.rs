@@ -314,10 +314,6 @@ pub struct Model {
     pub pending_import: Option<crate::storage::ImportResult>,
     /// Whether import preview dialog is showing
     pub show_import_preview: bool,
-
-    // Overdue alert state
-    /// Whether overdue tasks alert is visible (shown at startup)
-    pub show_overdue_alert: bool,
 }
 
 impl Model {
@@ -388,7 +384,6 @@ impl Model {
             report_panel: crate::ui::ReportPanel::default(),
             pending_import: None,
             show_import_preview: false,
-            show_overdue_alert: false,
         }
     }
 
@@ -892,13 +887,6 @@ impl Model {
             }
         }
 
-        // Filter by priority (if set)
-        if let Some(ref priorities) = self.filter.priority {
-            if !priorities.contains(&task.priority) {
-                return false;
-            }
-        }
-
         // Filter by selected project if any
         if let Some(ref project_id) = self.selected_project {
             if task.project_id.as_ref() != Some(project_id) {
@@ -1166,20 +1154,6 @@ impl Model {
             }
         }
         depth
-    }
-
-    /// Returns overdue task count and the overdue tasks themselves
-    #[must_use]
-    pub fn overdue_summary(&self) -> (usize, Vec<&Task>) {
-        let overdue_tasks: Vec<_> = self.tasks.values().filter(|t| t.is_overdue()).collect();
-        (overdue_tasks.len(), overdue_tasks)
-    }
-
-    /// Check if there are overdue tasks and show alert if so.
-    /// Call this after loading tasks from storage.
-    pub fn check_overdue_alert(&mut self) {
-        let (count, _) = self.overdue_summary();
-        self.show_overdue_alert = count > 0;
     }
 
     /// Returns all descendant task IDs (children, grandchildren, etc.)

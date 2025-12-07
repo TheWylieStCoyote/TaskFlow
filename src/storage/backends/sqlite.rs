@@ -154,10 +154,10 @@ impl SqliteBackend {
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
             for tag in tags {
                 // Use INSERT OR IGNORE to handle duplicates gracefully
-                let _ = conn.execute(
+                conn.execute(
                     "INSERT OR IGNORE INTO task_tags (task_id, tag_name) VALUES (?1, ?2)",
                     params![task_id, tag],
-                );
+                )?;
             }
         }
 

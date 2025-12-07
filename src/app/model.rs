@@ -1076,9 +1076,16 @@ impl Model {
     ///
     /// Automatically stops any currently running timer before starting
     /// a new one. Creates a new time entry and sets it as active.
-    pub fn start_time_tracking(&mut self, task_id: TaskId) {
-        // Stop any currently running timer
-        self.stop_time_tracking();
+    ///
+    /// Returns a tuple of:
+    /// - The newly created time entry
+    /// - Optionally, the stopped entry (before/after states) if one was running
+    pub fn start_time_tracking(
+        &mut self,
+        task_id: TaskId,
+    ) -> (TimeEntry, Option<(TimeEntry, TimeEntry)>) {
+        // Stop any currently running timer and get before/after states
+        let stopped_entry = self.stop_time_tracking_internal();
 
         // Start new timer
         let entry = TimeEntry::start(task_id);
@@ -1087,26 +1094,38 @@ impl Model {
         self.active_time_entry = Some(entry_id);
         self.sync_time_entry(&entry);
         self.dirty = true;
+
+        (entry, stopped_entry)
     }
 
     /// Stops the currently active time tracking session.
     ///
     /// Records the end time and calculates duration for the active entry.
     /// Also updates the task's actual_minutes with the total tracked time.
-    pub fn stop_time_tracking(&mut self) {
+    ///
+    /// Returns a tuple of (before, after) states for undo support, if there was
+    /// an active entry to stop.
+    pub fn stop_time_tracking(&mut self) -> Option<(TimeEntry, TimeEntry)> {
+        self.stop_time_tracking_internal()
+    }
+
+    /// Internal method for stopping time tracking, returning before/after states
+    fn stop_time_tracking_internal(&mut self) -> Option<(TimeEntry, TimeEntry)> {
         if let Some(ref entry_id) = self.active_time_entry.clone() {
-            let (entry_clone, task_id) = {
+            let (before, after, task_id) = {
                 if let Some(entry) = self.time_entries.get_mut(entry_id) {
+                    let before = entry.clone();
                     entry.stop();
-                    (Some(entry.clone()), Some(entry.task_id.clone()))
+                    let after = entry.clone();
+                    (Some(before), Some(after), Some(entry.task_id.clone()))
                 } else {
-                    (None, None)
+                    (None, None, None)
                 }
             };
 
             // Sync the stopped entry to storage
-            if let Some(entry) = entry_clone {
-                self.sync_time_entry(&entry);
+            if let Some(ref entry) = after {
+                self.sync_time_entry(entry);
             }
 
             // Update task's actual_minutes with total tracked time
@@ -1121,7 +1140,13 @@ impl Model {
 
             self.active_time_entry = None;
             self.dirty = true;
+
+            // Return before/after if we had an entry
+            if let (Some(before), Some(after)) = (before, after) {
+                return Some((before, after));
+            }
         }
+        None
     }
 
     /// Returns the currently active time entry, if any.
@@ -1149,6 +1174,34 @@ impl Model {
             .filter(|e| &e.task_id == task_id)
             .map(TimeEntry::calculated_duration_minutes)
             .sum()
+    }
+
+    /// Deletes a time entry by ID (used for undo).
+    pub fn delete_time_entry(&mut self, entry_id: &TimeEntryId) {
+        // If this is the active entry, clear it
+        if self.active_time_entry.as_ref() == Some(entry_id) {
+            self.active_time_entry = None;
+        }
+        self.time_entries.remove(entry_id);
+        // Also delete from storage
+        if let Some(ref mut backend) = self.storage {
+            let _ = backend.delete_time_entry(entry_id);
+        }
+        self.dirty = true;
+    }
+
+    /// Restores a time entry (used for undo).
+    ///
+    /// If the entry is still running (no ended_at), it becomes the active entry.
+    pub fn restore_time_entry(&mut self, entry: TimeEntry) {
+        let is_running = entry.ended_at.is_none();
+        let entry_id = entry.id.clone();
+        self.time_entries.insert(entry_id.clone(), entry.clone());
+        if is_running {
+            self.active_time_entry = Some(entry_id);
+        }
+        self.sync_time_entry(&entry);
+        self.dirty = true;
     }
 
     /// Returns subtask completion progress for a task.

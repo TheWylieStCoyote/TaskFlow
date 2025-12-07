@@ -1,4 +1,4 @@
-use crate::domain::{Project, Task};
+use crate::domain::{Project, Task, TimeEntry};
 
 /// Maximum number of undo/redo actions to keep in history
 pub const MAX_UNDO_HISTORY: usize = 50;
@@ -21,6 +21,15 @@ pub enum UndoAction {
         before: Box<Project>,
         after: Box<Project>,
     },
+    /// Time entry was created (started) - undo by deleting it
+    TimeEntryStarted(Box<TimeEntry>),
+    /// Time entry was stopped - undo by restoring running state
+    TimeEntryStopped {
+        before: Box<TimeEntry>,
+        after: Box<TimeEntry>,
+    },
+    /// Time entry was deleted - undo by restoring it
+    TimeEntryDeleted(Box<TimeEntry>),
 }
 
 impl UndoAction {
@@ -46,6 +55,9 @@ impl UndoAction {
             Self::ProjectModified { before, .. } => {
                 format!("Modify project \"{}\"", truncate(&before.name, 20))
             }
+            Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
+            Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
+            Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
         }
     }
 
@@ -71,6 +83,15 @@ impl UndoAction {
                 before: after.clone(),
                 after: before.clone(),
             },
+            // Undo time entry start = delete, so redo = start again
+            Self::TimeEntryStarted(entry) => Self::TimeEntryStarted(entry.clone()),
+            // Undo time entry stop swaps before/after, so redo swaps them back
+            Self::TimeEntryStopped { before, after } => Self::TimeEntryStopped {
+                before: after.clone(),
+                after: before.clone(),
+            },
+            // Undo time entry delete = restore, so redo = delete again
+            Self::TimeEntryDeleted(entry) => Self::TimeEntryDeleted(entry.clone()),
         }
     }
 }
@@ -437,6 +458,183 @@ mod tests {
             assert_eq!(inv_after.name, "Before");
         } else {
             panic!("Expected ProjectModified");
+        }
+    }
+
+    // Time entry undo tests
+    #[test]
+    fn test_time_entry_started_description() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id);
+        let action = UndoAction::TimeEntryStarted(Box::new(entry));
+        assert!(action.description().contains("Start time tracking"));
+    }
+
+    #[test]
+    fn test_time_entry_stopped_description() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let before = TimeEntry::start(task_id.clone());
+        let mut after = before.clone();
+        after.stop();
+        let action = UndoAction::TimeEntryStopped {
+            before: Box::new(before),
+            after: Box::new(after),
+        };
+        assert!(action.description().contains("Stop time tracking"));
+    }
+
+    #[test]
+    fn test_time_entry_deleted_description() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id);
+        let action = UndoAction::TimeEntryDeleted(Box::new(entry));
+        assert!(action.description().contains("Delete time entry"));
+    }
+
+    #[test]
+    fn test_time_entry_started_inverse() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id.clone();
+        let action = UndoAction::TimeEntryStarted(Box::new(entry));
+        let inverse = action.inverse();
+
+        if let UndoAction::TimeEntryStarted(inv_entry) = inverse {
+            assert_eq!(inv_entry.id, entry_id);
+        } else {
+            panic!("Expected TimeEntryStarted");
+        }
+    }
+
+    #[test]
+    fn test_time_entry_stopped_inverse() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let before = TimeEntry::start(task_id.clone());
+        let mut after = before.clone();
+        after.stop();
+
+        let action = UndoAction::TimeEntryStopped {
+            before: Box::new(before.clone()),
+            after: Box::new(after.clone()),
+        };
+
+        let inverse = action.inverse();
+        if let UndoAction::TimeEntryStopped {
+            before: inv_before,
+            after: inv_after,
+        } = inverse
+        {
+            // Inverse swaps before and after
+            assert_eq!(inv_before.id, after.id);
+            assert!(inv_before.ended_at.is_some());
+            assert_eq!(inv_after.id, before.id);
+            assert!(inv_after.ended_at.is_none());
+        } else {
+            panic!("Expected TimeEntryStopped");
+        }
+    }
+
+    #[test]
+    fn test_time_entry_deleted_inverse() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id.clone();
+        let action = UndoAction::TimeEntryDeleted(Box::new(entry));
+        let inverse = action.inverse();
+
+        if let UndoAction::TimeEntryDeleted(inv_entry) = inverse {
+            assert_eq!(inv_entry.id, entry_id);
+        } else {
+            panic!("Expected TimeEntryDeleted");
+        }
+    }
+
+    #[test]
+    fn test_undo_redo_time_entry_started() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let mut stack = UndoStack::new();
+        let task_id = TaskId::new();
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id.clone();
+
+        stack.push(UndoAction::TimeEntryStarted(Box::new(entry)));
+        assert_eq!(stack.len(), 1);
+        assert!(!stack.can_redo());
+
+        // Undo the action
+        let action = stack.pop_for_undo().unwrap();
+        if let UndoAction::TimeEntryStarted(e) = action {
+            assert_eq!(e.id, entry_id);
+        } else {
+            panic!("Expected TimeEntryStarted");
+        }
+        assert!(stack.is_empty());
+        assert!(stack.can_redo());
+
+        // Redo the action
+        let action = stack.pop_for_redo().unwrap();
+        if let UndoAction::TimeEntryStarted(e) = action {
+            assert_eq!(e.id, entry_id);
+        } else {
+            panic!("Expected TimeEntryStarted");
+        }
+        assert!(!stack.is_empty());
+        assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn test_undo_redo_time_entry_stopped() {
+        use crate::domain::{TaskId, TimeEntry};
+
+        let mut stack = UndoStack::new();
+        let task_id = TaskId::new();
+        let before = TimeEntry::start(task_id.clone());
+        let mut after = before.clone();
+        after.stop();
+
+        stack.push(UndoAction::TimeEntryStopped {
+            before: Box::new(before.clone()),
+            after: Box::new(after.clone()),
+        });
+
+        // Undo the stop
+        let action = stack.pop_for_undo().unwrap();
+        if let UndoAction::TimeEntryStopped {
+            before: b,
+            after: a,
+        } = action
+        {
+            // After undo, the entry should be running again
+            assert!(b.ended_at.is_none());
+            assert!(a.ended_at.is_some());
+        } else {
+            panic!("Expected TimeEntryStopped");
+        }
+
+        // Redo the stop
+        let action = stack.pop_for_redo().unwrap();
+        if let UndoAction::TimeEntryStopped {
+            before: b,
+            after: _,
+        } = action
+        {
+            // After redo, the entry should be stopped again
+            assert!(b.ended_at.is_some());
+        } else {
+            panic!("Expected TimeEntryStopped");
         }
     }
 }

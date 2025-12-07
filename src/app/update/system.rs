@@ -102,6 +102,18 @@ fn handle_undo(model: &mut Model) {
                 model.sync_project(&before);
                 model.projects.insert(before.id.clone(), *before);
             }
+            UndoAction::TimeEntryStarted(entry) => {
+                // Undo start by deleting the entry
+                model.delete_time_entry(&entry.id);
+            }
+            UndoAction::TimeEntryStopped { before, after: _ } => {
+                // Undo stop by restoring the running state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimeEntryDeleted(entry) => {
+                // Undo delete by restoring the entry
+                model.restore_time_entry(*entry);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -139,6 +151,18 @@ fn handle_redo(model: &mut Model) {
                 // Redo modify: the redo stack holds the inverse, so "before" is the state we want
                 model.sync_project(&before);
                 model.projects.insert(before.id.clone(), *before);
+            }
+            UndoAction::TimeEntryStarted(entry) => {
+                // Redo start by restoring the entry
+                model.restore_time_entry(*entry);
+            }
+            UndoAction::TimeEntryStopped { before, after: _ } => {
+                // Redo stop: the redo stack holds the inverse, so "before" is the stopped state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimeEntryDeleted(entry) => {
+                // Redo delete by removing the entry
+                model.delete_time_entry(&entry.id);
             }
         }
         model.refresh_visible_tasks();

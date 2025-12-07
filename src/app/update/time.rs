@@ -5,7 +5,7 @@
 //! - Pomodoro timer control (start, pause, resume, skip, stop)
 //! - Pomodoro configuration changes
 
-use crate::app::{Model, PomodoroMessage, TimeMessage};
+use crate::app::{Model, PomodoroMessage, TimeMessage, UndoAction};
 use crate::domain::{PomodoroPhase, PomodoroSession};
 
 /// Handle time tracking messages
@@ -13,18 +13,54 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
     match msg {
         TimeMessage::StartTracking => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
-                model.start_time_tracking(task_id);
+                let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
+
+                // Push undo for stopped entry first (if any)
+                if let Some((before, after)) = stopped_entry {
+                    model.undo_stack.push(UndoAction::TimeEntryStopped {
+                        before: Box::new(before),
+                        after: Box::new(after),
+                    });
+                }
+
+                // Push undo for new entry
+                model
+                    .undo_stack
+                    .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
             }
         }
         TimeMessage::StopTracking => {
-            model.stop_time_tracking();
+            if let Some((before, after)) = model.stop_time_tracking() {
+                model.undo_stack.push(UndoAction::TimeEntryStopped {
+                    before: Box::new(before),
+                    after: Box::new(after),
+                });
+            }
         }
         TimeMessage::ToggleTracking => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if model.is_tracking_task(&task_id) {
-                    model.stop_time_tracking();
+                    if let Some((before, after)) = model.stop_time_tracking() {
+                        model.undo_stack.push(UndoAction::TimeEntryStopped {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
                 } else {
-                    model.start_time_tracking(task_id);
+                    let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
+
+                    // Push undo for stopped entry first (if any)
+                    if let Some((before, after)) = stopped_entry {
+                        model.undo_stack.push(UndoAction::TimeEntryStopped {
+                            before: Box::new(before),
+                            after: Box::new(after),
+                        });
+                    }
+
+                    // Push undo for new entry
+                    model
+                        .undo_stack
+                        .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
                 }
             }
         }

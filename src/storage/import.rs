@@ -23,7 +23,7 @@
 //! println!("Imported {} tasks", result.imported.len());
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::BufRead;
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
@@ -235,6 +235,10 @@ pub fn import_from_csv<R: BufRead>(
         })?;
 
     let headers: Vec<&str> = parse_csv_row(&header_line);
+
+    // Validate headers before processing
+    validate_csv_headers(&headers)?;
+
     let column_map = build_column_map(&headers);
 
     // Process data rows
@@ -281,6 +285,41 @@ fn build_column_map(headers: &[&str]) -> HashMap<String, usize> {
         .enumerate()
         .map(|(i, h)| (h.to_lowercase().trim().to_string(), i))
         .collect()
+}
+
+/// Validate CSV headers for common issues
+fn validate_csv_headers(headers: &[&str]) -> StorageResult<()> {
+    // Check not empty
+    if headers.is_empty() {
+        return Err(StorageError::Deserialization {
+            message: "CSV file has no columns".to_string(),
+        });
+    }
+
+    // Check for required 'title' column (or common aliases)
+    let has_title = headers.iter().any(|h| {
+        let lower = h.to_lowercase();
+        let trimmed = lower.trim();
+        trimmed == "title" || trimmed == "name" || trimmed == "task" || trimmed == "summary"
+    });
+    if !has_title {
+        return Err(StorageError::Deserialization {
+            message: "CSV must have a 'title' column (or 'name', 'task', 'summary')".to_string(),
+        });
+    }
+
+    // Check for duplicate column names
+    let mut seen: HashSet<String> = HashSet::new();
+    for header in headers {
+        let normalized = header.to_lowercase().trim().to_string();
+        if !normalized.is_empty() && !seen.insert(normalized.clone()) {
+            return Err(StorageError::Deserialization {
+                message: format!("Duplicate column name: '{}'", header),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 /// Parse a single CSV row, handling quoted fields
@@ -1156,5 +1195,62 @@ END:VCALENDAR
         assert_eq!(unescape_ics("a\\,b"), "a,b");
         assert_eq!(unescape_ics("a\\nb"), "a\nb");
         assert_eq!(unescape_ics("a\\\\b"), "a\\b");
+    }
+
+    // Header validation tests
+    #[test]
+    fn test_validate_headers_valid() {
+        // Valid headers with title
+        assert!(validate_csv_headers(&["title", "status", "priority"]).is_ok());
+        assert!(validate_csv_headers(&["name", "description"]).is_ok());
+        assert!(validate_csv_headers(&["task", "due"]).is_ok());
+        assert!(validate_csv_headers(&["summary", "tags"]).is_ok());
+    }
+
+    #[test]
+    fn test_validate_headers_missing_title() {
+        let result = validate_csv_headers(&["status", "priority", "description"]);
+        assert!(result.is_err());
+        if let Err(StorageError::Deserialization { message }) = result {
+            assert!(message.contains("title"));
+        }
+    }
+
+    #[test]
+    fn test_validate_headers_empty() {
+        let result = validate_csv_headers(&[]);
+        assert!(result.is_err());
+        if let Err(StorageError::Deserialization { message }) = result {
+            assert!(message.contains("no columns"));
+        }
+    }
+
+    #[test]
+    fn test_validate_headers_duplicate() {
+        let result = validate_csv_headers(&["title", "status", "Title"]);
+        assert!(result.is_err());
+        if let Err(StorageError::Deserialization { message }) = result {
+            assert!(message.contains("Duplicate"));
+        }
+    }
+
+    #[test]
+    fn test_import_csv_no_title_column() {
+        let csv = "status,priority,description\ntodo,high,A task\n";
+        let reader = Cursor::new(csv);
+        let options = ImportOptions::default();
+
+        let result = import_from_csv(reader, &options);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_import_csv_duplicate_columns() {
+        let csv = "title,status,Title\nTest,todo,Duplicate\n";
+        let reader = Cursor::new(csv);
+        let options = ImportOptions::default();
+
+        let result = import_from_csv(reader, &options);
+        assert!(result.is_err());
     }
 }

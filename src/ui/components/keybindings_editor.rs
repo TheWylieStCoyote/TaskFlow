@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, StatefulWidget, Widget},
 };
 
-use crate::config::{Keybindings, Theme};
+use crate::config::{Action, Keybindings, Theme};
 
 /// Keybindings editor popup widget
 pub struct KeybindingsEditor<'a> {
@@ -14,6 +14,10 @@ pub struct KeybindingsEditor<'a> {
     selected: usize,
     capturing: bool,
     theme: &'a Theme,
+    /// Conflict message to display (e.g., "Key 'j' is bound to MoveDown")
+    conflict_message: Option<&'a str>,
+    /// The conflicting action, if any
+    conflict_action: Option<&'a Action>,
 }
 
 impl<'a> KeybindingsEditor<'a> {
@@ -29,7 +33,17 @@ impl<'a> KeybindingsEditor<'a> {
             selected,
             capturing,
             theme,
+            conflict_message: None,
+            conflict_action: None,
         }
+    }
+
+    /// Set a conflict message to display during key capture
+    #[must_use]
+    pub const fn with_conflict(mut self, message: &'a str, action: &'a Action) -> Self {
+        self.conflict_message = Some(message);
+        self.conflict_action = Some(action);
+        self
     }
 }
 
@@ -65,9 +79,22 @@ impl Widget for KeybindingsEditor<'_> {
             .collect();
 
         let title = if self.capturing {
-            " Keybindings - Press a key combination (Esc to cancel) "
+            if let Some(msg) = self.conflict_message {
+                // Show conflict warning in red
+                format!(" Keybindings - {} (Enter=overwrite, Esc=cancel) ", msg)
+            } else {
+                " Keybindings - Press a key combination (Esc to cancel) ".to_string()
+            }
         } else {
-            " Keybindings (Enter=edit, r=reset, R=reset all, s=save, Esc=close) "
+            " Keybindings (Enter=edit, r=reset, R=reset all, s=save, Esc=close) ".to_string()
+        };
+
+        let border_color = if self.conflict_message.is_some() {
+            Color::Red
+        } else if self.capturing {
+            Color::Yellow
+        } else {
+            theme.colors.accent.to_color()
         };
 
         let list = List::new(items)
@@ -75,11 +102,7 @@ impl Widget for KeybindingsEditor<'_> {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(title)
-                    .border_style(Style::default().fg(if self.capturing {
-                        Color::Yellow
-                    } else {
-                        theme.colors.accent.to_color()
-                    })),
+                    .border_style(Style::default().fg(border_color)),
             )
             .highlight_style(
                 Style::default()
@@ -207,6 +230,25 @@ mod tests {
         assert!(
             content.contains("Enter") || content.contains("edit") || content.contains("save"),
             "Instructions should be visible"
+        );
+    }
+
+    #[test]
+    fn test_keybindings_editor_conflict_display() {
+        use crate::config::Action;
+
+        let keybindings = Keybindings::default();
+        let theme = Theme::default();
+        let action = Action::MoveDown;
+        let editor = KeybindingsEditor::new(&keybindings, 0, true, &theme)
+            .with_conflict("Key bound to MoveDown", &action);
+        let buffer = render_widget(editor, 100, 20);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("overwrite") || content.contains("MoveDown"),
+            "Conflict message should be visible: {}",
+            content
         );
     }
 }

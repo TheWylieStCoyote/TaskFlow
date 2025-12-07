@@ -3,7 +3,7 @@ use crate::app::{
     SystemMessage, TaskMessage, TimeMessage, UiMessage, ViewId, SIDEBAR_FIRST_PROJECT_INDEX,
     SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
 };
-use crate::domain::{Priority, Task, TaskStatus};
+use crate::domain::{Priority, Task, TaskStatus, TimeEntry};
 use crate::ui::{InputMode, InputTarget};
 
 fn create_test_model_with_tasks() -> Model {
@@ -3325,4 +3325,167 @@ fn test_delete_project_requires_selection() {
     assert_eq!(model.projects.len(), 1);
     // Should show error message
     assert!(model.status_message.is_some());
+}
+
+// Time tracking undo tests
+#[test]
+fn test_time_tracking_start_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Start time tracking
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+
+    // Verify tracking started
+    assert!(model.active_time_entry.is_some());
+    assert!(model.is_tracking_task(&task_id));
+    let entry_id = model.active_time_entry.clone().unwrap();
+    assert!(model.time_entries.contains_key(&entry_id));
+
+    // Undo should stop tracking and remove entry
+    update(&mut model, Message::System(SystemMessage::Undo));
+
+    assert!(model.active_time_entry.is_none());
+    assert!(!model.time_entries.contains_key(&entry_id));
+
+    // Redo should restore tracking
+    update(&mut model, Message::System(SystemMessage::Redo));
+
+    assert!(model.active_time_entry.is_some());
+    assert!(model.is_tracking_task(&task_id));
+}
+
+#[test]
+fn test_time_tracking_stop_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Start tracking
+    model.start_time_tracking(task_id.clone());
+    assert!(model.active_time_entry.is_some());
+    let entry_id = model.active_time_entry.clone().unwrap();
+
+    // Stop tracking
+    update(&mut model, Message::Time(TimeMessage::StopTracking));
+
+    // Verify stopped
+    assert!(model.active_time_entry.is_none());
+    let stopped_entry = model.time_entries.get(&entry_id).unwrap();
+    assert!(!stopped_entry.is_running());
+
+    // Undo should restore running state
+    update(&mut model, Message::System(SystemMessage::Undo));
+
+    assert!(model.active_time_entry.is_some());
+    let running_entry = model.time_entries.get(&entry_id).unwrap();
+    assert!(running_entry.is_running());
+}
+
+#[test]
+fn test_time_tracking_toggle_undo() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Toggle to start
+    update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+    assert!(model.is_tracking_task(&task_id));
+
+    // Toggle to stop
+    update(&mut model, Message::Time(TimeMessage::ToggleTracking));
+    assert!(!model.is_tracking_task(&task_id));
+
+    // Undo stop - should be tracking again
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert!(model.is_tracking_task(&task_id));
+
+    // Undo start - should not be tracking
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert!(!model.is_tracking_task(&task_id));
+}
+
+#[test]
+fn test_time_tracking_actual_minutes_update() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0].clone();
+
+    // Check initial actual_minutes is 0
+    assert_eq!(model.tasks.get(&task_id).unwrap().actual_minutes, 0);
+
+    // Create a time entry with known duration (simulate past entry)
+    let mut entry = TimeEntry::start(task_id.clone());
+    entry.stop();
+    entry.duration_minutes = Some(30); // 30 minutes
+    model.time_entries.insert(entry.id.clone(), entry);
+
+    // Recalculate
+    let total = model.total_time_for_task(&task_id);
+    assert_eq!(total, 30);
+}
+
+#[test]
+fn test_time_tracking_persistence_simulation() {
+    // Simulate first session: start tracking
+    let mut model1 = create_test_model_with_tasks();
+    let task_id = model1.visible_tasks[0].clone();
+
+    // Start tracking
+    update(&mut model1, Message::Time(TimeMessage::StartTracking));
+    assert!(model1.active_time_entry.is_some());
+
+    // Get the running entry
+    let running_entry = model1.active_time_entry().unwrap().clone();
+    assert!(running_entry.is_running());
+
+    // Simulate "restart" by creating new model and loading entry
+    let mut model2 = create_test_model_with_tasks();
+
+    // Load the running entry (simulating storage restore)
+    model2
+        .time_entries
+        .insert(running_entry.id.clone(), running_entry.clone());
+    if running_entry.is_running() {
+        model2.active_time_entry = Some(running_entry.id.clone());
+    }
+
+    // Verify tracking is still active after "restart"
+    assert!(model2.active_time_entry.is_some());
+    assert!(model2.is_tracking_task(&task_id));
+
+    // The entry should still be running
+    let restored_entry = model2.active_time_entry().unwrap();
+    assert!(restored_entry.is_running());
+
+    // Duration should calculate from original start time (just verify it works)
+    let _duration = restored_entry.calculated_duration_minutes();
+}
+
+#[test]
+fn test_time_tracking_switch_task() {
+    let mut model = create_test_model_with_tasks();
+    let task_id_1 = model.visible_tasks[0].clone();
+    let task_id_2 = model.visible_tasks[1].clone();
+
+    // Start tracking task 1
+    model.selected_index = 0;
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+    assert!(model.is_tracking_task(&task_id_1));
+    let entry1_id = model.active_time_entry.clone().unwrap();
+
+    // Switch to task 2 (should stop task 1 and start task 2)
+    model.selected_index = 1;
+    update(&mut model, Message::Time(TimeMessage::StartTracking));
+
+    // Task 2 should now be tracked
+    assert!(model.is_tracking_task(&task_id_2));
+    assert!(!model.is_tracking_task(&task_id_1));
+
+    // First entry should be stopped
+    let entry1 = model.time_entries.get(&entry1_id).unwrap();
+    assert!(!entry1.is_running());
+
+    // Undo should restore task 1 tracking
+    update(&mut model, Message::System(SystemMessage::Undo)); // undo start task 2
+    update(&mut model, Message::System(SystemMessage::Undo)); // undo stop task 1
+
+    assert!(model.is_tracking_task(&task_id_1));
 }

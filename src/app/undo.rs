@@ -30,6 +30,11 @@ pub enum UndoAction {
     },
     /// Time entry was deleted - undo by restoring it
     TimeEntryDeleted(Box<TimeEntry>),
+    /// Time entry was modified - undo by restoring previous state
+    TimeEntryModified {
+        before: Box<TimeEntry>,
+        after: Box<TimeEntry>,
+    },
 }
 
 impl UndoAction {
@@ -58,6 +63,7 @@ impl UndoAction {
             Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
+            Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
         }
     }
 
@@ -92,6 +98,11 @@ impl UndoAction {
             },
             // Undo time entry delete = restore, so redo = delete again
             Self::TimeEntryDeleted(entry) => Self::TimeEntryDeleted(entry.clone()),
+            // Undo time entry modify swaps before/after, so redo swaps them back
+            Self::TimeEntryModified { before, after } => Self::TimeEntryModified {
+                before: after.clone(),
+                after: before.clone(),
+            },
         }
     }
 }

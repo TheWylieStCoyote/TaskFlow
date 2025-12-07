@@ -305,6 +305,16 @@ pub struct Model {
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
 
+    // Time log editor
+    /// Whether time log editor is visible
+    pub show_time_log: bool,
+    /// Selected time entry index in editor
+    pub time_log_selected: usize,
+    /// Current mode of time log editor
+    pub time_log_mode: crate::ui::TimeLogMode,
+    /// Edit buffer for time log editing
+    pub time_log_buffer: String,
+
     // Reports state
     /// Selected panel in the reports view
     pub report_panel: crate::ui::ReportPanel,
@@ -385,6 +395,10 @@ impl Model {
             keybinding_selected: 0,
             keybinding_capturing: false,
             keybindings: crate::config::Keybindings::load(),
+            show_time_log: false,
+            time_log_selected: 0,
+            time_log_mode: crate::ui::TimeLogMode::default(),
+            time_log_buffer: String::new(),
             report_panel: crate::ui::ReportPanel::default(),
             pending_import: None,
             show_import_preview: false,
@@ -1174,6 +1188,26 @@ impl Model {
             .filter(|e| &e.task_id == task_id)
             .map(TimeEntry::calculated_duration_minutes)
             .sum()
+    }
+
+    /// Returns all time entries sorted by start time (most recent first).
+    #[must_use]
+    pub fn sorted_time_entries(&self) -> Vec<&TimeEntry> {
+        let mut entries: Vec<&TimeEntry> = self.time_entries.values().collect();
+        entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        entries
+    }
+
+    /// Returns time entries for a specific task, sorted by start time (most recent first).
+    #[must_use]
+    pub fn time_entries_for_task(&self, task_id: &TaskId) -> Vec<&TimeEntry> {
+        let mut entries: Vec<&TimeEntry> = self
+            .time_entries
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .collect();
+        entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        entries
     }
 
     /// Deletes a time entry by ID (used for undo).

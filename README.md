@@ -150,6 +150,7 @@ Each task shows:
 | `n` | Edit description/notes |
 | `m` | Move task to project |
 | `t` | Toggle time tracking |
+| `L` | Open time log editor |
 
 #### Project Actions
 

@@ -35,6 +35,7 @@ pub enum Action {
 
     // Time tracking
     ToggleTimeTracking,
+    ShowTimeLog,
 
     // UI actions
     ToggleSidebar,
@@ -219,6 +220,7 @@ impl Default for Keybindings {
 
         // Time tracking
         bindings.insert("t".to_string(), Action::ToggleTimeTracking);
+        bindings.insert("L".to_string(), Action::ShowTimeLog);
 
         // UI actions
         bindings.insert("b".to_string(), Action::ToggleSidebar);

@@ -343,6 +343,49 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         };
     }
 
+    // If time log editor is showing, handle navigation and editing
+    if model.show_time_log {
+        use taskflow::ui::TimeLogMode;
+
+        match model.time_log_mode {
+            TimeLogMode::EditStart | TimeLogMode::EditEnd => {
+                // Editing time - handle character input
+                return match key.code {
+                    KeyCode::Esc => Message::Ui(UiMessage::TimeLogCancel),
+                    KeyCode::Enter => Message::Ui(UiMessage::TimeLogSubmit),
+                    KeyCode::Backspace => Message::Ui(UiMessage::InputBackspace),
+                    KeyCode::Char(c) => Message::Ui(UiMessage::InputChar(c)),
+                    _ => Message::None,
+                };
+            }
+            TimeLogMode::ConfirmDelete => {
+                // Confirm delete mode
+                return match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') => {
+                        Message::Ui(UiMessage::TimeLogDelete)
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                        Message::Ui(UiMessage::TimeLogCancel)
+                    }
+                    _ => Message::None,
+                };
+            }
+            TimeLogMode::Browse => {
+                // Normal time log navigation
+                return match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideTimeLog),
+                    KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::TimeLogUp),
+                    KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::TimeLogDown),
+                    KeyCode::Char('s') => Message::Ui(UiMessage::TimeLogEditStart),
+                    KeyCode::Char('e') => Message::Ui(UiMessage::TimeLogEditEnd),
+                    KeyCode::Char('d') => Message::Ui(UiMessage::TimeLogConfirmDelete),
+                    KeyCode::Char('a') => Message::Ui(UiMessage::TimeLogAddEntry),
+                    _ => Message::None,
+                };
+            }
+        }
+    }
+
     // In multi-select mode, Space toggles task selection
     if model.multi_select_mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
@@ -486,6 +529,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::CyclePriority => Message::Task(TaskMessage::CyclePriority),
         Action::MoveToProject => Message::Ui(UiMessage::StartMoveToProject),
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
+        Action::ShowTimeLog => Message::Ui(UiMessage::ShowTimeLog),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
         Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),

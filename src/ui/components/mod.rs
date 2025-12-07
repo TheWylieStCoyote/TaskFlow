@@ -9,6 +9,7 @@ mod reports;
 mod sidebar;
 mod task_list;
 mod template_picker;
+mod time_log_editor;
 
 pub use calendar::*;
 pub use dashboard::*;
@@ -20,3 +21,4 @@ pub use reports::*;
 pub use sidebar::*;
 pub use task_list::*;
 pub use template_picker::*;
+pub use time_log_editor::*;

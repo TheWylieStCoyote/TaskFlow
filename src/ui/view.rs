@@ -238,7 +238,11 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
         .filter(|t| t.status.is_complete())
         .count();
     let overdue = model.tasks.values().filter(|t| t.is_overdue()).count();
-    let due_today = model.tasks.values().filter(|t| t.is_due_today() && !t.status.is_complete()).count();
+    let due_today = model
+        .tasks
+        .values()
+        .filter(|t| t.is_due_today() && !t.status.is_complete())
+        .count();
 
     // Build footer with styled spans
     let mut spans = vec![

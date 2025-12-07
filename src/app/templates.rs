@@ -221,7 +221,6 @@ mod tests {
     fn test_template_manager_new() {
         let manager = TemplateManager::new();
         assert!(!manager.is_empty());
-        assert!(manager.len() > 0);
     }
 
     #[test]

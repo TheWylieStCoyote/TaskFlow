@@ -524,8 +524,10 @@ mod tests {
 
     #[test]
     fn test_time_analytics_total_hours() {
-        let mut analytics = TimeAnalytics::default();
-        analytics.total_minutes = 150;
+        let analytics = TimeAnalytics {
+            total_minutes: 150,
+            ..TimeAnalytics::default()
+        };
 
         assert!((analytics.total_hours() - 2.5).abs() < f64::EPSILON);
     }

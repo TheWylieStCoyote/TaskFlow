@@ -188,10 +188,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.toml");
 
-        let mut settings = Settings::default();
-        settings.backend = "yaml".to_string();
-        settings.show_completed = true;
-        settings.auto_save_interval = 600;
+        let settings = Settings {
+            backend: "yaml".to_string(),
+            show_completed: true,
+            auto_save_interval: 600,
+            ..Settings::default()
+        };
 
         settings.save_to_path(path.clone()).unwrap();
 
@@ -204,25 +206,37 @@ mod tests {
 
     #[test]
     fn test_settings_backend_type() {
-        let mut settings = Settings::default();
+        let json_settings = Settings {
+            backend: "json".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(json_settings.backend_type(), BackendType::Json);
 
-        settings.backend = "json".to_string();
-        assert_eq!(settings.backend_type(), BackendType::Json);
+        let yaml_settings = Settings {
+            backend: "yaml".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(yaml_settings.backend_type(), BackendType::Yaml);
 
-        settings.backend = "yaml".to_string();
-        assert_eq!(settings.backend_type(), BackendType::Yaml);
+        let sqlite_settings = Settings {
+            backend: "sqlite".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(sqlite_settings.backend_type(), BackendType::Sqlite);
 
-        settings.backend = "sqlite".to_string();
-        assert_eq!(settings.backend_type(), BackendType::Sqlite);
-
-        settings.backend = "markdown".to_string();
-        assert_eq!(settings.backend_type(), BackendType::Markdown);
+        let md_settings = Settings {
+            backend: "markdown".to_string(),
+            ..Settings::default()
+        };
+        assert_eq!(md_settings.backend_type(), BackendType::Markdown);
     }
 
     #[test]
     fn test_settings_get_data_path_explicit() {
-        let mut settings = Settings::default();
-        settings.data_path = Some(PathBuf::from("/custom/path/data.json"));
+        let settings = Settings {
+            data_path: Some(PathBuf::from("/custom/path/data.json")),
+            ..Settings::default()
+        };
 
         let path = settings.get_data_path();
         assert_eq!(path, PathBuf::from("/custom/path/data.json"));
@@ -230,15 +244,20 @@ mod tests {
 
     #[test]
     fn test_settings_get_data_path_default_uses_backend_extension() {
-        let mut settings = Settings::default();
-        settings.data_path = None;
-
-        settings.backend = "yaml".to_string();
-        let path = settings.get_data_path();
+        let yaml_settings = Settings {
+            backend: "yaml".to_string(),
+            data_path: None,
+            ..Settings::default()
+        };
+        let path = yaml_settings.get_data_path();
         assert!(path.to_string_lossy().ends_with("tasks.yaml"));
 
-        settings.backend = "sqlite".to_string();
-        let path = settings.get_data_path();
+        let sqlite_settings = Settings {
+            backend: "sqlite".to_string(),
+            data_path: None,
+            ..Settings::default()
+        };
+        let path = sqlite_settings.get_data_path();
         assert!(path.to_string_lossy().ends_with("tasks.db"));
     }
 

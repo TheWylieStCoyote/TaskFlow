@@ -2340,7 +2340,7 @@ mod tests {
             model
                 .tasks
                 .get(id)
-                .map_or(false, |t| t.title == "Unblocked task")
+                .is_some_and(|t| t.title == "Unblocked task")
         }));
     }
 

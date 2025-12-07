@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn test_help_popup_default_impl() {
         let popup1 = HelpPopup::new();
-        let popup2 = HelpPopup::default();
+        let popup2 = HelpPopup;
 
         // Both should render the same content
         let buffer1 = render_widget(popup1, 40, 20);

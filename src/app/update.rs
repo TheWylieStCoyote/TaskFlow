@@ -2553,7 +2553,7 @@ mod tests {
         );
 
         assert_eq!(model.tasks.len(), initial_count - 1);
-        assert!(model.tasks.get(&task_id).is_none());
+        assert!(!model.tasks.contains_key(&task_id));
     }
 
     // Time tests
@@ -3733,7 +3733,7 @@ mod tests {
         update(&mut model, Message::Ui(UiMessage::ConfirmDelete));
 
         assert_eq!(model.tasks.len(), initial_count - 1);
-        assert!(model.tasks.get(&task_id).is_none());
+        assert!(!model.tasks.contains_key(&task_id));
 
         // Undo should restore the task
         update(&mut model, Message::System(SystemMessage::Undo));
@@ -3958,7 +3958,7 @@ mod tests {
         // Redo should delete it again
         update(&mut model, Message::System(SystemMessage::Redo));
         assert_eq!(model.tasks.len(), initial_count - 1);
-        assert!(model.tasks.get(&task_id).is_none());
+        assert!(!model.tasks.contains_key(&task_id));
     }
 
     #[test]

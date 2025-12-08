@@ -274,4 +274,18 @@ pub trait StorageBackend:
     ///
     /// Returns a [`StorageError`](super::StorageError) if the stats cannot be saved.
     fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()>;
+
+    /// Refreshes the storage backend by detecting external changes.
+    ///
+    /// This method scans for files that have been modified, added, or deleted
+    /// externally (e.g., by a text editor or git operations) and updates the
+    /// internal cache accordingly.
+    ///
+    /// Returns the number of changes detected and applied.
+    ///
+    /// The default implementation is a no-op that returns 0, suitable for
+    /// backends that don't support external modification detection (like SQLite).
+    fn refresh(&mut self) -> usize {
+        0
+    }
 }

@@ -15,18 +15,19 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
 
-                // Push undo for stopped entry first (if any)
                 if let Some((before, after)) = stopped_entry {
-                    model.undo_stack.push(UndoAction::TimeEntryStopped {
-                        before: Box::new(before),
-                        after: Box::new(after),
+                    // Timer switch: use composite action for single undo
+                    model.undo_stack.push(UndoAction::TimerSwitched {
+                        stopped_entry_before: Box::new(before),
+                        stopped_entry_after: Box::new(after),
+                        started_entry: Box::new(new_entry),
                     });
+                } else {
+                    // Fresh start: use simple action
+                    model
+                        .undo_stack
+                        .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
                 }
-
-                // Push undo for new entry
-                model
-                    .undo_stack
-                    .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
             }
         }
         TimeMessage::StopTracking => {
@@ -40,6 +41,7 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
         TimeMessage::ToggleTracking => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if model.is_tracking_task(&task_id) {
+                    // Stop tracking current task
                     if let Some((before, after)) = model.stop_time_tracking() {
                         model.undo_stack.push(UndoAction::TimeEntryStopped {
                             before: Box::new(before),
@@ -47,20 +49,22 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
                         });
                     }
                 } else {
+                    // Start tracking new task (may switch from another task)
                     let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
 
-                    // Push undo for stopped entry first (if any)
                     if let Some((before, after)) = stopped_entry {
-                        model.undo_stack.push(UndoAction::TimeEntryStopped {
-                            before: Box::new(before),
-                            after: Box::new(after),
+                        // Timer switch: use composite action for single undo
+                        model.undo_stack.push(UndoAction::TimerSwitched {
+                            stopped_entry_before: Box::new(before),
+                            stopped_entry_after: Box::new(after),
+                            started_entry: Box::new(new_entry),
                         });
+                    } else {
+                        // Fresh start: use simple action
+                        model
+                            .undo_stack
+                            .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
                     }
-
-                    // Push undo for new entry
-                    model
-                        .undo_stack
-                        .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
                 }
             }
         }

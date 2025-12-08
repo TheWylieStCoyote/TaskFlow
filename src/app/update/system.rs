@@ -66,6 +66,14 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::CancelImport => {
             handle_cancel_import(model);
         }
+        SystemMessage::RefreshStorage => {
+            let changes = model.refresh_storage();
+            if changes > 0 {
+                model.status_message = Some(format!("Refreshed: {} change(s) detected", changes));
+            } else {
+                model.status_message = Some("No external changes detected".to_string());
+            }
+        }
     }
 }
 
@@ -77,10 +85,14 @@ fn handle_undo(model: &mut Model) {
                 model.delete_task_from_storage(&task.id);
                 model.tasks.remove(&task.id);
             }
-            UndoAction::TaskDeleted(task) => {
+            UndoAction::TaskDeleted { task, time_entries } => {
                 // Undo delete by restoring the task
                 model.sync_task(&task);
                 model.tasks.insert(task.id.clone(), *task);
+                // Restore time entries
+                for entry in time_entries {
+                    model.restore_time_entry(entry);
+                }
             }
             UndoAction::TaskModified { before, after: _ } => {
                 // Undo modify by restoring previous state
@@ -115,9 +127,17 @@ fn handle_undo(model: &mut Model) {
                 model.restore_time_entry(*entry);
             }
             UndoAction::TimeEntryModified { before, after: _ } => {
-                // Undo modify by restoring previous state
-                model.sync_time_entry(&before);
-                model.time_entries.insert(before.id.clone(), *before);
+                // Undo modification by restoring previous state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimerSwitched {
+                stopped_entry_before,
+                stopped_entry_after: _,
+                started_entry,
+            } => {
+                // Undo timer switch: delete new entry, restore old entry to running state
+                model.delete_time_entry(&started_entry.id);
+                model.restore_time_entry(*stopped_entry_before);
             }
         }
         model.refresh_visible_tasks();
@@ -132,8 +152,12 @@ fn handle_redo(model: &mut Model) {
                 model.sync_task(&task);
                 model.tasks.insert(task.id.clone(), *task);
             }
-            UndoAction::TaskDeleted(task) => {
-                // Redo delete by removing the task
+            UndoAction::TaskDeleted { task, time_entries } => {
+                // Redo delete by removing the task and its time entries
+                // Delete time entries first
+                for entry in &time_entries {
+                    model.delete_time_entry(&entry.id);
+                }
                 model.delete_task_from_storage(&task.id);
                 model.tasks.remove(&task.id);
             }
@@ -170,9 +194,21 @@ fn handle_redo(model: &mut Model) {
                 model.delete_time_entry(&entry.id);
             }
             UndoAction::TimeEntryModified { before, after: _ } => {
-                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
-                model.sync_time_entry(&before);
-                model.time_entries.insert(before.id.clone(), *before);
+                // Redo modification: inverse has swapped before/after, so "before" is now the new state
+                model.restore_time_entry(*before);
+            }
+            UndoAction::TimerSwitched {
+                stopped_entry_before: _,
+                stopped_entry_after,
+                started_entry,
+            } => {
+                // Redo timer switch: stop old entry, restore new entry
+                // First clear the active entry (the old one that was restored by undo)
+                model.active_time_entry = None;
+                // Restore the stopped state of old entry
+                model.restore_time_entry(*stopped_entry_after);
+                // Restore the new entry (will become active since we cleared active above)
+                model.restore_time_entry(*started_entry);
             }
         }
         model.refresh_visible_tasks();

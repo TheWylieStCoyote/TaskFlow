@@ -323,10 +323,35 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ConfirmDelete => {
             if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.remove(&id) {
+                    // Collect time entries for this task before deleting
+                    let task_entries: Vec<_> = model
+                        .time_entries
+                        .values()
+                        .filter(|e| e.task_id == id)
+                        .cloned()
+                        .collect();
+
+                    // Clear active time entry if it belongs to this task
+                    if model
+                        .active_time_entry
+                        .as_ref()
+                        .and_then(|entry_id| model.time_entries.get(entry_id))
+                        .is_some_and(|e| e.task_id == id)
+                    {
+                        model.active_time_entry = None;
+                    }
+
+                    // Delete time entries (collect IDs first to avoid borrow issues)
+                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                    for entry_id in entry_ids {
+                        model.delete_time_entry(&entry_id);
+                    }
+
                     model.delete_task_from_storage(&id);
-                    model
-                        .undo_stack
-                        .push(UndoAction::TaskDeleted(Box::new(task)));
+                    model.undo_stack.push(UndoAction::TaskDeleted {
+                        task: Box::new(task),
+                        time_entries: task_entries,
+                    });
                 }
                 model.refresh_visible_tasks();
             }
@@ -368,10 +393,35 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
                 for task_id in tasks_to_delete {
                     if let Some(task) = model.tasks.remove(&task_id) {
+                        // Collect time entries for this task before deleting
+                        let task_entries: Vec<_> = model
+                            .time_entries
+                            .values()
+                            .filter(|e| e.task_id == task_id)
+                            .cloned()
+                            .collect();
+
+                        // Clear active time entry if it belongs to this task
+                        if model
+                            .active_time_entry
+                            .as_ref()
+                            .and_then(|id| model.time_entries.get(id))
+                            .is_some_and(|e| e.task_id == task_id)
+                        {
+                            model.active_time_entry = None;
+                        }
+
+                        // Delete time entries (collect IDs first to avoid borrow issues)
+                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                        for entry_id in entry_ids {
+                            model.delete_time_entry(&entry_id);
+                        }
+
                         model.delete_task_from_storage(&task_id);
-                        model
-                            .undo_stack
-                            .push(UndoAction::TaskDeleted(Box::new(task)));
+                        model.undo_stack.push(UndoAction::TaskDeleted {
+                            task: Box::new(task),
+                            time_entries: task_entries,
+                        });
                     }
                 }
                 model.selected_tasks.clear();
@@ -475,18 +525,15 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::UnlinkTask => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
-                if let Some(task) = model.tasks.get_mut(&task_id) {
-                    if task.next_task_id.is_some() {
-                        let before = task.clone();
+                // Only unlink if currently linked
+                let is_linked = model
+                    .tasks
+                    .get(&task_id)
+                    .is_some_and(|t| t.next_task_id.is_some());
+                if is_linked {
+                    model.modify_task_with_undo(&task_id, |task| {
                         task.next_task_id = None;
-                        task.updated_at = chrono::Utc::now();
-                        let after = task.clone();
-                        model.sync_task(&after);
-                        model.undo_stack.push(UndoAction::TaskModified {
-                            before: Box::new(before),
-                            after: Box::new(after),
-                        });
-                    }
+                    });
                 }
             }
         }
@@ -561,97 +608,67 @@ fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::EditTask(task_id) => {
+            let task_id = task_id.clone();
             if !input.is_empty() {
-                if let Some(task) = model.tasks.get_mut(task_id) {
-                    let before = task.clone();
-                    task.title = input;
-                    task.updated_at = chrono::Utc::now();
-                    let after = task.clone();
-                    model.sync_task(&after);
-                    model.undo_stack.push(UndoAction::TaskModified {
-                        before: Box::new(before),
-                        after: Box::new(after),
-                    });
-                }
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.title = input.clone();
+                });
                 model.refresh_visible_tasks();
             }
         }
         InputTarget::EditDueDate(task_id) => {
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
-                // Empty input clears the due date
-                if input.is_empty() {
-                    task.due_date = None;
-                } else if let Some(date) = parse_date(&input) {
-                    task.due_date = Some(date);
-                }
-                // If parsing fails, just ignore (keep old date)
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
+            let task_id = task_id.clone();
+            // Parse date outside closure - empty clears, invalid keeps old
+            let new_due = if input.is_empty() {
+                Some(None) // Explicitly clear
+            } else {
+                parse_date(&input).map(Some) // Some(Some(date)) or None (invalid)
+            };
+            if let Some(due_date) = new_due {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.due_date = due_date;
                 });
             }
             model.refresh_visible_tasks();
         }
         InputTarget::EditScheduledDate(task_id) => {
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
-                // Empty input clears the scheduled date
-                if input.is_empty() {
-                    task.scheduled_date = None;
-                } else if let Some(date) = parse_date(&input) {
-                    task.scheduled_date = Some(date);
-                }
-                // If parsing fails, just ignore (keep old date)
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
+            let task_id = task_id.clone();
+            // Parse date outside closure - empty clears, invalid keeps old
+            let new_scheduled = if input.is_empty() {
+                Some(None) // Explicitly clear
+            } else {
+                parse_date(&input).map(Some) // Some(Some(date)) or None (invalid)
+            };
+            if let Some(scheduled_date) = new_scheduled {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_date = scheduled_date;
                 });
             }
             model.refresh_visible_tasks();
         }
         InputTarget::EditTags(task_id) => {
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
-                // Parse comma-separated tags, trim whitespace, filter empty
-                task.tags = input
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
-                });
-            }
+            let task_id = task_id.clone();
+            // Parse comma-separated tags outside closure
+            let tags: Vec<String> = input
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            model.modify_task_with_undo(&task_id, |task| {
+                task.tags = tags;
+            });
             model.refresh_visible_tasks();
         }
         InputTarget::EditDescription(task_id) => {
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
-                // Empty input clears the description
-                task.description = if input.is_empty() {
-                    None
-                } else {
-                    Some(input.clone())
-                };
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
-                });
-            }
+            let task_id = task_id.clone();
+            let description = if input.is_empty() {
+                None
+            } else {
+                Some(input.clone())
+            };
+            model.modify_task_with_undo(&task_id, |task| {
+                task.description = description;
+            });
             model.refresh_visible_tasks();
         }
         InputTarget::Project => {
@@ -665,19 +682,19 @@ fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::EditProject(project_id) => {
-            if let Some(project) = model.projects.get_mut(project_id) {
-                if !input.is_empty() && input != project.name {
-                    let before = project.clone();
-                    project.name = input.clone();
-                    project.updated_at = chrono::Utc::now();
-                    let after = project.clone();
-                    model.sync_project(&after);
-                    model.undo_stack.push(UndoAction::ProjectModified {
-                        before: Box::new(before),
-                        after: Box::new(after),
-                    });
-                    model.status_message = Some(format!("Renamed project to '{}'", input));
-                }
+            let project_id = project_id.clone();
+            // Only rename if input is non-empty and different from current name
+            let should_rename = !input.is_empty()
+                && model
+                    .projects
+                    .get(&project_id)
+                    .is_some_and(|p| p.name != input);
+            if should_rename {
+                let new_name = input.clone();
+                model.modify_project_with_undo(&project_id, |project| {
+                    project.name = new_name.clone();
+                });
+                model.status_message = Some(format!("Renamed project to '{new_name}'"));
             }
         }
         InputTarget::Search => {
@@ -689,24 +706,18 @@ fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::MoveToProject(task_id) => {
+            let task_id = task_id.clone();
             // Parse the number input to select a project
             if let Ok(choice) = input.parse::<usize>() {
-                if let Some(task) = model.tasks.get_mut(task_id) {
-                    let before = task.clone();
-                    let project_ids: Vec<_> = model.projects.keys().cloned().collect();
-                    if choice == 0 {
-                        // Remove from project
-                        task.project_id = None;
-                    } else if let Some(project_id) = project_ids.get(choice - 1) {
-                        // Move to selected project
-                        task.project_id = Some(project_id.clone());
-                    }
-                    task.updated_at = chrono::Utc::now();
-                    let after = task.clone();
-                    model.sync_task(&after);
-                    model.undo_stack.push(UndoAction::TaskModified {
-                        before: Box::new(before),
-                        after: Box::new(after),
+                let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                let new_project = if choice == 0 {
+                    Some(None) // Remove from project
+                } else {
+                    project_ids.get(choice - 1).cloned().map(Some) // Move to project or None if invalid
+                };
+                if let Some(project_id) = new_project {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.project_id = project_id;
                     });
                     model.refresh_visible_tasks();
                 }
@@ -743,17 +754,10 @@ fn handle_submit_input(model: &mut Model) {
                 // Move all selected tasks
                 let tasks_to_move: Vec<_> = model.selected_tasks.iter().cloned().collect();
                 for task_id in tasks_to_move {
-                    if let Some(task) = model.tasks.get_mut(&task_id) {
-                        let before = task.clone();
-                        task.project_id.clone_from(&target_project);
-                        task.updated_at = chrono::Utc::now();
-                        let after = task.clone();
-                        model.sync_task(&after);
-                        model.undo_stack.push(UndoAction::TaskModified {
-                            before: Box::new(before),
-                            after: Box::new(after),
-                        });
-                    }
+                    let proj = target_project.clone();
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.project_id = proj;
+                    });
                 }
                 model.selected_tasks.clear();
                 model.multi_select_mode = false;
@@ -774,22 +778,14 @@ fn handle_submit_input(model: &mut Model) {
             if let Some(new_status) = status {
                 let tasks_to_update: Vec<_> = model.selected_tasks.iter().cloned().collect();
                 for task_id in tasks_to_update {
-                    if let Some(task) = model.tasks.get_mut(&task_id) {
-                        let before = task.clone();
+                    model.modify_task_with_undo(&task_id, |task| {
                         task.status = new_status;
-                        task.updated_at = chrono::Utc::now();
                         if new_status.is_complete() && task.completed_at.is_none() {
                             task.completed_at = Some(chrono::Utc::now());
                         } else if !new_status.is_complete() {
                             task.completed_at = None;
                         }
-                        let after = task.clone();
-                        model.sync_task(&after);
-                        model.undo_stack.push(UndoAction::TaskModified {
-                            before: Box::new(before),
-                            after: Box::new(after),
-                        });
-                    }
+                    });
                 }
                 model.selected_tasks.clear();
                 model.multi_select_mode = false;
@@ -797,33 +793,27 @@ fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::EditDependencies(task_id) => {
+            let task_id = task_id.clone();
             // Parse task numbers from input
             let dep_indices: Vec<usize> = input
                 .split(|c: char| !c.is_ascii_digit())
                 .filter_map(|s| s.parse::<usize>().ok())
                 .collect();
 
-            // Convert indices to task IDs
+            // Convert indices to task IDs (can't depend on self)
             let new_deps: Vec<_> = dep_indices
                 .iter()
                 .filter_map(|i| model.visible_tasks.get(i.saturating_sub(1)).cloned())
-                .filter(|id| id != task_id) // Can't depend on self
+                .filter(|id| *id != task_id)
                 .collect();
 
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
+            model.modify_task_with_undo(&task_id, |task| {
                 task.dependencies = new_deps;
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
-                });
-            }
+            });
             model.refresh_visible_tasks();
         }
         InputTarget::EditRecurrence(task_id) => {
+            let task_id = task_id.clone();
             use crate::domain::Recurrence;
             use chrono::Datelike;
             // Parse recurrence from input (first char: d, w, m, y, 0)
@@ -846,20 +836,13 @@ fn handle_submit_input(model: &mut Model) {
                 _ => None, // Invalid input or explicit 0/n/N clears recurrence
             };
 
-            if let Some(task) = model.tasks.get_mut(task_id) {
-                let before = task.clone();
+            model.modify_task_with_undo(&task_id, |task| {
                 task.recurrence = new_recurrence;
-                task.updated_at = chrono::Utc::now();
-                let after = task.clone();
-                model.sync_task(&after);
-                model.undo_stack.push(UndoAction::TaskModified {
-                    before: Box::new(before),
-                    after: Box::new(after),
-                });
-            }
+            });
             model.refresh_visible_tasks();
         }
         InputTarget::LinkTask(task_id) => {
+            let task_id = task_id.clone();
             // Parse the input - support task number or task title search
             let target_task_id = if let Ok(num) = input.parse::<usize>() {
                 // User entered a task number
@@ -870,25 +853,17 @@ fn handle_submit_input(model: &mut Model) {
                 model
                     .tasks
                     .iter()
-                    .find(|(id, t)| *id != task_id && t.title.to_lowercase().contains(&input_lower))
+                    .find(|(id, t)| {
+                        **id != task_id && t.title.to_lowercase().contains(&input_lower)
+                    })
                     .map(|(id, _)| id.clone())
             };
 
-            if let Some(next_id) = target_task_id {
-                // Don't allow linking to self
-                if next_id != *task_id {
-                    if let Some(task) = model.tasks.get_mut(task_id) {
-                        let before = task.clone();
-                        task.next_task_id = Some(next_id);
-                        task.updated_at = chrono::Utc::now();
-                        let after = task.clone();
-                        model.sync_task(&after);
-                        model.undo_stack.push(UndoAction::TaskModified {
-                            before: Box::new(before),
-                            after: Box::new(after),
-                        });
-                    }
-                }
+            // Don't allow linking to self
+            if let Some(next_id) = target_task_id.filter(|id| *id != task_id) {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.next_task_id = Some(next_id);
+                });
             }
         }
         InputTarget::ImportFilePath(_format) => {
@@ -1418,29 +1393,12 @@ fn handle_move_task(model: &mut Model, direction: i32) {
         .unwrap_or(0);
 
     // Swap the sort orders
-    if let Some(current_task) = model.tasks.get_mut(&current_task_id) {
-        let before = current_task.clone();
-        current_task.sort_order = Some(swap_order);
-        current_task.updated_at = chrono::Utc::now();
-        let after = current_task.clone();
-        model.sync_task(&after);
-        model.undo_stack.push(UndoAction::TaskModified {
-            before: Box::new(before),
-            after: Box::new(after),
-        });
-    }
-
-    if let Some(swap_task) = model.tasks.get_mut(&swap_task_id) {
-        let before = swap_task.clone();
-        swap_task.sort_order = Some(current_order);
-        swap_task.updated_at = chrono::Utc::now();
-        let after = swap_task.clone();
-        model.sync_task(&after);
-        model.undo_stack.push(UndoAction::TaskModified {
-            before: Box::new(before),
-            after: Box::new(after),
-        });
-    }
+    model.modify_task_with_undo(&current_task_id, |task| {
+        task.sort_order = Some(swap_order);
+    });
+    model.modify_task_with_undo(&swap_task_id, |task| {
+        task.sort_order = Some(current_order);
+    });
 
     // Update selection to follow the moved task
     model.selected_index = swap_index;

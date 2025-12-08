@@ -8,8 +8,11 @@ pub const MAX_UNDO_HISTORY: usize = 50;
 pub enum UndoAction {
     /// Task was created - undo by deleting it
     TaskCreated(Box<Task>),
-    /// Task was deleted - undo by restoring it
-    TaskDeleted(Box<Task>),
+    /// Task was deleted - undo by restoring it (includes associated time entries)
+    TaskDeleted {
+        task: Box<Task>,
+        time_entries: Vec<TimeEntry>,
+    },
     /// Task was modified - undo by restoring previous state
     TaskModified { before: Box<Task>, after: Box<Task> },
     /// Project was created - undo by deleting it
@@ -35,6 +38,12 @@ pub enum UndoAction {
         before: Box<TimeEntry>,
         after: Box<TimeEntry>,
     },
+    /// Timer was switched from one task to another - undo both in one operation
+    TimerSwitched {
+        stopped_entry_before: Box<TimeEntry>,
+        stopped_entry_after: Box<TimeEntry>,
+        started_entry: Box<TimeEntry>,
+    },
 }
 
 impl UndoAction {
@@ -45,7 +54,7 @@ impl UndoAction {
             Self::TaskCreated(task) => {
                 format!("Create task \"{}\"", truncate(&task.title, 20))
             }
-            Self::TaskDeleted(task) => {
+            Self::TaskDeleted { task, .. } => {
                 format!("Delete task \"{}\"", truncate(&task.title, 20))
             }
             Self::TaskModified { before, .. } => {
@@ -64,6 +73,7 @@ impl UndoAction {
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
+            Self::TimerSwitched { .. } => "Switch timer".to_string(),
         }
     }
 
@@ -74,7 +84,10 @@ impl UndoAction {
             // Undo create = delete, so redo = create again
             Self::TaskCreated(task) => Self::TaskCreated(task.clone()),
             // Undo delete = restore, so redo = delete again
-            Self::TaskDeleted(task) => Self::TaskDeleted(task.clone()),
+            Self::TaskDeleted { task, time_entries } => Self::TaskDeleted {
+                task: task.clone(),
+                time_entries: time_entries.clone(),
+            },
             // Undo modify swaps before/after, so redo swaps them back
             Self::TaskModified { before, after } => Self::TaskModified {
                 before: after.clone(),
@@ -102,6 +115,16 @@ impl UndoAction {
             Self::TimeEntryModified { before, after } => Self::TimeEntryModified {
                 before: after.clone(),
                 after: before.clone(),
+            },
+            // Timer switch inverse keeps the same data (undo/redo logic handles it)
+            Self::TimerSwitched {
+                stopped_entry_before,
+                stopped_entry_after,
+                started_entry,
+            } => Self::TimerSwitched {
+                stopped_entry_before: stopped_entry_before.clone(),
+                stopped_entry_after: stopped_entry_after.clone(),
+                started_entry: started_entry.clone(),
             },
         }
     }

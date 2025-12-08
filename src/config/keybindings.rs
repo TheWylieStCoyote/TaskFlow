@@ -90,6 +90,7 @@ pub enum Action {
     Undo,
     Redo,
     Quit,
+    RefreshStorage,
 
     // Export
     ExportCsv,
@@ -314,6 +315,8 @@ impl Action {
             Self::PomodoroTogglePause => "Toggle pause",
             Self::PomodoroSkip => "Skip phase",
             Self::PomodoroStop => "Stop Pomodoro",
+            // Storage
+            Self::RefreshStorage => "Refresh storage",
         }
     }
 
@@ -413,7 +416,9 @@ impl Action {
             | Self::PomodoroSkip
             | Self::PomodoroStop => ActionCategory::Pomodoro,
 
-            Self::Save | Self::Undo | Self::Redo | Self::Quit => ActionCategory::System,
+            Self::Save | Self::Undo | Self::Redo | Self::Quit | Self::RefreshStorage => {
+                ActionCategory::System
+            }
         }
     }
 }
@@ -556,6 +561,7 @@ impl Default for Keybindings {
         bindings.insert("U".to_string(), Action::Redo);
         bindings.insert("q".to_string(), Action::Quit);
         bindings.insert("esc".to_string(), Action::Quit);
+        bindings.insert("f5".to_string(), Action::RefreshStorage);
 
         // Export
         bindings.insert("ctrl+e".to_string(), Action::ExportCsv);

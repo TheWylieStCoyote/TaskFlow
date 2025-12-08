@@ -83,8 +83,8 @@ use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 /// Number of view items in the sidebar (before the separator).
 /// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
 ///        Dashboard, Reports, Blocked, Untagged, No Project, Recent,
-///        Kanban, Eisenhower, Weekly Planner
-pub const SIDEBAR_VIEW_COUNT: usize = 15;
+///        Kanban, Eisenhower, Weekly Planner, Snoozed
+pub const SIDEBAR_VIEW_COUNT: usize = 16;
 
 /// Index of the separator line in the sidebar.
 pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12

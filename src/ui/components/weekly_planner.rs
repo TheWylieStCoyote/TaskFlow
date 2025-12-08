@@ -18,6 +18,16 @@ use crate::app::Model;
 use crate::config::Theme;
 use crate::domain::Task;
 
+/// Parameters for rendering a day column in the weekly planner.
+struct DayColumnParams<'a> {
+    area: Rect,
+    date: NaiveDate,
+    day_name: &'a str,
+    tasks: Vec<&'a Task>,
+    is_today: bool,
+    is_past: bool,
+}
+
 /// Weekly planner widget showing tasks organized by day.
 pub struct WeeklyPlanner<'a> {
     model: &'a Model,
@@ -105,34 +115,29 @@ impl Widget for WeeklyPlanner<'_> {
 
         // Render each day column
         for (i, (date, day_name)) in days.iter().enumerate() {
-            let tasks = self.tasks_for_date(*date);
-            let is_today = *date == today;
-            let is_past = *date < today;
-
-            self.render_day_column(
-                day_columns[i],
-                buf,
-                *date,
+            let params = DayColumnParams {
+                area: day_columns[i],
+                date: *date,
                 day_name,
-                &tasks,
-                is_today,
-                is_past,
-            );
+                tasks: self.tasks_for_date(*date),
+                is_today: *date == today,
+                is_past: *date < today,
+            };
+            self.render_day_column(buf, params);
         }
     }
 }
 
 impl WeeklyPlanner<'_> {
-    fn render_day_column(
-        &self,
-        area: Rect,
-        buf: &mut Buffer,
-        date: NaiveDate,
-        day_name: &str,
-        tasks: &[&Task],
-        is_today: bool,
-        is_past: bool,
-    ) {
+    fn render_day_column(&self, buf: &mut Buffer, params: DayColumnParams<'_>) {
+        let DayColumnParams {
+            area,
+            date,
+            day_name,
+            tasks,
+            is_today,
+            is_past,
+        } = params;
         let theme = self.theme;
 
         // Determine title color based on day status

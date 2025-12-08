@@ -266,8 +266,6 @@ mod tests {
 
     #[test]
     fn test_urgency_detection() {
-        use chrono::NaiveDate;
-
         let mut task = Task::new("Test");
 
         // No due date = not urgent

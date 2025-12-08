@@ -553,8 +553,12 @@ impl<'a> AnalyticsEngine<'a> {
             })
             .collect();
 
-        // Sort by count descending
-        stats.sort_by(|a, b| b.count.cmp(&a.count));
+        // Sort by count descending, then alphabetically by tag name (case-insensitive)
+        stats.sort_by(|a, b| {
+            b.count
+                .cmp(&a.count)
+                .then_with(|| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()))
+        });
         stats
     }
 }

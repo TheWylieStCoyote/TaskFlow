@@ -4,6 +4,12 @@ A terminal-based project management application built with Rust.
 
 TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects, and time tracking—all from your terminal.
 
+## Documentation
+
+- **[User Manual](docs/USER_MANUAL.md)** - Comprehensive guide covering all features
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - One-page cheat sheet
+- **[FAQ & Troubleshooting](docs/FAQ.md)** - Common questions and solutions
+
 ## Features
 
 - **Task Management**: Create, edit, and track tasks with priorities, due dates, status, and subtasks

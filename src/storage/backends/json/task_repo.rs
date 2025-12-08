@@ -1,6 +1,7 @@
 //! TaskRepository implementation for JSON backend.
 
 use crate::domain::{Filter, ProjectId, Task, TaskId};
+use crate::storage::backends::filter_utils::task_matches_filter;
 use crate::storage::{StorageError, StorageResult, TaskRepository};
 
 use super::JsonBackend;
@@ -48,87 +49,9 @@ impl TaskRepository for JsonBackend {
             .data
             .tasks
             .iter()
-            .filter(|task| {
-                // Filter by status
-                if let Some(ref statuses) = filter.status {
-                    if !statuses.contains(&task.status) {
-                        return false;
-                    }
-                }
-
-                // Filter by priority
-                if let Some(ref priorities) = filter.priority {
-                    if !priorities.contains(&task.priority) {
-                        return false;
-                    }
-                }
-
-                // Filter by project
-                if let Some(ref project_id) = filter.project_id {
-                    if task.project_id.as_ref() != Some(project_id) {
-                        return false;
-                    }
-                }
-
-                // Filter by tags
-                if let Some(ref tags) = filter.tags {
-                    let has_tags = match filter.tags_mode {
-                        crate::domain::TagFilterMode::Any => {
-                            tags.iter().any(|t| task.tags.contains(t))
-                        }
-                        crate::domain::TagFilterMode::All => {
-                            tags.iter().all(|t| task.tags.contains(t))
-                        }
-                    };
-                    if !has_tags && !tags.is_empty() {
-                        return false;
-                    }
-                }
-
-                // Filter by due date
-                if let Some(due_before) = filter.due_before {
-                    if let Some(due) = task.due_date {
-                        if due >= due_before {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-
-                if let Some(due_after) = filter.due_after {
-                    if let Some(due) = task.due_date {
-                        if due <= due_after {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-
-                // Filter by search text
-                if let Some(ref search) = filter.search_text {
-                    let search_lower = search.to_lowercase();
-                    let title_matches = task.title.to_lowercase().contains(&search_lower);
-                    let desc_matches = task
-                        .description
-                        .as_ref()
-                        .is_some_and(|d| d.to_lowercase().contains(&search_lower));
-                    if !title_matches && !desc_matches {
-                        return false;
-                    }
-                }
-
-                // Filter completed tasks
-                if !filter.include_completed && task.status.is_complete() {
-                    return false;
-                }
-
-                true
-            })
+            .filter(|task| task_matches_filter(task, filter))
             .cloned()
             .collect();
-
         Ok(tasks)
     }
 

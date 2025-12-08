@@ -1,6 +1,7 @@
 //! TaskRepository implementation for markdown backend.
 
 use crate::domain::{Filter, ProjectId, Task, TaskId};
+use crate::storage::backends::filter_utils::task_matches_filter;
 use crate::storage::{StorageError, StorageResult, TaskRepository};
 
 use super::MarkdownBackend;
@@ -45,33 +46,7 @@ impl TaskRepository for MarkdownBackend {
         let tasks = self
             .tasks_cache
             .values()
-            .filter(|task| {
-                if let Some(ref statuses) = filter.status {
-                    if !statuses.contains(&task.status) {
-                        return false;
-                    }
-                }
-                if let Some(ref priorities) = filter.priority {
-                    if !priorities.contains(&task.priority) {
-                        return false;
-                    }
-                }
-                if let Some(ref project_id) = filter.project_id {
-                    if task.project_id.as_ref() != Some(project_id) {
-                        return false;
-                    }
-                }
-                if !filter.include_completed && task.status.is_complete() {
-                    return false;
-                }
-                if let Some(ref search) = filter.search_text {
-                    let search_lower = search.to_lowercase();
-                    if !task.title.to_lowercase().contains(&search_lower) {
-                        return false;
-                    }
-                }
-                true
-            })
+            .filter(|task| task_matches_filter(task, filter))
             .cloned()
             .collect();
         Ok(tasks)

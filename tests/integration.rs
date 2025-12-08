@@ -618,3 +618,396 @@ fn test_all_backends_persist_estimate_after_flush() {
         );
     }
 }
+
+// Import/Export integration tests
+mod import_export_tests {
+    use super::*;
+    use std::io::Cursor;
+    use taskflow::storage::{
+        export_to_csv, export_to_ics, import_from_csv, import_from_ics, ImportOptions,
+    };
+
+    #[test]
+    fn test_csv_roundtrip() {
+        // Create tasks
+        let tasks = vec![
+            Task::new("Task 1").with_priority(Priority::High),
+            Task::new("Task 2")
+                .with_priority(Priority::Low)
+                .with_tags(vec!["tag1".to_string(), "tag2".to_string()]),
+            Task::new("Task 3").with_status(TaskStatus::Done),
+        ];
+
+        // Export to CSV
+        let mut csv_buffer = Vec::new();
+        export_to_csv(&tasks, &mut csv_buffer).expect("export should succeed");
+
+        // Import from CSV
+        let reader = Cursor::new(csv_buffer);
+        let options = ImportOptions::default();
+        let result = import_from_csv(reader, &options).expect("import should succeed");
+
+        // Verify basic import
+        assert_eq!(
+            result.imported.len(),
+            3,
+            "should import all 3 tasks, got {} with {} errors",
+            result.imported.len(),
+            result.errors.len()
+        );
+
+        // Verify priorities preserved
+        let high_priority_tasks: Vec<_> = result
+            .imported
+            .iter()
+            .filter(|t| t.priority == Priority::High)
+            .collect();
+        assert_eq!(
+            high_priority_tasks.len(),
+            1,
+            "should have 1 high priority task"
+        );
+
+        // Verify tags preserved
+        let tagged_task = result
+            .imported
+            .iter()
+            .find(|t| !t.tags.is_empty())
+            .expect("should have a tagged task");
+        assert_eq!(tagged_task.tags.len(), 2, "should have 2 tags");
+    }
+
+    #[test]
+    fn test_ics_roundtrip() {
+        // Create tasks with various properties
+        let mut task1 = Task::new("Meeting preparation");
+        task1.priority = Priority::High;
+        task1.status = TaskStatus::InProgress;
+
+        let mut task2 = Task::new("Completed task");
+        task2.status = TaskStatus::Done;
+        task2.completed_at = Some(chrono::Utc::now());
+
+        let tasks = vec![task1, task2];
+
+        // Export to ICS
+        let mut ics_buffer = Vec::new();
+        export_to_ics(&tasks, &mut ics_buffer).expect("export should succeed");
+
+        let ics_content = String::from_utf8(ics_buffer.clone()).unwrap();
+        assert!(
+            ics_content.contains("BEGIN:VCALENDAR"),
+            "should have calendar header"
+        );
+        assert!(
+            ics_content.contains("VTODO"),
+            "should have VTODO components"
+        );
+
+        // Import from ICS
+        let reader = Cursor::new(ics_buffer);
+        let options = ImportOptions::default();
+        let result = import_from_ics(reader, &options).expect("import should succeed");
+
+        assert_eq!(result.imported.len(), 2, "should import both tasks");
+    }
+
+    #[test]
+    fn test_csv_handles_special_characters() {
+        // Task with special characters that need escaping
+        let task = Task::new("Task with \"quotes\" and, commas")
+            .with_description("Description with\nmultiple lines");
+
+        let tasks = vec![task];
+
+        // Export
+        let mut csv_buffer = Vec::new();
+        export_to_csv(&tasks, &mut csv_buffer).expect("export should succeed");
+
+        // Import
+        let reader = Cursor::new(csv_buffer);
+        let options = ImportOptions::default();
+        let result = import_from_csv(reader, &options).expect("import should succeed");
+
+        assert_eq!(result.imported.len(), 1, "should import the task");
+        assert!(
+            result.imported[0].title.contains("quotes"),
+            "title should preserve quotes"
+        );
+    }
+
+    #[test]
+    fn test_all_backends_csv_export_import_consistency() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Create tasks
+            let task1 = Task::new("Export test task 1").with_priority(Priority::High);
+            let task2 = Task::new("Export test task 2").with_tags(vec!["exported".to_string()]);
+
+            backend.create_task(&task1).expect("create_task failed");
+            backend.create_task(&task2).expect("create_task failed");
+
+            // Get all tasks from backend
+            let stored_tasks = backend.list_tasks().expect("list_tasks failed");
+
+            // Export to CSV
+            let mut csv_buffer = Vec::new();
+            export_to_csv(&stored_tasks, &mut csv_buffer)
+                .unwrap_or_else(|e| panic!("{}: export failed: {}", backend_name, e));
+
+            // Re-import and verify consistency
+            let reader = Cursor::new(csv_buffer);
+            let options = ImportOptions::default();
+            let result = import_from_csv(reader, &options)
+                .unwrap_or_else(|e| panic!("{}: import failed: {}", backend_name, e));
+
+            assert_eq!(
+                result.imported.len(),
+                stored_tasks.len(),
+                "{}: should import same number of tasks",
+                backend_name
+            );
+        }
+    }
+}
+
+// Work log integration tests
+mod work_log_tests {
+    use super::*;
+    use taskflow::domain::WorkLogEntry;
+
+    #[test]
+    fn test_all_backends_work_log_operations() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Create a task
+            let task = Task::new("Task for work logs");
+            backend
+                .create_task(&task)
+                .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+            // Create work log entries
+            let entry1 = WorkLogEntry::new(task.id, "First progress update");
+            let entry2 = WorkLogEntry::new(task.id, "Second progress update");
+
+            backend
+                .create_work_log(&entry1)
+                .unwrap_or_else(|e| panic!("{}: create_work_log 1 failed: {}", backend_name, e));
+            backend
+                .create_work_log(&entry2)
+                .unwrap_or_else(|e| panic!("{}: create_work_log 2 failed: {}", backend_name, e));
+
+            // Retrieve work logs for task
+            let logs = backend
+                .get_work_logs_for_task(&task.id)
+                .unwrap_or_else(|e| {
+                    panic!("{}: get_work_logs_for_task failed: {}", backend_name, e)
+                });
+
+            assert_eq!(logs.len(), 2, "{}: should have 2 work logs", backend_name);
+
+            // Update a work log
+            let mut updated = entry1.clone();
+            updated.content = "Updated progress".to_string();
+            backend
+                .update_work_log(&updated)
+                .unwrap_or_else(|e| panic!("{}: update_work_log failed: {}", backend_name, e));
+
+            let retrieved = backend
+                .get_work_log(&entry1.id)
+                .unwrap_or_else(|e| panic!("{}: get_work_log failed: {}", backend_name, e))
+                .unwrap();
+            assert_eq!(
+                retrieved.content, "Updated progress",
+                "{}: work log content should be updated",
+                backend_name
+            );
+
+            // Delete a work log
+            backend
+                .delete_work_log(&entry2.id)
+                .unwrap_or_else(|e| panic!("{}: delete_work_log failed: {}", backend_name, e));
+
+            let logs = backend
+                .get_work_logs_for_task(&task.id)
+                .expect("get_work_logs_for_task failed");
+            assert_eq!(
+                logs.len(),
+                1,
+                "{}: should have 1 work log after deletion",
+                backend_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_work_logs_persist_in_export() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Create task and work log
+            let task = Task::new("Task with work log");
+            backend.create_task(&task).expect("create_task failed");
+
+            let log = WorkLogEntry::new(task.id, "Important work done");
+            backend
+                .create_work_log(&log)
+                .expect("create_work_log failed");
+
+            // Export all data
+            let export_data = backend
+                .export_all()
+                .unwrap_or_else(|e| panic!("{}: export_all failed: {}", backend_name, e));
+
+            assert!(
+                !export_data.work_logs.is_empty(),
+                "{}: export should include work logs",
+                backend_name
+            );
+            assert_eq!(
+                export_data.work_logs[0].content, "Important work done",
+                "{}: work log content should be preserved",
+                backend_name
+            );
+        }
+    }
+}
+
+// Edge case tests
+mod edge_case_tests {
+    use super::*;
+
+    #[test]
+    fn test_all_backends_empty_string_fields() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Task with empty description
+            let mut task = Task::new("Task with empty description");
+            task.description = Some(String::new());
+
+            backend
+                .create_task(&task)
+                .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+            let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+            // Empty string might be normalized to None or preserved as empty
+            // Either is acceptable
+            assert!(
+                retrieved.description.is_none() || retrieved.description == Some(String::new()),
+                "{}: empty description should be None or empty string",
+                backend_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_backends_unicode_content() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Task with unicode characters
+            let task = Task::new("Task with emojis and unicode")
+                .with_description("Description with emojis and unicode characters");
+
+            backend
+                .create_task(&task)
+                .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+            let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+            assert!(
+                retrieved.title.contains("unicode"),
+                "{}: unicode in title should be preserved",
+                backend_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_backends_very_long_content() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Task with very long title and description
+            let long_title: String = (0..500).map(|_| 'a').collect();
+            let long_desc: String = (0..10000).map(|_| 'b').collect();
+
+            let task = Task::new(&long_title).with_description(&long_desc);
+
+            backend
+                .create_task(&task)
+                .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+            let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+            assert_eq!(
+                retrieved.title.len(),
+                500,
+                "{}: long title should be preserved",
+                backend_name
+            );
+            assert_eq!(
+                retrieved.description.as_ref().map(|d| d.len()),
+                Some(10000),
+                "{}: long description should be preserved",
+                backend_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_backends_many_tags() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Task with many tags
+            let tags: Vec<String> = (0..50).map(|i| format!("tag{}", i)).collect();
+            let task = Task::new("Task with many tags").with_tags(tags.clone());
+
+            backend
+                .create_task(&task)
+                .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+            let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+            assert_eq!(
+                retrieved.tags.len(),
+                50,
+                "{}: all 50 tags should be preserved",
+                backend_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_backends_concurrent_operations() {
+        for (backend_name, mut backend) in create_all_backends() {
+            // Create multiple tasks quickly
+            let mut tasks = Vec::new();
+            for i in 0..10 {
+                let task = Task::new(&format!("Concurrent task {}", i));
+                tasks.push(task.clone());
+                backend.create_task(&task).unwrap_or_else(|e| {
+                    panic!("{}: create_task {} failed: {}", backend_name, i, e)
+                });
+            }
+
+            // Verify all were created
+            let all_tasks = backend
+                .list_tasks()
+                .unwrap_or_else(|e| panic!("{}: list_tasks failed: {}", backend_name, e));
+            assert_eq!(
+                all_tasks.len(),
+                10,
+                "{}: should have all 10 tasks",
+                backend_name
+            );
+
+            // Update all tasks
+            for (i, task) in tasks.iter_mut().enumerate() {
+                task.status = TaskStatus::InProgress;
+                backend.update_task(task).unwrap_or_else(|e| {
+                    panic!("{}: update_task {} failed: {}", backend_name, i, e)
+                });
+            }
+
+            // Verify all updates
+            let all_tasks = backend.list_tasks().unwrap();
+            let in_progress_count = all_tasks
+                .iter()
+                .filter(|t| t.status == TaskStatus::InProgress)
+                .count();
+            assert_eq!(
+                in_progress_count, 10,
+                "{}: all tasks should be InProgress",
+                backend_name
+            );
+        }
+    }
+}

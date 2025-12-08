@@ -335,6 +335,10 @@ pub struct Task {
     #[serde(default)]
     pub next_task_id: Option<TaskId>,
 
+    // Snooze - hide task until this date
+    #[serde(default)]
+    pub snooze_until: Option<NaiveDate>,
+
     // Custom fields for extensibility
     #[serde(default)]
     pub custom_fields: HashMap<String, serde_json::Value>,
@@ -363,6 +367,7 @@ impl Task {
             actual_minutes: 0,
             sort_order: None,
             next_task_id: None,
+            snooze_until: None,
             custom_fields: HashMap::new(),
         }
     }
@@ -444,6 +449,25 @@ impl Task {
             return due == Utc::now().date_naive();
         }
         false
+    }
+
+    /// Returns true if the task is currently snoozed (hidden until a future date).
+    #[must_use]
+    pub fn is_snoozed(&self) -> bool {
+        self.snooze_until
+            .is_some_and(|date| date > Utc::now().date_naive())
+    }
+
+    /// Snooze the task until a specific date.
+    pub fn snooze_until_date(&mut self, date: NaiveDate) {
+        self.snooze_until = Some(date);
+        self.updated_at = Utc::now();
+    }
+
+    /// Clear the snooze on this task.
+    pub fn clear_snooze(&mut self) {
+        self.snooze_until = None;
+        self.updated_at = Utc::now();
     }
 
     /// Returns time variance in minutes (positive = over estimate, negative = under estimate).

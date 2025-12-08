@@ -79,12 +79,12 @@ fn test_apply_keybinding() {
     // Apply a new key to that action
     update(
         &mut model,
-        Message::Ui(UiMessage::ApplyKeybinding("z".to_string())),
+        Message::Ui(UiMessage::ApplyKeybinding("1".to_string())),
     );
 
     assert!(!model.keybinding_capturing);
-    // The action should now be bound to 'z'
-    assert_eq!(model.keybindings.get_action("z"), Some(&original_action));
+    // The action should now be bound to '1'
+    assert_eq!(model.keybindings.get_action("1"), Some(&original_action));
 }
 
 #[test]
@@ -92,16 +92,16 @@ fn test_reset_all_keybindings() {
     let mut model = Model::new();
     model.show_keybindings_editor = true;
 
-    // Modify a keybinding
-    model.keybindings.set_binding("z".to_string(), Action::Quit);
+    // Modify a keybinding (use "1" which is not a default binding)
+    model.keybindings.set_binding("1".to_string(), Action::Quit);
 
     // Verify it was changed
-    assert_eq!(model.keybindings.get_action("z"), Some(&Action::Quit));
+    assert_eq!(model.keybindings.get_action("1"), Some(&Action::Quit));
 
     // Reset all
     update(&mut model, Message::Ui(UiMessage::ResetAllKeybindings));
 
-    // Should be back to default (z is not a default binding)
-    assert_eq!(model.keybindings.get_action("z"), None);
+    // Should be back to default ("1" is not a default binding)
+    assert_eq!(model.keybindings.get_action("1"), None);
     assert!(model.status_message.is_some());
 }

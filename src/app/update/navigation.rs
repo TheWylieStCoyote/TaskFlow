@@ -284,6 +284,9 @@ fn handle_sidebar_selection(model: &mut Model) {
         9 => activate_view(model, ViewId::Untagged),
         10 => activate_view(model, ViewId::NoProject),
         11 => activate_view(model, ViewId::RecentlyModified),
+        12 => activate_view(model, ViewId::Kanban),
+        13 => activate_view(model, ViewId::Eisenhower),
+        14 => activate_view(model, ViewId::WeeklyPlanner),
         n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks

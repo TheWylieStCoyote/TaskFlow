@@ -124,6 +124,10 @@ pub enum Action {
     // Keybindings editor
     ShowKeybindingsEditor,
 
+    // Task snooze
+    SnoozeTask,
+    ClearSnooze,
+
     // Pomodoro timer
     PomodoroStart,
     PomodoroPause,
@@ -308,6 +312,9 @@ impl Action {
             Self::ShowTemplates => "Show templates",
             // Keybindings
             Self::ShowKeybindingsEditor => "Edit keybindings",
+            // Snooze
+            Self::SnoozeTask => "Snooze task",
+            Self::ClearSnooze => "Clear snooze",
             // Pomodoro
             Self::PomodoroStart => "Start Pomodoro",
             Self::PomodoroPause => "Pause timer",
@@ -343,7 +350,9 @@ impl Action {
             | Self::CyclePriority
             | Self::MoveToProject
             | Self::MoveTaskUp
-            | Self::MoveTaskDown => ActionCategory::Tasks,
+            | Self::MoveTaskDown
+            | Self::SnoozeTask
+            | Self::ClearSnooze => ActionCategory::Tasks,
 
             Self::CreateProject | Self::EditProject | Self::DeleteProject => {
                 ActionCategory::Projects
@@ -508,6 +517,10 @@ impl Default for Keybindings {
         bindings.insert("d".to_string(), Action::DeleteTask);
         bindings.insert("p".to_string(), Action::CyclePriority);
         bindings.insert("m".to_string(), Action::MoveToProject);
+
+        // Task snooze
+        bindings.insert("z".to_string(), Action::SnoozeTask);
+        bindings.insert("Z".to_string(), Action::ClearSnooze);
 
         // Time tracking
         bindings.insert("t".to_string(), Action::ToggleTimeTracking);
@@ -894,18 +907,18 @@ z = "quit"
     fn test_find_conflict_none() {
         let kb = Keybindings::default();
 
-        // "z" is not bound by default
-        assert_eq!(kb.find_conflict("z"), None);
+        // "1" is not bound by default
+        assert_eq!(kb.find_conflict("1"), None);
     }
 
     #[test]
     fn test_set_binding_checked_no_conflict() {
         let mut kb = Keybindings::default();
 
-        // "z" is not bound, so no conflict
-        let previous = kb.set_binding_checked("z".to_string(), Action::Quit);
+        // "1" is not bound, so no conflict
+        let previous = kb.set_binding_checked("1".to_string(), Action::Quit);
         assert!(previous.is_none());
-        assert_eq!(kb.get_action("z"), Some(&Action::Quit));
+        assert_eq!(kb.get_action("1"), Some(&Action::Quit));
     }
 
     #[test]
@@ -922,13 +935,13 @@ z = "quit"
     fn test_set_binding_checked_removes_old_action_binding() {
         let mut kb = Keybindings::default();
 
-        // "j" is bound to MoveDown, now bind "z" to MoveDown
-        let previous = kb.set_binding_checked("z".to_string(), Action::MoveDown);
-        assert!(previous.is_none()); // "z" wasn't bound before
+        // "j" is bound to MoveDown, now bind "1" to MoveDown
+        let previous = kb.set_binding_checked("1".to_string(), Action::MoveDown);
+        assert!(previous.is_none()); // "1" wasn't bound before
 
         // "j" should no longer be bound to MoveDown (action can only have one key)
         assert_eq!(kb.get_action("j"), None);
-        assert_eq!(kb.get_action("z"), Some(&Action::MoveDown));
+        assert_eq!(kb.get_action("1"), Some(&Action::MoveDown));
     }
 
     #[test]

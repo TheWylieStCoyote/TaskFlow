@@ -184,6 +184,14 @@ pub enum ViewId {
     RecentlyModified,
     /// Analytics and reports view
     Reports,
+    /// Kanban board view with columns for each status
+    Kanban,
+    /// Eisenhower matrix (urgent/important quadrants)
+    Eisenhower,
+    /// Weekly planner view with day columns
+    WeeklyPlanner,
+    /// Snoozed tasks (hidden until snooze date)
+    Snoozed,
 }
 
 /// Task operation messages.
@@ -449,6 +457,60 @@ pub enum UiMessage {
     // Overdue alert
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,
+
+    // Saved filters
+    /// Show saved filter picker
+    ShowSavedFilters,
+    /// Hide saved filter picker
+    HideSavedFilters,
+    /// Navigate up in saved filter list
+    SavedFilterUp,
+    /// Navigate down in saved filter list
+    SavedFilterDown,
+    /// Apply the selected saved filter
+    ApplySavedFilter,
+    /// Save current filter as a new saved filter
+    SaveCurrentFilter,
+    /// Delete the selected saved filter
+    DeleteSavedFilter,
+    /// Clear the active saved filter
+    ClearSavedFilter,
+
+    // Daily review mode
+    /// Show daily review mode
+    ShowDailyReview,
+    /// Hide daily review mode
+    HideDailyReview,
+    /// Move to next phase in daily review
+    DailyReviewNext,
+    /// Move to previous phase in daily review
+    DailyReviewPrev,
+    /// Navigate up in daily review task list
+    DailyReviewUp,
+    /// Navigate down in daily review task list
+    DailyReviewDown,
+    /// Complete the selected task in daily review
+    DailyReviewComplete,
+
+    // Weekly review mode
+    /// Show weekly review mode
+    ShowWeeklyReview,
+    /// Hide weekly review mode
+    HideWeeklyReview,
+    /// Move to next phase in weekly review
+    WeeklyReviewNext,
+    /// Move to previous phase in weekly review
+    WeeklyReviewPrev,
+    /// Navigate up in weekly review list
+    WeeklyReviewUp,
+    /// Navigate down in weekly review list
+    WeeklyReviewDown,
+
+    // Task snooze
+    /// Start editing snooze date for selected task
+    StartSnoozeTask,
+    /// Clear snooze from selected task
+    ClearSnooze,
 }
 
 /// System-level messages for application control.

@@ -586,6 +586,8 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ShowTemplates => Message::Ui(UiMessage::ShowTemplates),
         Action::ToggleFocusMode => Message::Ui(UiMessage::ToggleFocusMode),
         Action::ShowKeybindingsEditor => Message::Ui(UiMessage::ShowKeybindingsEditor),
+        Action::SnoozeTask => Message::Ui(UiMessage::StartSnoozeTask),
+        Action::ClearSnooze => Message::Ui(UiMessage::ClearSnooze),
         Action::ReportsNextPanel => Message::Navigation(NavigationMessage::ReportsNextPanel),
         Action::ReportsPrevPanel => Message::Navigation(NavigationMessage::ReportsPrevPanel),
         Action::PomodoroStart => Message::Pomodoro(PomodoroMessage::Start { goal_cycles: 4 }),

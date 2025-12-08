@@ -149,6 +149,46 @@ impl Widget for Sidebar<'_> {
                     theme,
                 ),
             ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🎯 ", Style::default()),
+                styled_view_name(
+                    "Kanban",
+                    ViewId::Kanban,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("⚡ ", Style::default()),
+                styled_view_name(
+                    "Eisenhower",
+                    ViewId::Eisenhower,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📅 ", Style::default()),
+                styled_view_name(
+                    "Week",
+                    ViewId::WeeklyPlanner,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("💤 ", Style::default()),
+                styled_view_name(
+                    "Snoozed",
+                    ViewId::Snoozed,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
             // Separator
             ListItem::new(Line::from("───────────")),
             // Projects section
@@ -388,7 +428,7 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
+        let buffer = render_widget(sidebar, 30, 25);
         let content = buffer_content(&buffer);
 
         assert!(

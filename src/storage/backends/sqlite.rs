@@ -323,6 +323,11 @@ impl SqliteBackend {
                 .and_then(|s| uuid::Uuid::parse_str(&s).ok())
                 .map(TaskId),
             custom_fields: serde_json::from_str(&custom_fields_json).unwrap_or_default(),
+            snooze_until: row
+                .get::<_, Option<String>>("snooze_until")
+                .ok()
+                .flatten()
+                .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
         })
     }
 

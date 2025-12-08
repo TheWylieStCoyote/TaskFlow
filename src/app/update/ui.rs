@@ -577,6 +577,57 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::TimeLogDelete => {
             handle_ui_time_log(model, msg);
         }
+        // Saved filters - delegated to helper
+        UiMessage::ShowSavedFilters
+        | UiMessage::HideSavedFilters
+        | UiMessage::SavedFilterUp
+        | UiMessage::SavedFilterDown
+        | UiMessage::ApplySavedFilter
+        | UiMessage::SaveCurrentFilter
+        | UiMessage::DeleteSavedFilter
+        | UiMessage::ClearSavedFilter => {
+            handle_ui_saved_filters(model, msg);
+        }
+        // Daily review - delegated to helper
+        UiMessage::ShowDailyReview
+        | UiMessage::HideDailyReview
+        | UiMessage::DailyReviewNext
+        | UiMessage::DailyReviewPrev
+        | UiMessage::DailyReviewUp
+        | UiMessage::DailyReviewDown
+        | UiMessage::DailyReviewComplete => {
+            handle_ui_daily_review(model, msg);
+        }
+        // Weekly review - delegated to helper
+        UiMessage::ShowWeeklyReview
+        | UiMessage::HideWeeklyReview
+        | UiMessage::WeeklyReviewNext
+        | UiMessage::WeeklyReviewPrev
+        | UiMessage::WeeklyReviewUp
+        | UiMessage::WeeklyReviewDown => {
+            handle_ui_weekly_review(model, msg);
+        }
+
+        // Task snooze
+        UiMessage::StartSnoozeTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::SnoozeTask(task_id);
+                model.input_buffer.clear();
+                model.cursor_position = 0;
+            }
+        }
+        UiMessage::ClearSnooze => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    task.clear_snooze();
+                    let task_clone = task.clone();
+                    model.sync_task(&task_clone);
+                    model.status_message = Some("Snooze cleared".to_string());
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
     }
 }
 
@@ -872,6 +923,45 @@ fn handle_submit_input(model: &mut Model) {
             // Don't reset input mode here - handle_execute_import does it
             // and may show preview dialog
             return;
+        }
+        InputTarget::SavedFilterName => {
+            if !input.is_empty() {
+                // Create a new saved filter from current filter settings
+                let saved_filter = crate::domain::SavedFilter::new(
+                    input.clone(),
+                    model.filter.clone(),
+                    model.sort.clone(),
+                );
+                let filter_id = saved_filter.id.clone();
+                model.saved_filters.insert(filter_id.clone(), saved_filter);
+                model.active_saved_filter = Some(filter_id);
+                model.dirty = true;
+                model.status_message = Some(format!("Saved filter: {input}"));
+            }
+        }
+        InputTarget::SnoozeTask(task_id) => {
+            let task_id = task_id.clone();
+            if input.is_empty() {
+                // Clear snooze
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    task.clear_snooze();
+                    let task_clone = task.clone();
+                    model.sync_task(&task_clone);
+                    model.status_message = Some("Snooze cleared".to_string());
+                }
+            } else if let Some(date) = parse_date(&input) {
+                // Set snooze date
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    task.snooze_until_date(date);
+                    let task_clone = task.clone();
+                    model.sync_task(&task_clone);
+                    model.status_message =
+                        Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
+                }
+            } else {
+                model.status_message = Some("Invalid date format".to_string());
+            }
+            model.refresh_visible_tasks();
         }
     }
     model.input_mode = InputMode::Normal;
@@ -1347,6 +1437,281 @@ fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                     }
                 }
                 model.time_log_mode = TimeLogMode::Browse;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle saved filter UI messages
+fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::ShowSavedFilters => {
+            model.show_saved_filter_picker = true;
+            model.saved_filter_selected = 0;
+        }
+        UiMessage::HideSavedFilters => {
+            model.show_saved_filter_picker = false;
+        }
+        UiMessage::SavedFilterUp => {
+            if model.saved_filter_selected > 0 {
+                model.saved_filter_selected -= 1;
+            }
+        }
+        UiMessage::SavedFilterDown => {
+            let count = model.saved_filters.len();
+            if count > 0 && model.saved_filter_selected < count - 1 {
+                model.saved_filter_selected += 1;
+            }
+        }
+        UiMessage::ApplySavedFilter => {
+            // Get the sorted filter list and find selected filter
+            let mut filter_list: Vec<_> = model.saved_filters.values().collect();
+            filter_list.sort_by(|a, b| a.name.cmp(&b.name));
+
+            if let Some(saved_filter) = filter_list.get(model.saved_filter_selected) {
+                // Clone data we need before modifying model
+                let filter = saved_filter.filter.clone();
+                let sort = saved_filter.sort.clone();
+                let filter_id = saved_filter.id.clone();
+                let filter_name = saved_filter.name.clone();
+
+                // Apply the filter and sort
+                model.filter = filter;
+                model.sort = sort;
+                model.active_saved_filter = Some(filter_id);
+                model.show_saved_filter_picker = false;
+                model.refresh_visible_tasks();
+                model.status_message = Some(format!("Applied filter: {filter_name}"));
+            }
+        }
+        UiMessage::SaveCurrentFilter => {
+            // Start input mode to name the filter
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::SavedFilterName;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+            model.show_saved_filter_picker = false;
+        }
+        UiMessage::DeleteSavedFilter => {
+            // Get the sorted filter list
+            let mut filter_list: Vec<_> = model.saved_filters.values().collect();
+            filter_list.sort_by(|a, b| a.name.cmp(&b.name));
+
+            if let Some(saved_filter) = filter_list.get(model.saved_filter_selected) {
+                let id_to_remove = saved_filter.id.clone();
+                let name = saved_filter.name.clone();
+
+                // Clear active filter if it's being deleted
+                if model.active_saved_filter.as_ref() == Some(&id_to_remove) {
+                    model.active_saved_filter = None;
+                }
+
+                model.saved_filters.remove(&id_to_remove);
+                model.dirty = true;
+
+                // Adjust selection
+                if model.saved_filter_selected > 0
+                    && model.saved_filter_selected >= model.saved_filters.len()
+                {
+                    model.saved_filter_selected = model.saved_filters.len().saturating_sub(1);
+                }
+
+                model.status_message = Some(format!("Deleted filter: {name}"));
+            }
+        }
+        UiMessage::ClearSavedFilter => {
+            model.active_saved_filter = None;
+            model.filter = crate::domain::Filter::default();
+            model.sort = crate::domain::SortSpec::default();
+            model.refresh_visible_tasks();
+            model.status_message = Some("Filter cleared".to_string());
+        }
+        _ => {}
+    }
+}
+
+/// Handle daily review UI messages
+fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
+    use crate::ui::DailyReviewPhase;
+
+    match msg {
+        UiMessage::ShowDailyReview => {
+            model.show_daily_review = true;
+            model.daily_review_phase = DailyReviewPhase::Welcome;
+            model.daily_review_selected = 0;
+        }
+        UiMessage::HideDailyReview => {
+            model.show_daily_review = false;
+        }
+        UiMessage::DailyReviewNext => {
+            model.daily_review_phase = model.daily_review_phase.next();
+            model.daily_review_selected = 0;
+        }
+        UiMessage::DailyReviewPrev => {
+            model.daily_review_phase = model.daily_review_phase.prev();
+            model.daily_review_selected = 0;
+        }
+        UiMessage::DailyReviewUp => {
+            if model.daily_review_selected > 0 {
+                model.daily_review_selected -= 1;
+            }
+        }
+        UiMessage::DailyReviewDown => {
+            // Get the task count for current phase
+            let today = chrono::Utc::now().date_naive();
+            let count = match model.daily_review_phase {
+                DailyReviewPhase::OverdueTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| !t.status.is_complete() && t.due_date.is_some_and(|d| d < today))
+                    .count(),
+                DailyReviewPhase::TodayTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| !t.status.is_complete() && t.due_date == Some(today))
+                    .count(),
+                DailyReviewPhase::ScheduledTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && t.scheduled_date == Some(today)
+                            && t.due_date != Some(today)
+                    })
+                    .count(),
+                _ => 0,
+            };
+            if count > 0 && model.daily_review_selected < count - 1 {
+                model.daily_review_selected += 1;
+            }
+        }
+        UiMessage::DailyReviewComplete => {
+            // Get the task at the current selection and toggle its completion
+            let today = chrono::Utc::now().date_naive();
+            let task_ids: Vec<_> = match model.daily_review_phase {
+                DailyReviewPhase::OverdueTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| !t.status.is_complete() && t.due_date.is_some_and(|d| d < today))
+                    .map(|t| t.id.clone())
+                    .collect(),
+                DailyReviewPhase::TodayTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| !t.status.is_complete() && t.due_date == Some(today))
+                    .map(|t| t.id.clone())
+                    .collect(),
+                DailyReviewPhase::ScheduledTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && t.scheduled_date == Some(today)
+                            && t.due_date != Some(today)
+                    })
+                    .map(|t| t.id.clone())
+                    .collect(),
+                _ => vec![],
+            };
+
+            if let Some(task_id) = task_ids.get(model.daily_review_selected).cloned() {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.toggle_complete();
+                });
+                model.status_message = Some("Task completed!".to_string());
+
+                // Adjust selection if we just removed an item
+                let new_count = task_ids.len().saturating_sub(1);
+                if model.daily_review_selected >= new_count && new_count > 0 {
+                    model.daily_review_selected = new_count - 1;
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle weekly review UI messages
+fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
+    use crate::ui::WeeklyReviewPhase;
+
+    match msg {
+        UiMessage::ShowWeeklyReview => {
+            model.show_weekly_review = true;
+            model.weekly_review_phase = WeeklyReviewPhase::Welcome;
+            model.weekly_review_selected = 0;
+        }
+        UiMessage::HideWeeklyReview => {
+            model.show_weekly_review = false;
+        }
+        UiMessage::WeeklyReviewNext => {
+            model.weekly_review_phase = model.weekly_review_phase.next();
+            model.weekly_review_selected = 0;
+        }
+        UiMessage::WeeklyReviewPrev => {
+            model.weekly_review_phase = model.weekly_review_phase.prev();
+            model.weekly_review_selected = 0;
+        }
+        UiMessage::WeeklyReviewUp => {
+            if model.weekly_review_selected > 0 {
+                model.weekly_review_selected -= 1;
+            }
+        }
+        UiMessage::WeeklyReviewDown => {
+            // Get the count for current phase
+            let today = chrono::Utc::now().date_naive();
+            let week_ago = today - chrono::Duration::days(7);
+            let week_ahead = today + chrono::Duration::days(7);
+
+            let count = match model.weekly_review_phase {
+                WeeklyReviewPhase::CompletedTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        t.status.is_complete()
+                            && t.completed_at.is_some_and(|d| d.date_naive() >= week_ago)
+                    })
+                    .count(),
+                WeeklyReviewPhase::OverdueTasks => model
+                    .tasks
+                    .values()
+                    .filter(|t| !t.status.is_complete() && t.due_date.is_some_and(|d| d < today))
+                    .count(),
+                WeeklyReviewPhase::UpcomingWeek => model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && t.due_date.is_some_and(|d| d >= today && d <= week_ahead)
+                    })
+                    .count(),
+                WeeklyReviewPhase::StaleProjects => {
+                    // Count stale projects
+                    model
+                        .projects
+                        .iter()
+                        .filter(|(id, _)| {
+                            let task_count = model
+                                .tasks
+                                .values()
+                                .filter(|t| {
+                                    t.project_id.as_ref() == Some(*id) && !t.status.is_complete()
+                                })
+                                .count();
+                            let has_recent = model.tasks.values().any(|t| {
+                                t.project_id.as_ref() == Some(*id)
+                                    && t.updated_at.date_naive() >= week_ago
+                            });
+                            task_count > 0 && !has_recent
+                        })
+                        .count()
+                }
+                _ => 0,
+            };
+
+            if count > 0 && model.weekly_review_selected < count - 1 {
+                model.weekly_review_selected += 1;
             }
         }
         _ => {}

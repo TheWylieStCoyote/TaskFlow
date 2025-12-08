@@ -468,6 +468,7 @@ fn parse_csv_task(
         created_at,
         updated_at: Utc::now(),
         completed_at,
+        snooze_until: None,
     };
 
     // Set completed_at if status is Done
@@ -713,6 +714,7 @@ fn parse_ics_vtodo(props: &HashMap<String, String>, validate: bool) -> Result<Ta
         created_at,
         updated_at: Utc::now(),
         completed_at,
+        snooze_until: None,
     };
 
     Ok(task)

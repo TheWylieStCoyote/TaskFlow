@@ -148,6 +148,11 @@ impl Model {
             return false;
         }
 
+        // Filter out snoozed tasks unless viewing the Snoozed view
+        if self.current_view != ViewId::Snoozed && task.is_snoozed() {
+            return false;
+        }
+
         // Filter by search text (case-insensitive, matches title or tags)
         if let Some(ref search) = self.filter.search_text {
             let search_lower = search.to_lowercase();
@@ -269,6 +274,31 @@ impl Model {
             ViewId::Reports => {
                 // Reports view shows all tasks (used for analytics)
                 true
+            }
+            ViewId::Kanban => {
+                // Kanban view shows all tasks (grouped by status in the UI)
+                true
+            }
+            ViewId::Eisenhower => {
+                // Eisenhower matrix shows all tasks (grouped by urgency/importance in the UI)
+                true
+            }
+            ViewId::WeeklyPlanner => {
+                // Weekly planner shows tasks with due dates or scheduled dates in the current week
+                let today = Utc::now().date_naive();
+                let week_start =
+                    today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+                let week_end = week_start + chrono::Duration::days(6);
+
+                task.due_date
+                    .is_some_and(|d| d >= week_start && d <= week_end)
+                    || task
+                        .scheduled_date
+                        .is_some_and(|d| d >= week_start && d <= week_end)
+            }
+            ViewId::Snoozed => {
+                // Show only snoozed tasks
+                task.is_snoozed()
             }
         }
     }

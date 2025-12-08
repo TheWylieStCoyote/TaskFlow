@@ -197,12 +197,13 @@ impl Widget for Dashboard<'_> {
             ])
             .split(columns[0]);
 
-        // Right column: 3 panels
+        // Right column: 4 panels
         let right_panels = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(8), // Status Distribution
-                Constraint::Length(7), // Estimation
+                Constraint::Length(6), // Estimation
+                Constraint::Length(6), // Focus Sessions
                 Constraint::Min(5),    // Weekly Activity
             ])
             .split(columns[1]);
@@ -213,7 +214,8 @@ impl Widget for Dashboard<'_> {
         self.render_projects_panel(left_panels[2], buf, theme);
         self.render_status_panel(right_panels[0], buf, theme);
         self.render_estimation_panel(right_panels[1], buf, theme);
-        self.render_activity_panel(right_panels[2], buf, theme);
+        self.render_focus_panel(right_panels[2], buf, theme);
+        self.render_activity_panel(right_panels[3], buf, theme);
     }
 }
 
@@ -635,6 +637,85 @@ impl Dashboard<'_> {
             }
         }
     }
+
+    fn render_focus_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Focus Sessions ")
+            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        let stats = &self.model.pomodoro_stats;
+        let has_active = self.model.pomodoro_session.is_some();
+
+        // Active session indicator
+        let active_indicator = if has_active {
+            Span::styled(
+                "● Active",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            Span::styled("○ Idle", Style::default().fg(theme.colors.muted.to_color()))
+        };
+
+        let lines = [
+            Line::from(vec![
+                Span::styled(
+                    "Today: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(
+                    format!("{} 🍅", stats.cycles_today()),
+                    Style::default()
+                        .fg(theme.colors.accent.to_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" | ", Style::default().fg(theme.colors.muted.to_color())),
+                active_indicator,
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "All time: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(
+                    format!(
+                        "{} cycles | {}",
+                        stats.total_cycles,
+                        Self::format_duration(stats.total_work_mins)
+                    ),
+                    Style::default(),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Streak: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(
+                    format!("{} days", stats.current_streak()),
+                    Style::default().fg(if stats.current_streak() > 0 {
+                        Color::Green
+                    } else {
+                        theme.colors.muted.to_color()
+                    }),
+                ),
+                Span::styled(
+                    format!(" (best: {})", stats.longest_streak),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+            ]),
+        ];
+
+        for (i, line) in lines.iter().enumerate() {
+            if (i as u16) < inner.height {
+                buf.set_line(inner.x, inner.y + i as u16, line, inner.width);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -882,5 +963,37 @@ mod tests {
         assert_eq!(Dashboard::format_duration(60), "1h 0m");
         assert_eq!(Dashboard::format_duration(90), "1h 30m");
         assert_eq!(Dashboard::format_duration(125), "2h 5m");
+    }
+
+    #[test]
+    fn test_dashboard_renders_focus_sessions_panel() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 30);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Focus Sessions"),
+            "Focus Sessions panel should be visible"
+        );
+    }
+
+    #[test]
+    fn test_dashboard_shows_focus_stats() {
+        let mut model = Model::new();
+        // Record a pomodoro cycle
+        model.pomodoro_stats.record_cycle(25);
+
+        let theme = Theme::default();
+        let dashboard = Dashboard::new(&model, &theme);
+        let buffer = render_widget(dashboard, 80, 30);
+        let content = buffer_content(&buffer);
+
+        // Should show the stats
+        assert!(
+            content.contains("Today") || content.contains("Streak"),
+            "Focus stats should be visible"
+        );
     }
 }

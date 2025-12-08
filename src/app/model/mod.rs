@@ -60,7 +60,8 @@ use std::path::PathBuf;
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId,
+    Filter, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec, Task, TaskId,
+    TimeEntry, TimeEntryId,
 };
 use crate::storage::StorageBackend;
 use crate::ui::{InputMode, InputTarget};
@@ -81,8 +82,9 @@ use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
 /// Number of view items in the sidebar (before the separator).
 /// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
-///        Dashboard, Reports, Blocked, Untagged, No Project, Recent
-pub const SIDEBAR_VIEW_COUNT: usize = 12;
+///        Dashboard, Reports, Blocked, Untagged, No Project, Recent,
+///        Kanban, Eisenhower, Weekly Planner
+pub const SIDEBAR_VIEW_COUNT: usize = 15;
 
 /// Index of the separator line in the sidebar.
 pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
@@ -277,6 +279,32 @@ pub struct Model {
     pub time_log_mode: crate::ui::TimeLogMode,
     /// Text buffer for editing time entries
     pub time_log_buffer: String,
+
+    // Saved filters
+    /// User-defined saved filters (smart lists)
+    pub saved_filters: HashMap<SavedFilterId, SavedFilter>,
+    /// Currently active saved filter (if any)
+    pub active_saved_filter: Option<SavedFilterId>,
+    /// Whether saved filter picker is visible
+    pub show_saved_filter_picker: bool,
+    /// Selected index in saved filter picker
+    pub saved_filter_selected: usize,
+
+    // Daily review mode
+    /// Whether daily review mode is active
+    pub show_daily_review: bool,
+    /// Current phase of the daily review
+    pub daily_review_phase: crate::ui::DailyReviewPhase,
+    /// Selected index within current review phase
+    pub daily_review_selected: usize,
+
+    // Weekly review mode
+    /// Whether weekly review mode is active
+    pub show_weekly_review: bool,
+    /// Current phase of the weekly review
+    pub weekly_review_phase: crate::ui::WeeklyReviewPhase,
+    /// Selected index within current review phase
+    pub weekly_review_selected: usize,
 }
 
 impl Model {
@@ -352,6 +380,16 @@ impl Model {
             time_log_selected: 0,
             time_log_mode: crate::ui::TimeLogMode::default(),
             time_log_buffer: String::new(),
+            saved_filters: HashMap::new(),
+            active_saved_filter: None,
+            show_saved_filter_picker: false,
+            saved_filter_selected: 0,
+            show_daily_review: false,
+            daily_review_phase: crate::ui::DailyReviewPhase::default(),
+            daily_review_selected: 0,
+            show_weekly_review: false,
+            weekly_review_phase: crate::ui::WeeklyReviewPhase::default(),
+            weekly_review_selected: 0,
         }
     }
 

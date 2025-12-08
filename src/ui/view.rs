@@ -12,9 +12,10 @@ use crate::config::Theme;
 use crate::app::ViewId;
 
 use super::components::{
-    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
-    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, OverdueAlert, ReportsView,
-    Sidebar, TaskList, TemplatePicker, TimeLogEditor,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
+    Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget, Kanban,
+    KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, TaskList,
+    TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -74,6 +75,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
                 crate::storage::ImportFormat::Csv => "Import CSV: Enter file path",
                 crate::storage::ImportFormat::Ics => "Import ICS: Enter file path",
             },
+            InputTarget::SavedFilterName => "Save Filter As (enter name)",
+            InputTarget::SnoozeTask(_) => "Snooze Until (YYYY-MM-DD)",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -116,6 +119,28 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let picker_area = centered_rect_fixed_height(60, height, area);
         frame.render_widget(
             TemplatePicker::new(&model.template_manager, model.template_selected, theme),
+            picker_area,
+        );
+    }
+
+    // Render saved filter picker
+    if model.show_saved_filter_picker {
+        // Get sorted filter list for display
+        let mut filter_list: Vec<_> = model.saved_filters.values().collect();
+        filter_list.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // Get active filter name for highlighting
+        let active_name = model
+            .active_saved_filter
+            .as_ref()
+            .and_then(|id| model.saved_filters.get(id))
+            .map(|f| f.name.as_str());
+
+        // Height depends on number of filters, min 4, max 15
+        let height = (filter_list.len() as u16 + 2).clamp(4, 15);
+        let picker_area = centered_rect_fixed_height(60, height, area);
+        frame.render_widget(
+            SavedFilterPicker::new(filter_list, model.saved_filter_selected, active_name, theme),
             picker_area,
         );
     }
@@ -165,6 +190,36 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let height = (6 + count.min(5)) as u16;
         let alert_area = centered_rect_fixed_height(50, height.max(7), area);
         frame.render_widget(OverdueAlert::new(count, task_titles), alert_area);
+    }
+
+    // Render daily review mode (full screen overlay)
+    if model.show_daily_review {
+        // Use centered area for the review dialog
+        let review_area = centered_rect(70, 70, area);
+        frame.render_widget(
+            DailyReview::new(
+                model,
+                theme,
+                model.daily_review_phase,
+                model.daily_review_selected,
+            ),
+            review_area,
+        );
+    }
+
+    // Render weekly review mode (full screen overlay)
+    if model.show_weekly_review {
+        // Use centered area for the review dialog
+        let review_area = centered_rect(75, 75, area);
+        frame.render_widget(
+            WeeklyReview::new(
+                model,
+                theme,
+                model.weekly_review_phase,
+                model.weekly_review_selected,
+            ),
+            review_area,
+        );
     }
 }
 
@@ -227,6 +282,18 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
         ViewId::Reports => {
             let reports = ReportsView::new(model, model.report_panel);
             frame.render_widget(reports, area);
+        }
+        ViewId::Kanban => {
+            let kanban = Kanban::new(model, theme);
+            frame.render_widget(kanban, area);
+        }
+        ViewId::Eisenhower => {
+            let eisenhower = Eisenhower::new(model, theme);
+            frame.render_widget(eisenhower, area);
+        }
+        ViewId::WeeklyPlanner => {
+            let planner = WeeklyPlanner::new(model, theme);
+            frame.render_widget(planner, area);
         }
         _ => {
             let task_list = TaskList::new(model, theme);

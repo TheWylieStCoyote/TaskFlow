@@ -38,6 +38,8 @@ pub enum InputTarget {
     EditRecurrence(TaskId),
     LinkTask(TaskId),             // Linking current task to next task in chain
     ImportFilePath(ImportFormat), // File path input for import
+    SavedFilterName,              // Name for a new saved filter
+    SnoozeTask(TaskId),           // Snooze date for a task
 }
 
 /// Input dialog for creating/editing items

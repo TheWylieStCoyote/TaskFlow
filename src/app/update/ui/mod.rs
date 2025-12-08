@@ -10,15 +10,18 @@
 //! - Keybindings editor
 
 mod calendar;
+mod delete;
 mod editors;
 mod filters;
 mod input;
 mod keybindings;
 mod macros;
+mod multi_select;
 mod reviews;
 mod task_ops;
 mod templates;
 mod time_tracking;
+mod view_state;
 
 use std::fmt::Write as _;
 
@@ -187,25 +190,12 @@ mod duration_tests {
 #[allow(clippy::too_many_lines)]
 pub fn handle_ui(model: &mut Model, msg: UiMessage) {
     match msg {
-        UiMessage::ToggleShowCompleted => {
-            model.show_completed = !model.show_completed;
-            model.refresh_visible_tasks();
-        }
-        UiMessage::ToggleSidebar => {
-            model.show_sidebar = !model.show_sidebar;
-        }
-        UiMessage::ShowHelp => {
-            model.show_help = true;
-        }
-        UiMessage::HideHelp => {
-            model.show_help = false;
-        }
-        UiMessage::ToggleFocusMode => {
-            // Only toggle focus mode if there's a selected task
-            if model.selected_task().is_some() {
-                model.focus_mode = !model.focus_mode;
-            }
-        }
+        // View state toggles - delegated to helper
+        UiMessage::ToggleShowCompleted => view_state::toggle_show_completed(model),
+        UiMessage::ToggleSidebar => view_state::toggle_sidebar(model),
+        UiMessage::ShowHelp => view_state::show_help(model),
+        UiMessage::HideHelp => view_state::hide_help(model),
+        UiMessage::ToggleFocusMode => view_state::toggle_focus_mode(model),
         // Input mode handling
         UiMessage::StartCreateTask => {
             model.input_mode = InputMode::Editing;
@@ -488,149 +478,18 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::InputCursorEnd => {
             model.cursor_position = model.input_buffer.len();
         }
-        // Delete confirmation
-        UiMessage::ShowDeleteConfirm => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
-                if model.has_subtasks(&task_id) {
-                    model.status_message = Some(
-                        "Cannot delete: task has subtasks. Delete subtasks first.".to_string(),
-                    );
-                } else {
-                    model.show_confirm_delete = true;
-                }
-            }
-        }
-        UiMessage::ConfirmDelete => {
-            if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
-                if let Some(task) = model.tasks.remove(&id) {
-                    // Collect time entries for this task before deleting
-                    let task_entries: Vec<_> = model
-                        .time_entries
-                        .values()
-                        .filter(|e| e.task_id == id)
-                        .cloned()
-                        .collect();
-
-                    // Clear active time entry if it belongs to this task
-                    if model
-                        .active_time_entry
-                        .as_ref()
-                        .and_then(|entry_id| model.time_entries.get(entry_id))
-                        .is_some_and(|e| e.task_id == id)
-                    {
-                        model.active_time_entry = None;
-                    }
-
-                    // Delete time entries (collect IDs first to avoid borrow issues)
-                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id).collect();
-                    for entry_id in entry_ids {
-                        model.delete_time_entry(&entry_id);
-                    }
-
-                    model.delete_task_from_storage(&id);
-                    model.undo_stack.push(UndoAction::TaskDeleted {
-                        task: Box::new(task),
-                        time_entries: task_entries,
-                    });
-                }
-                model.refresh_visible_tasks();
-            }
-            model.show_confirm_delete = false;
-        }
-        UiMessage::CancelDelete => {
-            model.show_confirm_delete = false;
-        }
-        // Multi-select / Bulk operations
-        UiMessage::ToggleMultiSelect => {
-            model.multi_select_mode = !model.multi_select_mode;
-            if !model.multi_select_mode {
-                // Exiting multi-select mode clears selection
-                model.selected_tasks.clear();
-            }
-        }
-        UiMessage::ToggleTaskSelection => {
-            if model.multi_select_mode {
-                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
-                    if model.selected_tasks.contains(&task_id) {
-                        model.selected_tasks.remove(&task_id);
-                    } else {
-                        model.selected_tasks.insert(task_id);
-                    }
-                }
-            }
-        }
-        UiMessage::SelectAll => {
-            model.multi_select_mode = true;
-            model.selected_tasks = model.visible_tasks.iter().cloned().collect();
-        }
-        UiMessage::ClearSelection => {
-            model.selected_tasks.clear();
-            model.multi_select_mode = false;
-        }
-        UiMessage::BulkDelete => {
-            if model.multi_select_mode && !model.selected_tasks.is_empty() {
-                // Delete all selected tasks
-                let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
-                for task_id in tasks_to_delete {
-                    if let Some(task) = model.tasks.remove(&task_id) {
-                        // Collect time entries for this task before deleting
-                        let task_entries: Vec<_> = model
-                            .time_entries
-                            .values()
-                            .filter(|e| e.task_id == task_id)
-                            .cloned()
-                            .collect();
-
-                        // Clear active time entry if it belongs to this task
-                        if model
-                            .active_time_entry
-                            .as_ref()
-                            .and_then(|id| model.time_entries.get(id))
-                            .is_some_and(|e| e.task_id == task_id)
-                        {
-                            model.active_time_entry = None;
-                        }
-
-                        // Delete time entries (collect IDs first to avoid borrow issues)
-                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id).collect();
-                        for entry_id in entry_ids {
-                            model.delete_time_entry(&entry_id);
-                        }
-
-                        model.delete_task_from_storage(&task_id);
-                        model.undo_stack.push(UndoAction::TaskDeleted {
-                            task: Box::new(task),
-                            time_entries: task_entries,
-                        });
-                    }
-                }
-                model.selected_tasks.clear();
-                model.multi_select_mode = false;
-                model.refresh_visible_tasks();
-            }
-        }
-        UiMessage::StartBulkMoveToProject => {
-            if model.multi_select_mode && !model.selected_tasks.is_empty() {
-                model.input_mode = InputMode::Editing;
-                model.input_target = InputTarget::BulkMoveToProject;
-                // Build project list string
-                let mut options = vec!["0: (none)".to_string()];
-                for (i, project) in model.projects.values().enumerate() {
-                    options.push(format!("{}: {}", i + 1, project.name));
-                }
-                model.input_buffer = options.join(", ");
-                model.cursor_position = model.input_buffer.len();
-            }
-        }
-        UiMessage::StartBulkSetStatus => {
-            if model.multi_select_mode && !model.selected_tasks.is_empty() {
-                model.input_mode = InputMode::Editing;
-                model.input_target = InputTarget::BulkSetStatus;
-                model.input_buffer =
-                    "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
-                model.cursor_position = model.input_buffer.len();
-            }
-        }
+        // Delete confirmation - delegated to helper
+        UiMessage::ShowDeleteConfirm => delete::show_delete_confirm(model),
+        UiMessage::ConfirmDelete => delete::confirm_delete(model),
+        UiMessage::CancelDelete => delete::cancel_delete(model),
+        // Multi-select / Bulk operations - delegated to helper
+        UiMessage::ToggleMultiSelect => multi_select::toggle_multi_select(model),
+        UiMessage::ToggleTaskSelection => multi_select::toggle_task_selection(model),
+        UiMessage::SelectAll => multi_select::select_all(model),
+        UiMessage::ClearSelection => multi_select::clear_selection(model),
+        UiMessage::BulkDelete => multi_select::bulk_delete(model),
+        UiMessage::StartBulkMoveToProject => multi_select::start_bulk_move_to_project(model),
+        UiMessage::StartBulkSetStatus => multi_select::start_bulk_set_status(model),
         UiMessage::StartEditDependencies => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.get(&task_id) {

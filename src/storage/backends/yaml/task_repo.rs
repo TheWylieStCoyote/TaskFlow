@@ -1,0 +1,147 @@
+//! TaskRepository implementation for YAML backend.
+
+use crate::domain::{Filter, ProjectId, Task, TaskId};
+use crate::storage::{StorageError, StorageResult, TaskRepository};
+
+use super::YamlBackend;
+
+impl TaskRepository for YamlBackend {
+    fn create_task(&mut self, task: &Task) -> StorageResult<()> {
+        if self.data.tasks.iter().any(|t| t.id == task.id) {
+            return Err(StorageError::already_exists("Task", task.id.to_string()));
+        }
+        self.data.tasks.push(task.clone());
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn get_task(&self, id: &TaskId) -> StorageResult<Option<Task>> {
+        Ok(self.data.tasks.iter().find(|t| &t.id == id).cloned())
+    }
+
+    fn update_task(&mut self, task: &Task) -> StorageResult<()> {
+        if let Some(existing) = self.data.tasks.iter_mut().find(|t| t.id == task.id) {
+            *existing = task.clone();
+            self.mark_dirty();
+            Ok(())
+        } else {
+            Err(StorageError::not_found("Task", task.id.to_string()))
+        }
+    }
+
+    fn delete_task(&mut self, id: &TaskId) -> StorageResult<()> {
+        let len_before = self.data.tasks.len();
+        self.data.tasks.retain(|t| &t.id != id);
+        if self.data.tasks.len() == len_before {
+            return Err(StorageError::not_found("Task", id.to_string()));
+        }
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn list_tasks(&self) -> StorageResult<Vec<Task>> {
+        Ok(self.data.tasks.clone())
+    }
+
+    fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
+        let tasks = self
+            .data
+            .tasks
+            .iter()
+            .filter(|task| {
+                if let Some(ref statuses) = filter.status {
+                    if !statuses.contains(&task.status) {
+                        return false;
+                    }
+                }
+
+                if let Some(ref priorities) = filter.priority {
+                    if !priorities.contains(&task.priority) {
+                        return false;
+                    }
+                }
+
+                if let Some(ref project_id) = filter.project_id {
+                    if task.project_id.as_ref() != Some(project_id) {
+                        return false;
+                    }
+                }
+
+                if let Some(ref tags) = filter.tags {
+                    let has_tags = match filter.tags_mode {
+                        crate::domain::TagFilterMode::Any => {
+                            tags.iter().any(|t| task.tags.contains(t))
+                        }
+                        crate::domain::TagFilterMode::All => {
+                            tags.iter().all(|t| task.tags.contains(t))
+                        }
+                    };
+                    if !has_tags && !tags.is_empty() {
+                        return false;
+                    }
+                }
+
+                if let Some(due_before) = filter.due_before {
+                    if let Some(due) = task.due_date {
+                        if due >= due_before {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(due_after) = filter.due_after {
+                    if let Some(due) = task.due_date {
+                        if due <= due_after {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+
+                if let Some(ref search) = filter.search_text {
+                    let search_lower = search.to_lowercase();
+                    let title_matches = task.title.to_lowercase().contains(&search_lower);
+                    let desc_matches = task
+                        .description
+                        .as_ref()
+                        .is_some_and(|d| d.to_lowercase().contains(&search_lower));
+                    if !title_matches && !desc_matches {
+                        return false;
+                    }
+                }
+
+                if !filter.include_completed && task.status.is_complete() {
+                    return false;
+                }
+
+                true
+            })
+            .cloned()
+            .collect();
+
+        Ok(tasks)
+    }
+
+    fn get_tasks_by_project(&self, project_id: &ProjectId) -> StorageResult<Vec<Task>> {
+        Ok(self
+            .data
+            .tasks
+            .iter()
+            .filter(|t| t.project_id.as_ref() == Some(project_id))
+            .cloned()
+            .collect())
+    }
+
+    fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>> {
+        Ok(self
+            .data
+            .tasks
+            .iter()
+            .filter(|t| t.tags.contains(&tag.to_string()))
+            .cloned()
+            .collect())
+    }
+}

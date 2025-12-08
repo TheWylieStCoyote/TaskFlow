@@ -442,17 +442,16 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::TaskModified {
+        let UndoAction::TaskModified {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.title, "After");
-            assert_eq!(inv_after.title, "Before");
-        } else {
-            panic!("Expected TaskModified");
-        }
+        else {
+            panic!("Expected TaskModified, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.title, "After");
+        assert_eq!(inv_after.title, "Before");
     }
 
     #[test]
@@ -492,11 +491,10 @@ mod tests {
         let project = Project::new("Test project");
         let action = UndoAction::ProjectDeleted(Box::new(project.clone()));
         let inverse = action.inverse();
-        if let UndoAction::ProjectDeleted(inv_project) = inverse {
-            assert_eq!(inv_project.name, "Test project");
-        } else {
-            panic!("Expected ProjectDeleted");
-        }
+        let UndoAction::ProjectDeleted(inv_project) = inverse else {
+            panic!("Expected ProjectDeleted, got {inverse:?}");
+        };
+        assert_eq!(inv_project.name, "Test project");
     }
 
     #[test]
@@ -509,17 +507,16 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::ProjectModified {
+        let UndoAction::ProjectModified {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.name, "After");
-            assert_eq!(inv_after.name, "Before");
-        } else {
-            panic!("Expected ProjectModified");
-        }
+        else {
+            panic!("Expected ProjectModified, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.name, "After");
+        assert_eq!(inv_after.name, "Before");
     }
 
     // Time entry undo tests
@@ -568,11 +565,10 @@ mod tests {
         let action = UndoAction::TimeEntryStarted(Box::new(entry));
         let inverse = action.inverse();
 
-        if let UndoAction::TimeEntryStarted(inv_entry) = inverse {
-            assert_eq!(inv_entry.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(inv_entry) = inverse else {
+            panic!("Expected TimeEntryStarted, got {inverse:?}");
+        };
+        assert_eq!(inv_entry.id, entry_id);
     }
 
     #[test]
@@ -590,19 +586,18 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.id, after.id);
-            assert!(inv_before.ended_at.is_some());
-            assert_eq!(inv_after.id, before.id);
-            assert!(inv_after.ended_at.is_none());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.id, after.id);
+        assert!(inv_before.ended_at.is_some());
+        assert_eq!(inv_after.id, before.id);
+        assert!(inv_after.ended_at.is_none());
     }
 
     #[test]
@@ -615,11 +610,10 @@ mod tests {
         let action = UndoAction::TimeEntryDeleted(Box::new(entry));
         let inverse = action.inverse();
 
-        if let UndoAction::TimeEntryDeleted(inv_entry) = inverse {
-            assert_eq!(inv_entry.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryDeleted");
-        }
+        let UndoAction::TimeEntryDeleted(inv_entry) = inverse else {
+            panic!("Expected TimeEntryDeleted, got {inverse:?}");
+        };
+        assert_eq!(inv_entry.id, entry_id);
     }
 
     #[test]
@@ -637,21 +631,19 @@ mod tests {
 
         // Undo the action
         let action = stack.pop_for_undo().unwrap();
-        if let UndoAction::TimeEntryStarted(e) = action {
-            assert_eq!(e.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(e) = action else {
+            panic!("Expected TimeEntryStarted, got {action:?}");
+        };
+        assert_eq!(e.id, entry_id);
         assert!(stack.is_empty());
         assert!(stack.can_redo());
 
         // Redo the action
         let action = stack.pop_for_redo().unwrap();
-        if let UndoAction::TimeEntryStarted(e) = action {
-            assert_eq!(e.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(e) = action else {
+            panic!("Expected TimeEntryStarted, got {action:?}");
+        };
+        assert_eq!(e.id, entry_id);
         assert!(!stack.is_empty());
         assert!(!stack.can_redo());
     }
@@ -673,29 +665,27 @@ mod tests {
 
         // Undo the stop
         let action = stack.pop_for_undo().unwrap();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: b,
             after: a,
         } = action
-        {
-            // After undo, the entry should be running again
-            assert!(b.ended_at.is_none());
-            assert!(a.ended_at.is_some());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {action:?}");
+        };
+        // After undo, the entry should be running again
+        assert!(b.ended_at.is_none());
+        assert!(a.ended_at.is_some());
 
         // Redo the stop
         let action = stack.pop_for_redo().unwrap();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: b,
             after: _,
         } = action
-        {
-            // After redo, the entry should be stopped again
-            assert!(b.ended_at.is_some());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {action:?}");
+        };
+        // After redo, the entry should be stopped again
+        assert!(b.ended_at.is_some());
     }
 }

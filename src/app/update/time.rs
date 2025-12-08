@@ -77,7 +77,7 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
         PomodoroMessage::Start { goal_cycles } => {
             // Start a new session for the selected task
             if let Some(task) = model.selected_task() {
-                let task_id = task.id.clone();
+                let task_id = task.id;
                 model.pomodoro_session = Some(PomodoroSession::new(
                     task_id,
                     &model.pomodoro_config,

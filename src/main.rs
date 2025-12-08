@@ -325,7 +325,7 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
         let project_name_lower = project_name.to_lowercase();
         for project in model.projects.values() {
             if project.name.to_lowercase().contains(&project_name_lower) {
-                task.project_id = Some(project.id.clone());
+                task.project_id = Some(project.id);
                 break;
             }
         }
@@ -333,8 +333,8 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
 
     // Add task and save
     let task_title = task.title.clone();
-    let task_id = task.id.clone();
-    model.tasks.insert(task_id.clone(), task.clone());
+    let task_id = task.id;
+    model.tasks.insert(task_id, task.clone());
 
     // Sync to storage
     model.sync_task(&task);
@@ -405,7 +405,7 @@ fn list_tasks(
             .projects
             .values()
             .find(|p| p.name.to_lowercase().contains(&name_lower))
-            .map(|p| p.id.clone())
+            .map(|p| p.id)
     };
 
     let project_id = filters
@@ -643,7 +643,7 @@ fn mark_task_done(
             .projects
             .iter()
             .find(|(_, p)| p.name.to_lowercase().contains(&name_lower))
-            .map(|(id, _)| id.clone())
+            .map(|(id, _)| *id)
     });
 
     // Find matching tasks (case-insensitive title search + optional filters)
@@ -687,7 +687,7 @@ fn mark_task_done(
             std::process::exit(1);
         }
         1 => {
-            let task_id = matches[0].id.clone();
+            let task_id = matches[0].id;
             let task_title = matches[0].title.clone();
 
             // Mark as done

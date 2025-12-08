@@ -238,7 +238,7 @@ impl<'a> AnalyticsEngine<'a> {
         // Per-project burndowns
         for project in self.model.projects.values() {
             charts.push(self.compute_burn_chart_for_project(
-                Some(project.id.clone()),
+                Some(project.id),
                 &project.name,
                 start,
                 end,
@@ -343,10 +343,7 @@ impl<'a> AnalyticsEngine<'a> {
                     analytics.total_minutes += minutes;
 
                     // By project
-                    *analytics
-                        .by_project
-                        .entry(task.project_id.clone())
-                        .or_insert(0) += minutes;
+                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
 
                     // By day of week
                     let dow = date.weekday().num_days_from_monday() as usize;
@@ -368,10 +365,7 @@ impl<'a> AnalyticsEngine<'a> {
 
                 // Find the task to get project ID
                 if let Some(task) = self.model.tasks.get(&entry.task_id) {
-                    *analytics
-                        .by_project
-                        .entry(task.project_id.clone())
-                        .or_insert(0) += minutes;
+                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
                 }
 
                 // By day of week

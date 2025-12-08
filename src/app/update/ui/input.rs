@@ -14,31 +14,31 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::Task => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
-                let task_id = task.id.clone();
+                let task_id = task.id;
                 // Insert first (moves task), then sync by id
                 model
                     .undo_stack
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
-                model.tasks.insert(task_id.clone(), task);
+                model.tasks.insert(task_id, task);
                 model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
             }
         }
         InputTarget::Subtask(parent_id) => {
             if !input.is_empty() {
-                let task = create_task_from_quick_add(&input, model, Some(parent_id.clone()));
-                let task_id = task.id.clone();
+                let task = create_task_from_quick_add(&input, model, Some(*parent_id));
+                let task_id = task.id;
                 // Insert first (moves task), then sync by id
                 model
                     .undo_stack
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
-                model.tasks.insert(task_id.clone(), task);
+                model.tasks.insert(task_id, task);
                 model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
             }
         }
         InputTarget::EditTask(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             if !input.is_empty() {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.title = input.clone();
@@ -47,7 +47,7 @@ pub fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::EditDueDate(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse date outside closure - empty clears, invalid keeps old
             let new_due = if input.is_empty() {
                 Some(None) // Explicitly clear
@@ -62,7 +62,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::EditScheduledDate(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse date outside closure - empty clears, invalid keeps old
             let new_scheduled = if input.is_empty() {
                 Some(None) // Explicitly clear
@@ -77,7 +77,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::EditTags(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse comma-separated tags outside closure
             let tags: Vec<String> = input
                 .split(',')
@@ -90,7 +90,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::EditDescription(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             let description = if input.is_empty() {
                 None
             } else {
@@ -102,7 +102,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::EditEstimate(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse duration - empty clears, invalid keeps old
             let new_estimate = if input.is_empty() {
                 Some(None) // Explicitly clear
@@ -131,17 +131,17 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::Project => {
             if !input.is_empty() {
                 let project = crate::domain::Project::new(input);
-                let project_id = project.id.clone();
+                let project_id = project.id;
                 // Clone for undo stack, then move into projects map
                 model
                     .undo_stack
                     .push(UndoAction::ProjectCreated(Box::new(project.clone())));
-                model.projects.insert(project_id.clone(), project);
+                model.projects.insert(project_id, project);
                 model.sync_project_by_id(&project_id);
             }
         }
         InputTarget::EditProject(project_id) => {
-            let project_id = project_id.clone();
+            let project_id = *project_id;
             // Only rename if input is non-empty and different from current name
             let should_rename = !input.is_empty()
                 && model
@@ -165,7 +165,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::MoveToProject(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse the number input to select a project
             if let Ok(choice) = input.parse::<usize>() {
                 let project_ids: Vec<_> = model.projects.keys().cloned().collect();
@@ -213,7 +213,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 // Move all selected tasks
                 let tasks_to_move: Vec<_> = model.selected_tasks.iter().cloned().collect();
                 for task_id in tasks_to_move {
-                    let proj = target_project.clone();
+                    let proj = target_project;
                     model.modify_task_with_undo(&task_id, |task| {
                         task.project_id = proj;
                     });
@@ -252,7 +252,7 @@ pub fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::EditDependencies(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse task numbers from input
             let dep_indices: Vec<usize> = input
                 .split(|c: char| !c.is_ascii_digit())
@@ -272,7 +272,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::EditRecurrence(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             use crate::domain::Recurrence;
             use chrono::Datelike;
             // Parse recurrence from input (first char: d, w, m, y, 0)
@@ -301,7 +301,7 @@ pub fn handle_submit_input(model: &mut Model) {
             model.refresh_visible_tasks();
         }
         InputTarget::LinkTask(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             // Parse the input - support task number or task title search
             let target_task_id = if let Ok(num) = input.parse::<usize>() {
                 // User entered a task number
@@ -315,7 +315,7 @@ pub fn handle_submit_input(model: &mut Model) {
                     .find(|(id, t)| {
                         **id != task_id && t.title.to_lowercase().contains(&input_lower)
                     })
-                    .map(|(id, _)| id.clone())
+                    .map(|(id, _)| *id)
             };
 
             // Don't allow linking to self
@@ -348,7 +348,7 @@ pub fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::SnoozeTask(task_id) => {
-            let task_id = task_id.clone();
+            let task_id = *task_id;
             if input.is_empty() {
                 // Clear snooze
                 if let Some(task) = model.tasks.get_mut(&task_id) {
@@ -427,7 +427,7 @@ pub fn create_task_from_quick_add(
             .projects
             .values()
             .find(|p| p.name.to_lowercase() == project_name_lower)
-            .map(|p| p.id.clone())
+            .map(|p| p.id)
         {
             task.project_id = Some(project_id);
         }

@@ -102,10 +102,10 @@ impl MarkdownBackend {
                     // Track file modification time
                     if let Ok(metadata) = fs::metadata(&path) {
                         if let Ok(mtime) = metadata.modified() {
-                            self.task_mtimes.insert(task.id.clone(), mtime);
+                            self.task_mtimes.insert(task.id, mtime);
                         }
                     }
-                    self.tasks_cache.insert(task.id.clone(), task);
+                    self.tasks_cache.insert(task.id, task);
                 }
             }
         }
@@ -132,10 +132,10 @@ impl MarkdownBackend {
                     // Track file modification time
                     if let Ok(metadata) = fs::metadata(&path) {
                         if let Ok(mtime) = metadata.modified() {
-                            self.project_mtimes.insert(project.id.clone(), mtime);
+                            self.project_mtimes.insert(project.id, mtime);
                         }
                     }
-                    self.projects_cache.insert(project.id.clone(), project);
+                    self.projects_cache.insert(project.id, project);
                 }
             }
         }
@@ -295,7 +295,7 @@ impl MarkdownBackend {
 
         // Update mtime cache after write
         if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {
-            self.task_mtimes.insert(task.id.clone(), mtime);
+            self.task_mtimes.insert(task.id, mtime);
         }
 
         Ok(())
@@ -323,7 +323,7 @@ impl MarkdownBackend {
 
         // Update mtime cache after write
         if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {
-            self.project_mtimes.insert(project.id.clone(), mtime);
+            self.project_mtimes.insert(project.id, mtime);
         }
 
         Ok(())
@@ -368,8 +368,8 @@ impl MarkdownBackend {
         if needs_reload {
             // Reload the file
             if let Ok(task) = self.parse_task_file(&path) {
-                self.task_mtimes.insert(id.clone(), current_mtime);
-                self.tasks_cache.insert(id.clone(), task);
+                self.task_mtimes.insert(*id, current_mtime);
+                self.tasks_cache.insert(*id, task);
                 return true;
             }
         }
@@ -395,8 +395,8 @@ impl MarkdownBackend {
         if needs_reload {
             // Reload the file
             if let Ok(project) = self.parse_project_file(&path) {
-                self.project_mtimes.insert(id.clone(), current_mtime);
-                self.projects_cache.insert(id.clone(), project);
+                self.project_mtimes.insert(*id, current_mtime);
+                self.projects_cache.insert(*id, project);
                 return true;
             }
         }
@@ -436,9 +436,9 @@ impl MarkdownBackend {
                 let path = self.tasks_dir.join(format!("{}.md", id.0));
                 if let Ok(task) = self.parse_task_file(&path) {
                     if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {
-                        self.task_mtimes.insert(id.clone(), mtime);
+                        self.task_mtimes.insert(*id, mtime);
                     }
-                    self.tasks_cache.insert(id.clone(), task);
+                    self.tasks_cache.insert(*id, task);
                     changes += 1;
                 }
             }
@@ -496,9 +496,9 @@ impl MarkdownBackend {
                 let path = self.projects_dir.join(format!("{}.md", id.0));
                 if let Ok(project) = self.parse_project_file(&path) {
                     if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {
-                        self.project_mtimes.insert(id.clone(), mtime);
+                        self.project_mtimes.insert(*id, mtime);
                     }
-                    self.projects_cache.insert(id.clone(), project);
+                    self.projects_cache.insert(*id, project);
                     changes += 1;
                 }
             }
@@ -539,7 +539,7 @@ impl TaskRepository for MarkdownBackend {
             return Err(StorageError::already_exists("Task", task.id.to_string()));
         }
         self.write_task_file(task)?;
-        self.tasks_cache.insert(task.id.clone(), task.clone());
+        self.tasks_cache.insert(task.id, task.clone());
         Ok(())
     }
 
@@ -552,7 +552,7 @@ impl TaskRepository for MarkdownBackend {
             return Err(StorageError::not_found("Task", task.id.to_string()));
         }
         self.write_task_file(task)?;
-        self.tasks_cache.insert(task.id.clone(), task.clone());
+        self.tasks_cache.insert(task.id, task.clone());
         Ok(())
     }
 
@@ -633,8 +633,7 @@ impl ProjectRepository for MarkdownBackend {
             ));
         }
         self.write_project_file(project)?;
-        self.projects_cache
-            .insert(project.id.clone(), project.clone());
+        self.projects_cache.insert(project.id, project.clone());
         Ok(())
     }
 
@@ -647,8 +646,7 @@ impl ProjectRepository for MarkdownBackend {
             return Err(StorageError::not_found("Project", project.id.to_string()));
         }
         self.write_project_file(project)?;
-        self.projects_cache
-            .insert(project.id.clone(), project.clone());
+        self.projects_cache.insert(project.id, project.clone());
         Ok(())
     }
 

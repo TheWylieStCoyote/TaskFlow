@@ -308,7 +308,7 @@ pub fn export_to_mermaid<W: Write>(
     let id_map: HashMap<TaskId, String> = tasks
         .keys()
         .enumerate()
-        .map(|(i, id)| (id.clone(), format!("T{i}")))
+        .map(|(i, id)| (*id, format!("T{i}")))
         .collect();
 
     writeln!(writer, "    %% Nodes")?;

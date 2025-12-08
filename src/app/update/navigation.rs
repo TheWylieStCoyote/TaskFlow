@@ -300,7 +300,7 @@ fn handle_sidebar_selection(model: &mut Model) {
             let project_ids: Vec<_> = model.projects.keys().cloned().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
-                model.selected_project = Some(project_id.clone());
+                model.selected_project = Some(*project_id);
                 model.focus_pane = FocusPane::TaskList;
                 model.selected_index = 0;
                 model.refresh_visible_tasks();

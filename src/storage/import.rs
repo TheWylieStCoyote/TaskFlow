@@ -172,7 +172,7 @@ impl<'a> DuplicateDetector<'a> {
         let mut title_date_index = HashMap::new();
         for task in existing_tasks.values() {
             let key = (task.title.to_lowercase(), task.due_date);
-            title_date_index.insert(key, task.id.clone());
+            title_date_index.insert(key, task.id);
         }
         Self {
             existing_by_id: existing_tasks,
@@ -184,7 +184,7 @@ impl<'a> DuplicateDetector<'a> {
     pub fn check(&self, task: &Task) -> Option<ImportSkipReason> {
         // Check by ID first
         if self.existing_by_id.contains_key(&task.id) {
-            return Some(ImportSkipReason::DuplicateId(task.id.clone()));
+            return Some(ImportSkipReason::DuplicateId(task.id));
         }
 
         // Check by title + due date

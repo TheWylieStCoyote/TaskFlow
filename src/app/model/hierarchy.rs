@@ -50,7 +50,7 @@ impl Model {
     #[must_use]
     pub fn task_depth(&self, task_id: &TaskId) -> usize {
         let mut depth = 0;
-        let mut current_id = task_id.clone();
+        let mut current_id = *task_id;
         let mut visited = HashSet::new();
 
         while let Some(task) = self.tasks.get(&current_id) {
@@ -59,9 +59,9 @@ impl Model {
                     // Circular reference detected - break to prevent infinite loop
                     break;
                 }
-                visited.insert(current_id.clone());
+                visited.insert(current_id);
                 depth += 1;
-                current_id = parent_id.clone();
+                current_id = *parent_id;
             } else {
                 break;
             }
@@ -89,19 +89,19 @@ impl Model {
     #[must_use]
     pub fn get_all_descendants(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut descendants = Vec::new();
-        let mut stack = vec![task_id.clone()];
+        let mut stack = vec![*task_id];
         let mut visited = HashSet::new();
 
         while let Some(current_id) = stack.pop() {
             if visited.contains(&current_id) {
                 continue; // Prevent cycles
             }
-            visited.insert(current_id.clone());
+            visited.insert(current_id);
 
             for (id, task) in &self.tasks {
                 if task.parent_task_id.as_ref() == Some(&current_id) {
-                    descendants.push(id.clone());
-                    stack.push(id.clone());
+                    descendants.push(*id);
+                    stack.push(*id);
                 }
             }
         }
@@ -114,7 +114,7 @@ impl Model {
     #[must_use]
     pub fn get_all_ancestors(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut ancestors = Vec::new();
-        let mut current_id = task_id.clone();
+        let mut current_id = *task_id;
         let mut visited = HashSet::new();
 
         while let Some(task) = self.tasks.get(&current_id) {
@@ -122,9 +122,9 @@ impl Model {
                 if visited.contains(parent_id) {
                     break; // Circular reference
                 }
-                visited.insert(current_id.clone());
-                ancestors.push(parent_id.clone());
-                current_id = parent_id.clone();
+                visited.insert(current_id);
+                ancestors.push(*parent_id);
+                current_id = *parent_id;
             } else {
                 break;
             }

@@ -88,7 +88,7 @@ fn handle_undo(model: &mut Model) {
             UndoAction::TaskDeleted { task, time_entries } => {
                 // Undo delete by restoring the task
                 model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), *task);
+                model.tasks.insert(task.id, *task);
                 // Restore time entries
                 for entry in time_entries {
                     model.restore_time_entry(entry);
@@ -97,7 +97,7 @@ fn handle_undo(model: &mut Model) {
             UndoAction::TaskModified { before, after: _ } => {
                 // Undo modify by restoring previous state
                 model.sync_task(&before);
-                model.tasks.insert(before.id.clone(), *before);
+                model.tasks.insert(before.id, *before);
             }
             UndoAction::ProjectCreated(project) => {
                 // Undo project create by removing it
@@ -107,12 +107,12 @@ fn handle_undo(model: &mut Model) {
             UndoAction::ProjectDeleted(project) => {
                 // Undo project delete by restoring it
                 model.sync_project(&project);
-                model.projects.insert(project.id.clone(), *project);
+                model.projects.insert(project.id, *project);
             }
             UndoAction::ProjectModified { before, after: _ } => {
                 // Undo modify by restoring previous state
                 model.sync_project(&before);
-                model.projects.insert(before.id.clone(), *before);
+                model.projects.insert(before.id, *before);
             }
             UndoAction::TimeEntryStarted(entry) => {
                 // Undo start by deleting the entry
@@ -147,12 +147,12 @@ fn handle_undo(model: &mut Model) {
             UndoAction::WorkLogDeleted(entry) => {
                 // Undo work log delete by restoring it
                 model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id.clone(), *entry);
+                model.work_logs.insert(entry.id, *entry);
             }
             UndoAction::WorkLogModified { before, after: _ } => {
                 // Undo work log modify by restoring previous state
                 model.sync_work_log(&before);
-                model.work_logs.insert(before.id.clone(), *before);
+                model.work_logs.insert(before.id, *before);
             }
         }
         model.refresh_visible_tasks();
@@ -165,7 +165,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TaskCreated(task) => {
                 // Redo create by restoring the task
                 model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), *task);
+                model.tasks.insert(task.id, *task);
             }
             UndoAction::TaskDeleted { task, time_entries } => {
                 // Redo delete by removing the task and its time entries
@@ -179,12 +179,12 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TaskModified { before, after: _ } => {
                 // Redo modify: the redo stack holds the inverse, so "before" is the state we want
                 model.sync_task(&before);
-                model.tasks.insert(before.id.clone(), *before);
+                model.tasks.insert(before.id, *before);
             }
             UndoAction::ProjectCreated(project) => {
                 // Redo project create by restoring it
                 model.sync_project(&project);
-                model.projects.insert(project.id.clone(), *project);
+                model.projects.insert(project.id, *project);
             }
             UndoAction::ProjectDeleted(project) => {
                 // Redo project delete by removing it
@@ -194,7 +194,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::ProjectModified { before, after: _ } => {
                 // Redo modify: the redo stack holds the inverse, so "before" is the state we want
                 model.sync_project(&before);
-                model.projects.insert(before.id.clone(), *before);
+                model.projects.insert(before.id, *before);
             }
             UndoAction::TimeEntryStarted(entry) => {
                 // Redo start by restoring the entry
@@ -228,7 +228,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::WorkLogCreated(entry) => {
                 // Redo work log create by restoring it
                 model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id.clone(), *entry);
+                model.work_logs.insert(entry.id, *entry);
             }
             UndoAction::WorkLogDeleted(entry) => {
                 // Redo work log delete by removing it
@@ -238,7 +238,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::WorkLogModified { before, after: _ } => {
                 // Redo work log modify: inverse has swapped before/after, so "before" is the new state
                 model.sync_work_log(&before);
-                model.work_logs.insert(before.id.clone(), *before);
+                model.work_logs.insert(before.id, *before);
             }
         }
         model.refresh_visible_tasks();
@@ -541,7 +541,7 @@ fn handle_confirm_import(model: &mut Model) {
         // Add all imported tasks
         for task in result.imported {
             model.sync_task(&task);
-            model.tasks.insert(task.id.clone(), task);
+            model.tasks.insert(task.id, task);
         }
 
         model.dirty = true;

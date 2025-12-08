@@ -8,7 +8,7 @@ pub fn handle_move_task(model: &mut Model, direction: i32) {
         return;
     }
 
-    let current_task_id = model.visible_tasks[model.selected_index].clone();
+    let current_task_id = model.visible_tasks[model.selected_index];
 
     // Get the current task
     let current_order = model
@@ -32,7 +32,7 @@ pub fn handle_move_task(model: &mut Model, direction: i32) {
         model.selected_index + 1
     };
 
-    let swap_task_id = model.visible_tasks[swap_index].clone();
+    let swap_task_id = model.visible_tasks[swap_index];
 
     // Get the swap task's order
     let swap_order = model

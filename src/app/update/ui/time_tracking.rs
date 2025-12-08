@@ -75,7 +75,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 let entries = model.time_entries_for_task(&task_id);
                 if let Some(entry) = entries.get(model.time_log_selected) {
-                    let entry_id = entry.id.clone();
+                    let entry_id = entry.id;
 
                     // Parse the time from buffer (HH:MM format)
                     if let Ok(time) = NaiveTime::parse_from_str(&model.time_log_buffer, "%H:%M") {
@@ -147,7 +147,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                     .undo_stack
                     .push(UndoAction::TimeEntryStarted(Box::new(entry.clone())));
                 model.sync_time_entry(&entry);
-                model.time_entries.insert(entry.id.clone(), entry);
+                model.time_entries.insert(entry.id, entry);
                 model.time_log_selected = 0; // New entry will be at top (sorted by date)
                 model.status_message = Some("Added 30-minute time entry".to_string());
             }
@@ -157,7 +157,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                 if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                     let entries = model.time_entries_for_task(&task_id);
                     if let Some(entry) = entries.get(model.time_log_selected) {
-                        let entry_id = entry.id.clone();
+                        let entry_id = entry.id;
 
                         // Can't delete if it's the active entry
                         if model.active_time_entry.as_ref() == Some(&entry_id) {

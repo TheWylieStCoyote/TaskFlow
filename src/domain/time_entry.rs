@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::TaskId;
 
 /// Unique identifier for time entries.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TimeEntryId(pub Uuid);
 
 impl TimeEntryId {

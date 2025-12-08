@@ -64,13 +64,13 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                     .tasks
                     .values()
                     .filter(|t| !t.status.is_complete() && t.due_date.is_some_and(|d| d < today))
-                    .map(|t| t.id.clone())
+                    .map(|t| t.id)
                     .collect(),
                 DailyReviewPhase::TodayTasks => model
                     .tasks
                     .values()
                     .filter(|t| !t.status.is_complete() && t.due_date == Some(today))
-                    .map(|t| t.id.clone())
+                    .map(|t| t.id)
                     .collect(),
                 DailyReviewPhase::ScheduledTasks => model
                     .tasks
@@ -80,7 +80,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                             && t.scheduled_date == Some(today)
                             && t.due_date != Some(today)
                     })
-                    .map(|t| t.id.clone())
+                    .map(|t| t.id)
                     .collect(),
                 _ => vec![],
             };

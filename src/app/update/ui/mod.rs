@@ -235,7 +235,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             if let Some(ref project_id) = model.selected_project {
                 if let Some(project) = model.projects.get(project_id) {
                     model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditProject(project_id.clone());
+                    model.input_target = InputTarget::EditProject(*project_id);
                     model.input_buffer.clone_from(&project.name);
                     model.cursor_position = model.input_buffer.len();
                 }
@@ -245,7 +245,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::DeleteProject => {
             // Delete the currently selected project (from sidebar)
-            if let Some(project_id) = model.selected_project.clone() {
+            if let Some(project_id) = model.selected_project {
                 if let Some(project) = model.projects.remove(&project_id) {
                     let project_name = project.name.clone();
 
@@ -254,7 +254,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                         .tasks
                         .iter()
                         .filter(|(_, task)| task.project_id.as_ref() == Some(&project_id))
-                        .map(|(id, _)| id.clone())
+                        .map(|(id, _)| *id)
                         .collect();
 
                     // Unassign tasks from this project
@@ -522,7 +522,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     }
 
                     // Delete time entries (collect IDs first to avoid borrow issues)
-                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id).collect();
                     for entry_id in entry_ids {
                         model.delete_time_entry(&entry_id);
                     }
@@ -592,7 +592,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                         }
 
                         // Delete time entries (collect IDs first to avoid borrow issues)
-                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id).collect();
                         for entry_id in entry_ids {
                             model.delete_time_entry(&entry_id);
                         }
@@ -635,7 +635,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditDependencies(task_id.clone());
+                    model.input_target = InputTarget::EditDependencies(task_id);
                     // Build list of available tasks with numbers
                     let mut buffer = String::new();
                     for (i, id) in model.visible_tasks.iter().enumerate() {

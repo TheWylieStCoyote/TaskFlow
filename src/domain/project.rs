@@ -20,7 +20,7 @@ use uuid::Uuid;
 /// let id = ProjectId::new();
 /// println!("Project ID: {}", id);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {

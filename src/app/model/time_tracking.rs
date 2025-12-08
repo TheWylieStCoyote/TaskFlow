@@ -22,8 +22,8 @@ impl Model {
 
         // Start new timer
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
-        self.time_entries.insert(entry_id.clone(), entry.clone());
+        let entry_id = entry.id;
+        self.time_entries.insert(entry_id, entry.clone());
         self.active_time_entry = Some(entry_id);
         self.sync_time_entry(&entry);
         self.dirty = true;
@@ -44,13 +44,13 @@ impl Model {
 
     /// Internal method for stopping time tracking, returning before/after states
     fn stop_time_tracking_internal(&mut self) -> Option<(TimeEntry, TimeEntry)> {
-        if let Some(ref entry_id) = self.active_time_entry.clone() {
+        if let Some(ref entry_id) = self.active_time_entry {
             let (before, after, task_id) = {
                 if let Some(entry) = self.time_entries.get_mut(entry_id) {
                     let before = entry.clone();
                     entry.stop();
                     let after = entry.clone();
-                    (Some(before), Some(after), Some(entry.task_id.clone()))
+                    (Some(before), Some(after), Some(entry.task_id))
                 } else {
                     (None, None, None)
                 }
@@ -144,9 +144,9 @@ impl Model {
         let is_running = entry.ended_at.is_none();
         let task_exists = self.tasks.contains_key(&entry.task_id);
         let no_active_entry = self.active_time_entry.is_none();
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
 
-        self.time_entries.insert(entry_id.clone(), entry.clone());
+        self.time_entries.insert(entry_id, entry.clone());
 
         // Only make active if: running, task exists, AND no current active entry
         if is_running && task_exists && no_active_entry {

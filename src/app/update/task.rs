@@ -32,7 +32,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                 // Check for task chain - if completing and has next_task_id, schedule it
                 let chain_next_id = model.tasks.get(&id).and_then(|task| {
                     if task.status != TaskStatus::Done {
-                        task.next_task_id.clone()
+                        task.next_task_id
                     } else {
                         None
                     }
@@ -82,7 +82,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     model
                         .undo_stack
                         .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
-                    model.tasks.insert(new_task.id.clone(), new_task);
+                    model.tasks.insert(new_task.id, new_task);
                 }
 
                 // Auto-schedule the next task in chain for today
@@ -126,7 +126,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             model
                 .undo_stack
                 .push(UndoAction::TaskCreated(Box::new(task.clone())));
-            model.tasks.insert(task.id.clone(), task);
+            model.tasks.insert(task.id, task);
             model.refresh_visible_tasks();
         }
         TaskMessage::Delete(task_id) => {
@@ -150,7 +150,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                 }
 
                 // Delete time entries (collect IDs first to avoid borrow issues)
-                let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id).collect();
                 for entry_id in entry_ids {
                     model.delete_time_entry(&entry_id);
                 }
@@ -244,6 +244,6 @@ pub fn create_next_recurring_task(task: &Task) -> Task {
         .with_due_date(next_due)
         .with_tags(task.tags.clone())
         .with_recurrence(task.recurrence.clone())
-        .with_project_opt(task.project_id.clone())
+        .with_project_opt(task.project_id)
         .with_description_opt(task.description.clone())
 }

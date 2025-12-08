@@ -39,13 +39,13 @@ impl Model {
         // Load tasks from storage
         let tasks = backend.list_tasks()?;
         for task in tasks {
-            self.tasks.insert(task.id.clone(), task);
+            self.tasks.insert(task.id, task);
         }
 
         // Load projects from storage
         let projects = ProjectRepository::list_projects(backend.as_mut())?;
         for project in projects {
-            self.projects.insert(project.id.clone(), project);
+            self.projects.insert(project.id, project);
         }
 
         // Load time entries from storage
@@ -53,14 +53,14 @@ impl Model {
         for entry in export_data.time_entries {
             // Track active entry if still running
             if entry.is_running() {
-                self.active_time_entry = Some(entry.id.clone());
+                self.active_time_entry = Some(entry.id);
             }
-            self.time_entries.insert(entry.id.clone(), entry);
+            self.time_entries.insert(entry.id, entry);
         }
 
         // Load work log entries from storage
         for work_log in export_data.work_logs {
-            self.work_logs.insert(work_log.id.clone(), work_log);
+            self.work_logs.insert(work_log.id, work_log);
         }
 
         // Load Pomodoro state
@@ -208,13 +208,13 @@ impl Model {
                 if let Ok(tasks) = backend.list_tasks() {
                     self.tasks.clear();
                     for task in tasks {
-                        self.tasks.insert(task.id.clone(), task);
+                        self.tasks.insert(task.id, task);
                     }
                 }
                 if let Ok(projects) = ProjectRepository::list_projects(backend.as_mut()) {
                     self.projects.clear();
                     for project in projects {
-                        self.projects.insert(project.id.clone(), project);
+                        self.projects.insert(project.id, project);
                     }
                 }
                 self.refresh_visible_tasks();

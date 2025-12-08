@@ -114,7 +114,7 @@ impl Model {
             subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
             result: &mut Vec<TaskId>,
         ) {
-            result.push(task_id.clone());
+            result.push(*task_id);
             if let Some(children) = subtasks_by_parent.get(task_id) {
                 for child in children {
                     add_with_descendants(&child.id, subtasks_by_parent, result);
@@ -130,7 +130,7 @@ impl Model {
         // These are shown at the end
         for task in &filtered_tasks {
             if task.parent_task_id.is_some() && !result.contains(&task.id) {
-                result.push(task.id.clone());
+                result.push(task.id);
             }
         }
 
@@ -316,7 +316,7 @@ impl Model {
     /// Returns the currently selected task mutably, if any.
     #[must_use]
     pub fn selected_task_mut(&mut self) -> Option<&mut Task> {
-        let id = self.visible_tasks.get(self.selected_index)?.clone();
+        let id = *self.visible_tasks.get(self.selected_index)?;
         self.tasks.get_mut(&id)
     }
 
@@ -332,12 +332,12 @@ impl Model {
 
         for task_id in &self.visible_tasks {
             if let Some(task) = self.tasks.get(task_id) {
-                let project_id = task.project_id.clone();
+                let project_id = task.project_id;
                 // Find existing group or create new one
                 if let Some(group) = grouped.iter_mut().find(|(pid, _)| *pid == project_id) {
-                    group.1.push(task_id.clone());
+                    group.1.push(*task_id);
                 } else {
-                    grouped.push((project_id, vec![task_id.clone()]));
+                    grouped.push((project_id, vec![*task_id]));
                 }
             }
         }

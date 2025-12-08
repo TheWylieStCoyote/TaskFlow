@@ -10,7 +10,7 @@ use uuid::Uuid;
 use super::TaskId;
 
 /// Unique identifier for work log entries.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkLogEntryId(pub Uuid);
 
 impl WorkLogEntryId {

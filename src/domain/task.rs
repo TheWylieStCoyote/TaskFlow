@@ -27,7 +27,7 @@ use super::ProjectId;
 /// // Can be displayed as a string
 /// println!("Task ID: {}", id1);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TaskId(pub Uuid);
 
 impl TaskId {

@@ -107,14 +107,14 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                             .undo_stack
                             .push(UndoAction::WorkLogCreated(Box::new(entry.clone())));
                         model.sync_work_log(&entry);
-                        model.work_logs.insert(entry.id.clone(), entry);
+                        model.work_logs.insert(entry.id, entry);
                         model.work_log_selected = 0; // New entry will be at top
                         model.status_message = Some("Work log entry added".to_string());
                     }
                     WorkLogMode::Edit => {
                         let entries = model.work_logs_for_task(&task_id);
                         if let Some(entry) = entries.get(model.work_log_selected) {
-                            let entry_id = entry.id.clone();
+                            let entry_id = entry.id;
                             if let Some(existing) = model.work_logs.get_mut(&entry_id) {
                                 let before = existing.clone();
                                 existing.update_content(content);
@@ -141,7 +141,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                 if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                     let entries = model.work_logs_for_task(&task_id);
                     if let Some(entry) = entries.get(model.work_log_selected) {
-                        let entry_id = entry.id.clone();
+                        let entry_id = entry.id;
 
                         if let Some(removed) = model.work_logs.remove(&entry_id) {
                             model

@@ -30,7 +30,7 @@ pub fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
 
                 // Store the task
                 model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), task.clone());
+                model.tasks.insert(task.id, task.clone());
 
                 // Start editing the task title
                 model.input_mode = InputMode::Editing;

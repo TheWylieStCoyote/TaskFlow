@@ -48,15 +48,61 @@ enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
+    /// Quick add a task from the command line
+    #[command(alias = "a")]
+    Add {
+        /// Task description with optional quick-add syntax
+        /// Examples:
+        ///   "Buy milk #shopping !high due:tomorrow"
+        ///   "Review PR @work #code due:friday"
+        #[arg(trailing_var_arg = true, num_args = 1..)]
+        task: Vec<String>,
+    },
+    /// List tasks (without launching TUI)
+    #[command(alias = "ls")]
+    List {
+        /// Filter by view (today, overdue, upcoming, all)
+        #[arg(short, long, default_value = "all")]
+        view: String,
+        /// Show completed tasks
+        #[arg(short, long)]
+        completed: bool,
+        /// Limit number of tasks shown
+        #[arg(short = 'n', long, default_value = "20")]
+        limit: usize,
+    },
+    /// Mark a task as done by searching for it
+    #[command(alias = "d")]
+    Done {
+        /// Search query to find the task (matches title)
+        #[arg(trailing_var_arg = true, num_args = 1..)]
+        query: Vec<String>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Handle completion subcommand
-    if let Some(Commands::Completion { shell }) = cli.command {
-        print_completions(shell);
-        return Ok(());
+    // Handle subcommands
+    match &cli.command {
+        Some(Commands::Completion { shell }) => {
+            print_completions(*shell);
+            return Ok(());
+        }
+        Some(Commands::Add { task }) => {
+            return quick_add_task(&cli, task);
+        }
+        Some(Commands::List {
+            view,
+            completed,
+            limit,
+        }) => {
+            return list_tasks(&cli, view, *completed, *limit);
+        }
+        Some(Commands::Done { query }) => {
+            return mark_task_done(&cli, query);
+        }
+        None => {}
     }
 
     // No subcommand - run the TUI
@@ -68,6 +114,296 @@ fn print_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
     generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+/// Quick add a task from the command line
+fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
+    use taskflow::app::quick_add::parse_quick_add;
+    use taskflow::domain::Task;
+
+    // Join all words into a single task string
+    let task_input = task_words.join(" ");
+    if task_input.trim().is_empty() {
+        eprintln!("Error: Task description cannot be empty");
+        eprintln!("Usage: taskflow add <task description>");
+        eprintln!("Example: taskflow add \"Buy milk #shopping !high due:tomorrow\"");
+        std::process::exit(1);
+    }
+
+    // Load settings and create model with storage
+    let settings = Settings::load();
+    let backend_type = if cli.backend == BackendType::Json {
+        BackendType::parse(&settings.backend).unwrap_or_default()
+    } else {
+        cli.backend
+    };
+    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
+
+    let mut model = Model::new()
+        .with_storage(backend_type, data_path)
+        .unwrap_or_else(|_| Model::new());
+
+    // Parse the quick add syntax
+    let parsed = parse_quick_add(&task_input);
+
+    // Create the task
+    let mut task = Task::new(&parsed.title);
+
+    // Apply parsed metadata
+    if let Some(priority) = parsed.priority {
+        task = task.with_priority(priority);
+    }
+    if let Some(due_date) = parsed.due_date {
+        task = task.with_due_date(due_date);
+    }
+    if let Some(sched_date) = parsed.scheduled_date {
+        task.scheduled_date = Some(sched_date);
+    }
+    for tag in &parsed.tags {
+        task.tags.push(tag.clone());
+    }
+
+    // Find project by name if specified
+    if let Some(ref project_name) = parsed.project_name {
+        let project_name_lower = project_name.to_lowercase();
+        for project in model.projects.values() {
+            if project.name.to_lowercase().contains(&project_name_lower) {
+                task.project_id = Some(project.id.clone());
+                break;
+            }
+        }
+    }
+
+    // Add task and save
+    let task_title = task.title.clone();
+    let task_id = task.id.clone();
+    model.tasks.insert(task_id.clone(), task.clone());
+
+    // Sync to storage
+    model.sync_task(&task);
+    if let Err(e) = model.save() {
+        eprintln!("Warning: Could not save task: {e}");
+    }
+
+    // Print confirmation
+    println!("✓ Added: {}", task_title);
+    if !parsed.tags.is_empty() {
+        println!("  Tags: {}", parsed.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "));
+    }
+    if let Some(priority) = parsed.priority {
+        println!("  Priority: {:?}", priority);
+    }
+    if let Some(due) = parsed.due_date {
+        println!("  Due: {}", due.format("%Y-%m-%d"));
+    }
+    if let Some(ref project_name) = parsed.project_name {
+        if task.project_id.is_some() {
+            println!("  Project: @{project_name}");
+        } else {
+            println!("  Project: @{project_name} (not found)");
+        }
+    }
+
+    Ok(())
+}
+
+/// List tasks from the command line
+fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyhow::Result<()> {
+    use chrono::Utc;
+
+    // Load settings and create model with storage
+    let settings = Settings::load();
+    let backend_type = if cli.backend == BackendType::Json {
+        BackendType::parse(&settings.backend).unwrap_or_default()
+    } else {
+        cli.backend
+    };
+    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
+
+    let model = Model::new()
+        .with_storage(backend_type, data_path)
+        .unwrap_or_else(|_| Model::new());
+
+    let today = Utc::now().date_naive();
+
+    // Filter tasks based on view
+    let mut tasks: Vec<_> = model
+        .tasks
+        .values()
+        .filter(|t| {
+            // Filter by completion status
+            if !show_completed && t.status.is_complete() {
+                return false;
+            }
+
+            // Filter by view
+            match view.to_lowercase().as_str() {
+                "today" => t.due_date.is_some_and(|d| d == today),
+                "overdue" => t.due_date.is_some_and(|d| d < today) && !t.status.is_complete(),
+                "upcoming" => t.due_date.is_some_and(|d| d > today && d <= today + chrono::Duration::days(7)),
+                _ => true, // "all" or any other value
+            }
+        })
+        .collect();
+
+    // Sort by due date, then priority (higher priority first)
+    tasks.sort_by(|a, b| {
+        match (&a.due_date, &b.due_date) {
+            (Some(da), Some(db)) => da.cmp(db),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => {
+                // Sort by priority level (urgent > high > medium > low > none)
+                let priority_order = |p: &taskflow::domain::Priority| match p {
+                    taskflow::domain::Priority::Urgent => 0,
+                    taskflow::domain::Priority::High => 1,
+                    taskflow::domain::Priority::Medium => 2,
+                    taskflow::domain::Priority::Low => 3,
+                    taskflow::domain::Priority::None => 4,
+                };
+                priority_order(&a.priority).cmp(&priority_order(&b.priority))
+            }
+        }
+    });
+
+    // Limit output
+    let tasks: Vec<_> = tasks.into_iter().take(limit).collect();
+
+    if tasks.is_empty() {
+        println!("No tasks found.");
+        return Ok(());
+    }
+
+    // Print header
+    let view_name = match view.to_lowercase().as_str() {
+        "today" => "Today's Tasks",
+        "overdue" => "Overdue Tasks",
+        "upcoming" => "Upcoming Tasks",
+        _ => "All Tasks",
+    };
+    println!("{} ({} shown)", view_name, tasks.len());
+    println!("{}", "-".repeat(60));
+
+    // Print tasks
+    for task in tasks {
+        let status_icon = if task.status.is_complete() {
+            "✓"
+        } else {
+            "○"
+        };
+
+        let priority_icon = match task.priority {
+            taskflow::domain::Priority::Urgent => "‼️",
+            taskflow::domain::Priority::High => "❗",
+            taskflow::domain::Priority::Medium => "•",
+            taskflow::domain::Priority::Low => "·",
+            taskflow::domain::Priority::None => " ",
+        };
+
+        let due_str = task
+            .due_date
+            .map(|d| {
+                if d == today {
+                    "today".to_string()
+                } else if d == today + chrono::Duration::days(1) {
+                    "tomorrow".to_string()
+                } else if d < today {
+                    format!("{} (overdue)", d.format("%m/%d"))
+                } else {
+                    d.format("%m/%d").to_string()
+                }
+            })
+            .unwrap_or_default();
+
+        let tags_str = if task.tags.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", task.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "))
+        };
+
+        println!(
+            "{} {} {}{}{}",
+            status_icon,
+            priority_icon,
+            task.title,
+            if due_str.is_empty() { String::new() } else { format!(" [{}]", due_str) },
+            tags_str
+        );
+    }
+
+    Ok(())
+}
+
+/// Mark a task as done from the command line
+fn mark_task_done(cli: &Cli, query_words: &[String]) -> anyhow::Result<()> {
+    use taskflow::domain::TaskStatus;
+
+    let query = query_words.join(" ").to_lowercase();
+    if query.trim().is_empty() {
+        eprintln!("Error: Search query cannot be empty");
+        eprintln!("Usage: taskflow done <search query>");
+        std::process::exit(1);
+    }
+
+    // Load settings and create model with storage
+    let settings = Settings::load();
+    let backend_type = if cli.backend == BackendType::Json {
+        BackendType::parse(&settings.backend).unwrap_or_default()
+    } else {
+        cli.backend
+    };
+    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
+
+    let mut model = Model::new()
+        .with_storage(backend_type, data_path)
+        .unwrap_or_else(|_| Model::new());
+
+    // Find matching tasks (case-insensitive title search)
+    let matches: Vec<_> = model
+        .tasks
+        .values()
+        .filter(|t| {
+            !t.status.is_complete() && t.title.to_lowercase().contains(&query)
+        })
+        .collect();
+
+    match matches.len() {
+        0 => {
+            eprintln!("No matching incomplete tasks found for: {}", query);
+            std::process::exit(1);
+        }
+        1 => {
+            let task_id = matches[0].id.clone();
+            let task_title = matches[0].title.clone();
+
+            // Mark as done
+            if let Some(task) = model.tasks.get_mut(&task_id) {
+                task.status = TaskStatus::Done;
+                task.completed_at = Some(chrono::Utc::now());
+                let task_clone = task.clone();
+                model.sync_task(&task_clone);
+                if let Err(e) = model.save() {
+                    eprintln!("Warning: Could not save: {e}");
+                }
+            }
+
+            println!("✓ Completed: {}", task_title);
+        }
+        n => {
+            println!("Multiple tasks match '{}' ({} found):", query, n);
+            for (i, task) in matches.iter().enumerate() {
+                let due_str = task
+                    .due_date
+                    .map(|d| format!(" [{}]", d.format("%m/%d")))
+                    .unwrap_or_default();
+                println!("  {}. {}{}", i + 1, task.title, due_str);
+            }
+            eprintln!("\nPlease use a more specific query.");
+            std::process::exit(1);
+        }
+    }
+
+    Ok(())
 }
 
 /// Run the TUI application

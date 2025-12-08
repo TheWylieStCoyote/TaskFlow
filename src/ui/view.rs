@@ -15,7 +15,7 @@ use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
     Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget, Kanban,
     KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, TaskList,
-    TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview,
+    TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -175,6 +175,34 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
                     model.time_log_selected,
                     model.time_log_mode,
                     &model.time_log_buffer,
+                    theme,
+                ),
+                editor_area,
+            );
+        }
+    }
+
+    // Render work log editor
+    if model.show_work_log {
+        if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
+            let entries = model.work_logs_for_task(task_id);
+            // Height: min 6, max 20 depending on entries and mode
+            let height = match model.work_log_mode {
+                crate::ui::WorkLogMode::Browse => (entries.len() as u16 + 4).clamp(6, 15),
+                crate::ui::WorkLogMode::View | crate::ui::WorkLogMode::ConfirmDelete => 15,
+                crate::ui::WorkLogMode::Add | crate::ui::WorkLogMode::Edit => {
+                    (model.work_log_buffer.len() as u16 + 4).clamp(10, 20)
+                }
+            };
+            let editor_area = centered_rect_fixed_height(70, height, area);
+            frame.render_widget(
+                WorkLogEditor::new(
+                    entries,
+                    model.work_log_selected,
+                    model.work_log_mode,
+                    &model.work_log_buffer,
+                    model.work_log_cursor_line,
+                    model.work_log_cursor_col,
                     theme,
                 ),
                 editor_area,

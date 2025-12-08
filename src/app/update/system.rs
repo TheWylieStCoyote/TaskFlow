@@ -139,6 +139,21 @@ fn handle_undo(model: &mut Model) {
                 model.delete_time_entry(&started_entry.id);
                 model.restore_time_entry(*stopped_entry_before);
             }
+            UndoAction::WorkLogCreated(entry) => {
+                // Undo work log create by deleting it
+                model.delete_work_log_from_storage(&entry.id);
+                model.work_logs.remove(&entry.id);
+            }
+            UndoAction::WorkLogDeleted(entry) => {
+                // Undo work log delete by restoring it
+                model.sync_work_log(&entry);
+                model.work_logs.insert(entry.id.clone(), *entry);
+            }
+            UndoAction::WorkLogModified { before, after: _ } => {
+                // Undo work log modify by restoring previous state
+                model.sync_work_log(&before);
+                model.work_logs.insert(before.id.clone(), *before);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -209,6 +224,21 @@ fn handle_redo(model: &mut Model) {
                 model.restore_time_entry(*stopped_entry_after);
                 // Restore the new entry (will become active since we cleared active above)
                 model.restore_time_entry(*started_entry);
+            }
+            UndoAction::WorkLogCreated(entry) => {
+                // Redo work log create by restoring it
+                model.sync_work_log(&entry);
+                model.work_logs.insert(entry.id.clone(), *entry);
+            }
+            UndoAction::WorkLogDeleted(entry) => {
+                // Redo work log delete by removing it
+                model.delete_work_log_from_storage(&entry.id);
+                model.work_logs.remove(&entry.id);
+            }
+            UndoAction::WorkLogModified { before, after: _ } => {
+                // Redo work log modify: inverse has swapped before/after, so "before" is the new state
+                model.sync_work_log(&before);
+                model.work_logs.insert(before.id.clone(), *before);
             }
         }
         model.refresh_visible_tasks();

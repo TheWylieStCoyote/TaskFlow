@@ -454,6 +454,50 @@ pub enum UiMessage {
     /// Delete the selected time entry
     TimeLogDelete,
 
+    // Work log editor
+    /// Show the work log editor for selected task
+    ShowWorkLog,
+    /// Hide the work log editor
+    HideWorkLog,
+    /// Navigate up in work log list
+    WorkLogUp,
+    /// Navigate down in work log list
+    WorkLogDown,
+    /// View the selected work log entry
+    WorkLogView,
+    /// Start adding a new work log entry
+    WorkLogAdd,
+    /// Start editing the selected work log entry
+    WorkLogEdit,
+    /// Show delete confirmation for work log entry
+    WorkLogConfirmDelete,
+    /// Cancel work log operation (return to browse mode)
+    WorkLogCancel,
+    /// Submit work log entry (save add/edit)
+    WorkLogSubmit,
+    /// Delete the selected work log entry
+    WorkLogDelete,
+    /// Insert a character in work log buffer
+    WorkLogInputChar(char),
+    /// Delete character before cursor in work log buffer
+    WorkLogInputBackspace,
+    /// Delete character at cursor in work log buffer
+    WorkLogInputDelete,
+    /// Move cursor left in work log buffer
+    WorkLogCursorLeft,
+    /// Move cursor right in work log buffer
+    WorkLogCursorRight,
+    /// Move cursor up (to previous line)
+    WorkLogCursorUp,
+    /// Move cursor down (to next line)
+    WorkLogCursorDown,
+    /// Insert a newline in work log buffer
+    WorkLogNewline,
+    /// Move cursor to start of line
+    WorkLogCursorHome,
+    /// Move cursor to end of line
+    WorkLogCursorEnd,
+
     // Overdue alert
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,

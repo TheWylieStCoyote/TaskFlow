@@ -4,11 +4,12 @@ use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{
     Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Priority, Project, ProjectId,
-    ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId,
+    ProjectStatus, Tag, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId, WorkLogEntry,
+    WorkLogEntryId,
 };
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
-    TaskRepository, TimeEntryRepository,
+    TaskRepository, TimeEntryRepository, WorkLogRepository,
 };
 
 /// `SQLite` database storage backend
@@ -117,6 +118,17 @@ impl SqliteBackend {
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS work_logs (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_work_logs_task ON work_logs(task_id);
+            CREATE INDEX IF NOT EXISTS idx_work_logs_created ON work_logs(created_at);
             ",
         )?;
 
@@ -932,6 +944,133 @@ impl TimeEntryRepository for SqliteBackend {
     }
 }
 
+impl WorkLogRepository for SqliteBackend {
+    fn create_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
+        let conn = self.conn()?;
+        conn.execute(
+            r"INSERT INTO work_logs (id, task_id, content, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                entry.id.0.to_string(),
+                entry.task_id.0.to_string(),
+                entry.content,
+                entry.created_at.to_rfc3339(),
+                entry.updated_at.to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn get_work_log(&self, id: &WorkLogEntryId) -> StorageResult<Option<WorkLogEntry>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT * FROM work_logs WHERE id = ?1")?;
+        let entry = stmt
+            .query_row(params![id.0.to_string()], |row| {
+                let id: String = row.get("id")?;
+                let task_id: String = row.get("task_id")?;
+                let created_at: String = row.get("created_at")?;
+                let updated_at: String = row.get("updated_at")?;
+                Ok(WorkLogEntry {
+                    id: WorkLogEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
+                    task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
+                    content: row.get("content")?,
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                })
+            })
+            .optional()?;
+        Ok(entry)
+    }
+
+    fn update_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
+        let conn = self.conn()?;
+        let rows = conn.execute(
+            r"UPDATE work_logs SET content = ?2, updated_at = ?3 WHERE id = ?1",
+            params![
+                entry.id.0.to_string(),
+                entry.content,
+                entry.updated_at.to_rfc3339(),
+            ],
+        )?;
+        if rows == 0 {
+            return Err(StorageError::not_found(
+                "WorkLogEntry",
+                entry.id.0.to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn delete_work_log(&mut self, id: &WorkLogEntryId) -> StorageResult<()> {
+        let conn = self.conn()?;
+        let rows = conn.execute(
+            "DELETE FROM work_logs WHERE id = ?1",
+            params![id.0.to_string()],
+        )?;
+        if rows == 0 {
+            return Err(StorageError::not_found("WorkLogEntry", id.0.to_string()));
+        }
+        Ok(())
+    }
+
+    fn get_work_logs_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<WorkLogEntry>> {
+        let conn = self.conn()?;
+        let mut stmt =
+            conn.prepare("SELECT * FROM work_logs WHERE task_id = ?1 ORDER BY created_at DESC")?;
+        let entries = stmt
+            .query_map(params![task_id.0.to_string()], |row| {
+                let id: String = row.get("id")?;
+                let task_id: String = row.get("task_id")?;
+                let created_at: String = row.get("created_at")?;
+                let updated_at: String = row.get("updated_at")?;
+                Ok(WorkLogEntry {
+                    id: WorkLogEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
+                    task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
+                    content: row.get("content")?,
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                })
+            })?
+            .filter_map(Result::ok)
+            .collect();
+        Ok(entries)
+    }
+
+    fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT * FROM work_logs ORDER BY created_at DESC")?;
+        let entries = stmt
+            .query_map([], |row| {
+                let id: String = row.get("id")?;
+                let task_id: String = row.get("task_id")?;
+                let created_at: String = row.get("created_at")?;
+                let updated_at: String = row.get("updated_at")?;
+                Ok(WorkLogEntry {
+                    id: WorkLogEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
+                    task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
+                    content: row.get("content")?,
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                    updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now()),
+                })
+            })?
+            .filter_map(Result::ok)
+            .collect();
+        Ok(entries)
+    }
+}
+
 impl StorageBackend for SqliteBackend {
     fn initialize(&mut self) -> StorageResult<()> {
         if let Some(parent) = self.path.parent() {
@@ -954,6 +1093,7 @@ impl StorageBackend for SqliteBackend {
             projects: self.list_projects()?,
             tags: self.list_tags()?,
             time_entries: self.list_all_time_entries()?,
+            work_logs: self.list_work_logs()?,
             version: 1,
             pomodoro_session: self.get_pomodoro_value("session")?,
             pomodoro_config: self.get_pomodoro_value("config")?,
@@ -966,7 +1106,7 @@ impl StorageBackend for SqliteBackend {
 
         // Clear existing data
         conn.execute_batch(
-            "DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags;",
+            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags;",
         )?;
 
         // Import data
@@ -981,6 +1121,9 @@ impl StorageBackend for SqliteBackend {
         }
         for entry in &data.time_entries {
             self.create_time_entry(entry)?;
+        }
+        for entry in &data.work_logs {
+            self.create_work_log(entry)?;
         }
 
         // Import Pomodoro state

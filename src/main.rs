@@ -188,7 +188,15 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
     // Print confirmation
     println!("✓ Added: {}", task_title);
     if !parsed.tags.is_empty() {
-        println!("  Tags: {}", parsed.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "));
+        println!(
+            "  Tags: {}",
+            parsed
+                .tags
+                .iter()
+                .map(|t| format!("#{t}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
     }
     if let Some(priority) = parsed.priority {
         println!("  Priority: {:?}", priority);
@@ -240,7 +248,9 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
             match view.to_lowercase().as_str() {
                 "today" => t.due_date.is_some_and(|d| d == today),
                 "overdue" => t.due_date.is_some_and(|d| d < today) && !t.status.is_complete(),
-                "upcoming" => t.due_date.is_some_and(|d| d > today && d <= today + chrono::Duration::days(7)),
+                "upcoming" => t
+                    .due_date
+                    .is_some_and(|d| d > today && d <= today + chrono::Duration::days(7)),
                 _ => true, // "all" or any other value
             }
         })
@@ -318,7 +328,14 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
         let tags_str = if task.tags.is_empty() {
             String::new()
         } else {
-            format!(" {}", task.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "))
+            format!(
+                " {}",
+                task.tags
+                    .iter()
+                    .map(|t| format!("#{t}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
         };
 
         println!(
@@ -326,7 +343,11 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
             status_icon,
             priority_icon,
             task.title,
-            if due_str.is_empty() { String::new() } else { format!(" [{}]", due_str) },
+            if due_str.is_empty() {
+                String::new()
+            } else {
+                format!(" [{}]", due_str)
+            },
             tags_str
         );
     }
@@ -362,9 +383,7 @@ fn mark_task_done(cli: &Cli, query_words: &[String]) -> anyhow::Result<()> {
     let matches: Vec<_> = model
         .tasks
         .values()
-        .filter(|t| {
-            !t.status.is_complete() && t.title.to_lowercase().contains(&query)
-        })
+        .filter(|t| !t.status.is_complete() && t.title.to_lowercase().contains(&query))
         .collect();
 
     match matches.len() {
@@ -722,6 +741,69 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         }
     }
 
+    // If work log editor is showing, handle navigation and editing
+    if model.show_work_log {
+        use taskflow::ui::WorkLogMode;
+
+        match model.work_log_mode {
+            WorkLogMode::Add | WorkLogMode::Edit => {
+                // Multi-line editing mode - handle character input
+                // Check for Ctrl+S to save first
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+                    return Message::Ui(UiMessage::WorkLogSubmit);
+                }
+                return match key.code {
+                    KeyCode::Esc => Message::Ui(UiMessage::WorkLogCancel),
+                    KeyCode::Enter => Message::Ui(UiMessage::WorkLogNewline),
+                    KeyCode::Backspace => Message::Ui(UiMessage::WorkLogInputBackspace),
+                    KeyCode::Delete => Message::Ui(UiMessage::WorkLogInputDelete),
+                    KeyCode::Left => Message::Ui(UiMessage::WorkLogCursorLeft),
+                    KeyCode::Right => Message::Ui(UiMessage::WorkLogCursorRight),
+                    KeyCode::Up => Message::Ui(UiMessage::WorkLogCursorUp),
+                    KeyCode::Down => Message::Ui(UiMessage::WorkLogCursorDown),
+                    KeyCode::Home => Message::Ui(UiMessage::WorkLogCursorHome),
+                    KeyCode::End => Message::Ui(UiMessage::WorkLogCursorEnd),
+                    KeyCode::Char(c) => Message::Ui(UiMessage::WorkLogInputChar(c)),
+                    _ => Message::None,
+                };
+            }
+            WorkLogMode::ConfirmDelete => {
+                // Confirm delete mode
+                return match key.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') => {
+                        Message::Ui(UiMessage::WorkLogDelete)
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                        Message::Ui(UiMessage::WorkLogCancel)
+                    }
+                    _ => Message::None,
+                };
+            }
+            WorkLogMode::View => {
+                // Viewing a single entry
+                return match key.code {
+                    KeyCode::Esc | KeyCode::Enter => Message::Ui(UiMessage::WorkLogCancel),
+                    KeyCode::Char('e') => Message::Ui(UiMessage::WorkLogEdit),
+                    KeyCode::Char('d') => Message::Ui(UiMessage::WorkLogConfirmDelete),
+                    _ => Message::None,
+                };
+            }
+            WorkLogMode::Browse => {
+                // Normal work log navigation
+                return match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideWorkLog),
+                    KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::WorkLogUp),
+                    KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::WorkLogDown),
+                    KeyCode::Enter => Message::Ui(UiMessage::WorkLogView),
+                    KeyCode::Char('a') => Message::Ui(UiMessage::WorkLogAdd),
+                    KeyCode::Char('e') => Message::Ui(UiMessage::WorkLogEdit),
+                    KeyCode::Char('d') => Message::Ui(UiMessage::WorkLogConfirmDelete),
+                    _ => Message::None,
+                };
+            }
+        }
+    }
+
     // In multi-select mode, Space toggles task selection
     if model.multi_select_mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
@@ -866,6 +948,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::MoveToProject => Message::Ui(UiMessage::StartMoveToProject),
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
         Action::ShowTimeLog => Message::Ui(UiMessage::ShowTimeLog),
+        Action::ShowWorkLog => Message::Ui(UiMessage::ShowWorkLog),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
         Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),

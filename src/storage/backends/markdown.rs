@@ -5,11 +5,11 @@ use std::time::SystemTime;
 
 use crate::domain::{
     Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
-    TimeEntry, TimeEntryId,
+    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::{
     ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
-    TaskRepository, TimeEntryRepository,
+    TaskRepository, TimeEntryRepository, WorkLogRepository,
 };
 
 /// Markdown file-based storage backend
@@ -48,6 +48,7 @@ pub struct MarkdownBackend {
     project_mtimes: HashMap<ProjectId, SystemTime>,
     tags: Vec<Tag>,
     time_entries: Vec<TimeEntry>,
+    work_logs: Vec<WorkLogEntry>,
     pomodoro_state: PomodoroState,
     dirty: bool,
 }
@@ -69,6 +70,7 @@ impl MarkdownBackend {
             project_mtimes: HashMap::new(),
             tags: Vec::new(),
             time_entries: Vec::new(),
+            work_logs: Vec::new(),
             pomodoro_state: PomodoroState::default(),
             dirty: false,
         })
@@ -174,6 +176,24 @@ impl MarkdownBackend {
         let content = serde_yaml::to_string(&self.time_entries)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
         fs::write(&entries_file, content).map_err(|e| StorageError::io(&entries_file, e))?;
+        Ok(())
+    }
+
+    fn load_work_logs(&mut self) -> StorageResult<()> {
+        let work_logs_file = self.base_path.join("work_logs.yaml");
+        if work_logs_file.exists() {
+            let content = fs::read_to_string(&work_logs_file)
+                .map_err(|e| StorageError::io(&work_logs_file, e))?;
+            self.work_logs = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    fn save_work_logs(&self) -> StorageResult<()> {
+        let work_logs_file = self.base_path.join("work_logs.yaml");
+        let content = serde_yaml::to_string(&self.work_logs)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&work_logs_file, content).map_err(|e| StorageError::io(&work_logs_file, e))?;
         Ok(())
     }
 
@@ -736,6 +756,63 @@ impl TimeEntryRepository for MarkdownBackend {
     }
 }
 
+impl WorkLogRepository for MarkdownBackend {
+    fn create_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
+        if self.work_logs.iter().any(|e| e.id == entry.id) {
+            return Err(StorageError::already_exists(
+                "WorkLogEntry",
+                entry.id.0.to_string(),
+            ));
+        }
+        self.work_logs.push(entry.clone());
+        self.save_work_logs()?;
+        Ok(())
+    }
+
+    fn get_work_log(&self, id: &WorkLogEntryId) -> StorageResult<Option<WorkLogEntry>> {
+        Ok(self.work_logs.iter().find(|e| &e.id == id).cloned())
+    }
+
+    fn update_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
+        if let Some(existing) = self.work_logs.iter_mut().find(|e| e.id == entry.id) {
+            *existing = entry.clone();
+            self.save_work_logs()?;
+            Ok(())
+        } else {
+            Err(StorageError::not_found(
+                "WorkLogEntry",
+                entry.id.0.to_string(),
+            ))
+        }
+    }
+
+    fn delete_work_log(&mut self, id: &WorkLogEntryId) -> StorageResult<()> {
+        let len_before = self.work_logs.len();
+        self.work_logs.retain(|e| &e.id != id);
+        if self.work_logs.len() == len_before {
+            return Err(StorageError::not_found("WorkLogEntry", id.0.to_string()));
+        }
+        self.save_work_logs()?;
+        Ok(())
+    }
+
+    fn get_work_logs_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<WorkLogEntry>> {
+        let mut logs: Vec<_> = self
+            .work_logs
+            .iter()
+            .filter(|e| &e.task_id == task_id)
+            .cloned()
+            .collect();
+        // Sort by creation time, newest first
+        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(logs)
+    }
+
+    fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>> {
+        Ok(self.work_logs.clone())
+    }
+}
+
 impl StorageBackend for MarkdownBackend {
     fn initialize(&mut self) -> StorageResult<()> {
         self.ensure_dirs()?;
@@ -743,6 +820,7 @@ impl StorageBackend for MarkdownBackend {
         self.load_projects()?;
         self.load_tags()?;
         self.load_time_entries()?;
+        self.load_work_logs()?;
         self.load_pomodoro_state()?;
         Ok(())
     }
@@ -751,6 +829,7 @@ impl StorageBackend for MarkdownBackend {
         // Files are written immediately, but we save auxiliary data
         self.save_tags()?;
         self.save_time_entries()?;
+        self.save_work_logs()?;
         self.save_pomodoro_state()?;
         self.dirty = false;
         Ok(())
@@ -762,6 +841,7 @@ impl StorageBackend for MarkdownBackend {
             projects: self.projects_cache.values().cloned().collect(),
             tags: self.tags.clone(),
             time_entries: self.time_entries.clone(),
+            work_logs: self.work_logs.clone(),
             version: 1,
             pomodoro_session: self.pomodoro_state.session.clone(),
             pomodoro_config: self.pomodoro_state.config.clone(),
@@ -783,6 +863,7 @@ impl StorageBackend for MarkdownBackend {
         self.projects_cache.clear();
         self.tags.clear();
         self.time_entries.clear();
+        self.work_logs.clear();
 
         // Import new data
         for project in &data.projects {
@@ -798,6 +879,12 @@ impl StorageBackend for MarkdownBackend {
             self.time_entries.push(entry.clone());
         }
         self.save_time_entries()?;
+
+        // Import work logs
+        for entry in &data.work_logs {
+            self.work_logs.push(entry.clone());
+        }
+        self.save_work_logs()?;
 
         // Import Pomodoro state
         self.pomodoro_state = PomodoroState {

@@ -16,6 +16,7 @@ mod template_picker;
 mod time_log_editor;
 mod weekly_planner;
 mod weekly_review;
+mod work_log_editor;
 
 pub use calendar::*;
 pub use daily_review::*;
@@ -34,3 +35,4 @@ pub use template_picker::*;
 pub use time_log_editor::*;
 pub use weekly_planner::*;
 pub use weekly_review::*;
+pub use work_log_editor::*;

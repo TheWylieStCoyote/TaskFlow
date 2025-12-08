@@ -61,7 +61,7 @@ use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
     Filter, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec, Task, TaskId,
-    TimeEntry, TimeEntryId,
+    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::StorageBackend;
 use crate::ui::{InputMode, InputTarget};
@@ -280,6 +280,22 @@ pub struct Model {
     /// Text buffer for editing time entries
     pub time_log_buffer: String,
 
+    // Work log state
+    /// All work log entries indexed by ID
+    pub work_logs: HashMap<WorkLogEntryId, WorkLogEntry>,
+    /// Whether work log editor is visible
+    pub show_work_log: bool,
+    /// Selected work log entry index
+    pub work_log_selected: usize,
+    /// Current mode in work log editor
+    pub work_log_mode: crate::ui::WorkLogMode,
+    /// Text buffer for editing work log entries (multi-line)
+    pub work_log_buffer: Vec<String>,
+    /// Cursor line position in work log buffer
+    pub work_log_cursor_line: usize,
+    /// Cursor column position in work log buffer
+    pub work_log_cursor_col: usize,
+
     // Saved filters
     /// User-defined saved filters (smart lists)
     pub saved_filters: HashMap<SavedFilterId, SavedFilter>,
@@ -380,6 +396,13 @@ impl Model {
             time_log_selected: 0,
             time_log_mode: crate::ui::TimeLogMode::default(),
             time_log_buffer: String::new(),
+            work_logs: HashMap::new(),
+            show_work_log: false,
+            work_log_selected: 0,
+            work_log_mode: crate::ui::WorkLogMode::default(),
+            work_log_buffer: vec![String::new()],
+            work_log_cursor_line: 0,
+            work_log_cursor_col: 0,
             saved_filters: HashMap::new(),
             active_saved_filter: None,
             show_saved_filter_picker: false,
@@ -459,6 +482,27 @@ impl Model {
                 .tasks
                 .values()
                 .any(|t| t.due_date == Some(date) && !t.status.is_complete())
+    }
+
+    /// Returns work log entries for a specific task, ordered by creation time (newest first).
+    #[must_use]
+    pub fn work_logs_for_task(&self, task_id: &TaskId) -> Vec<&WorkLogEntry> {
+        let mut logs: Vec<_> = self
+            .work_logs
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .collect();
+        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs
+    }
+
+    /// Returns the count of work log entries for a specific task.
+    #[must_use]
+    pub fn work_log_count_for_task(&self, task_id: &TaskId) -> usize {
+        self.work_logs
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .count()
     }
 }
 

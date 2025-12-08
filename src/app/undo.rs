@@ -1,4 +1,4 @@
-use crate::domain::{Project, Task, TimeEntry};
+use crate::domain::{Project, Task, TimeEntry, WorkLogEntry};
 
 /// Maximum number of undo/redo actions to keep in history
 pub const MAX_UNDO_HISTORY: usize = 50;
@@ -44,6 +44,15 @@ pub enum UndoAction {
         stopped_entry_after: Box<TimeEntry>,
         started_entry: Box<TimeEntry>,
     },
+    /// Work log entry was created - undo by deleting it
+    WorkLogCreated(Box<WorkLogEntry>),
+    /// Work log entry was deleted - undo by restoring it
+    WorkLogDeleted(Box<WorkLogEntry>),
+    /// Work log entry was modified - undo by restoring previous state
+    WorkLogModified {
+        before: Box<WorkLogEntry>,
+        after: Box<WorkLogEntry>,
+    },
 }
 
 impl UndoAction {
@@ -74,6 +83,15 @@ impl UndoAction {
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
             Self::TimerSwitched { .. } => "Switch timer".to_string(),
+            Self::WorkLogCreated(entry) => {
+                format!("Add work log \"{}\"", truncate(&entry.summary(), 20))
+            }
+            Self::WorkLogDeleted(entry) => {
+                format!("Delete work log \"{}\"", truncate(&entry.summary(), 20))
+            }
+            Self::WorkLogModified { before, .. } => {
+                format!("Edit work log \"{}\"", truncate(&before.summary(), 20))
+            }
         }
     }
 
@@ -125,6 +143,15 @@ impl UndoAction {
                 stopped_entry_before: stopped_entry_before.clone(),
                 stopped_entry_after: stopped_entry_after.clone(),
                 started_entry: started_entry.clone(),
+            },
+            // Undo work log create = delete, so redo = create again
+            Self::WorkLogCreated(entry) => Self::WorkLogCreated(entry.clone()),
+            // Undo work log delete = restore, so redo = delete again
+            Self::WorkLogDeleted(entry) => Self::WorkLogDeleted(entry.clone()),
+            // Undo work log modify swaps before/after, so redo swaps them back
+            Self::WorkLogModified { before, after } => Self::WorkLogModified {
+                before: after.clone(),
+                after: before.clone(),
             },
         }
     }

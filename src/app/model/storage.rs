@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 
-use crate::domain::{Project, ProjectId, Task, TaskId, TimeEntry};
-use crate::storage::{self, BackendType, ProjectRepository};
+use crate::domain::{Project, ProjectId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId};
+use crate::storage::{self, BackendType, ProjectRepository, WorkLogRepository};
 
 use super::{Model, UndoAction};
 
@@ -56,6 +56,11 @@ impl Model {
                 self.active_time_entry = Some(entry.id.clone());
             }
             self.time_entries.insert(entry.id.clone(), entry);
+        }
+
+        // Load work log entries from storage
+        for work_log in export_data.work_logs {
+            self.work_logs.insert(work_log.id.clone(), work_log);
         }
 
         // Load Pomodoro state
@@ -253,6 +258,29 @@ impl Model {
             true
         } else {
             false
+        }
+    }
+
+    /// Syncs a work log entry to storage.
+    ///
+    /// Creates or updates the work log entry in the storage backend.
+    pub fn sync_work_log(&mut self, entry: &WorkLogEntry) {
+        if let Some(ref mut backend) = self.storage {
+            // Try update first, if not found, create
+            if WorkLogRepository::update_work_log(backend.as_mut(), entry).is_err() {
+                let _ = WorkLogRepository::create_work_log(backend.as_mut(), entry);
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Deletes a work log entry from storage.
+    ///
+    /// Removes the work log entry from the storage backend.
+    pub fn delete_work_log_from_storage(&mut self, id: &WorkLogEntryId) {
+        if let Some(ref mut backend) = self.storage {
+            let _ = WorkLogRepository::delete_work_log(backend.as_mut(), id);
+            self.dirty = true;
         }
     }
 }

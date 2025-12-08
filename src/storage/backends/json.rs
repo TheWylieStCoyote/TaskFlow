@@ -931,4 +931,170 @@ mod tests {
         let exported = backend.export_all().unwrap();
         assert!(exported.pomodoro_session.is_none());
     }
+
+    // Edge case tests for error handling
+
+    #[test]
+    fn test_corrupted_json_file_handling() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupted.json");
+
+        // Write invalid JSON
+        fs::write(&path, "{ not valid json ]").unwrap();
+
+        // Try to initialize - should fail with deserialization error
+        let mut backend = JsonBackend::new(&path).unwrap();
+        let result = backend.initialize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_json_file_handling() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.json");
+
+        // Write empty file
+        fs::write(&path, "").unwrap();
+
+        // Try to initialize - should fail with deserialization error
+        let mut backend = JsonBackend::new(&path).unwrap();
+        let result = backend.initialize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_partial_json_file_handling() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("partial.json");
+
+        // Write partial JSON (missing closing brace)
+        fs::write(&path, r#"{"tasks": {"abc": {"id": "abc""#).unwrap();
+
+        // Try to initialize - should fail
+        let mut backend = JsonBackend::new(&path).unwrap();
+        let result = backend.initialize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_valid_json_wrong_schema() {
+        use std::fs;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wrong_schema.json");
+
+        // Write valid JSON but wrong schema
+        fs::write(&path, r#"{"wrong": "schema", "tasks": "not_a_map"}"#).unwrap();
+
+        // Try to initialize - should fail with deserialization error
+        let mut backend = JsonBackend::new(&path).unwrap();
+        let result = backend.initialize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_project_not_found_error() {
+        let (_dir, backend) = create_test_backend();
+        let result = backend.get_project(&ProjectId::new());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_time_entry_not_found_error() {
+        let (_dir, backend) = create_test_backend();
+        let result = backend.get_time_entry(&TimeEntryId::new());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_update_project_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+        let project = Project::new("Non-existent");
+        let result = backend.update_project(&project);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delete_project_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+        let result = backend.delete_project(&ProjectId::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_time_entry_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+        let entry = TimeEntry::start(TaskId::new());
+        let result = backend.update_time_entry(&entry);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delete_time_entry_not_found() {
+        let (_dir, mut backend) = create_test_backend();
+        let result = backend.delete_time_entry(&TimeEntryId::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_concurrent_task_operations() {
+        let (_dir, mut backend) = create_test_backend();
+
+        // Create many tasks rapidly
+        let mut task_ids = Vec::new();
+        for i in 0..100 {
+            let task = Task::new(format!("Task {i}"));
+            task_ids.push(task.id.clone());
+            backend.create_task(&task).unwrap();
+        }
+
+        // Verify all tasks exist
+        let tasks = backend.list_tasks().unwrap();
+        assert_eq!(tasks.len(), 100);
+
+        // Delete all tasks
+        for id in &task_ids {
+            backend.delete_task(id).unwrap();
+        }
+
+        // Verify all tasks deleted
+        let tasks = backend.list_tasks().unwrap();
+        assert_eq!(tasks.len(), 0);
+    }
+
+    #[test]
+    fn test_special_characters_in_task_title() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let task = Task::new("Task with \"quotes\" and \\ backslash and emoji 🎉");
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.title, task.title);
+    }
+
+    #[test]
+    fn test_unicode_in_project_name() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let project = Project::new("项目 プロジェクト مشروع");
+        backend.create_project(&project).unwrap();
+
+        let retrieved = backend.get_project(&project.id).unwrap().unwrap();
+        assert_eq!(retrieved.name, project.name);
+    }
+
+    #[test]
+    fn test_very_long_task_title() {
+        let (_dir, mut backend) = create_test_backend();
+
+        let long_title = "A".repeat(10000);
+        let task = Task::new(long_title.clone());
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        assert_eq!(retrieved.title, long_title);
+    }
 }

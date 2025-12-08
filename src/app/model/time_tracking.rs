@@ -62,13 +62,12 @@ impl Model {
             }
 
             // Update task's actual_minutes with total tracked time
-            if let Some(task_id) = task_id {
-                let total_minutes = self.total_time_for_task(&task_id);
-                if let Some(task) = self.tasks.get_mut(&task_id) {
+            if let Some(ref task_id) = task_id {
+                let total_minutes = self.total_time_for_task(task_id);
+                if let Some(task) = self.tasks.get_mut(task_id) {
                     task.actual_minutes = total_minutes;
-                    let task_clone = task.clone();
-                    self.sync_task(&task_clone);
                 }
+                self.sync_task_by_id(task_id);
             }
 
             self.active_time_entry = None;

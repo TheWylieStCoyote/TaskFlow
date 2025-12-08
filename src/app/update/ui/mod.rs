@@ -88,11 +88,11 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::StartEditProject => {
             // Edit the currently selected project (from sidebar)
-            if let Some(ref project_id) = model.selected_project.clone() {
+            if let Some(ref project_id) = model.selected_project {
                 if let Some(project) = model.projects.get(project_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditProject(project_id.clone());
-                    model.input_buffer = project.name.clone();
+                    model.input_buffer.clone_from(&project.name);
                     model.cursor_position = model.input_buffer.len();
                 }
             } else {
@@ -101,13 +101,15 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::DeleteProject => {
             // Delete the currently selected project (from sidebar)
-            if let Some(ref project_id) = model.selected_project.clone() {
-                if let Some(project) = model.projects.remove(project_id) {
+            if let Some(project_id) = model.selected_project.clone() {
+                if let Some(project) = model.projects.remove(&project_id) {
+                    let project_name = project.name.clone();
+
                     // Find tasks in this project
                     let tasks_to_unassign: Vec<_> = model
                         .tasks
                         .iter()
-                        .filter(|(_, task)| task.project_id.as_ref() == Some(project_id))
+                        .filter(|(_, task)| task.project_id.as_ref() == Some(&project_id))
                         .map(|(id, _)| id.clone())
                         .collect();
 
@@ -115,22 +117,21 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     for task_id in tasks_to_unassign {
                         if let Some(task) = model.tasks.get_mut(&task_id) {
                             task.project_id = None;
-                            let task_clone = task.clone();
-                            model.sync_task(&task_clone);
                         }
+                        model.sync_task_by_id(&task_id);
                     }
 
-                    // Push undo action
+                    // Push undo action (project is already owned from remove)
                     model
                         .undo_stack
-                        .push(UndoAction::ProjectDeleted(Box::new(project.clone())));
+                        .push(UndoAction::ProjectDeleted(Box::new(project)));
                     // Clear selected project
                     model.selected_project = None;
                     model.dirty = true;
                     model.refresh_visible_tasks();
                     model.status_message = Some(format!(
                         "Deleted project '{}' (tasks unassigned)",
-                        project.name
+                        project_name
                     ));
                 }
             } else {
@@ -683,11 +684,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.clear_snooze();
-                    let task_clone = task.clone();
-                    model.sync_task(&task_clone);
-                    model.status_message = Some("Snooze cleared".to_string());
-                    model.refresh_visible_tasks();
                 }
+                model.sync_task_by_id(&task_id);
+                model.status_message = Some("Snooze cleared".to_string());
+                model.refresh_visible_tasks();
             }
         }
     }

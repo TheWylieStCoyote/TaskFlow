@@ -639,11 +639,10 @@ fn mark_task_done(
             if let Some(task) = model.tasks.get_mut(&task_id) {
                 task.status = TaskStatus::Done;
                 task.completed_at = Some(chrono::Utc::now());
-                let task_clone = task.clone();
-                model.sync_task(&task_clone);
-                if let Err(e) = model.save() {
-                    eprintln!("Warning: Could not save: {e}");
-                }
+            }
+            model.sync_task_by_id(&task_id);
+            if let Err(e) = model.save() {
+                eprintln!("Warning: Could not save: {e}");
             }
 
             println!("✓ Completed: {}", task_title);

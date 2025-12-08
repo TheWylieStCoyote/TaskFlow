@@ -14,22 +14,26 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::Task => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
-                model.sync_task(&task);
+                let task_id = task.id.clone();
+                // Insert first (moves task), then sync by id
                 model
                     .undo_stack
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
-                model.tasks.insert(task.id.clone(), task);
+                model.tasks.insert(task_id.clone(), task);
+                model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
             }
         }
         InputTarget::Subtask(parent_id) => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, Some(parent_id.clone()));
-                model.sync_task(&task);
+                let task_id = task.id.clone();
+                // Insert first (moves task), then sync by id
                 model
                     .undo_stack
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
-                model.tasks.insert(task.id.clone(), task);
+                model.tasks.insert(task_id.clone(), task);
+                model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
             }
         }
@@ -100,11 +104,13 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::Project => {
             if !input.is_empty() {
                 let project = crate::domain::Project::new(input);
-                model.sync_project(&project);
+                let project_id = project.id.clone();
+                // Clone for undo stack, then move into projects map
                 model
                     .undo_stack
                     .push(UndoAction::ProjectCreated(Box::new(project.clone())));
-                model.projects.insert(project.id.clone(), project);
+                model.projects.insert(project_id.clone(), project);
+                model.sync_project_by_id(&project_id);
             }
         }
         InputTarget::EditProject(project_id) => {
@@ -320,19 +326,16 @@ pub fn handle_submit_input(model: &mut Model) {
                 // Clear snooze
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.clear_snooze();
-                    let task_clone = task.clone();
-                    model.sync_task(&task_clone);
-                    model.status_message = Some("Snooze cleared".to_string());
                 }
+                model.sync_task_by_id(&task_id);
+                model.status_message = Some("Snooze cleared".to_string());
             } else if let Some(date) = parse_date(&input) {
                 // Set snooze date
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.snooze_until_date(date);
-                    let task_clone = task.clone();
-                    model.sync_task(&task_clone);
-                    model.status_message =
-                        Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
                 }
+                model.sync_task_by_id(&task_id);
+                model.status_message = Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
             } else {
                 model.status_message = Some("Invalid date format".to_string());
             }

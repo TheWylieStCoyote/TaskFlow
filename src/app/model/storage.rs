@@ -127,6 +127,20 @@ impl Model {
         }
     }
 
+    /// Syncs a task by ID to storage.
+    ///
+    /// Looks up the task in the model and syncs it to the storage backend.
+    /// This avoids the need to clone the task when you have a mutable borrow.
+    pub fn sync_task_by_id(&mut self, task_id: &TaskId) {
+        if let (Some(ref mut backend), Some(task)) = (&mut self.storage, self.tasks.get(task_id)) {
+            // Try update first, if not found, create
+            if backend.update_task(task).is_err() {
+                let _ = backend.create_task(task);
+            }
+            self.dirty = true;
+        }
+    }
+
     /// Deletes a task from storage.
     ///
     /// Removes the task from the storage backend.
@@ -142,6 +156,22 @@ impl Model {
     /// Creates or updates the project in the storage backend.
     pub fn sync_project(&mut self, project: &Project) {
         if let Some(ref mut backend) = self.storage {
+            // Try update first, if not found, create
+            if backend.update_project(project).is_err() {
+                let _ = backend.create_project(project);
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Syncs a project by ID to storage.
+    ///
+    /// Looks up the project in the model and syncs it to the storage backend.
+    /// This avoids the need to clone the project when you have a mutable borrow.
+    pub fn sync_project_by_id(&mut self, project_id: &ProjectId) {
+        if let (Some(ref mut backend), Some(project)) =
+            (&mut self.storage, self.projects.get(project_id))
+        {
             // Try update first, if not found, create
             if backend.update_project(project).is_err() {
                 let _ = backend.create_project(project);

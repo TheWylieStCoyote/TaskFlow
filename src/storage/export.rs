@@ -312,10 +312,11 @@ pub fn export_to_mermaid<W: Write>(
         .collect();
 
     writeln!(writer, "    %% Nodes")?;
-    for task in tasks.values() {
-        let short_id = id_map
-            .get(&task.id)
-            .expect("task ID must exist in id_map built from same task collection");
+    for (task_id, task) in tasks {
+        // id_map is built from the same keys, so this lookup always succeeds
+        let Some(short_id) = id_map.get(task_id) else {
+            continue;
+        };
         let label = escape_mermaid(&task.title);
         let class = match task.status {
             TaskStatus::Done => "done",

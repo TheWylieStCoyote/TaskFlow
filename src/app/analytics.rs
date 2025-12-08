@@ -24,6 +24,17 @@
 use chrono::{Datelike, NaiveDate, Timelike, Weekday};
 use std::collections::{HashMap, HashSet};
 
+/// Maps array index to weekday (0 = Monday, 6 = Sunday).
+const WEEKDAYS: [Weekday; 7] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+    Weekday::Sat,
+    Weekday::Sun,
+];
+
 use crate::domain::analytics::{
     AnalyticsReport, BurnChart, CompletionTrend, PriorityBreakdown, ProductivityInsights,
     ReportConfig, StatusBreakdown, TagStats, TimeAnalytics, TimeSeriesPoint, VelocityMetrics,
@@ -418,16 +429,7 @@ impl<'a> AnalyticsEngine<'a> {
             .filter(|(_, &v)| v > 0)
             .map(|(i, _)| i);
 
-        insights.best_day = max_day_idx.map(|i| match i {
-            0 => Weekday::Mon,
-            1 => Weekday::Tue,
-            2 => Weekday::Wed,
-            3 => Weekday::Thu,
-            4 => Weekday::Fri,
-            5 => Weekday::Sat,
-            6 => Weekday::Sun,
-            _ => unreachable!(),
-        });
+        insights.best_day = max_day_idx.map(|i| WEEKDAYS[i]);
 
         // Find peak hour
         insights.peak_hour = by_hour

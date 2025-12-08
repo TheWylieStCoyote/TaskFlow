@@ -772,17 +772,14 @@ pub fn apply_merge_strategy(
     let detector = DuplicateDetector::new(existing_tasks);
     let mut new_imported = Vec::new();
 
+    // At this point, strategy is either Skip or Overwrite (CreateNew returned early)
     for task in result.imported.drain(..) {
         if let Some(reason) = detector.check(&task) {
-            match strategy {
-                MergeStrategy::Skip => {
-                    result.skipped.push((task, reason));
-                }
-                MergeStrategy::Overwrite => {
-                    // Allow overwrite - task will replace existing
-                    new_imported.push(task);
-                }
-                MergeStrategy::CreateNew => unreachable!(), // Handled above
+            if strategy == MergeStrategy::Skip {
+                result.skipped.push((task, reason));
+            } else {
+                // Overwrite - task will replace existing
+                new_imported.push(task);
             }
         } else {
             new_imported.push(task);

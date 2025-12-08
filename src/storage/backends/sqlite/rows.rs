@@ -1,9 +1,27 @@
 //! Row parsing helpers for SQLite backend.
 
+use tracing::warn;
+
 use crate::domain::{
     Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId,
     WorkLogEntry, WorkLogEntryId,
 };
+
+/// Parse a UUID string, logging a warning if invalid.
+fn parse_uuid(s: &str, field_name: &str) -> uuid::Uuid {
+    uuid::Uuid::parse_str(s).unwrap_or_else(|e| {
+        warn!(field = field_name, value = s, error = %e, "Invalid UUID in SQLite row");
+        uuid::Uuid::nil()
+    })
+}
+
+/// Parse JSON, logging a warning if invalid.
+fn parse_json<T: serde::de::DeserializeOwned + Default>(s: &str, field_name: &str) -> T {
+    serde_json::from_str(s).unwrap_or_else(|e| {
+        warn!(field = field_name, error = %e, "Invalid JSON in SQLite row");
+        T::default()
+    })
+}
 
 /// Parse a Task from a SQLite row.
 pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
@@ -23,7 +41,7 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
     let custom_fields_json: String = row.get("custom_fields")?;
 
     Ok(Task {
-        id: TaskId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
+        id: TaskId(parse_uuid(&id, "task.id")),
         title: row.get("title")?,
         description: row.get("description")?,
         status: match status_str.as_str() {
@@ -40,14 +58,12 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
             "urgent" => Priority::Urgent,
             _ => Priority::None,
         },
-        project_id: project_id.map(|s| ProjectId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
-        parent_task_id: parent_task_id
-            .map(|s| TaskId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
-        tags: serde_json::from_str(&tags_json).unwrap_or_default(),
-        dependencies: serde_json::from_str::<Vec<String>>(&deps_json)
-            .unwrap_or_default()
+        project_id: project_id.map(|s| ProjectId(parse_uuid(&s, "task.project_id"))),
+        parent_task_id: parent_task_id.map(|s| TaskId(parse_uuid(&s, "task.parent_task_id"))),
+        tags: parse_json(&tags_json, "task.tags"),
+        dependencies: parse_json::<Vec<String>>(&deps_json, "task.dependencies")
             .into_iter()
-            .map(|s| TaskId(uuid::Uuid::parse_str(&s).unwrap_or_default()))
+            .map(|s| TaskId(parse_uuid(&s, "task.dependencies[]")))
             .collect(),
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -73,7 +89,7 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
             .flatten()
             .and_then(|s| uuid::Uuid::parse_str(&s).ok())
             .map(TaskId),
-        custom_fields: serde_json::from_str(&custom_fields_json).unwrap_or_default(),
+        custom_fields: parse_json(&custom_fields_json, "task.custom_fields"),
         snooze_until: row
             .get::<_, Option<String>>("snooze_until")
             .ok()
@@ -95,7 +111,7 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
     let custom_fields_json: String = row.get("custom_fields")?;
 
     Ok(Project {
-        id: ProjectId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
+        id: ProjectId(parse_uuid(&id, "project.id")),
         name: row.get("name")?,
         description: row.get("description")?,
         status: match status_str.as_str() {
@@ -104,7 +120,7 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
             "archived" => ProjectStatus::Archived,
             _ => ProjectStatus::Active,
         },
-        parent_id: parent_id.map(|s| ProjectId(uuid::Uuid::parse_str(&s).unwrap_or_default())),
+        parent_id: parent_id.map(|s| ProjectId(parse_uuid(&s, "project.parent_id"))),
         color: row.get("color")?,
         icon: row.get("icon")?,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
@@ -115,8 +131,8 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
             .unwrap_or_else(|_| chrono::Utc::now()),
         start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
         due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-        default_tags: serde_json::from_str(&default_tags_json).unwrap_or_default(),
-        custom_fields: serde_json::from_str(&custom_fields_json).unwrap_or_default(),
+        default_tags: parse_json(&default_tags_json, "project.default_tags"),
+        custom_fields: parse_json(&custom_fields_json, "project.custom_fields"),
     })
 }
 
@@ -128,8 +144,8 @@ pub(crate) fn time_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<T
     let ended_at: Option<String> = row.get("ended_at")?;
 
     Ok(TimeEntry {
-        id: TimeEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
-        task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
+        id: TimeEntryId(parse_uuid(&id, "time_entry.id")),
+        task_id: TaskId(parse_uuid(&task_id, "time_entry.task_id")),
         description: row.get("description")?,
         started_at: chrono::DateTime::parse_from_rfc3339(&started_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -153,8 +169,8 @@ pub(crate) fn work_log_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Wor
     let updated_at: String = row.get("updated_at")?;
 
     Ok(WorkLogEntry {
-        id: WorkLogEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
-        task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
+        id: WorkLogEntryId(parse_uuid(&id, "work_log.id")),
+        task_id: TaskId(parse_uuid(&task_id, "work_log.task_id")),
         content: row.get("content")?,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))

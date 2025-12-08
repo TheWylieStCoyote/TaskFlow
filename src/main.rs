@@ -804,6 +804,28 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
         }
     }
 
+    // If description editor is showing, handle multi-line input
+    if model.show_description_editor {
+        // Check for Ctrl+S to save first
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('s') {
+            return Message::Ui(UiMessage::DescriptionSubmit);
+        }
+        return match key.code {
+            KeyCode::Esc => Message::Ui(UiMessage::HideDescriptionEditor),
+            KeyCode::Enter => Message::Ui(UiMessage::DescriptionNewline),
+            KeyCode::Backspace => Message::Ui(UiMessage::DescriptionInputBackspace),
+            KeyCode::Delete => Message::Ui(UiMessage::DescriptionInputDelete),
+            KeyCode::Left => Message::Ui(UiMessage::DescriptionCursorLeft),
+            KeyCode::Right => Message::Ui(UiMessage::DescriptionCursorRight),
+            KeyCode::Up => Message::Ui(UiMessage::DescriptionCursorUp),
+            KeyCode::Down => Message::Ui(UiMessage::DescriptionCursorDown),
+            KeyCode::Home => Message::Ui(UiMessage::DescriptionCursorHome),
+            KeyCode::End => Message::Ui(UiMessage::DescriptionCursorEnd),
+            KeyCode::Char(c) => Message::Ui(UiMessage::DescriptionInputChar(c)),
+            _ => Message::None,
+        };
+    }
+
     // In multi-select mode, Space toggles task selection
     if model.multi_select_mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
@@ -943,6 +965,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::EditScheduledDate => Message::Ui(UiMessage::StartEditScheduledDate),
         Action::EditTags => Message::Ui(UiMessage::StartEditTags),
         Action::EditDescription => Message::Ui(UiMessage::StartEditDescription),
+        Action::EditDescriptionMultiline => Message::Ui(UiMessage::StartEditDescriptionMultiline),
         Action::DeleteTask => Message::Ui(UiMessage::ShowDeleteConfirm),
         Action::CyclePriority => Message::Task(TaskMessage::CyclePriority),
         Action::MoveToProject => Message::Ui(UiMessage::StartMoveToProject),

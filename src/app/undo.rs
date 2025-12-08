@@ -84,13 +84,13 @@ impl UndoAction {
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
             Self::TimerSwitched { .. } => "Switch timer".to_string(),
             Self::WorkLogCreated(entry) => {
-                format!("Add work log \"{}\"", truncate(&entry.summary(), 20))
+                format!("Add work log \"{}\"", truncate(entry.summary(), 20))
             }
             Self::WorkLogDeleted(entry) => {
-                format!("Delete work log \"{}\"", truncate(&entry.summary(), 20))
+                format!("Delete work log \"{}\"", truncate(entry.summary(), 20))
             }
             Self::WorkLogModified { before, .. } => {
-                format!("Edit work log \"{}\"", truncate(&before.summary(), 20))
+                format!("Edit work log \"{}\"", truncate(before.summary(), 20))
             }
         }
     }

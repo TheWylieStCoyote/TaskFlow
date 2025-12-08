@@ -29,6 +29,7 @@ pub enum Action {
     EditScheduledDate,
     EditTags,
     EditDescription,
+    EditDescriptionMultiline,
     DeleteTask,
     CyclePriority,
     MoveToProject,
@@ -231,6 +232,7 @@ impl Action {
             Self::EditScheduledDate => "Edit scheduled date",
             Self::EditTags => "Edit tags",
             Self::EditDescription => "Edit description",
+            Self::EditDescriptionMultiline => "Edit description (multi-line)",
             Self::DeleteTask => "Delete task",
             Self::CyclePriority => "Cycle priority",
             Self::MoveToProject => "Move to project",
@@ -348,6 +350,7 @@ impl Action {
             | Self::EditScheduledDate
             | Self::EditTags
             | Self::EditDescription
+            | Self::EditDescriptionMultiline
             | Self::DeleteTask
             | Self::CyclePriority
             | Self::MoveToProject
@@ -518,6 +521,7 @@ impl Default for Keybindings {
         bindings.insert("S".to_string(), Action::EditScheduledDate);
         bindings.insert("T".to_string(), Action::EditTags);
         bindings.insert("n".to_string(), Action::EditDescription);
+        bindings.insert("N".to_string(), Action::EditDescriptionMultiline);
         bindings.insert("d".to_string(), Action::DeleteTask);
         bindings.insert("p".to_string(), Action::CyclePriority);
         bindings.insert("m".to_string(), Action::MoveToProject);

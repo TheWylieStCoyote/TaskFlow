@@ -13,8 +13,8 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
-    Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget, Kanban,
-    KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, TaskList,
+    DescriptionEditor, Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget,
+    Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, TaskList,
     TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
@@ -208,6 +208,22 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
                 editor_area,
             );
         }
+    }
+
+    // Render description editor (multi-line)
+    if model.show_description_editor {
+        // Height: min 10, max 20 depending on buffer lines
+        let height = (model.description_buffer.len() as u16 + 4).clamp(10, 20);
+        let editor_area = centered_rect_fixed_height(70, height, area);
+        frame.render_widget(
+            DescriptionEditor::new(
+                &model.description_buffer,
+                model.description_cursor_line,
+                model.description_cursor_col,
+                theme,
+            ),
+            editor_area,
+        );
     }
 
     // Render overdue alert popup (shown at startup if there are overdue tasks)

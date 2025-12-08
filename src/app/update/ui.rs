@@ -601,6 +601,22 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::WorkLogCursorEnd => {
             handle_ui_work_log(model, msg);
         }
+        // Description editor - delegated to helper
+        UiMessage::StartEditDescriptionMultiline
+        | UiMessage::HideDescriptionEditor
+        | UiMessage::DescriptionSubmit
+        | UiMessage::DescriptionInputChar(_)
+        | UiMessage::DescriptionInputBackspace
+        | UiMessage::DescriptionInputDelete
+        | UiMessage::DescriptionCursorLeft
+        | UiMessage::DescriptionCursorRight
+        | UiMessage::DescriptionCursorUp
+        | UiMessage::DescriptionCursorDown
+        | UiMessage::DescriptionNewline
+        | UiMessage::DescriptionCursorHome
+        | UiMessage::DescriptionCursorEnd => {
+            handle_ui_description_editor(model, msg);
+        }
         // Saved filters - delegated to helper
         UiMessage::ShowSavedFilters
         | UiMessage::HideSavedFilters
@@ -2040,23 +2056,23 @@ fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::WorkLogCursorUp => {
-            if matches!(model.work_log_mode, WorkLogMode::Add | WorkLogMode::Edit) {
-                if model.work_log_cursor_line > 0 {
-                    model.work_log_cursor_line -= 1;
-                    // Clamp column to line length
-                    let line_len = model.work_log_buffer[model.work_log_cursor_line].len();
-                    model.work_log_cursor_col = model.work_log_cursor_col.min(line_len);
-                }
+            if matches!(model.work_log_mode, WorkLogMode::Add | WorkLogMode::Edit)
+                && model.work_log_cursor_line > 0
+            {
+                model.work_log_cursor_line -= 1;
+                // Clamp column to line length
+                let line_len = model.work_log_buffer[model.work_log_cursor_line].len();
+                model.work_log_cursor_col = model.work_log_cursor_col.min(line_len);
             }
         }
         UiMessage::WorkLogCursorDown => {
-            if matches!(model.work_log_mode, WorkLogMode::Add | WorkLogMode::Edit) {
-                if model.work_log_cursor_line + 1 < model.work_log_buffer.len() {
-                    model.work_log_cursor_line += 1;
-                    // Clamp column to line length
-                    let line_len = model.work_log_buffer[model.work_log_cursor_line].len();
-                    model.work_log_cursor_col = model.work_log_cursor_col.min(line_len);
-                }
+            if matches!(model.work_log_mode, WorkLogMode::Add | WorkLogMode::Edit)
+                && model.work_log_cursor_line + 1 < model.work_log_buffer.len()
+            {
+                model.work_log_cursor_line += 1;
+                // Clamp column to line length
+                let line_len = model.work_log_buffer[model.work_log_cursor_line].len();
+                model.work_log_cursor_col = model.work_log_cursor_col.min(line_len);
             }
         }
         UiMessage::WorkLogNewline => {
@@ -2084,6 +2100,195 @@ fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                 let line_idx = model.work_log_cursor_line;
                 if line_idx < model.work_log_buffer.len() {
                     model.work_log_cursor_col = model.work_log_buffer[line_idx].len();
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle description editor (multi-line) messages
+fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::StartEditDescriptionMultiline => {
+            // Only open if a task is selected
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
+                if let Some(task) = model.tasks.get(task_id) {
+                    // Load description into buffer as lines
+                    let description = task.description.clone().unwrap_or_default();
+                    model.description_buffer = if description.is_empty() {
+                        vec![String::new()]
+                    } else {
+                        description.lines().map(String::from).collect()
+                    };
+                    if model.description_buffer.is_empty() {
+                        model.description_buffer.push(String::new());
+                    }
+                    model.description_cursor_line = 0;
+                    model.description_cursor_col = 0;
+                    model.show_description_editor = true;
+                }
+            }
+        }
+        UiMessage::HideDescriptionEditor => {
+            model.show_description_editor = false;
+            model.description_buffer = vec![String::new()];
+            model.description_cursor_line = 0;
+            model.description_cursor_col = 0;
+        }
+        UiMessage::DescriptionSubmit => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                let content = model.description_buffer.join("\n");
+                let description = if content.trim().is_empty() {
+                    None
+                } else {
+                    Some(content)
+                };
+
+                // Use modify_task_with_undo for proper undo support
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.description = description;
+                });
+
+                model.status_message = Some("Description updated".to_string());
+            }
+            model.show_description_editor = false;
+            model.description_buffer = vec![String::new()];
+            model.description_cursor_line = 0;
+            model.description_cursor_col = 0;
+        }
+        UiMessage::DescriptionInputChar(c) => {
+            if model.show_description_editor {
+                // Ensure we have at least one line
+                if model.description_buffer.is_empty() {
+                    model.description_buffer.push(String::new());
+                }
+
+                let line_idx = model
+                    .description_cursor_line
+                    .min(model.description_buffer.len() - 1);
+                let col = model
+                    .description_cursor_col
+                    .min(model.description_buffer[line_idx].len());
+
+                model.description_buffer[line_idx].insert(col, c);
+                model.description_cursor_col = col + 1;
+            }
+        }
+        UiMessage::DescriptionInputBackspace => {
+            if model.show_description_editor {
+                let line_idx = model.description_cursor_line;
+                if line_idx < model.description_buffer.len() {
+                    if model.description_cursor_col > 0 {
+                        // Delete character before cursor
+                        let col = model
+                            .description_cursor_col
+                            .min(model.description_buffer[line_idx].len());
+                        if col > 0 {
+                            model.description_buffer[line_idx].remove(col - 1);
+                            model.description_cursor_col = col - 1;
+                        }
+                    } else if line_idx > 0 {
+                        // At beginning of line - join with previous line
+                        let current_line = model.description_buffer.remove(line_idx);
+                        model.description_cursor_line = line_idx - 1;
+                        model.description_cursor_col = model.description_buffer[line_idx - 1].len();
+                        model.description_buffer[line_idx - 1].push_str(&current_line);
+                    }
+                }
+            }
+        }
+        UiMessage::DescriptionInputDelete => {
+            if model.show_description_editor {
+                let line_idx = model.description_cursor_line;
+                if line_idx < model.description_buffer.len() {
+                    let col = model.description_cursor_col;
+                    let line_len = model.description_buffer[line_idx].len();
+                    if col < line_len {
+                        // Delete character at cursor
+                        model.description_buffer[line_idx].remove(col);
+                    } else if line_idx + 1 < model.description_buffer.len() {
+                        // At end of line - join with next line
+                        let next_line = model.description_buffer.remove(line_idx + 1);
+                        model.description_buffer[line_idx].push_str(&next_line);
+                    }
+                }
+            }
+        }
+        UiMessage::DescriptionCursorLeft => {
+            if model.show_description_editor {
+                if model.description_cursor_col > 0 {
+                    model.description_cursor_col -= 1;
+                } else if model.description_cursor_line > 0 {
+                    // Move to end of previous line
+                    model.description_cursor_line -= 1;
+                    model.description_cursor_col =
+                        model.description_buffer[model.description_cursor_line].len();
+                }
+            }
+        }
+        UiMessage::DescriptionCursorRight => {
+            if model.show_description_editor {
+                let line_idx = model.description_cursor_line;
+                if line_idx < model.description_buffer.len() {
+                    let line_len = model.description_buffer[line_idx].len();
+                    if model.description_cursor_col < line_len {
+                        model.description_cursor_col += 1;
+                    } else if line_idx + 1 < model.description_buffer.len() {
+                        // Move to beginning of next line
+                        model.description_cursor_line += 1;
+                        model.description_cursor_col = 0;
+                    }
+                }
+            }
+        }
+        UiMessage::DescriptionCursorUp => {
+            if model.show_description_editor && model.description_cursor_line > 0 {
+                model.description_cursor_line -= 1;
+                // Clamp column to new line length
+                let new_line_len = model.description_buffer[model.description_cursor_line].len();
+                if model.description_cursor_col > new_line_len {
+                    model.description_cursor_col = new_line_len;
+                }
+            }
+        }
+        UiMessage::DescriptionCursorDown => {
+            if model.show_description_editor
+                && model.description_cursor_line + 1 < model.description_buffer.len()
+            {
+                model.description_cursor_line += 1;
+                // Clamp column to new line length
+                let new_line_len = model.description_buffer[model.description_cursor_line].len();
+                if model.description_cursor_col > new_line_len {
+                    model.description_cursor_col = new_line_len;
+                }
+            }
+        }
+        UiMessage::DescriptionNewline => {
+            if model.show_description_editor {
+                let line_idx = model.description_cursor_line;
+                if line_idx < model.description_buffer.len() {
+                    // Split current line at cursor position
+                    let col = model
+                        .description_cursor_col
+                        .min(model.description_buffer[line_idx].len());
+                    let remainder = model.description_buffer[line_idx].split_off(col);
+                    model.description_buffer.insert(line_idx + 1, remainder);
+                    model.description_cursor_line += 1;
+                    model.description_cursor_col = 0;
+                }
+            }
+        }
+        UiMessage::DescriptionCursorHome => {
+            if model.show_description_editor {
+                model.description_cursor_col = 0;
+            }
+        }
+        UiMessage::DescriptionCursorEnd => {
+            if model.show_description_editor {
+                let line_idx = model.description_cursor_line;
+                if line_idx < model.description_buffer.len() {
+                    model.description_cursor_col = model.description_buffer[line_idx].len();
                 }
             }
         }

@@ -296,6 +296,16 @@ pub struct Model {
     /// Cursor column position in work log buffer
     pub work_log_cursor_col: usize,
 
+    // Description editor state (multi-line)
+    /// Whether description editor is visible
+    pub show_description_editor: bool,
+    /// Text buffer for editing description (multi-line)
+    pub description_buffer: Vec<String>,
+    /// Cursor line position in description buffer
+    pub description_cursor_line: usize,
+    /// Cursor column position in description buffer
+    pub description_cursor_col: usize,
+
     // Saved filters
     /// User-defined saved filters (smart lists)
     pub saved_filters: HashMap<SavedFilterId, SavedFilter>,
@@ -403,6 +413,10 @@ impl Model {
             work_log_buffer: vec![String::new()],
             work_log_cursor_line: 0,
             work_log_cursor_col: 0,
+            show_description_editor: false,
+            description_buffer: vec![String::new()],
+            description_cursor_line: 0,
+            description_cursor_col: 0,
             saved_filters: HashMap::new(),
             active_saved_filter: None,
             show_saved_filter_picker: false,

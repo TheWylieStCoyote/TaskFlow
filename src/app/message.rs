@@ -498,6 +498,34 @@ pub enum UiMessage {
     /// Move cursor to end of line
     WorkLogCursorEnd,
 
+    // Description editor (multi-line)
+    /// Start editing description in multi-line mode
+    StartEditDescriptionMultiline,
+    /// Hide description editor (cancel)
+    HideDescriptionEditor,
+    /// Submit description edit (save)
+    DescriptionSubmit,
+    /// Insert a character in description buffer
+    DescriptionInputChar(char),
+    /// Delete character before cursor in description buffer
+    DescriptionInputBackspace,
+    /// Delete character at cursor in description buffer
+    DescriptionInputDelete,
+    /// Move cursor left in description buffer
+    DescriptionCursorLeft,
+    /// Move cursor right in description buffer
+    DescriptionCursorRight,
+    /// Move cursor up (to previous line)
+    DescriptionCursorUp,
+    /// Move cursor down (to next line)
+    DescriptionCursorDown,
+    /// Insert a newline in description buffer
+    DescriptionNewline,
+    /// Move cursor to start of line
+    DescriptionCursorHome,
+    /// Move cursor to end of line
+    DescriptionCursorEnd,
+
     // Overdue alert
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,

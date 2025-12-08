@@ -501,3 +501,120 @@ mod completion_tests {
         );
     }
 }
+
+// === Time Estimate Integration Tests ===
+
+#[test]
+fn test_all_backends_preserve_time_estimate() {
+    for (backend_name, mut backend) in create_all_backends() {
+        // Create task with estimate
+        let mut task = Task::new("Task with estimate");
+        task.estimated_minutes = Some(90); // 1h30m
+        task.actual_minutes = 45;
+
+        backend
+            .create_task(&task)
+            .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+        // Retrieve and verify estimate is preserved
+        let retrieved = backend
+            .get_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: get_task failed: {}", backend_name, e))
+            .unwrap();
+
+        assert_eq!(
+            retrieved.estimated_minutes,
+            Some(90),
+            "{}: estimated_minutes should be preserved",
+            backend_name
+        );
+        assert_eq!(
+            retrieved.actual_minutes, 45,
+            "{}: actual_minutes should be preserved",
+            backend_name
+        );
+
+        // Update estimate
+        let mut updated = retrieved;
+        updated.estimated_minutes = Some(120);
+        backend
+            .update_task(&updated)
+            .unwrap_or_else(|e| panic!("{}: update_task failed: {}", backend_name, e));
+
+        // Verify update
+        let re_retrieved = backend
+            .get_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: get_task (2) failed: {}", backend_name, e))
+            .unwrap();
+
+        assert_eq!(
+            re_retrieved.estimated_minutes,
+            Some(120),
+            "{}: estimated_minutes should be updated",
+            backend_name
+        );
+    }
+}
+
+#[test]
+fn test_all_backends_clear_time_estimate() {
+    for (backend_name, mut backend) in create_all_backends() {
+        // Create task with estimate
+        let mut task = Task::new("Task with estimate to clear");
+        task.estimated_minutes = Some(60);
+
+        backend
+            .create_task(&task)
+            .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+        // Clear estimate
+        let mut updated = task.clone();
+        updated.estimated_minutes = None;
+        backend
+            .update_task(&updated)
+            .unwrap_or_else(|e| panic!("{}: update_task failed: {}", backend_name, e));
+
+        // Verify cleared
+        let retrieved = backend
+            .get_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: get_task failed: {}", backend_name, e))
+            .unwrap();
+
+        assert!(
+            retrieved.estimated_minutes.is_none(),
+            "{}: estimated_minutes should be cleared",
+            backend_name
+        );
+    }
+}
+
+#[test]
+fn test_all_backends_persist_estimate_after_flush() {
+    for (backend_name, mut backend) in create_all_backends() {
+        // Create task with estimate
+        let mut task = Task::new("Persistent estimate task");
+        task.estimated_minutes = Some(45);
+
+        backend
+            .create_task(&task)
+            .unwrap_or_else(|e| panic!("{}: create_task failed: {}", backend_name, e));
+
+        // Flush
+        backend
+            .flush()
+            .unwrap_or_else(|e| panic!("{}: flush failed: {}", backend_name, e));
+
+        // Retrieve after flush
+        let retrieved = backend
+            .get_task(&task.id)
+            .unwrap_or_else(|e| panic!("{}: get_task failed: {}", backend_name, e))
+            .unwrap();
+
+        assert_eq!(
+            retrieved.estimated_minutes,
+            Some(45),
+            "{}: estimated_minutes should persist after flush",
+            backend_name
+        );
+    }
+}

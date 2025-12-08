@@ -16,8 +16,22 @@ use taskflow::app::{
     TaskMessage, TimeMessage, UiMessage,
 };
 use taskflow::config::{Action, Keybindings, Settings, Theme};
+use taskflow::domain::{Priority, TaskStatus};
 use taskflow::storage::BackendType;
 use taskflow::ui::{view, InputMode};
+
+/// CLI filter options for the list command
+#[derive(Default)]
+struct ListFilters {
+    project: Option<String>,
+    tags: Option<Vec<String>>,
+    tags_any: bool,
+    priority: Option<Vec<Priority>>,
+    status: Option<Vec<TaskStatus>>,
+    search: Option<String>,
+    sort: String,
+    reverse: bool,
+}
 
 /// `TaskFlow` - A TUI project management application
 #[derive(Parser, Debug)]
@@ -61,7 +75,7 @@ enum Commands {
     /// List tasks (without launching TUI)
     #[command(alias = "ls")]
     List {
-        /// Filter by view (today, overdue, upcoming, all)
+        /// Filter by view (today, overdue, upcoming, all, blocked, untagged, no-project, scheduled)
         #[arg(short, long, default_value = "all")]
         view: String,
         /// Show completed tasks
@@ -70,6 +84,30 @@ enum Commands {
         /// Limit number of tasks shown
         #[arg(short = 'n', long, default_value = "20")]
         limit: usize,
+        /// Filter by project name (case-insensitive substring match)
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Filter by tags (comma-separated, requires ALL by default)
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        /// Match ANY tag instead of ALL tags
+        #[arg(long)]
+        tags_any: bool,
+        /// Filter by priority (comma-separated: none, low, medium, high, urgent)
+        #[arg(long, value_delimiter = ',')]
+        priority: Option<Vec<String>>,
+        /// Filter by status (comma-separated: todo, in-progress, blocked, done, cancelled)
+        #[arg(long, value_delimiter = ',')]
+        status: Option<Vec<String>>,
+        /// Search in title and tags (case-insensitive)
+        #[arg(short, long)]
+        search: Option<String>,
+        /// Sort by field (due-date, priority, title, created)
+        #[arg(long, default_value = "due-date")]
+        sort: String,
+        /// Reverse sort order
+        #[arg(long)]
+        reverse: bool,
     },
     /// Mark a task as done by searching for it
     #[command(alias = "d")]
@@ -77,6 +115,12 @@ enum Commands {
         /// Search query to find the task (matches title)
         #[arg(trailing_var_arg = true, num_args = 1..)]
         query: Vec<String>,
+        /// Only search in tasks from this project (case-insensitive substring match)
+        #[arg(short, long)]
+        project: Option<String>,
+        /// Only search in tasks with these tags (comma-separated)
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
     },
 }
 
@@ -96,11 +140,33 @@ fn main() -> anyhow::Result<()> {
             view,
             completed,
             limit,
+            project,
+            tags,
+            tags_any,
+            priority,
+            status,
+            search,
+            sort,
+            reverse,
         }) => {
-            return list_tasks(&cli, view, *completed, *limit);
+            let filters = ListFilters {
+                project: project.clone(),
+                tags: tags.clone(),
+                tags_any: *tags_any,
+                priority: priority.as_ref().map(|p| parse_priorities(p)),
+                status: status.as_ref().map(|s| parse_statuses(s)),
+                search: search.clone(),
+                sort: sort.clone(),
+                reverse: *reverse,
+            };
+            return list_tasks(&cli, view, *completed, *limit, &filters);
         }
-        Some(Commands::Done { query }) => {
-            return mark_task_done(&cli, query);
+        Some(Commands::Done {
+            query,
+            project,
+            tags,
+        }) => {
+            return mark_task_done(&cli, query, project.as_deref(), tags.as_deref());
         }
         None => {}
     }
@@ -114,6 +180,36 @@ fn print_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
     generate(shell, &mut cmd, name, &mut io::stdout());
+}
+
+/// Parse priority strings into Priority enum values
+fn parse_priorities(strings: &[String]) -> Vec<Priority> {
+    strings
+        .iter()
+        .filter_map(|s| match s.to_lowercase().as_str() {
+            "none" => Some(Priority::None),
+            "low" => Some(Priority::Low),
+            "medium" | "med" => Some(Priority::Medium),
+            "high" => Some(Priority::High),
+            "urgent" => Some(Priority::Urgent),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Parse status strings into TaskStatus enum values
+fn parse_statuses(strings: &[String]) -> Vec<TaskStatus> {
+    strings
+        .iter()
+        .filter_map(|s| match s.to_lowercase().replace('-', "").as_str() {
+            "todo" => Some(TaskStatus::Todo),
+            "inprogress" | "in_progress" | "progress" => Some(TaskStatus::InProgress),
+            "blocked" => Some(TaskStatus::Blocked),
+            "done" | "completed" => Some(TaskStatus::Done),
+            "cancelled" | "canceled" => Some(TaskStatus::Cancelled),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Load model with storage for CLI commands.
@@ -222,53 +318,162 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
 }
 
 /// List tasks from the command line
-fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyhow::Result<()> {
+fn list_tasks(
+    cli: &Cli,
+    view: &str,
+    show_completed: bool,
+    limit: usize,
+    filters: &ListFilters,
+) -> anyhow::Result<()> {
     use chrono::Utc;
+    use taskflow::domain::Task;
 
     // Load model with storage (fail fast on error)
     let model = load_model_for_cli(cli)?;
 
     let today = Utc::now().date_naive();
 
-    // Filter tasks based on view
+    // Helper: check if task has incomplete dependencies (blocked)
+    let is_blocked = |task: &Task| -> bool {
+        task.dependencies.iter().any(|dep_id| {
+            model
+                .tasks
+                .get(dep_id)
+                .is_some_and(|dep| !dep.status.is_complete())
+        })
+    };
+
+    // Helper: find project ID by name
+    let find_project_id = |name: &str| -> Option<taskflow::domain::ProjectId> {
+        let name_lower = name.to_lowercase();
+        model
+            .projects
+            .values()
+            .find(|p| p.name.to_lowercase().contains(&name_lower))
+            .map(|p| p.id.clone())
+    };
+
+    let project_id = filters
+        .project
+        .as_ref()
+        .and_then(|name| find_project_id(name));
+
+    // Filter tasks based on all criteria
     let mut tasks: Vec<_> = model
         .tasks
         .values()
         .filter(|t| {
-            // Filter by completion status
+            // Filter by completion status (unless explicitly showing completed)
             if !show_completed && t.status.is_complete() {
                 return false;
             }
 
             // Filter by view
-            match view.to_lowercase().as_str() {
+            let view_match = match view.to_lowercase().as_str() {
                 "today" => t.due_date.is_some_and(|d| d == today),
                 "overdue" => t.due_date.is_some_and(|d| d < today) && !t.status.is_complete(),
                 "upcoming" => t
                     .due_date
                     .is_some_and(|d| d > today && d <= today + chrono::Duration::days(7)),
+                "blocked" => is_blocked(t),
+                "untagged" => t.tags.is_empty(),
+                "no-project" | "noproject" => t.project_id.is_none(),
+                "scheduled" => t.scheduled_date.is_some(),
                 _ => true, // "all" or any other value
+            };
+            if !view_match {
+                return false;
             }
+
+            // Filter by project
+            if let Some(ref pid) = project_id {
+                if t.project_id.as_ref() != Some(pid) {
+                    return false;
+                }
+            }
+
+            // Filter by tags
+            if let Some(ref filter_tags) = filters.tags {
+                let task_tags_lower: Vec<String> =
+                    t.tags.iter().map(|tag| tag.to_lowercase()).collect();
+                let filter_tags_lower: Vec<String> =
+                    filter_tags.iter().map(|tag| tag.to_lowercase()).collect();
+
+                let matches = if filters.tags_any {
+                    // ANY mode: task has at least one of the filter tags
+                    filter_tags_lower
+                        .iter()
+                        .any(|ft| task_tags_lower.contains(ft))
+                } else {
+                    // ALL mode: task has all of the filter tags
+                    filter_tags_lower
+                        .iter()
+                        .all(|ft| task_tags_lower.contains(ft))
+                };
+                if !matches {
+                    return false;
+                }
+            }
+
+            // Filter by priority
+            if let Some(ref priorities) = filters.priority {
+                if !priorities.is_empty() && !priorities.contains(&t.priority) {
+                    return false;
+                }
+            }
+
+            // Filter by status
+            if let Some(ref statuses) = filters.status {
+                if !statuses.is_empty() && !statuses.contains(&t.status) {
+                    return false;
+                }
+            }
+
+            // Filter by search query
+            if let Some(ref query) = filters.search {
+                let query_lower = query.to_lowercase();
+                let title_match = t.title.to_lowercase().contains(&query_lower);
+                let tag_match = t
+                    .tags
+                    .iter()
+                    .any(|tag| tag.to_lowercase().contains(&query_lower));
+                if !title_match && !tag_match {
+                    return false;
+                }
+            }
+
+            true
         })
         .collect();
 
-    // Sort by due date, then priority (higher priority first)
+    // Sort tasks
+    let priority_order = |p: &Priority| match p {
+        Priority::Urgent => 0,
+        Priority::High => 1,
+        Priority::Medium => 2,
+        Priority::Low => 3,
+        Priority::None => 4,
+    };
+
     tasks.sort_by(|a, b| {
-        match (&a.due_date, &b.due_date) {
-            (Some(da), Some(db)) => da.cmp(db),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => {
-                // Sort by priority level (urgent > high > medium > low > none)
-                let priority_order = |p: &taskflow::domain::Priority| match p {
-                    taskflow::domain::Priority::Urgent => 0,
-                    taskflow::domain::Priority::High => 1,
-                    taskflow::domain::Priority::Medium => 2,
-                    taskflow::domain::Priority::Low => 3,
-                    taskflow::domain::Priority::None => 4,
-                };
-                priority_order(&a.priority).cmp(&priority_order(&b.priority))
+        let cmp = match filters.sort.to_lowercase().as_str() {
+            "priority" => priority_order(&a.priority).cmp(&priority_order(&b.priority)),
+            "title" => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            "created" => a.created_at.cmp(&b.created_at),
+            _ => {
+                // Default: due-date, then priority
+                match (&a.due_date, &b.due_date) {
+                    (Some(da), Some(db)) => da.cmp(db),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => priority_order(&a.priority).cmp(&priority_order(&b.priority)),
+                }
             }
+        };
+        if filters.reverse {
+            cmp.reverse()
+        } else {
+            cmp
         }
     });
 
@@ -285,6 +490,10 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
         "today" => "Today's Tasks",
         "overdue" => "Overdue Tasks",
         "upcoming" => "Upcoming Tasks",
+        "blocked" => "Blocked Tasks",
+        "untagged" => "Untagged Tasks",
+        "no-project" | "noproject" => "Tasks Without Project",
+        "scheduled" => "Scheduled Tasks",
         _ => "All Tasks",
     };
     println!("{} ({} shown)", view_name, tasks.len());
@@ -292,18 +501,20 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
 
     // Print tasks
     for task in tasks {
-        let status_icon = if task.status.is_complete() {
-            "✓"
-        } else {
-            "○"
+        let status_icon = match task.status {
+            TaskStatus::Done => "✓",
+            TaskStatus::Cancelled => "✗",
+            TaskStatus::InProgress => "~",
+            TaskStatus::Blocked => "!",
+            TaskStatus::Todo => "○",
         };
 
         let priority_icon = match task.priority {
-            taskflow::domain::Priority::Urgent => "‼️",
-            taskflow::domain::Priority::High => "❗",
-            taskflow::domain::Priority::Medium => "•",
-            taskflow::domain::Priority::Low => "·",
-            taskflow::domain::Priority::None => " ",
+            Priority::Urgent => "‼️",
+            Priority::High => "❗",
+            Priority::Medium => "•",
+            Priority::Low => "·",
+            Priority::None => " ",
         };
 
         let due_str = task
@@ -352,7 +563,12 @@ fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyh
 }
 
 /// Mark a task as done from the command line
-fn mark_task_done(cli: &Cli, query_words: &[String]) -> anyhow::Result<()> {
+fn mark_task_done(
+    cli: &Cli,
+    query_words: &[String],
+    project_filter: Option<&str>,
+    tags_filter: Option<&[String]>,
+) -> anyhow::Result<()> {
     use taskflow::domain::TaskStatus;
 
     let query = query_words.join(" ").to_lowercase();
@@ -365,11 +581,49 @@ fn mark_task_done(cli: &Cli, query_words: &[String]) -> anyhow::Result<()> {
     // Load model with storage (fail fast on error)
     let mut model = load_model_for_cli(cli)?;
 
-    // Find matching tasks (case-insensitive title search)
+    // Find project ID by name for filtering
+    let project_id = project_filter.and_then(|name| {
+        let name_lower = name.to_lowercase();
+        model
+            .projects
+            .iter()
+            .find(|(_, p)| p.name.to_lowercase().contains(&name_lower))
+            .map(|(id, _)| id.clone())
+    });
+
+    // Find matching tasks (case-insensitive title search + optional filters)
     let matches: Vec<_> = model
         .tasks
         .values()
-        .filter(|t| !t.status.is_complete() && t.title.to_lowercase().contains(&query))
+        .filter(|t| {
+            // Basic filter: not complete and title matches
+            if t.status.is_complete() || !t.title.to_lowercase().contains(&query) {
+                return false;
+            }
+
+            // Project filter: if specified, must match
+            if let Some(ref proj_id) = project_id {
+                if t.project_id.as_ref() != Some(proj_id) {
+                    return false;
+                }
+            }
+
+            // Tags filter: must have ALL specified tags
+            if let Some(filter_tags) = tags_filter {
+                let task_tags_lower: Vec<String> =
+                    t.tags.iter().map(|tag| tag.to_lowercase()).collect();
+                let has_all = filter_tags.iter().all(|ft| {
+                    task_tags_lower
+                        .iter()
+                        .any(|tt| tt.contains(&ft.to_lowercase()))
+                });
+                if !has_all {
+                    return false;
+                }
+            }
+
+            true
+        })
         .collect();
 
     match matches.len() {

@@ -103,17 +103,17 @@ fn test_sidebar_select_project() {
     let mut model = Model::new();
     // Add a project
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
 
     // Add a task with this project
     let mut task = Task::new("Task in project");
-    task.project_id = Some(project_id.clone());
-    model.tasks.insert(task.id.clone(), task);
+    task.project_id = Some(project_id);
+    model.tasks.insert(task.id, task);
 
     // Add a task without project
     let task2 = Task::new("Task without project");
-    model.tasks.insert(task2.id.clone(), task2);
+    model.tasks.insert(task2.id, task2);
 
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 2);
@@ -136,8 +136,8 @@ fn test_sidebar_select_project() {
 fn test_sidebar_select_all_tasks_clears_project_filter() {
     let mut model = Model::new();
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
     model.selected_project = Some(project_id);
 
     model.focus_pane = FocusPane::Sidebar;

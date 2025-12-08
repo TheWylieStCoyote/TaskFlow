@@ -216,7 +216,7 @@ fn test_all_backends_project_task_relationship() {
         backend.create_project(&project).unwrap();
 
         // Create tasks with and without project
-        let task_with_project = Task::new("Task with project").with_project(project.id.clone());
+        let task_with_project = Task::new("Task with project").with_project(project.id);
         let task_without_project = Task::new("Task without project");
 
         backend.create_task(&task_with_project).unwrap();
@@ -246,7 +246,7 @@ fn test_all_backends_time_entry_tracking() {
         backend.create_task(&task).unwrap();
 
         // Start time entry
-        let entry = TimeEntry::start(task.id.clone());
+        let entry = TimeEntry::start(task.id);
         backend.create_time_entry(&entry).unwrap();
 
         // Get active entry
@@ -349,8 +349,8 @@ fn test_backend_persistence_survives_reload() {
         let task = Task::new("Persistent task").with_priority(Priority::High);
         let project = Project::new("Persistent project");
 
-        task_id = task.id.clone();
-        project_id = project.id.clone();
+        task_id = task.id;
+        project_id = project.id;
 
         backend.create_task(&task).unwrap();
         backend.create_project(&project).unwrap();

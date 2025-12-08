@@ -41,12 +41,12 @@
 //! // Create a project hierarchy
 //! let parent = Project::new("Engineering");
 //! let child = Project::new("Backend Team")
-//!     .with_parent(parent.id.clone())
+//!     .with_parent(parent.id)
 //!     .with_color("#3498db");
 //!
 //! // Associate tasks with projects
 //! let task = Task::new("Setup CI/CD")
-//!     .with_project(child.id.clone());
+//!     .with_project(child.id);
 //!
 //! assert!(child.is_active());
 //! assert_eq!(task.project_id, Some(child.id));
@@ -60,7 +60,7 @@
 //! let task = Task::new("Write tests");
 //!
 //! // Start a time entry
-//! let mut entry = TimeEntry::start(task.id.clone());
+//! let mut entry = TimeEntry::start(task.id);
 //! assert!(entry.is_running());
 //!
 //! // Stop and get duration

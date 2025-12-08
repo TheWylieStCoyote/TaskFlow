@@ -25,10 +25,7 @@ fn test_task_set_status() {
 
     update(
         &mut model,
-        Message::Task(TaskMessage::SetStatus(
-            task_id.clone(),
-            TaskStatus::InProgress,
-        )),
+        Message::Task(TaskMessage::SetStatus(task_id, TaskStatus::InProgress)),
     );
 
     assert_eq!(
@@ -44,7 +41,7 @@ fn test_task_set_priority() {
 
     update(
         &mut model,
-        Message::Task(TaskMessage::SetPriority(task_id.clone(), Priority::Urgent)),
+        Message::Task(TaskMessage::SetPriority(task_id, Priority::Urgent)),
     );
 
     assert_eq!(
@@ -74,10 +71,7 @@ fn test_task_delete() {
     let task_id = model.visible_tasks[0].clone();
     let initial_count = model.tasks.len();
 
-    update(
-        &mut model,
-        Message::Task(TaskMessage::Delete(task_id.clone())),
-    );
+    update(&mut model, Message::Task(TaskMessage::Delete(task_id)));
 
     assert_eq!(model.tasks.len(), initial_count - 1);
     assert!(!model.tasks.contains_key(&task_id));

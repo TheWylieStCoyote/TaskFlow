@@ -52,7 +52,7 @@ pub fn create_test_model_with_tasks() -> Model {
 
     for i in 0..5 {
         let task = Task::new(format!("Task {}", i));
-        model.tasks.insert(task.id.clone(), task);
+        model.tasks.insert(task.id, task);
     }
     model.refresh_visible_tasks();
     model

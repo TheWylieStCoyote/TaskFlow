@@ -75,7 +75,7 @@ use super::ProjectId;
 ///
 /// let parent = Task::new("Release v2.0");
 /// let subtask = Task::new("Write changelog")
-///     .with_parent(parent.id.clone());
+///     .with_parent(parent.id);
 ///
 /// assert_eq!(subtask.parent_task_id, Some(parent.id));
 /// ```

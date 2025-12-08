@@ -44,7 +44,7 @@ impl Default for WorkLogEntryId {
 ///
 /// // Create a new entry
 /// let entry = WorkLogEntry::new(
-///     task.id.clone(),
+///     task.id,
 ///     "Started implementing OAuth2 flow.\nIntegrated with Google provider."
 /// );
 ///
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn test_work_log_entry_new() {
         let task_id = TaskId::new();
-        let entry = WorkLogEntry::new(task_id.clone(), "Test content");
+        let entry = WorkLogEntry::new(task_id, "Test content");
 
         assert_eq!(entry.task_id, task_id);
         assert_eq!(entry.content, "Test content");
@@ -197,7 +197,7 @@ mod tests {
     fn test_work_log_entry_line_count() {
         let task_id = TaskId::new();
 
-        let single = WorkLogEntry::new(task_id.clone(), "One line");
+        let single = WorkLogEntry::new(task_id, "One line");
         assert_eq!(single.line_count(), 1);
 
         let multi = WorkLogEntry::new(task_id, "Line 1\nLine 2\nLine 3");

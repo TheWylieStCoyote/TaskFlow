@@ -86,13 +86,13 @@ fn test_edit_project_with_undo() {
 
     // Create a project
     let project = Project::new("Original Name");
-    let project_id = project.id.clone();
-    model.projects.insert(project_id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
 
     // Focus sidebar and select project
     model.focus_pane = FocusPane::Sidebar;
     model.sidebar_selected = SIDEBAR_FIRST_PROJECT_INDEX;
-    model.selected_project = Some(project_id.clone());
+    model.selected_project = Some(project_id);
 
     // Start editing project
     update(&mut model, Message::Ui(UiMessage::StartEditProject));
@@ -136,13 +136,13 @@ fn test_delete_project_with_undo() {
 
     // Create a project
     let project = Project::new("To Delete");
-    let project_id = project.id.clone();
-    model.projects.insert(project_id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
 
     // Focus sidebar and select project
     model.focus_pane = FocusPane::Sidebar;
     model.sidebar_selected = SIDEBAR_FIRST_PROJECT_INDEX;
-    model.selected_project = Some(project_id.clone());
+    model.selected_project = Some(project_id);
 
     // Delete project
     update(&mut model, Message::Ui(UiMessage::DeleteProject));
@@ -192,7 +192,7 @@ fn test_delete_project_requires_selection() {
 
     // Create a project
     let project = Project::new("Existing");
-    model.projects.insert(project.id.clone(), project);
+    model.projects.insert(project.id, project);
 
     // Focus sidebar but select a view item (not project)
     model.focus_pane = FocusPane::Sidebar;

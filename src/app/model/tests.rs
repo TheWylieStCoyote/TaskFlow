@@ -44,9 +44,9 @@ fn test_model_refresh_visible_tasks_sorts_by_priority() {
     let low = Task::new("Low").with_priority(Priority::Low);
     let high = Task::new("High").with_priority(Priority::High);
 
-    model.tasks.insert(low.id.clone(), low.clone());
-    model.tasks.insert(urgent.id.clone(), urgent.clone());
-    model.tasks.insert(high.id.clone(), high.clone());
+    model.tasks.insert(low.id, low.clone());
+    model.tasks.insert(urgent.id, urgent.clone());
+    model.tasks.insert(high.id, high.clone());
 
     // Set sort to priority (default is CreatedAt)
     model.sort = SortSpec {
@@ -71,9 +71,9 @@ fn test_model_refresh_visible_tasks_hides_completed() {
     let done = Task::new("Done").with_status(TaskStatus::Done);
     let cancelled = Task::new("Cancelled").with_status(TaskStatus::Cancelled);
 
-    model.tasks.insert(todo.id.clone(), todo);
-    model.tasks.insert(done.id.clone(), done);
-    model.tasks.insert(cancelled.id.clone(), cancelled);
+    model.tasks.insert(todo.id, todo);
+    model.tasks.insert(done.id, done);
+    model.tasks.insert(cancelled.id, cancelled);
 
     model.refresh_visible_tasks();
 
@@ -90,9 +90,9 @@ fn test_model_refresh_visible_tasks_shows_completed() {
     let done = Task::new("Done").with_status(TaskStatus::Done);
     let cancelled = Task::new("Cancelled").with_status(TaskStatus::Cancelled);
 
-    model.tasks.insert(todo.id.clone(), todo);
-    model.tasks.insert(done.id.clone(), done);
-    model.tasks.insert(cancelled.id.clone(), cancelled);
+    model.tasks.insert(todo.id, todo);
+    model.tasks.insert(done.id, done);
+    model.tasks.insert(cancelled.id, cancelled);
 
     model.refresh_visible_tasks();
 
@@ -108,18 +108,18 @@ fn test_model_refresh_visible_tasks_subtasks_follow_parent() {
 
     // Create a parent task and two subtasks
     let parent1 = Task::new("Parent 1").with_priority(Priority::High);
-    let subtask1a = Task::new("Subtask 1a").with_parent(parent1.id.clone());
-    let subtask1b = Task::new("Subtask 1b").with_parent(parent1.id.clone());
+    let subtask1a = Task::new("Subtask 1a").with_parent(parent1.id);
+    let subtask1b = Task::new("Subtask 1b").with_parent(parent1.id);
 
     let parent2 = Task::new("Parent 2").with_priority(Priority::Low);
-    let subtask2a = Task::new("Subtask 2a").with_parent(parent2.id.clone());
+    let subtask2a = Task::new("Subtask 2a").with_parent(parent2.id);
 
     // Insert in random order
-    model.tasks.insert(subtask1b.id.clone(), subtask1b.clone());
-    model.tasks.insert(parent2.id.clone(), parent2.clone());
-    model.tasks.insert(subtask2a.id.clone(), subtask2a.clone());
-    model.tasks.insert(parent1.id.clone(), parent1.clone());
-    model.tasks.insert(subtask1a.id.clone(), subtask1a.clone());
+    model.tasks.insert(subtask1b.id, subtask1b.clone());
+    model.tasks.insert(parent2.id, parent2.clone());
+    model.tasks.insert(subtask2a.id, subtask2a.clone());
+    model.tasks.insert(parent1.id, parent1.clone());
+    model.tasks.insert(subtask1a.id, subtask1a.clone());
 
     // Sort by priority so parent order is deterministic
     model.sort = SortSpec {
@@ -151,8 +151,8 @@ fn test_model_selected_task_returns_correct() {
     let task1 = Task::new("Task 1");
     let task2 = Task::new("Task 2");
 
-    model.tasks.insert(task1.id.clone(), task1.clone());
-    model.tasks.insert(task2.id.clone(), task2.clone());
+    model.tasks.insert(task1.id, task1.clone());
+    model.tasks.insert(task2.id, task2.clone());
     model.refresh_visible_tasks();
 
     // Select first task
@@ -180,7 +180,7 @@ fn test_model_selected_index_adjustment() {
     // Add 3 tasks
     for i in 0..3 {
         let task = Task::new(format!("Task {}", i));
-        model.tasks.insert(task.id.clone(), task);
+        model.tasks.insert(task.id, task);
     }
     model.refresh_visible_tasks();
 
@@ -204,9 +204,9 @@ fn test_model_start_time_tracking() {
     let mut model = Model::new();
 
     let task = Task::new("Task");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
-    model.start_time_tracking(task.id.clone());
+    model.start_time_tracking(task.id);
 
     assert!(model.active_time_entry.is_some());
     assert!(model.time_entries.len() == 1);
@@ -222,9 +222,9 @@ fn test_model_stop_time_tracking() {
     let mut model = Model::new();
 
     let task = Task::new("Task");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
-    model.start_time_tracking(task.id.clone());
+    model.start_time_tracking(task.id);
     model.stop_time_tracking();
 
     assert!(model.active_time_entry.is_none());
@@ -240,15 +240,15 @@ fn test_model_start_stops_previous() {
 
     let task1 = Task::new("Task 1");
     let task2 = Task::new("Task 2");
-    model.tasks.insert(task1.id.clone(), task1.clone());
-    model.tasks.insert(task2.id.clone(), task2.clone());
+    model.tasks.insert(task1.id, task1.clone());
+    model.tasks.insert(task2.id, task2.clone());
 
     // Start tracking task1
-    model.start_time_tracking(task1.id.clone());
+    model.start_time_tracking(task1.id);
     let first_entry_id = model.active_time_entry.clone().unwrap();
 
     // Start tracking task2 (should stop task1)
-    model.start_time_tracking(task2.id.clone());
+    model.start_time_tracking(task2.id);
 
     // Two entries total
     assert_eq!(model.time_entries.len(), 2);
@@ -268,15 +268,15 @@ fn test_model_is_tracking_task() {
 
     let task1 = Task::new("Task 1");
     let task2 = Task::new("Task 2");
-    model.tasks.insert(task1.id.clone(), task1.clone());
-    model.tasks.insert(task2.id.clone(), task2.clone());
+    model.tasks.insert(task1.id, task1.clone());
+    model.tasks.insert(task2.id, task2.clone());
 
     // Not tracking anything initially
     assert!(!model.is_tracking_task(&task1.id));
     assert!(!model.is_tracking_task(&task2.id));
 
     // Start tracking task1
-    model.start_time_tracking(task1.id.clone());
+    model.start_time_tracking(task1.id);
 
     assert!(model.is_tracking_task(&task1.id));
     assert!(!model.is_tracking_task(&task2.id));
@@ -287,19 +287,19 @@ fn test_model_total_time_for_task() {
     let mut model = Model::new();
 
     let task = Task::new("Task");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     // Add multiple completed time entries
-    let mut entry1 = TimeEntry::start(task.id.clone());
+    let mut entry1 = TimeEntry::start(task.id);
     entry1.duration_minutes = Some(30);
     entry1.ended_at = Some(chrono::Utc::now());
 
-    let mut entry2 = TimeEntry::start(task.id.clone());
+    let mut entry2 = TimeEntry::start(task.id);
     entry2.duration_minutes = Some(45);
     entry2.ended_at = Some(chrono::Utc::now());
 
-    model.time_entries.insert(entry1.id.clone(), entry1);
-    model.time_entries.insert(entry2.id.clone(), entry2);
+    model.time_entries.insert(entry1.id, entry1);
+    model.time_entries.insert(entry2.id, entry2);
 
     let total = model.total_time_for_task(&task.id);
     assert_eq!(total, 75); // 30 + 45
@@ -311,9 +311,9 @@ fn test_model_dirty_flag() {
     assert!(!model.dirty);
 
     let task = Task::new("Task");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
-    model.start_time_tracking(task.id.clone());
+    model.start_time_tracking(task.id);
     assert!(model.dirty);
 }
 
@@ -340,13 +340,9 @@ fn test_view_tasklist_shows_all() {
         Task::new("Has date").with_due_date(chrono::NaiveDate::from_ymd_opt(2025, 12, 15).unwrap());
     let task_with_project = Task::new("Has project").with_project(crate::domain::ProjectId::new());
 
-    model.tasks.insert(task_no_date.id.clone(), task_no_date);
-    model
-        .tasks
-        .insert(task_with_date.id.clone(), task_with_date);
-    model
-        .tasks
-        .insert(task_with_project.id.clone(), task_with_project);
+    model.tasks.insert(task_no_date.id, task_no_date);
+    model.tasks.insert(task_with_date.id, task_with_date);
+    model.tasks.insert(task_with_project.id, task_with_project);
 
     model.refresh_visible_tasks();
 
@@ -366,11 +362,9 @@ fn test_view_today_filters_due_today() {
     let task_tomorrow = Task::new("Due tomorrow").with_due_date(tomorrow);
     let task_no_date = Task::new("No due date");
 
-    model
-        .tasks
-        .insert(task_today.id.clone(), task_today.clone());
-    model.tasks.insert(task_tomorrow.id.clone(), task_tomorrow);
-    model.tasks.insert(task_no_date.id.clone(), task_no_date);
+    model.tasks.insert(task_today.id, task_today.clone());
+    model.tasks.insert(task_tomorrow.id, task_tomorrow);
+    model.tasks.insert(task_no_date.id, task_no_date);
 
     model.refresh_visible_tasks();
 
@@ -393,14 +387,12 @@ fn test_view_upcoming_filters_future() {
     let task_next_week = Task::new("Due next week").with_due_date(next_week);
     let task_no_date = Task::new("No due date");
 
-    model.tasks.insert(task_today.id.clone(), task_today);
+    model.tasks.insert(task_today.id, task_today);
+    model.tasks.insert(task_tomorrow.id, task_tomorrow.clone());
     model
         .tasks
-        .insert(task_tomorrow.id.clone(), task_tomorrow.clone());
-    model
-        .tasks
-        .insert(task_next_week.id.clone(), task_next_week.clone());
-    model.tasks.insert(task_no_date.id.clone(), task_no_date);
+        .insert(task_next_week.id, task_next_week.clone());
+    model.tasks.insert(task_no_date.id, task_no_date);
 
     model.refresh_visible_tasks();
 
@@ -422,10 +414,8 @@ fn test_view_projects_filters_with_project() {
 
     model
         .tasks
-        .insert(task_with_project.id.clone(), task_with_project.clone());
-    model
-        .tasks
-        .insert(task_no_project.id.clone(), task_no_project);
+        .insert(task_with_project.id, task_with_project.clone());
+    model.tasks.insert(task_no_project.id, task_no_project);
 
     model.refresh_visible_tasks();
 
@@ -452,13 +442,13 @@ fn test_view_overdue_filters_past_due() {
 
     model
         .tasks
-        .insert(task_yesterday.id.clone(), task_yesterday.clone());
+        .insert(task_yesterday.id, task_yesterday.clone());
     model
         .tasks
-        .insert(task_last_week.id.clone(), task_last_week.clone());
-    model.tasks.insert(task_today.id.clone(), task_today);
-    model.tasks.insert(task_tomorrow.id.clone(), task_tomorrow);
-    model.tasks.insert(task_no_date.id.clone(), task_no_date);
+        .insert(task_last_week.id, task_last_week.clone());
+    model.tasks.insert(task_today.id, task_today);
+    model.tasks.insert(task_tomorrow.id, task_tomorrow);
+    model.tasks.insert(task_no_date.id, task_no_date);
 
     model.refresh_visible_tasks();
 
@@ -476,7 +466,7 @@ fn test_view_overdue_excludes_today() {
     let today = chrono::Utc::now().date_naive();
     let task_today = Task::new("Due today").with_due_date(today);
 
-    model.tasks.insert(task_today.id.clone(), task_today);
+    model.tasks.insert(task_today.id, task_today);
 
     model.refresh_visible_tasks();
 
@@ -490,7 +480,7 @@ fn test_view_overdue_excludes_no_due_date() {
     model.current_view = ViewId::Overdue;
 
     let task_no_date = Task::new("No due date");
-    model.tasks.insert(task_no_date.id.clone(), task_no_date);
+    model.tasks.insert(task_no_date.id, task_no_date);
 
     model.refresh_visible_tasks();
 
@@ -505,10 +495,8 @@ fn test_search_filter_matches_title() {
     let task_match = Task::new("Build the feature");
     let task_no_match = Task::new("Fix the bug");
 
-    model
-        .tasks
-        .insert(task_match.id.clone(), task_match.clone());
-    model.tasks.insert(task_no_match.id.clone(), task_no_match);
+    model.tasks.insert(task_match.id, task_match.clone());
+    model.tasks.insert(task_no_match.id, task_no_match);
 
     model.filter.search_text = Some("build".to_string());
     model.refresh_visible_tasks();
@@ -522,7 +510,7 @@ fn test_search_filter_case_insensitive() {
     let mut model = Model::new();
 
     let task = Task::new("Build Feature");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     // Search with different cases
     model.filter.search_text = Some("BUILD".to_string());
@@ -541,10 +529,8 @@ fn test_search_filter_matches_tags() {
     let task_with_tag = Task::new("Some task").with_tags(vec!["urgent".to_string()]);
     let task_no_tag = Task::new("Other task");
 
-    model
-        .tasks
-        .insert(task_with_tag.id.clone(), task_with_tag.clone());
-    model.tasks.insert(task_no_tag.id.clone(), task_no_tag);
+    model.tasks.insert(task_with_tag.id, task_with_tag.clone());
+    model.tasks.insert(task_no_tag.id, task_no_tag);
 
     model.filter.search_text = Some("urgent".to_string());
     model.refresh_visible_tasks();
@@ -558,7 +544,7 @@ fn test_search_filter_partial_match() {
     let mut model = Model::new();
 
     let task = Task::new("Implement authentication");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     model.filter.search_text = Some("auth".to_string());
     model.refresh_visible_tasks();
@@ -573,8 +559,8 @@ fn test_search_filter_empty_clears() {
     let task1 = Task::new("Task one");
     let task2 = Task::new("Task two");
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
 
     // With filter
     model.filter.search_text = Some("one".to_string());
@@ -599,12 +585,10 @@ fn test_tag_filter_any_mode() {
         Task::new("Task Both").with_tags(vec!["rust".to_string(), "python".to_string()]);
     let task_none = Task::new("Task None");
 
-    model.tasks.insert(task_rust.id.clone(), task_rust.clone());
-    model
-        .tasks
-        .insert(task_python.id.clone(), task_python.clone());
-    model.tasks.insert(task_both.id.clone(), task_both.clone());
-    model.tasks.insert(task_none.id.clone(), task_none);
+    model.tasks.insert(task_rust.id, task_rust.clone());
+    model.tasks.insert(task_python.id, task_python.clone());
+    model.tasks.insert(task_both.id, task_both.clone());
+    model.tasks.insert(task_none.id, task_none);
 
     // Filter by "rust" tag (Any mode - default)
     model.filter.tags = Some(vec!["rust".to_string()]);
@@ -627,9 +611,9 @@ fn test_tag_filter_all_mode() {
         Task::new("Task Both").with_tags(vec!["rust".to_string(), "python".to_string()]);
     let task_none = Task::new("Task None");
 
-    model.tasks.insert(task_rust.id.clone(), task_rust.clone());
-    model.tasks.insert(task_both.id.clone(), task_both.clone());
-    model.tasks.insert(task_none.id.clone(), task_none);
+    model.tasks.insert(task_rust.id, task_rust.clone());
+    model.tasks.insert(task_both.id, task_both.clone());
+    model.tasks.insert(task_none.id, task_none);
 
     // Filter by "rust" AND "python" tags (All mode)
     model.filter.tags = Some(vec!["rust".to_string(), "python".to_string()]);
@@ -646,7 +630,7 @@ fn test_tag_filter_case_insensitive() {
     let mut model = Model::new();
 
     let task = Task::new("Task").with_tags(vec!["Rust".to_string()]);
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     // Filter with different case
     model.filter.tags = Some(vec!["rust".to_string()]);
@@ -663,10 +647,8 @@ fn test_tag_filter_clear() {
     let task_tagged = Task::new("Tagged").with_tags(vec!["work".to_string()]);
     let task_untagged = Task::new("Untagged");
 
-    model
-        .tasks
-        .insert(task_tagged.id.clone(), task_tagged.clone());
-    model.tasks.insert(task_untagged.id.clone(), task_untagged);
+    model.tasks.insert(task_tagged.id, task_tagged.clone());
+    model.tasks.insert(task_untagged.id, task_untagged);
 
     // With filter
     model.filter.tags = Some(vec!["work".to_string()]);
@@ -688,15 +670,9 @@ fn test_tag_filter_with_search() {
     let task_wrong_tag = Task::new("Important Other").with_tags(vec!["home".to_string()]);
     let task_wrong_title = Task::new("Regular Task").with_tags(vec!["work".to_string()]);
 
-    model
-        .tasks
-        .insert(task_match.id.clone(), task_match.clone());
-    model
-        .tasks
-        .insert(task_wrong_tag.id.clone(), task_wrong_tag);
-    model
-        .tasks
-        .insert(task_wrong_title.id.clone(), task_wrong_title);
+    model.tasks.insert(task_match.id, task_match.clone());
+    model.tasks.insert(task_wrong_tag.id, task_wrong_tag);
+    model.tasks.insert(task_wrong_title.id, task_wrong_title);
 
     // Both search and tag filter
     model.filter.search_text = Some("Important".to_string());
@@ -718,9 +694,9 @@ fn test_sort_by_title() {
     let task_a = Task::new("Apple");
     let task_c = Task::new("Cherry");
 
-    model.tasks.insert(task_b.id.clone(), task_b.clone());
-    model.tasks.insert(task_a.id.clone(), task_a.clone());
-    model.tasks.insert(task_c.id.clone(), task_c.clone());
+    model.tasks.insert(task_b.id, task_b.clone());
+    model.tasks.insert(task_a.id, task_a.clone());
+    model.tasks.insert(task_c.id, task_c.clone());
 
     model.sort = SortSpec {
         field: SortField::Title,
@@ -743,9 +719,9 @@ fn test_sort_by_title_descending() {
     let task_a = Task::new("Apple");
     let task_c = Task::new("Cherry");
 
-    model.tasks.insert(task_b.id.clone(), task_b.clone());
-    model.tasks.insert(task_a.id.clone(), task_a.clone());
-    model.tasks.insert(task_c.id.clone(), task_c.clone());
+    model.tasks.insert(task_b.id, task_b.clone());
+    model.tasks.insert(task_a.id, task_a.clone());
+    model.tasks.insert(task_c.id, task_c.clone());
 
     model.sort = SortSpec {
         field: SortField::Title,
@@ -772,13 +748,9 @@ fn test_sort_by_due_date() {
     let task_later = Task::new("Later").with_due_date(next_week);
     let task_no_date = Task::new("No date");
 
-    model
-        .tasks
-        .insert(task_later.id.clone(), task_later.clone());
-    model.tasks.insert(task_soon.id.clone(), task_soon.clone());
-    model
-        .tasks
-        .insert(task_no_date.id.clone(), task_no_date.clone());
+    model.tasks.insert(task_later.id, task_later.clone());
+    model.tasks.insert(task_soon.id, task_soon.clone());
+    model.tasks.insert(task_no_date.id, task_no_date.clone());
 
     model.sort = SortSpec {
         field: SortField::DueDate,
@@ -803,11 +775,11 @@ fn test_sort_by_status() {
     let task_in_progress = Task::new("In Progress").with_status(TaskStatus::InProgress);
     let task_done = Task::new("Done").with_status(TaskStatus::Done);
 
-    model.tasks.insert(task_done.id.clone(), task_done.clone());
-    model.tasks.insert(task_todo.id.clone(), task_todo.clone());
+    model.tasks.insert(task_done.id, task_done.clone());
+    model.tasks.insert(task_todo.id, task_todo.clone());
     model
         .tasks
-        .insert(task_in_progress.id.clone(), task_in_progress.clone());
+        .insert(task_in_progress.id, task_in_progress.clone());
 
     model.sort = SortSpec {
         field: SortField::Status,
@@ -830,8 +802,8 @@ fn test_sort_order_toggle() {
     let task_high = Task::new("High").with_priority(Priority::High);
     let task_low = Task::new("Low").with_priority(Priority::Low);
 
-    model.tasks.insert(task_high.id.clone(), task_high.clone());
-    model.tasks.insert(task_low.id.clone(), task_low.clone());
+    model.tasks.insert(task_high.id, task_high.clone());
+    model.tasks.insert(task_low.id, task_low.clone());
 
     // Ascending: High first (lower priority number)
     model.sort = SortSpec {
@@ -859,8 +831,8 @@ fn test_get_tasks_grouped_by_project_basic() {
     // Create two projects
     let project_a = Project::new("Alpha Project");
     let project_b = Project::new("Beta Project");
-    let project_a_id = project_a.id.clone();
-    let project_b_id = project_b.id.clone();
+    let project_a_id = project_a.id;
+    let project_b_id = project_b.id;
 
     model.projects.insert(project_a_id.clone(), project_a);
     model.projects.insert(project_b_id.clone(), project_b);
@@ -870,9 +842,9 @@ fn test_get_tasks_grouped_by_project_basic() {
     let task_a2 = Task::new("Alpha Task 2").with_project(project_a_id.clone());
     let task_b1 = Task::new("Beta Task 1").with_project(project_b_id.clone());
 
-    model.tasks.insert(task_a1.id.clone(), task_a1);
-    model.tasks.insert(task_a2.id.clone(), task_a2);
-    model.tasks.insert(task_b1.id.clone(), task_b1);
+    model.tasks.insert(task_a1.id, task_a1);
+    model.tasks.insert(task_a2.id, task_a2);
+    model.tasks.insert(task_b1.id, task_b1);
 
     model.refresh_visible_tasks();
 
@@ -898,9 +870,9 @@ fn test_get_tasks_grouped_by_project_alphabetical_order() {
     let project_a = Project::new("Apple");
     let project_m = Project::new("Mango");
 
-    let z_id = project_z.id.clone();
-    let a_id = project_a.id.clone();
-    let m_id = project_m.id.clone();
+    let z_id = project_z.id;
+    let a_id = project_a.id;
+    let m_id = project_m.id;
 
     model.projects.insert(z_id.clone(), project_z);
     model.projects.insert(a_id.clone(), project_a);
@@ -911,9 +883,9 @@ fn test_get_tasks_grouped_by_project_alphabetical_order() {
     let task_a = Task::new("A task").with_project(a_id);
     let task_m = Task::new("M task").with_project(m_id);
 
-    model.tasks.insert(task_z.id.clone(), task_z);
-    model.tasks.insert(task_a.id.clone(), task_a);
-    model.tasks.insert(task_m.id.clone(), task_m);
+    model.tasks.insert(task_z.id, task_z);
+    model.tasks.insert(task_a.id, task_a);
+    model.tasks.insert(task_m.id, task_m);
 
     model.refresh_visible_tasks();
 
@@ -935,8 +907,8 @@ fn test_get_tasks_grouped_no_project_goes_last() {
 
     // Create one project
     let project = Project::new("My Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project_id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
 
     // Task with project
     let task_with = Task::new("With project").with_project(project_id);
@@ -944,8 +916,8 @@ fn test_get_tasks_grouped_no_project_goes_last() {
     // but test the grouping logic)
     let task_without = Task::new("Without project");
 
-    model.tasks.insert(task_with.id.clone(), task_with);
-    model.tasks.insert(task_without.id.clone(), task_without);
+    model.tasks.insert(task_with.id, task_with);
+    model.tasks.insert(task_without.id, task_without);
 
     // For this test, we need to make both visible
     // Override the view filtering by using TaskList view
@@ -985,21 +957,21 @@ fn test_get_tasks_grouped_preserves_task_order_within_group() {
     model.sort.order = SortOrder::Ascending;
 
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project_id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
 
     // Create tasks with different titles (will be sorted alphabetically)
-    let task_c = Task::new("Charlie").with_project(project_id.clone());
-    let task_a = Task::new("Alpha").with_project(project_id.clone());
-    let task_b = Task::new("Bravo").with_project(project_id.clone());
+    let task_c = Task::new("Charlie").with_project(project_id);
+    let task_a = Task::new("Alpha").with_project(project_id);
+    let task_b = Task::new("Bravo").with_project(project_id);
 
-    let task_a_id = task_a.id.clone();
-    let task_b_id = task_b.id.clone();
-    let task_c_id = task_c.id.clone();
+    let task_a_id = task_a.id;
+    let task_b_id = task_b.id;
+    let task_c_id = task_c.id;
 
-    model.tasks.insert(task_c.id.clone(), task_c);
-    model.tasks.insert(task_a.id.clone(), task_a);
-    model.tasks.insert(task_b.id.clone(), task_b);
+    model.tasks.insert(task_c.id, task_c);
+    model.tasks.insert(task_a.id, task_a);
+    model.tasks.insert(task_b.id, task_b);
 
     model.refresh_visible_tasks();
 
@@ -1023,7 +995,7 @@ fn test_view_blocked_shows_tasks_with_unmet_dependencies() {
 
     // Task A is a prerequisite (incomplete)
     let task_a = Task::new("Prerequisite task");
-    let task_a_id = task_a.id.clone();
+    let task_a_id = task_a.id;
 
     // Task B depends on task A (blocked because A is not done)
     let mut task_b = Task::new("Blocked task");
@@ -1032,10 +1004,10 @@ fn test_view_blocked_shows_tasks_with_unmet_dependencies() {
     // Task C has no dependencies
     let task_c = Task::new("Independent task");
 
-    let task_b_id = task_b.id.clone();
-    model.tasks.insert(task_a.id.clone(), task_a);
-    model.tasks.insert(task_b.id.clone(), task_b);
-    model.tasks.insert(task_c.id.clone(), task_c);
+    let task_b_id = task_b.id;
+    model.tasks.insert(task_a.id, task_a);
+    model.tasks.insert(task_b.id, task_b);
+    model.tasks.insert(task_c.id, task_c);
 
     model.refresh_visible_tasks();
 
@@ -1051,14 +1023,14 @@ fn test_view_blocked_excludes_tasks_with_completed_dependencies() {
 
     // Task A is a completed prerequisite
     let task_a = Task::new("Done prerequisite").with_status(TaskStatus::Done);
-    let task_a_id = task_a.id.clone();
+    let task_a_id = task_a.id;
 
     // Task B depends on task A (NOT blocked because A is done)
     let mut task_b = Task::new("Unblocked task");
     task_b.dependencies.push(task_a_id.clone());
 
-    model.tasks.insert(task_a.id.clone(), task_a);
-    model.tasks.insert(task_b.id.clone(), task_b);
+    model.tasks.insert(task_a.id, task_a);
+    model.tasks.insert(task_b.id, task_b);
 
     model.show_completed = true; // Include completed tasks
     model.refresh_visible_tasks();
@@ -1080,12 +1052,8 @@ fn test_view_untagged_shows_tasks_without_tags() {
     let task_with_tags = Task::new("Has tags").with_tags(vec!["work".to_string()]);
     let task_no_tags = Task::new("No tags");
 
-    model
-        .tasks
-        .insert(task_with_tags.id.clone(), task_with_tags);
-    model
-        .tasks
-        .insert(task_no_tags.id.clone(), task_no_tags.clone());
+    model.tasks.insert(task_with_tags.id, task_with_tags);
+    model.tasks.insert(task_no_tags.id, task_no_tags.clone());
 
     model.refresh_visible_tasks();
 
@@ -1103,12 +1071,10 @@ fn test_view_no_project_shows_tasks_without_project() {
     let task_with_project = Task::new("Has project").with_project(project_id);
     let task_no_project = Task::new("No project");
 
+    model.tasks.insert(task_with_project.id, task_with_project);
     model
         .tasks
-        .insert(task_with_project.id.clone(), task_with_project);
-    model
-        .tasks
-        .insert(task_no_project.id.clone(), task_no_project.clone());
+        .insert(task_no_project.id, task_no_project.clone());
 
     model.refresh_visible_tasks();
 
@@ -1129,10 +1095,8 @@ fn test_view_recently_modified_filters_by_date() {
     let mut old_task = Task::new("Old task");
     old_task.updated_at = chrono::Utc::now() - chrono::Duration::days(14);
 
-    model
-        .tasks
-        .insert(recent_task.id.clone(), recent_task.clone());
-    model.tasks.insert(old_task.id.clone(), old_task);
+    model.tasks.insert(recent_task.id, recent_task.clone());
+    model.tasks.insert(old_task.id, old_task);
 
     model.refresh_visible_tasks();
 
@@ -1147,7 +1111,7 @@ fn test_view_recently_modified_filters_by_date() {
 fn test_task_depth_root_task() {
     let mut model = Model::new();
     let task = Task::new("Root");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
     assert_eq!(model.task_depth(&task.id), 0);
 }
 
@@ -1155,14 +1119,12 @@ fn test_task_depth_root_task() {
 fn test_task_depth_nested() {
     let mut model = Model::new();
     let root = Task::new("Root");
-    let child = Task::new("Child").with_parent(root.id.clone());
-    let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+    let child = Task::new("Child").with_parent(root.id);
+    let grandchild = Task::new("Grandchild").with_parent(child.id);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child.id.clone(), child.clone());
-    model
-        .tasks
-        .insert(grandchild.id.clone(), grandchild.clone());
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child.id, child.clone());
+    model.tasks.insert(grandchild.id, grandchild.clone());
 
     assert_eq!(model.task_depth(&root.id), 0);
     assert_eq!(model.task_depth(&child.id), 1);
@@ -1175,7 +1137,7 @@ fn test_task_depth_missing_parent() {
     // Create a task with a parent_task_id that doesn't exist
     let orphan_parent_id = TaskId::new();
     let orphan = Task::new("Orphan").with_parent(orphan_parent_id);
-    model.tasks.insert(orphan.id.clone(), orphan.clone());
+    model.tasks.insert(orphan.id, orphan.clone());
 
     // Returns 1 because the function counts parent hops: orphan → missing parent (1 hop).
     // Note that orphaned tasks will display indented even though their parent doesn't exist.
@@ -1186,7 +1148,7 @@ fn test_task_depth_missing_parent() {
 fn test_get_all_descendants_empty() {
     let mut model = Model::new();
     let task = Task::new("Standalone");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     let descendants = model.get_all_descendants(&task.id);
     assert!(descendants.is_empty());
@@ -1196,16 +1158,14 @@ fn test_get_all_descendants_empty() {
 fn test_get_all_descendants_nested() {
     let mut model = Model::new();
     let root = Task::new("Root");
-    let child1 = Task::new("Child1").with_parent(root.id.clone());
-    let child2 = Task::new("Child2").with_parent(root.id.clone());
-    let grandchild = Task::new("Grandchild").with_parent(child1.id.clone());
+    let child1 = Task::new("Child1").with_parent(root.id);
+    let child2 = Task::new("Child2").with_parent(root.id);
+    let grandchild = Task::new("Grandchild").with_parent(child1.id);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child1.id.clone(), child1.clone());
-    model.tasks.insert(child2.id.clone(), child2.clone());
-    model
-        .tasks
-        .insert(grandchild.id.clone(), grandchild.clone());
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child1.id, child1.clone());
+    model.tasks.insert(child2.id, child2.clone());
+    model.tasks.insert(grandchild.id, grandchild.clone());
 
     let descendants = model.get_all_descendants(&root.id);
     assert_eq!(descendants.len(), 3);
@@ -1218,7 +1178,7 @@ fn test_get_all_descendants_nested() {
 fn test_get_all_ancestors_empty() {
     let mut model = Model::new();
     let task = Task::new("Root");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     let ancestors = model.get_all_ancestors(&task.id);
     assert!(ancestors.is_empty());
@@ -1228,14 +1188,12 @@ fn test_get_all_ancestors_empty() {
 fn test_get_all_ancestors_nested() {
     let mut model = Model::new();
     let root = Task::new("Root");
-    let child = Task::new("Child").with_parent(root.id.clone());
-    let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+    let child = Task::new("Child").with_parent(root.id);
+    let grandchild = Task::new("Grandchild").with_parent(child.id);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child.id.clone(), child.clone());
-    model
-        .tasks
-        .insert(grandchild.id.clone(), grandchild.clone());
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child.id, child.clone());
+    model.tasks.insert(grandchild.id, grandchild.clone());
 
     let ancestors = model.get_all_ancestors(&grandchild.id);
     assert_eq!(ancestors.len(), 2);
@@ -1247,7 +1205,7 @@ fn test_get_all_ancestors_nested() {
 fn test_would_create_cycle_self_reference() {
     let mut model = Model::new();
     let task = Task::new("Task");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     assert!(model.would_create_cycle(&task.id, &task.id));
 }
@@ -1256,14 +1214,12 @@ fn test_would_create_cycle_self_reference() {
 fn test_would_create_cycle_descendant() {
     let mut model = Model::new();
     let root = Task::new("Root");
-    let child = Task::new("Child").with_parent(root.id.clone());
-    let grandchild = Task::new("Grandchild").with_parent(child.id.clone());
+    let child = Task::new("Child").with_parent(root.id);
+    let grandchild = Task::new("Grandchild").with_parent(child.id);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child.id.clone(), child.clone());
-    model
-        .tasks
-        .insert(grandchild.id.clone(), grandchild.clone());
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child.id, child.clone());
+    model.tasks.insert(grandchild.id, grandchild.clone());
 
     // Setting root's parent to grandchild would create a cycle
     assert!(model.would_create_cycle(&root.id, &grandchild.id));
@@ -1271,7 +1227,7 @@ fn test_would_create_cycle_descendant() {
 
     // Setting grandchild's parent to a new task is fine
     let new_task = Task::new("New");
-    model.tasks.insert(new_task.id.clone(), new_task.clone());
+    model.tasks.insert(new_task.id, new_task.clone());
     assert!(!model.would_create_cycle(&grandchild.id, &new_task.id));
 }
 
@@ -1279,14 +1235,12 @@ fn test_would_create_cycle_descendant() {
 fn test_has_subtasks() {
     let mut model = Model::new();
     let parent = Task::new("Parent");
-    let child = Task::new("Child").with_parent(parent.id.clone());
+    let child = Task::new("Child").with_parent(parent.id);
     let standalone = Task::new("Standalone");
 
-    model.tasks.insert(parent.id.clone(), parent.clone());
-    model.tasks.insert(child.id.clone(), child);
-    model
-        .tasks
-        .insert(standalone.id.clone(), standalone.clone());
+    model.tasks.insert(parent.id, parent.clone());
+    model.tasks.insert(child.id, child);
+    model.tasks.insert(standalone.id, standalone.clone());
 
     assert!(model.has_subtasks(&parent.id));
     assert!(!model.has_subtasks(&standalone.id));
@@ -1297,17 +1251,17 @@ fn test_subtask_progress_recursive() {
     let mut model = Model::new();
     let root = Task::new("Root");
     let child1 = Task::new("Child1")
-        .with_parent(root.id.clone())
+        .with_parent(root.id)
         .with_status(TaskStatus::Done);
-    let child2 = Task::new("Child2").with_parent(root.id.clone());
+    let child2 = Task::new("Child2").with_parent(root.id);
     let grandchild = Task::new("Grandchild")
-        .with_parent(child2.id.clone())
+        .with_parent(child2.id)
         .with_status(TaskStatus::Done);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child1.id.clone(), child1);
-    model.tasks.insert(child2.id.clone(), child2);
-    model.tasks.insert(grandchild.id.clone(), grandchild);
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child1.id, child1);
+    model.tasks.insert(child2.id, child2);
+    model.tasks.insert(grandchild.id, grandchild);
 
     let (completed, total) = model.subtask_progress(&root.id);
     assert_eq!(total, 3); // child1, child2, grandchild
@@ -1319,13 +1273,13 @@ fn test_subtask_percentage() {
     let mut model = Model::new();
     let root = Task::new("Root");
     let child1 = Task::new("Child1")
-        .with_parent(root.id.clone())
+        .with_parent(root.id)
         .with_status(TaskStatus::Done);
-    let child2 = Task::new("Child2").with_parent(root.id.clone());
+    let child2 = Task::new("Child2").with_parent(root.id);
 
-    model.tasks.insert(root.id.clone(), root.clone());
-    model.tasks.insert(child1.id.clone(), child1);
-    model.tasks.insert(child2.id.clone(), child2);
+    model.tasks.insert(root.id, root.clone());
+    model.tasks.insert(child1.id, child1);
+    model.tasks.insert(child2.id, child2);
 
     // 1 of 2 completed = 50%
     assert_eq!(model.subtask_percentage(&root.id), Some(50));
@@ -1335,7 +1289,7 @@ fn test_subtask_percentage() {
 fn test_subtask_percentage_no_subtasks() {
     let mut model = Model::new();
     let task = Task::new("Standalone");
-    model.tasks.insert(task.id.clone(), task.clone());
+    model.tasks.insert(task.id, task.clone());
 
     assert_eq!(model.subtask_percentage(&task.id), None);
 }
@@ -1346,20 +1300,20 @@ fn test_refresh_visible_tasks_deep_nesting_order() {
     let mut model = Model::new();
 
     let root1 = Task::new("Root1");
-    let child1 = Task::new("Child1").with_parent(root1.id.clone());
-    let grandchild = Task::new("Grandchild").with_parent(child1.id.clone());
+    let child1 = Task::new("Child1").with_parent(root1.id);
+    let grandchild = Task::new("Grandchild").with_parent(child1.id);
     let root2 = Task::new("Root2");
 
-    let root1_id = root1.id.clone();
-    let child1_id = child1.id.clone();
-    let grandchild_id = grandchild.id.clone();
-    let root2_id = root2.id.clone();
+    let root1_id = root1.id;
+    let child1_id = child1.id;
+    let grandchild_id = grandchild.id;
+    let root2_id = root2.id;
 
     // Insert in random order
-    model.tasks.insert(grandchild.id.clone(), grandchild);
-    model.tasks.insert(root2.id.clone(), root2);
-    model.tasks.insert(child1.id.clone(), child1);
-    model.tasks.insert(root1.id.clone(), root1);
+    model.tasks.insert(grandchild.id, grandchild);
+    model.tasks.insert(root2.id, root2);
+    model.tasks.insert(child1.id, child1);
+    model.tasks.insert(root1.id, root1);
 
     model.refresh_visible_tasks();
 

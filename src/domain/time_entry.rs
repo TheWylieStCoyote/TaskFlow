@@ -41,7 +41,7 @@ impl Default for TimeEntryId {
 /// let task = Task::new("Write documentation");
 ///
 /// // Start tracking
-/// let mut entry = TimeEntry::start(task.id.clone());
+/// let mut entry = TimeEntry::start(task.id);
 /// assert!(entry.is_running());
 ///
 /// // Do some work...
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn test_time_entry_start() {
         let task_id = TaskId::new();
-        let entry = TimeEntry::start(task_id.clone());
+        let entry = TimeEntry::start(task_id);
 
         assert_eq!(entry.task_id, task_id);
         assert!(entry.ended_at.is_none());

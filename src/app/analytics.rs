@@ -573,7 +573,7 @@ mod tests {
         task1.completed_at = Some(chrono::Utc::now());
         task1.tags = vec!["work".to_string(), "urgent".to_string()];
         task1.actual_minutes = 60;
-        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task1.id, task1);
 
         let mut task2 = Task::new("Task 2");
         task2.status = TaskStatus::Done;
@@ -581,22 +581,22 @@ mod tests {
         task2.tags = vec!["work".to_string()];
         task2.priority = Priority::High;
         task2.actual_minutes = 30;
-        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task2.id, task2);
 
         let mut task3 = Task::new("Task 3");
         task3.status = TaskStatus::InProgress;
         task3.priority = Priority::Medium;
-        model.tasks.insert(task3.id.clone(), task3);
+        model.tasks.insert(task3.id, task3);
 
         let mut task4 = Task::new("Task 4");
         task4.status = TaskStatus::Todo;
         task4.priority = Priority::Low;
         task4.tags = vec!["personal".to_string()];
-        model.tasks.insert(task4.id.clone(), task4);
+        model.tasks.insert(task4.id, task4);
 
         // Add a project
         let project = Project::new("Test Project");
-        model.projects.insert(project.id.clone(), project);
+        model.projects.insert(project.id, project);
 
         model
     }
@@ -764,17 +764,17 @@ mod tests {
         let mut task1 = Task::new("Today");
         task1.status = TaskStatus::Done;
         task1.completed_at = Some(today);
-        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task1.id, task1);
 
         let mut task2 = Task::new("Yesterday");
         task2.status = TaskStatus::Done;
         task2.completed_at = Some(today - chrono::Duration::days(1));
-        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task2.id, task2);
 
         let mut task3 = Task::new("Day before");
         task3.status = TaskStatus::Done;
         task3.completed_at = Some(today - chrono::Duration::days(2));
-        model.tasks.insert(task3.id.clone(), task3);
+        model.tasks.insert(task3.id, task3);
 
         let engine = AnalyticsEngine::new(&model);
         let insights = engine.compute_insights();

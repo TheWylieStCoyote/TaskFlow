@@ -14,8 +14,8 @@ fn test_start_move_to_project() {
     // Add some projects
     let project1 = Project::new("Project Alpha");
     let project2 = Project::new("Project Beta");
-    model.projects.insert(project1.id.clone(), project1);
-    model.projects.insert(project2.id.clone(), project2);
+    model.projects.insert(project1.id, project1);
+    model.projects.insert(project2.id, project2);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -36,8 +36,8 @@ fn test_move_to_project_assign() {
 
     // Add a project
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -62,8 +62,8 @@ fn test_move_to_project_remove() {
 
     // Add a project and assign task to it
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
     model.tasks.get_mut(&task_id).unwrap().project_id = Some(project_id);
 
     // Start move to project
@@ -88,8 +88,8 @@ fn test_move_to_project_undo() {
 
     // Add a project
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
 
     // Move task to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -117,7 +117,7 @@ fn test_move_to_project_invalid_input_ignored() {
 
     // Add a project
     let project = Project::new("Test Project");
-    model.projects.insert(project.id.clone(), project);
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -141,7 +141,7 @@ fn test_move_to_project_out_of_range_ignored() {
 
     // Add one project
     let project = Project::new("Test Project");
-    model.projects.insert(project.id.clone(), project);
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));

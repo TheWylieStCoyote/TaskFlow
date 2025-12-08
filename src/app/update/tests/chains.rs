@@ -65,12 +65,12 @@ fn test_link_task_by_title_search() {
     let task1 = Task::new("First task");
     let task2 = Task::new("Second task");
     let task3 = Task::new("Target unique title");
-    let task1_id = task1.id.clone();
-    let task3_id = task3.id.clone();
+    let task1_id = task1.id;
+    let task3_id = task3.id;
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
-    model.tasks.insert(task3.id.clone(), task3);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+    model.tasks.insert(task3.id, task3);
     model.refresh_visible_tasks();
 
     // Find the visible index for task1

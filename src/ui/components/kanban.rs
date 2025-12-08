@@ -114,7 +114,7 @@ impl Kanban<'_> {
         }
 
         // Create list items for each task
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .map(|task| {
                 let priority_indicator = match task.priority {

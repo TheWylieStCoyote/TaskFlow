@@ -28,7 +28,7 @@ impl Widget for HelpPopup<'_> {
         // Get bindings grouped by category
         let grouped = self.keybindings.bindings_by_category();
 
-        let mut help_lines: Vec<Line> = Vec::new();
+        let mut help_lines: Vec<Line<'_>> = Vec::new();
 
         for (category, bindings) in grouped {
             // Add category header

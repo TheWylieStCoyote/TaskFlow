@@ -266,7 +266,7 @@ impl SqliteBackend {
         Ok(())
     }
 
-    fn task_from_row(row: &rusqlite::Row) -> rusqlite::Result<Task> {
+    fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         let id: String = row.get("id")?;
         let status_str: String = row.get("status")?;
         let priority_str: String = row.get("priority")?;
@@ -343,7 +343,7 @@ impl SqliteBackend {
         })
     }
 
-    fn project_from_row(row: &rusqlite::Row) -> rusqlite::Result<Project> {
+    fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Project> {
         let id: String = row.get("id")?;
         let status_str: String = row.get("status")?;
         let parent_id: Option<String> = row.get("parent_id")?;

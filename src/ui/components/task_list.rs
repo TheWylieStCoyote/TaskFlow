@@ -165,7 +165,7 @@ impl Widget for TaskList<'_> {
         let theme = self.theme;
         let selected_row = self.selected_row();
 
-        let items: Vec<ListItem> = self
+        let items: Vec<ListItem<'_>> = self
             .entries
             .iter()
             .map(|entry| match entry {
@@ -260,7 +260,7 @@ fn project_header_to_list_item(name: &str, task_count: usize, theme: &Theme) -> 
 }
 
 #[allow(clippy::too_many_lines)]
-fn task_to_list_item(ctx: &TaskItemContext) -> ListItem<'static> {
+fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
     let task = ctx.task;
     let theme = ctx.theme;
 

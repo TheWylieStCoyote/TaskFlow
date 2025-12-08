@@ -181,7 +181,7 @@ impl WeeklyPlanner<'_> {
         }
 
         // Create list items for tasks
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .take(inner.height as usize)
             .map(|task| {

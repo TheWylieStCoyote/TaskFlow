@@ -45,7 +45,7 @@ impl Widget for DescriptionEditor<'_> {
         let theme = self.theme;
 
         // Render the multi-line edit buffer with cursor
-        let mut lines: Vec<Line> = Vec::new();
+        let mut lines: Vec<Line<'_>> = Vec::new();
 
         for (line_idx, line_text) in self.buffer.iter().enumerate() {
             let is_cursor_line = line_idx == self.cursor_line;

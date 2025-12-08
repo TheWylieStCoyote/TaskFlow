@@ -369,7 +369,7 @@ impl WeeklyReview<'_> {
             return;
         }
 
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .map(|task| {
                 let status = if task.status.is_complete() {
@@ -450,7 +450,7 @@ impl WeeklyReview<'_> {
             return;
         }
 
-        let items: Vec<ListItem> = stale
+        let items: Vec<ListItem<'_>> = stale
             .iter()
             .map(|(_, project, task_count)| {
                 ListItem::new(Line::from(vec![

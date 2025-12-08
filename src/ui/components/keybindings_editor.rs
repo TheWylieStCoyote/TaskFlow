@@ -56,7 +56,7 @@ impl Widget for KeybindingsEditor<'_> {
         let bindings = self.keybindings.sorted_bindings();
 
         // Build list items
-        let items: Vec<ListItem> = bindings
+        let items: Vec<ListItem<'_>> = bindings
             .iter()
             .map(|(key, action)| {
                 let key_display = format!("{:>12}", key);

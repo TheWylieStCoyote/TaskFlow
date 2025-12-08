@@ -199,7 +199,7 @@ impl Eisenhower<'_> {
         }
 
         // Create list items
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .take(tasks_area.height as usize) // Limit to visible area
             .map(|task| {

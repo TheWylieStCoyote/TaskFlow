@@ -295,7 +295,7 @@ impl DailyReview<'_> {
             return;
         }
 
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .map(|task| {
                 let priority_indicator = match task.priority {

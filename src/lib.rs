@@ -1,3 +1,7 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::all, rust_2018_idioms)]
+#![allow(clippy::too_many_lines)]
+
 //! # `TaskFlow`
 //!
 //! A terminal-based task and project management application built with Rust.

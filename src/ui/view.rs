@@ -20,7 +20,7 @@ use super::components::{
 };
 
 /// Main view function - renders the entire UI based on model state
-pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
+pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     let area = frame.area();
 
     // Main layout: header, content, footer
@@ -276,7 +276,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     }
 }
 
-fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_header(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
             " TaskFlow ",
@@ -293,7 +293,7 @@ fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
     frame.render_widget(title, area);
 }
 
-fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Focus mode takes over the entire content area
     if model.focus_mode {
         let focus_view = FocusView::new(model, theme);
@@ -322,7 +322,7 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     }
 }
 
-fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     match model.current_view {
         ViewId::Calendar => {
             let calendar = Calendar::new(model, theme);
@@ -355,7 +355,7 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
     }
 }
 
-fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Show error message if available (in red, higher priority than status)
     if let Some(ref msg) = model.error_message {
         let footer =

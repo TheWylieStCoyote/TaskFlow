@@ -12,7 +12,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_delete_task_removes_time_entries() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add time entries for this task
     let entry1 = TimeEntry::start(task_id);
@@ -31,7 +31,7 @@ fn test_delete_task_removes_time_entries() {
 #[test]
 fn test_delete_task_clears_active_time_entry() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start time tracking on this task
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
@@ -49,7 +49,7 @@ fn test_delete_task_clears_active_time_entry() {
 #[test]
 fn test_undo_delete_task_restores_time_entries() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add time entries for this task
     let entry1 = TimeEntry::start(task_id);
@@ -76,7 +76,7 @@ fn test_undo_delete_task_restores_time_entries() {
 #[test]
 fn test_redo_delete_task_removes_time_entries_again() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add time entries for this task
     let entry1 = TimeEntry::start(task_id);
@@ -97,12 +97,12 @@ fn test_redo_delete_task_removes_time_entries_again() {
 #[test]
 fn test_bulk_delete_removes_time_entries() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let task2_id = model.visible_tasks[1];
 
     // Add time entries for both tasks
-    let entry1 = TimeEntry::start(task1_id.clone());
-    let entry2 = TimeEntry::start(task2_id.clone());
+    let entry1 = TimeEntry::start(task1_id);
+    let entry2 = TimeEntry::start(task2_id);
     model.time_entries.insert(entry1.id, entry1);
     model.time_entries.insert(entry2.id, entry2);
     assert_eq!(model.time_entries.len(), 2);
@@ -122,7 +122,7 @@ fn test_bulk_delete_removes_time_entries() {
 #[test]
 fn test_bulk_delete_clears_active_time_entry() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start time tracking
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
@@ -140,12 +140,12 @@ fn test_bulk_delete_clears_active_time_entry() {
 #[test]
 fn test_undo_bulk_delete_restores_time_entries() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let task2_id = model.visible_tasks[1];
 
     // Add time entries
-    let entry1 = TimeEntry::start(task1_id.clone());
-    let entry2 = TimeEntry::start(task2_id.clone());
+    let entry1 = TimeEntry::start(task1_id);
+    let entry2 = TimeEntry::start(task2_id);
     let entry1_id = entry1.id;
     let entry2_id = entry2.id;
     model.time_entries.insert(entry1.id, entry1);
@@ -153,8 +153,8 @@ fn test_undo_bulk_delete_restores_time_entries() {
 
     // Bulk delete
     model.multi_select_mode = true;
-    model.selected_tasks.insert(task1_id.clone());
-    model.selected_tasks.insert(task2_id.clone());
+    model.selected_tasks.insert(task1_id);
+    model.selected_tasks.insert(task2_id);
     update(&mut model, Message::Ui(UiMessage::BulkDelete));
     assert!(model.time_entries.is_empty());
 
@@ -173,7 +173,7 @@ fn test_undo_bulk_delete_restores_time_entries() {
 fn test_confirm_delete_removes_time_entries() {
     let mut model = create_test_model_with_tasks();
     model.selected_index = 0;
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add time entry
     let entry = TimeEntry::start(task_id);
@@ -190,12 +190,12 @@ fn test_confirm_delete_removes_time_entries() {
 #[test]
 fn test_undo_restores_running_time_entry_as_active() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start time tracking (creates a running entry)
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
     assert!(model.active_time_entry.is_some());
-    let entry_id = model.active_time_entry.clone().unwrap();
+    let entry_id = model.active_time_entry.unwrap();
 
     // Delete the task (which should clear the active entry)
     update(&mut model, Message::Task(TaskMessage::Delete(task_id)));
@@ -210,7 +210,7 @@ fn test_undo_restores_running_time_entry_as_active() {
 #[test]
 fn test_task_deleted_undo_action_contains_time_entries() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add time entries
     let entry1 = TimeEntry::start(task_id);
@@ -240,8 +240,8 @@ fn test_task_deleted_undo_action_contains_time_entries() {
 #[test]
 fn test_timer_switch_single_undo() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let task2_id = model.visible_tasks[1];
 
     // Start tracking task 1
     model.selected_index = 0;
@@ -271,8 +271,8 @@ fn test_timer_switch_single_undo() {
 #[test]
 fn test_timer_switched_redo() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let task2_id = model.visible_tasks[1];
 
     // Start tracking task 1
     model.selected_index = 0;
@@ -295,7 +295,7 @@ fn test_timer_switched_redo() {
 #[test]
 fn test_restore_time_entry_checks_task_exists() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Create a time entry for a task that will be deleted
     let entry = TimeEntry::start(task_id);
@@ -316,13 +316,13 @@ fn test_restore_time_entry_checks_task_exists() {
 #[test]
 fn test_restore_time_entry_doesnt_overwrite_active() {
     let mut model = create_test_model_with_tasks();
-    let _task1_id = model.visible_tasks[0].clone();
-    let task2_id = model.visible_tasks[1].clone();
+    let _task1_id = model.visible_tasks[0];
+    let task2_id = model.visible_tasks[1];
 
     // Start tracking task 1
     model.selected_index = 0;
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
-    let task1_entry_id = model.active_time_entry.clone().unwrap();
+    let task1_entry_id = model.active_time_entry.unwrap();
 
     // Create a running entry for task 2 (simulating what would be restored)
     let task2_entry = TimeEntry::start(task2_id);
@@ -341,26 +341,23 @@ fn test_restore_time_entry_doesnt_overwrite_active() {
 #[test]
 fn test_undo_delete_while_tracking_different_task() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let _task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let _task2_id = model.visible_tasks[1];
 
     // Start tracking task 1
     model.selected_index = 0;
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
-    let task1_entry_id = model.active_time_entry.clone().unwrap();
+    let task1_entry_id = model.active_time_entry.unwrap();
 
     // Delete task 1 (clears active_time_entry but entry stored as running)
-    update(
-        &mut model,
-        Message::Task(TaskMessage::Delete(task1_id.clone())),
-    );
+    update(&mut model, Message::Task(TaskMessage::Delete(task1_id)));
     assert!(model.active_time_entry.is_none());
     assert!(!model.tasks.contains_key(&task1_id));
 
     // Start tracking task 2
     model.selected_index = 0; // task2 is now at index 0
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
-    let task2_entry_id = model.active_time_entry.clone().unwrap();
+    let task2_entry_id = model.active_time_entry.unwrap();
     assert_ne!(task1_entry_id, task2_entry_id);
 
     // First undo: undoes task2 time entry start
@@ -386,32 +383,29 @@ fn test_undo_delete_while_tracking_different_task() {
 #[test]
 fn test_restore_doesnt_steal_active_timer() {
     let mut model = create_test_model_with_tasks();
-    let task1_id = model.visible_tasks[0].clone();
-    let _task2_id = model.visible_tasks[1].clone();
+    let task1_id = model.visible_tasks[0];
+    let _task2_id = model.visible_tasks[1];
 
     // Start tracking task 1
     model.selected_index = 0;
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
-    let _task1_entry_id = model.active_time_entry.clone().unwrap();
+    let _task1_entry_id = model.active_time_entry.unwrap();
 
     // Delete task 1 (entry stored as running in undo action)
-    update(
-        &mut model,
-        Message::Task(TaskMessage::Delete(task1_id.clone())),
-    );
+    update(&mut model, Message::Task(TaskMessage::Delete(task1_id)));
     assert!(model.active_time_entry.is_none());
 
     // Start tracking task 2
     model.selected_index = 0;
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));
-    let task2_entry_id = model.active_time_entry.clone().unwrap();
+    let task2_entry_id = model.active_time_entry.unwrap();
 
     // Now manually try to restore task1 without undoing task2's tracking
     let task1 = Task::new("Restored Task".to_string());
-    let running_entry = TimeEntry::start(task1_id.clone());
+    let running_entry = TimeEntry::start(task1_id);
 
     // Insert task first
-    model.tasks.insert(task1_id.clone(), task1);
+    model.tasks.insert(task1_id, task1);
 
     // Restore entry - should NOT steal active since task2 is tracking
     model.restore_time_entry(running_entry);
@@ -458,7 +452,7 @@ fn test_timer_switched_undo_action() {
     let task1_id = TaskId::new();
     let task2_id = TaskId::new();
 
-    let stopped_before = TimeEntry::start(task1_id.clone());
+    let stopped_before = TimeEntry::start(task1_id);
     let mut stopped_after = stopped_before.clone();
     stopped_after.stop();
     let started = TimeEntry::start(task2_id);

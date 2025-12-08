@@ -103,89 +103,6 @@ fn parse_duration_input(input: &str) -> Option<u32> {
     None
 }
 
-#[cfg(test)]
-mod duration_tests {
-    use super::*;
-
-    #[test]
-    fn test_format_duration_input() {
-        assert_eq!(format_duration_input(30), "30m");
-        assert_eq!(format_duration_input(60), "1h");
-        assert_eq!(format_duration_input(90), "1h30m");
-        assert_eq!(format_duration_input(120), "2h");
-        assert_eq!(format_duration_input(0), "0m");
-        assert_eq!(format_duration_input(5), "5m");
-    }
-
-    #[test]
-    fn test_parse_duration_plain_minutes() {
-        assert_eq!(parse_duration_input("30"), Some(30));
-        assert_eq!(parse_duration_input("0"), Some(0));
-        assert_eq!(parse_duration_input("120"), Some(120));
-    }
-
-    #[test]
-    fn test_parse_duration_minutes_suffix() {
-        assert_eq!(parse_duration_input("30m"), Some(30));
-        assert_eq!(parse_duration_input("90m"), Some(90));
-        assert_eq!(parse_duration_input("0m"), Some(0));
-    }
-
-    #[test]
-    fn test_parse_duration_hours() {
-        assert_eq!(parse_duration_input("1h"), Some(60));
-        assert_eq!(parse_duration_input("2h"), Some(120));
-        assert_eq!(parse_duration_input("0h"), Some(0));
-    }
-
-    #[test]
-    fn test_parse_duration_decimal_hours() {
-        assert_eq!(parse_duration_input("1.5h"), Some(90));
-        assert_eq!(parse_duration_input("0.5h"), Some(30));
-        assert_eq!(parse_duration_input("2.25h"), Some(135));
-    }
-
-    #[test]
-    fn test_parse_duration_hours_and_minutes() {
-        assert_eq!(parse_duration_input("1h30m"), Some(90));
-        assert_eq!(parse_duration_input("2h15m"), Some(135));
-        assert_eq!(parse_duration_input("1h0m"), Some(60));
-        assert_eq!(parse_duration_input("0h30m"), Some(30));
-    }
-
-    #[test]
-    fn test_parse_duration_with_spaces() {
-        assert_eq!(parse_duration_input("1h 30m"), Some(90));
-        assert_eq!(parse_duration_input(" 30m "), Some(30));
-        assert_eq!(parse_duration_input("  2h  "), Some(120));
-    }
-
-    #[test]
-    fn test_parse_duration_case_insensitive() {
-        assert_eq!(parse_duration_input("1H30M"), Some(90));
-        assert_eq!(parse_duration_input("2H"), Some(120));
-        assert_eq!(parse_duration_input("30M"), Some(30));
-    }
-
-    #[test]
-    fn test_parse_duration_empty_and_invalid() {
-        assert_eq!(parse_duration_input(""), None);
-        assert_eq!(parse_duration_input("   "), None);
-        assert_eq!(parse_duration_input("abc"), None);
-        assert_eq!(parse_duration_input("h"), None);
-        assert_eq!(parse_duration_input("m"), None);
-    }
-
-    #[test]
-    fn test_format_and_parse_roundtrip() {
-        for mins in [0, 15, 30, 45, 60, 90, 120, 135, 180] {
-            let formatted = format_duration_input(mins);
-            let parsed = parse_duration_input(&formatted);
-            assert_eq!(parsed, Some(mins), "Roundtrip failed for {mins} minutes");
-        }
-    }
-}
-
 /// Handle UI messages
 #[allow(clippy::too_many_lines)]
 pub fn handle_ui(model: &mut Model, msg: UiMessage) {
@@ -706,6 +623,89 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.status_message = Some("Snooze cleared".to_string());
                 model.refresh_visible_tasks();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+
+    #[test]
+    fn test_format_duration_input() {
+        assert_eq!(format_duration_input(30), "30m");
+        assert_eq!(format_duration_input(60), "1h");
+        assert_eq!(format_duration_input(90), "1h30m");
+        assert_eq!(format_duration_input(120), "2h");
+        assert_eq!(format_duration_input(0), "0m");
+        assert_eq!(format_duration_input(5), "5m");
+    }
+
+    #[test]
+    fn test_parse_duration_plain_minutes() {
+        assert_eq!(parse_duration_input("30"), Some(30));
+        assert_eq!(parse_duration_input("0"), Some(0));
+        assert_eq!(parse_duration_input("120"), Some(120));
+    }
+
+    #[test]
+    fn test_parse_duration_minutes_suffix() {
+        assert_eq!(parse_duration_input("30m"), Some(30));
+        assert_eq!(parse_duration_input("90m"), Some(90));
+        assert_eq!(parse_duration_input("0m"), Some(0));
+    }
+
+    #[test]
+    fn test_parse_duration_hours() {
+        assert_eq!(parse_duration_input("1h"), Some(60));
+        assert_eq!(parse_duration_input("2h"), Some(120));
+        assert_eq!(parse_duration_input("0h"), Some(0));
+    }
+
+    #[test]
+    fn test_parse_duration_decimal_hours() {
+        assert_eq!(parse_duration_input("1.5h"), Some(90));
+        assert_eq!(parse_duration_input("0.5h"), Some(30));
+        assert_eq!(parse_duration_input("2.25h"), Some(135));
+    }
+
+    #[test]
+    fn test_parse_duration_hours_and_minutes() {
+        assert_eq!(parse_duration_input("1h30m"), Some(90));
+        assert_eq!(parse_duration_input("2h15m"), Some(135));
+        assert_eq!(parse_duration_input("1h0m"), Some(60));
+        assert_eq!(parse_duration_input("0h30m"), Some(30));
+    }
+
+    #[test]
+    fn test_parse_duration_with_spaces() {
+        assert_eq!(parse_duration_input("1h 30m"), Some(90));
+        assert_eq!(parse_duration_input(" 30m "), Some(30));
+        assert_eq!(parse_duration_input("  2h  "), Some(120));
+    }
+
+    #[test]
+    fn test_parse_duration_case_insensitive() {
+        assert_eq!(parse_duration_input("1H30M"), Some(90));
+        assert_eq!(parse_duration_input("2H"), Some(120));
+        assert_eq!(parse_duration_input("30M"), Some(30));
+    }
+
+    #[test]
+    fn test_parse_duration_empty_and_invalid() {
+        assert_eq!(parse_duration_input(""), None);
+        assert_eq!(parse_duration_input("   "), None);
+        assert_eq!(parse_duration_input("abc"), None);
+        assert_eq!(parse_duration_input("h"), None);
+        assert_eq!(parse_duration_input("m"), None);
+    }
+
+    #[test]
+    fn test_format_and_parse_roundtrip() {
+        for mins in [0, 15, 30, 45, 60, 90, 120, 135, 180] {
+            let formatted = format_duration_input(mins);
+            let parsed = parse_duration_input(&formatted);
+            assert_eq!(parsed, Some(mins), "Roundtrip failed for {mins} minutes");
         }
     }
 }

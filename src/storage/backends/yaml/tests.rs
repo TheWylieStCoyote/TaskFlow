@@ -130,7 +130,7 @@ fn test_yaml_time_entry_crud() {
     let task = Task::new("Task for time entry");
     backend.create_task(&task).unwrap();
 
-    let entry = TimeEntry::start(task.id.clone());
+    let entry = TimeEntry::start(task.id);
     backend.create_time_entry(&entry).unwrap();
 
     let retrieved = backend.get_time_entry(&entry.id).unwrap();
@@ -188,7 +188,7 @@ fn test_yaml_create_task_duplicate_id_fails() {
     backend.create_task(&task).unwrap();
 
     let duplicate = Task {
-        id: task.id.clone(),
+        id: task.id,
         ..Task::new("Duplicate")
     };
 
@@ -207,7 +207,7 @@ fn test_yaml_get_active_entry() {
     assert!(backend.get_active_entry().unwrap().is_none());
 
     // Start an entry
-    let entry = TimeEntry::start(task.id.clone());
+    let entry = TimeEntry::start(task.id);
     backend.create_time_entry(&entry).unwrap();
 
     // Now there's an active entry

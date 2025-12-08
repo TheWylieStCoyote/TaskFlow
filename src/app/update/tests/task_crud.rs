@@ -8,7 +8,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_task_toggle_complete() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Task should be Todo initially
     assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
@@ -21,7 +21,7 @@ fn test_task_toggle_complete() {
 #[test]
 fn test_task_set_status() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(
         &mut model,
@@ -37,7 +37,7 @@ fn test_task_set_status() {
 #[test]
 fn test_task_set_priority() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(
         &mut model,
@@ -68,7 +68,7 @@ fn test_task_create() {
 #[test]
 fn test_task_delete() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let initial_count = model.tasks.len();
 
     update(&mut model, Message::Task(TaskMessage::Delete(task_id)));
@@ -95,7 +95,7 @@ fn test_task_create_uses_default_priority() {
 #[test]
 fn test_cycle_priority() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial priority to None
     model.tasks.get_mut(&task_id).unwrap().priority = Priority::None;

@@ -35,7 +35,7 @@ fn test_undo_task_create() {
 fn test_undo_task_delete() {
     let mut model = create_test_model_with_tasks();
     let initial_count = model.tasks.len();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let original_title = model.tasks.get(&task_id).unwrap().title.clone();
 
     // Delete the task via confirm dialog path
@@ -57,7 +57,7 @@ fn test_undo_task_delete() {
 #[test]
 fn test_undo_task_toggle_complete() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Task starts as Todo
     assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Todo);
@@ -76,7 +76,7 @@ fn test_undo_task_toggle_complete() {
 #[test]
 fn test_undo_task_edit_title() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let original_title = model.tasks.get(&task_id).unwrap().title.clone();
 
     // Edit the title
@@ -96,7 +96,7 @@ fn test_undo_task_edit_title() {
 #[test]
 fn test_undo_task_cycle_priority() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial priority
     model.tasks.get_mut(&task_id).unwrap().priority = Priority::None;
@@ -173,7 +173,7 @@ fn test_undo_empty_stack() {
 #[test]
 fn test_undo_edit_due_date() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial due date
     let original_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -202,7 +202,7 @@ fn test_undo_edit_due_date() {
 #[test]
 fn test_undo_edit_tags() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial tags
     model.tasks.get_mut(&task_id).unwrap().tags = vec!["original".to_string()];
@@ -235,7 +235,7 @@ fn test_redo_task_create() {
         &mut model,
         Message::Task(TaskMessage::Create("New task".to_string())),
     );
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     assert_eq!(model.tasks.len(), 1);
 
     // Undo should remove the task
@@ -254,7 +254,7 @@ fn test_redo_task_create() {
 fn test_redo_task_delete() {
     let mut model = create_test_model_with_tasks();
     let initial_count = model.tasks.len();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Delete the task
     model.selected_index = 0;
@@ -275,7 +275,7 @@ fn test_redo_task_delete() {
 #[test]
 fn test_redo_task_modify() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let original_title = model.tasks.get(&task_id).unwrap().title.clone();
 
     // Edit the title
@@ -305,7 +305,7 @@ fn test_redo_project_create() {
     }
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
     assert_eq!(model.projects.len(), 1);
-    let project_id = model.projects.keys().next().unwrap().clone();
+    let project_id = *model.projects.keys().next().unwrap();
 
     // Undo should remove the project
     update(&mut model, Message::System(SystemMessage::Undo));

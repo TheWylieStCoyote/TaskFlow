@@ -9,7 +9,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_filter_by_tag() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add tags to task
     model.tasks.get_mut(&task_id).unwrap().tags = vec!["work".to_string(), "urgent".to_string()];

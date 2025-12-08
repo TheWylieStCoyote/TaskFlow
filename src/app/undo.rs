@@ -538,7 +538,7 @@ mod tests {
         use crate::domain::{TaskId, TimeEntry};
 
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
         let action = UndoAction::TimeEntryStopped {
@@ -564,7 +564,7 @@ mod tests {
 
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
         let action = UndoAction::TimeEntryStarted(Box::new(entry));
         let inverse = action.inverse();
 
@@ -580,7 +580,7 @@ mod tests {
         use crate::domain::{TaskId, TimeEntry};
 
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
 
@@ -611,7 +611,7 @@ mod tests {
 
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
         let action = UndoAction::TimeEntryDeleted(Box::new(entry));
         let inverse = action.inverse();
 
@@ -629,7 +629,7 @@ mod tests {
         let mut stack = UndoStack::new();
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
 
         stack.push(UndoAction::TimeEntryStarted(Box::new(entry)));
         assert_eq!(stack.len(), 1);
@@ -662,7 +662,7 @@ mod tests {
 
         let mut stack = UndoStack::new();
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
 

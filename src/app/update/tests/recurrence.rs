@@ -11,7 +11,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_set_recurrence_daily() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing recurrence
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
@@ -29,7 +29,7 @@ fn test_set_recurrence_daily() {
 #[test]
 fn test_set_recurrence_weekly() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
     model.input_buffer = "w".to_string();
@@ -43,7 +43,7 @@ fn test_set_recurrence_weekly() {
 #[test]
 fn test_clear_recurrence() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // First set recurrence
     if let Some(task) = model.tasks.get_mut(&task_id) {
@@ -63,7 +63,7 @@ fn test_clear_recurrence() {
 #[test]
 fn test_completing_recurring_task_creates_next() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let initial_count = model.tasks.len();
 
     // Set task as recurring with a due date
@@ -106,7 +106,7 @@ fn test_completing_non_recurring_task_no_new_task() {
 #[test]
 fn test_recurrence_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set recurrence
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));

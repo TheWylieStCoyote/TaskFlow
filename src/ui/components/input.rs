@@ -275,18 +275,18 @@ mod tests {
 
         // Test each variant can be created
         let _ = InputTarget::Task;
-        let _ = InputTarget::Subtask(task_id.clone());
-        let _ = InputTarget::EditTask(task_id.clone());
-        let _ = InputTarget::EditDueDate(task_id.clone());
-        let _ = InputTarget::EditTags(task_id.clone());
-        let _ = InputTarget::EditDescription(task_id.clone());
+        let _ = InputTarget::Subtask(task_id);
+        let _ = InputTarget::EditTask(task_id);
+        let _ = InputTarget::EditDueDate(task_id);
+        let _ = InputTarget::EditTags(task_id);
+        let _ = InputTarget::EditDescription(task_id);
         let _ = InputTarget::Project;
         let _ = InputTarget::Search;
-        let _ = InputTarget::MoveToProject(task_id.clone());
+        let _ = InputTarget::MoveToProject(task_id);
         let _ = InputTarget::FilterByTag;
         let _ = InputTarget::BulkMoveToProject;
         let _ = InputTarget::BulkSetStatus;
-        let _ = InputTarget::EditDependencies(task_id.clone());
+        let _ = InputTarget::EditDependencies(task_id);
         let _ = InputTarget::EditRecurrence(task_id);
     }
 

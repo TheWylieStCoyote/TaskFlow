@@ -565,8 +565,8 @@ mod tests {
     fn test_task_list_renders_task_titles() {
         let mut model = Model::new();
         let task = Task::new("Test Task Title");
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();
@@ -584,8 +584,8 @@ mod tests {
     fn test_task_list_renders_priority_indicator() {
         let mut model = Model::new();
         let task = Task::new("Urgent Task").with_priority(Priority::Urgent);
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();
@@ -604,8 +604,8 @@ mod tests {
     fn test_task_list_renders_completed_task() {
         let mut model = Model::new();
         let task = Task::new("Completed Task").with_status(TaskStatus::Done);
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
         model.show_completed = true;
 
@@ -624,8 +624,8 @@ mod tests {
     fn test_task_list_renders_status_symbol() {
         let mut model = Model::new();
         let task = Task::new("In Progress Task").with_status(TaskStatus::InProgress);
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();
@@ -644,8 +644,8 @@ mod tests {
     fn test_task_list_renders_tags() {
         let mut model = Model::new();
         let task = Task::new("Tagged Task").with_tags(vec!["rust".into(), "test".into()]);
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();
@@ -664,8 +664,8 @@ mod tests {
         let mut model = Model::new();
         let today = chrono::Utc::now().date_naive();
         let task = Task::new("Due Task").with_due_date(today);
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();
@@ -714,8 +714,8 @@ mod tests {
         let mut model = Model::new();
         let task =
             Task::new("Task with Notes").with_description("Some important notes".to_string());
-        let task_id = task.id.clone();
-        model.tasks.insert(task_id.clone(), task);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
         model.visible_tasks.push(task_id);
 
         let theme = Theme::default();

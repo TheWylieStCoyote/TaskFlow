@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(cache.get_depth(grandchild_id), 2);
 
         // Check children
-        assert!(cache.children.get(&parent_id).is_some());
+        assert!(cache.children.contains_key(&parent_id));
         assert_eq!(cache.children.get(&parent_id).unwrap().len(), 1);
 
         // Check subtask progress (parent has 2 descendants, 0 completed)

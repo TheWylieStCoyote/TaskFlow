@@ -12,7 +12,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_edit_task() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let original_title = model.tasks.get(&task_id).unwrap().title.clone();
 
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
@@ -26,7 +26,7 @@ fn test_start_edit_task() {
 #[test]
 fn test_edit_task_title() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
@@ -50,7 +50,7 @@ fn test_edit_task_title() {
 #[test]
 fn test_cancel_edit_task() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     let original_title = model.tasks.get(&task_id).unwrap().title.clone();
 
     // Start editing
@@ -73,7 +73,7 @@ fn test_cancel_edit_task() {
 #[test]
 fn test_edit_due_date() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing due date
     update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
@@ -99,7 +99,7 @@ fn test_edit_due_date() {
 #[test]
 fn test_clear_due_date() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set an initial due date
     model.tasks.get_mut(&task_id).unwrap().due_date =
@@ -123,7 +123,7 @@ fn test_clear_due_date() {
 #[test]
 fn test_invalid_due_date_keeps_old() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set an initial due date
     let original_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -149,7 +149,7 @@ fn test_invalid_due_date_keeps_old() {
 #[test]
 fn test_start_edit_tags() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add some initial tags
     model.tasks.get_mut(&task_id).unwrap().tags = vec!["work".to_string(), "urgent".to_string()];
@@ -164,7 +164,7 @@ fn test_start_edit_tags() {
 #[test]
 fn test_edit_tags_add_new() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Task has no tags initially
     assert!(model.tasks.get(&task_id).unwrap().tags.is_empty());
@@ -187,7 +187,7 @@ fn test_edit_tags_add_new() {
 #[test]
 fn test_edit_tags_clear() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial tags
     model.tasks.get_mut(&task_id).unwrap().tags = vec!["work".to_string()];
@@ -210,7 +210,7 @@ fn test_edit_tags_clear() {
 #[test]
 fn test_edit_tags_trims_whitespace() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing tags
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
@@ -230,7 +230,7 @@ fn test_edit_tags_trims_whitespace() {
 #[test]
 fn test_edit_tags_filters_empty() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing tags
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
@@ -250,7 +250,7 @@ fn test_edit_tags_filters_empty() {
 #[test]
 fn test_cancel_edit_tags() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial tags
     let original_tags = vec!["original".to_string()];
@@ -276,7 +276,7 @@ fn test_cancel_edit_tags() {
 #[test]
 fn test_start_edit_description_enters_edit_mode() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Task starts with no description
     assert!(model.tasks.get(&task_id).unwrap().description.is_none());
@@ -294,7 +294,7 @@ fn test_start_edit_description_enters_edit_mode() {
 #[test]
 fn test_start_edit_description_prefills_existing() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set existing description
     model.tasks.get_mut(&task_id).unwrap().description = Some("Existing notes here".to_string());
@@ -307,7 +307,7 @@ fn test_start_edit_description_prefills_existing() {
 #[test]
 fn test_edit_description_add_new() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing description
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
@@ -330,7 +330,7 @@ fn test_edit_description_add_new() {
 #[test]
 fn test_edit_description_clear() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set initial description
     model.tasks.get_mut(&task_id).unwrap().description = Some("Old description".to_string());
@@ -353,7 +353,7 @@ fn test_edit_description_clear() {
 #[test]
 fn test_edit_description_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start with no description
     assert!(model.tasks.get(&task_id).unwrap().description.is_none());
@@ -382,7 +382,7 @@ fn test_edit_description_undo() {
 #[test]
 fn test_start_edit_estimate() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Task starts with no estimate
     assert!(model
@@ -403,7 +403,7 @@ fn test_start_edit_estimate() {
 #[test]
 fn test_edit_estimate_set_minutes() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start editing estimate
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
@@ -424,7 +424,7 @@ fn test_edit_estimate_set_minutes() {
 #[test]
 fn test_edit_estimate_set_hours() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
     model.input_buffer = "2h".to_string();
@@ -438,7 +438,7 @@ fn test_edit_estimate_set_hours() {
 #[test]
 fn test_edit_estimate_set_hours_and_minutes() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
     model.input_buffer = "1h30m".to_string();
@@ -452,7 +452,7 @@ fn test_edit_estimate_set_hours_and_minutes() {
 #[test]
 fn test_edit_estimate_clear() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // First set an estimate
     model.tasks.get_mut(&task_id).unwrap().estimated_minutes = Some(60);
@@ -476,7 +476,7 @@ fn test_edit_estimate_clear() {
 #[test]
 fn test_edit_estimate_invalid_keeps_old() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set an initial estimate
     model.tasks.get_mut(&task_id).unwrap().estimated_minutes = Some(60);
@@ -501,7 +501,7 @@ fn test_edit_estimate_invalid_keeps_old() {
 #[test]
 fn test_edit_estimate_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Start with no estimate
     assert!(model
@@ -547,7 +547,7 @@ fn test_edit_estimate_undo() {
 #[test]
 fn test_edit_estimate_prefill_existing() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set various estimates and check prefill
     let test_cases = [
@@ -577,7 +577,7 @@ fn test_edit_estimate_prefill_existing() {
 #[test]
 fn test_cancel_edit_estimate() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Set an estimate
     model.tasks.get_mut(&task_id).unwrap().estimated_minutes = Some(60);

@@ -196,10 +196,10 @@ fn test_dashboard_completion_rate_calculation() {
     let task3 = Task::new("Task 3").with_status(TaskStatus::Todo);
     let task4 = Task::new("Task 4").with_status(TaskStatus::Todo);
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
-    model.tasks.insert(task3.id.clone(), task3);
-    model.tasks.insert(task4.id.clone(), task4);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+    model.tasks.insert(task3.id, task3);
+    model.tasks.insert(task4.id, task4);
 
     let stats = DashboardStats::new(&model);
 
@@ -224,9 +224,9 @@ fn test_dashboard_status_counts() {
     let task2 = Task::new("Task 2").with_status(TaskStatus::InProgress);
     let task3 = Task::new("Task 3").with_status(TaskStatus::Done);
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
-    model.tasks.insert(task3.id.clone(), task3);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+    model.tasks.insert(task3.id, task3);
 
     let stats = DashboardStats::new(&model);
 

@@ -7,7 +7,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_system_quit_preserves_timer() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     model.start_time_tracking(task_id);
 
     assert!(model.active_time_entry.is_some());
@@ -47,7 +47,7 @@ fn test_time_toggle_tracking_start() {
 #[test]
 fn test_time_toggle_tracking_stop() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
     model.start_time_tracking(task_id);
 
     update(&mut model, Message::Time(TimeMessage::ToggleTracking));

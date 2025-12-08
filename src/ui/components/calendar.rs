@@ -506,7 +506,7 @@ mod tests {
 
         // Add a task due today
         let task = Task::new("Today's Task").with_due_date(today);
-        let task_id = task.id.clone();
+        let task_id = task.id;
         model.tasks.insert(task_id, task);
         model.calendar_state.selected_day = Some(today.day());
         model.calendar_state.year = today.year();

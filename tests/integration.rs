@@ -971,7 +971,7 @@ mod edge_case_tests {
             // Create multiple tasks quickly
             let mut tasks = Vec::new();
             for i in 0..10 {
-                let task = Task::new(&format!("Concurrent task {}", i));
+                let task = Task::new(format!("Concurrent task {}", i));
                 tasks.push(task.clone());
                 backend.create_task(&task).unwrap_or_else(|e| {
                     panic!("{}: create_task {} failed: {}", backend_name, i, e)

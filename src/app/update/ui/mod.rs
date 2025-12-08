@@ -39,6 +39,150 @@ use time_tracking::handle_ui_time_log;
 // Re-export for external use
 pub use input::create_task_from_quick_add;
 
+/// Format duration in minutes as a human-readable string (e.g., "1h30m" or "45m")
+fn format_duration_input(minutes: u32) -> String {
+    let hours = minutes / 60;
+    let mins = minutes % 60;
+    match (hours, mins) {
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h{m}m"),
+    }
+}
+
+/// Parse a duration string (e.g., "1h30m", "90m", "1.5h", "2h") into minutes.
+/// Returns None if the input is empty or invalid.
+fn parse_duration_input(input: &str) -> Option<u32> {
+    let input = input.trim().to_lowercase();
+    if input.is_empty() {
+        return None;
+    }
+
+    // Try parsing as plain number (assume minutes)
+    if let Ok(mins) = input.parse::<u32>() {
+        return Some(mins);
+    }
+
+    // Try parsing as decimal hours (e.g., "1.5h")
+    if let Some(hours_str) = input.strip_suffix('h') {
+        if let Ok(hours) = hours_str.parse::<f64>() {
+            return Some((hours * 60.0).round() as u32);
+        }
+    }
+
+    // Try parsing as minutes only (e.g., "90m")
+    if let Some(mins_str) = input.strip_suffix('m') {
+        if !mins_str.contains('h') {
+            if let Ok(mins) = mins_str.parse::<u32>() {
+                return Some(mins);
+            }
+        }
+    }
+
+    // Try parsing as hours and minutes (e.g., "1h30m" or "1h 30m")
+    let input = input.replace(' ', "");
+    if let Some(h_pos) = input.find('h') {
+        let hours_str = &input[..h_pos];
+        let rest = &input[h_pos + 1..];
+
+        if let Ok(hours) = hours_str.parse::<u32>() {
+            let mins = if rest.is_empty() {
+                0
+            } else if let Some(mins_str) = rest.strip_suffix('m') {
+                mins_str.parse::<u32>().unwrap_or(0)
+            } else {
+                rest.parse::<u32>().unwrap_or(0)
+            };
+            return Some(hours * 60 + mins);
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::*;
+
+    #[test]
+    fn test_format_duration_input() {
+        assert_eq!(format_duration_input(30), "30m");
+        assert_eq!(format_duration_input(60), "1h");
+        assert_eq!(format_duration_input(90), "1h30m");
+        assert_eq!(format_duration_input(120), "2h");
+        assert_eq!(format_duration_input(0), "0m");
+        assert_eq!(format_duration_input(5), "5m");
+    }
+
+    #[test]
+    fn test_parse_duration_plain_minutes() {
+        assert_eq!(parse_duration_input("30"), Some(30));
+        assert_eq!(parse_duration_input("0"), Some(0));
+        assert_eq!(parse_duration_input("120"), Some(120));
+    }
+
+    #[test]
+    fn test_parse_duration_minutes_suffix() {
+        assert_eq!(parse_duration_input("30m"), Some(30));
+        assert_eq!(parse_duration_input("90m"), Some(90));
+        assert_eq!(parse_duration_input("0m"), Some(0));
+    }
+
+    #[test]
+    fn test_parse_duration_hours() {
+        assert_eq!(parse_duration_input("1h"), Some(60));
+        assert_eq!(parse_duration_input("2h"), Some(120));
+        assert_eq!(parse_duration_input("0h"), Some(0));
+    }
+
+    #[test]
+    fn test_parse_duration_decimal_hours() {
+        assert_eq!(parse_duration_input("1.5h"), Some(90));
+        assert_eq!(parse_duration_input("0.5h"), Some(30));
+        assert_eq!(parse_duration_input("2.25h"), Some(135));
+    }
+
+    #[test]
+    fn test_parse_duration_hours_and_minutes() {
+        assert_eq!(parse_duration_input("1h30m"), Some(90));
+        assert_eq!(parse_duration_input("2h15m"), Some(135));
+        assert_eq!(parse_duration_input("1h0m"), Some(60));
+        assert_eq!(parse_duration_input("0h30m"), Some(30));
+    }
+
+    #[test]
+    fn test_parse_duration_with_spaces() {
+        assert_eq!(parse_duration_input("1h 30m"), Some(90));
+        assert_eq!(parse_duration_input(" 30m "), Some(30));
+        assert_eq!(parse_duration_input("  2h  "), Some(120));
+    }
+
+    #[test]
+    fn test_parse_duration_case_insensitive() {
+        assert_eq!(parse_duration_input("1H30M"), Some(90));
+        assert_eq!(parse_duration_input("2H"), Some(120));
+        assert_eq!(parse_duration_input("30M"), Some(30));
+    }
+
+    #[test]
+    fn test_parse_duration_empty_and_invalid() {
+        assert_eq!(parse_duration_input(""), None);
+        assert_eq!(parse_duration_input("   "), None);
+        assert_eq!(parse_duration_input("abc"), None);
+        assert_eq!(parse_duration_input("h"), None);
+        assert_eq!(parse_duration_input("m"), None);
+    }
+
+    #[test]
+    fn test_format_and_parse_roundtrip() {
+        for mins in [0, 15, 30, 45, 60, 90, 120, 135, 180] {
+            let formatted = format_duration_input(mins);
+            let parsed = parse_duration_input(&formatted);
+            assert_eq!(parsed, Some(mins), "Roundtrip failed for {mins} minutes");
+        }
+    }
+}
+
 /// Handle UI messages
 #[allow(clippy::too_many_lines)]
 pub fn handle_ui(model: &mut Model, msg: UiMessage) {
@@ -194,6 +338,20 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.input_target = InputTarget::EditDescription(task_id);
                     // Pre-fill with existing description
                     model.input_buffer = task.description.clone().unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditEstimate => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditEstimate(task_id);
+                    // Pre-fill with existing estimate in human-readable format
+                    model.input_buffer = task
+                        .estimated_minutes
+                        .map(format_duration_input)
+                        .unwrap_or_default();
                     model.cursor_position = model.input_buffer.len();
                 }
             }

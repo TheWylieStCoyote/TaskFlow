@@ -101,6 +101,30 @@ pub fn handle_submit_input(model: &mut Model) {
             });
             model.refresh_visible_tasks();
         }
+        InputTarget::EditEstimate(task_id) => {
+            let task_id = task_id.clone();
+            // Parse duration - empty clears, invalid keeps old
+            let new_estimate = if input.is_empty() {
+                Some(None) // Explicitly clear
+            } else {
+                super::parse_duration_input(&input).map(Some)
+            };
+            if let Some(estimate) = new_estimate {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.estimated_minutes = estimate;
+                });
+                // Show feedback
+                if let Some(mins) = estimate {
+                    model.status_message =
+                        Some(format!("Estimate set to {}", super::format_duration_input(mins)));
+                } else {
+                    model.status_message = Some("Estimate cleared".to_string());
+                }
+            } else {
+                model.status_message = Some("Invalid duration format (try: 30m, 1h, 1h30m)".to_string());
+            }
+            model.refresh_visible_tasks();
+        }
         InputTarget::Project => {
             if !input.is_empty() {
                 let project = crate::domain::Project::new(input);

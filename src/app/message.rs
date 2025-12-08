@@ -309,6 +309,8 @@ pub enum UiMessage {
     StartEditTags,
     /// Enter input mode to edit description
     StartEditDescription,
+    /// Enter input mode to edit time estimate
+    StartEditEstimate,
     /// Enter input mode to move task to project
     StartMoveToProject,
     /// Enter input mode to search tasks

@@ -1289,6 +1289,7 @@ const fn action_to_message(action: &Action) -> Message {
         Action::ToggleTimeTracking => Message::Time(TimeMessage::ToggleTracking),
         Action::ShowTimeLog => Message::Ui(UiMessage::ShowTimeLog),
         Action::ShowWorkLog => Message::Ui(UiMessage::ShowWorkLog),
+        Action::EditEstimate => Message::Ui(UiMessage::StartEditEstimate),
         Action::ToggleSidebar => Message::Ui(UiMessage::ToggleSidebar),
         Action::ToggleShowCompleted => Message::Ui(UiMessage::ToggleShowCompleted),
         Action::ShowHelp => Message::Ui(UiMessage::ShowHelp),

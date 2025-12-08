@@ -38,6 +38,7 @@ pub enum Action {
     ToggleTimeTracking,
     ShowTimeLog,
     ShowWorkLog,
+    EditEstimate,
 
     // UI actions
     ToggleSidebar,
@@ -244,6 +245,7 @@ impl Action {
             Self::ToggleTimeTracking => "Toggle time tracking",
             Self::ShowTimeLog => "Show time log",
             Self::ShowWorkLog => "Show work log",
+            Self::EditEstimate => "Edit time estimate",
             // UI actions
             Self::ToggleSidebar => "Toggle sidebar",
             Self::ToggleShowCompleted => "Toggle show completed",
@@ -363,9 +365,10 @@ impl Action {
                 ActionCategory::Projects
             }
 
-            Self::ToggleTimeTracking | Self::ShowTimeLog | Self::ShowWorkLog => {
-                ActionCategory::TimeTracking
-            }
+            Self::ToggleTimeTracking
+            | Self::ShowTimeLog
+            | Self::ShowWorkLog
+            | Self::EditEstimate => ActionCategory::TimeTracking,
 
             Self::ToggleSidebar
             | Self::ToggleShowCompleted
@@ -534,6 +537,7 @@ impl Default for Keybindings {
         bindings.insert("t".to_string(), Action::ToggleTimeTracking);
         bindings.insert("L".to_string(), Action::ShowTimeLog);
         bindings.insert("W".to_string(), Action::ShowWorkLog);
+        bindings.insert("E".to_string(), Action::EditEstimate);
 
         // UI actions
         bindings.insert("b".to_string(), Action::ToggleSidebar);

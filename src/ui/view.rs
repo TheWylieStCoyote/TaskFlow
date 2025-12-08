@@ -60,6 +60,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             InputTarget::EditScheduledDate(_) => "Scheduled Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::EditDescription(_) => "Description (empty to clear)",
+            InputTarget::EditEstimate(_) => "Time Estimate (e.g., 30m, 1h, 1h30m)",
             InputTarget::Project => "New Project",
             InputTarget::EditProject(_) => "Rename Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",

@@ -40,6 +40,7 @@ pub enum InputTarget {
     ImportFilePath(ImportFormat), // File path input for import
     SavedFilterName,              // Name for a new saved filter
     SnoozeTask(TaskId),           // Snooze date for a task
+    EditEstimate(TaskId),         // Time estimate for a task (e.g., "30m", "2h", "1h30m")
 }
 
 /// Input dialog for creating/editing items

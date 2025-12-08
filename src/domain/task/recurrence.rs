@@ -50,3 +50,28 @@ pub enum Recurrence {
         day: u32,
     },
 }
+
+impl std::fmt::Display for Recurrence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Daily => write!(f, "Daily"),
+            Self::Weekly { days } => {
+                let day_names: Vec<&str> = days
+                    .iter()
+                    .map(|d| match d {
+                        chrono::Weekday::Mon => "Mon",
+                        chrono::Weekday::Tue => "Tue",
+                        chrono::Weekday::Wed => "Wed",
+                        chrono::Weekday::Thu => "Thu",
+                        chrono::Weekday::Fri => "Fri",
+                        chrono::Weekday::Sat => "Sat",
+                        chrono::Weekday::Sun => "Sun",
+                    })
+                    .collect();
+                write!(f, "Weekly ({})", day_names.join(", "))
+            }
+            Self::Monthly { day } => write!(f, "Monthly (day {day})"),
+            Self::Yearly { month, day } => write!(f, "Yearly ({month}/{day})"),
+        }
+    }
+}

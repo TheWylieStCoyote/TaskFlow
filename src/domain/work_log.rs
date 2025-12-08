@@ -27,6 +27,12 @@ impl Default for WorkLogEntryId {
     }
 }
 
+impl std::fmt::Display for WorkLogEntryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A work log entry associated with a task.
 ///
 /// Work log entries record notes, updates, and progress information

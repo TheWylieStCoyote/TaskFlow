@@ -26,6 +26,12 @@ impl Default for TimeEntryId {
     }
 }
 
+impl std::fmt::Display for TimeEntryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A time tracking entry associated with a task.
 ///
 /// Time entries record the duration spent working on a specific task.

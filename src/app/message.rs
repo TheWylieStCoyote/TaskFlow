@@ -530,6 +530,10 @@ pub enum UiMessage {
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,
 
+    // Storage error alert
+    /// Dismiss the storage error alert
+    DismissStorageErrorAlert,
+
     // Saved filters
     /// Show saved filter picker
     ShowSavedFilters,

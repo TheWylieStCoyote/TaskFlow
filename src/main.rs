@@ -116,6 +116,22 @@ fn print_completions(shell: Shell) {
     generate(shell, &mut cmd, name, &mut io::stdout());
 }
 
+/// Load model with storage for CLI commands.
+/// Returns an error with a descriptive message if storage cannot be loaded.
+fn load_model_for_cli(cli: &Cli) -> anyhow::Result<Model> {
+    let settings = Settings::load();
+    let backend_type = if cli.backend == BackendType::Json {
+        BackendType::parse(&settings.backend).unwrap_or_default()
+    } else {
+        cli.backend
+    };
+    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
+
+    Model::new()
+        .with_storage(backend_type, data_path.clone())
+        .map_err(|e| anyhow::anyhow!("Could not load data from {}: {e}", data_path.display()))
+}
+
 /// Quick add a task from the command line
 fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
     use taskflow::app::quick_add::parse_quick_add;
@@ -130,18 +146,8 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Load settings and create model with storage
-    let settings = Settings::load();
-    let backend_type = if cli.backend == BackendType::Json {
-        BackendType::parse(&settings.backend).unwrap_or_default()
-    } else {
-        cli.backend
-    };
-    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
-
-    let mut model = Model::new()
-        .with_storage(backend_type, data_path)
-        .unwrap_or_else(|_| Model::new());
+    // Load model with storage (fail fast on error)
+    let mut model = load_model_for_cli(cli)?;
 
     // Parse the quick add syntax
     let parsed = parse_quick_add(&task_input);
@@ -219,18 +225,8 @@ fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
 fn list_tasks(cli: &Cli, view: &str, show_completed: bool, limit: usize) -> anyhow::Result<()> {
     use chrono::Utc;
 
-    // Load settings and create model with storage
-    let settings = Settings::load();
-    let backend_type = if cli.backend == BackendType::Json {
-        BackendType::parse(&settings.backend).unwrap_or_default()
-    } else {
-        cli.backend
-    };
-    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
-
-    let model = Model::new()
-        .with_storage(backend_type, data_path)
-        .unwrap_or_else(|_| Model::new());
+    // Load model with storage (fail fast on error)
+    let model = load_model_for_cli(cli)?;
 
     let today = Utc::now().date_naive();
 
@@ -366,18 +362,8 @@ fn mark_task_done(cli: &Cli, query_words: &[String]) -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    // Load settings and create model with storage
-    let settings = Settings::load();
-    let backend_type = if cli.backend == BackendType::Json {
-        BackendType::parse(&settings.backend).unwrap_or_default()
-    } else {
-        cli.backend
-    };
-    let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
-
-    let mut model = Model::new()
-        .with_storage(backend_type, data_path)
-        .unwrap_or_else(|_| Model::new());
+    // Load model with storage (fail fast on error)
+    let mut model = load_model_for_cli(cli)?;
 
     // Find matching tasks (case-insensitive title search)
     let matches: Vec<_> = model
@@ -455,12 +441,12 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
                 }
             }
             Err(e) => {
-                eprintln!(
-                    "Warning: Could not load data from {}: {e}",
-                    data_path.display()
-                );
-                eprintln!("Starting with sample data...");
-                Model::new().with_sample_data()
+                // Set error state so TUI can show alert to user
+                let error_msg = format!("{}: {e}", data_path.display());
+                let mut m = Model::new().with_sample_data();
+                m.storage_load_error = Some(error_msg);
+                m.show_storage_error_alert = true;
+                m
             }
         }
     };
@@ -540,7 +526,9 @@ fn run_app(
         // Auto-save if interval has passed and there are unsaved changes
         if let Some(interval) = auto_save_interval {
             if model.dirty && model.has_storage() && last_save.elapsed() >= interval {
-                let _ = model.save();
+                if let Err(e) = model.save() {
+                    model.error_message = Some(format!("Auto-save failed: {e}"));
+                }
                 last_save = Instant::now();
             }
         }
@@ -623,6 +611,11 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
             KeyCode::Char(c) => Message::Ui(UiMessage::InputChar(c)),
             _ => Message::None,
         };
+    }
+
+    // If storage error alert is showing, any key dismisses it
+    if model.show_storage_error_alert {
+        return Message::Ui(UiMessage::DismissStorageErrorAlert);
     }
 
     // If overdue alert is showing, any key dismisses it

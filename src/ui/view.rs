@@ -14,8 +14,9 @@ use crate::app::ViewId;
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
     DescriptionEditor, Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget,
-    Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, TaskList,
-    TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview, WorkLogEditor,
+    Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar,
+    StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview,
+    WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -236,6 +237,14 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         frame.render_widget(OverdueAlert::new(count, task_titles), alert_area);
     }
 
+    // Render storage error alert popup (shown at startup if data couldn't be loaded)
+    if model.show_storage_error_alert {
+        if let Some(ref error) = model.storage_load_error {
+            let alert_area = centered_rect_fixed_height(60, 10, area);
+            frame.render_widget(StorageErrorAlert::new(error), alert_area);
+        }
+    }
+
     // Render daily review mode (full screen overlay)
     if model.show_daily_review {
         // Use centered area for the review dialog
@@ -347,6 +356,14 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
 }
 
 fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+    // Show error message if available (in red, higher priority than status)
+    if let Some(ref msg) = model.error_message {
+        let footer =
+            Paragraph::new(msg.clone()).style(Style::default().fg(theme.colors.danger.to_color()));
+        frame.render_widget(footer, area);
+        return;
+    }
+
     // Show status message if available, otherwise show normal footer
     if let Some(ref msg) = model.status_message {
         let footer =

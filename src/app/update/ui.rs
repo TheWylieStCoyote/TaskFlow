@@ -560,7 +560,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::ResetKeybinding
         | UiMessage::ResetAllKeybindings
         | UiMessage::SaveKeybindings
-        | UiMessage::DismissOverdueAlert => {
+        | UiMessage::DismissOverdueAlert
+        | UiMessage::DismissStorageErrorAlert => {
             handle_ui_keybindings(model, msg);
         }
         // Time log editor - delegated to helper
@@ -1291,6 +1292,10 @@ fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
         },
         UiMessage::DismissOverdueAlert => {
             model.show_overdue_alert = false;
+        }
+        UiMessage::DismissStorageErrorAlert => {
+            model.show_storage_error_alert = false;
+            model.storage_load_error = None;
         }
         _ => {}
     }

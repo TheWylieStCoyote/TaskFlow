@@ -179,6 +179,45 @@ impl Widget for OverdueAlert {
     }
 }
 
+/// Storage error alert popup shown when data cannot be loaded
+pub struct StorageErrorAlert<'a> {
+    error_message: &'a str,
+}
+
+impl<'a> StorageErrorAlert<'a> {
+    #[must_use]
+    pub fn new(error_message: &'a str) -> Self {
+        Self { error_message }
+    }
+}
+
+impl Widget for StorageErrorAlert<'_> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        Clear.render(area, buf);
+
+        let text = format!(
+            "Could not load your task data:\n\n  {}\n\nStarting with sample data instead.\nYour existing data has not been modified.\n\nPress any key to continue",
+            self.error_message
+        );
+
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(Color::White))
+            .block(
+                Block::default()
+                    .title(" ⚠ Storage Error ")
+                    .title_style(
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
+
+        paragraph.render(area, buf);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

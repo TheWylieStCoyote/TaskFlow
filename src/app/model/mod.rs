@@ -270,6 +270,14 @@ pub struct Model {
     /// Whether overdue tasks alert is visible (shown at startup)
     pub show_overdue_alert: bool,
 
+    // Storage error alert state
+    /// Storage load error message (if any)
+    pub storage_load_error: Option<String>,
+    /// Whether storage error alert is visible
+    pub show_storage_error_alert: bool,
+    /// Error message to display in footer (shown in red)
+    pub error_message: Option<String>,
+
     // Time log editor state
     /// Whether time log editor is visible
     pub show_time_log: bool,
@@ -402,6 +410,9 @@ impl Model {
             pending_import: None,
             show_import_preview: false,
             show_overdue_alert: false,
+            storage_load_error: None,
+            show_storage_error_alert: false,
+            error_message: None,
             show_time_log: false,
             time_log_selected: 0,
             time_log_mode: crate::ui::TimeLogMode::default(),

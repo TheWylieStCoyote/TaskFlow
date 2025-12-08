@@ -140,6 +140,26 @@ impl MarkdownBackend {
         Ok(())
     }
 
+    /// Load habits from habits.yaml.
+    pub(crate) fn load_habits(&mut self) -> StorageResult<()> {
+        let habits_file = self.base_path.join("habits.yaml");
+        if habits_file.exists() {
+            let content =
+                fs::read_to_string(&habits_file).map_err(|e| StorageError::io(&habits_file, e))?;
+            self.habits = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// Save habits to habits.yaml.
+    pub(crate) fn save_habits(&self) -> StorageResult<()> {
+        let habits_file = self.base_path.join("habits.yaml");
+        let content = serde_yaml::to_string(&self.habits)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&habits_file, content).map_err(|e| StorageError::io(&habits_file, e))?;
+        Ok(())
+    }
+
     /// Load pomodoro state from pomodoro.yaml.
     pub(crate) fn load_pomodoro_state(&mut self) -> StorageResult<()> {
         let pomodoro_file = self.base_path.join("pomodoro.yaml");

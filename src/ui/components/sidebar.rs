@@ -110,6 +110,16 @@ impl Widget for Sidebar<'_> {
                 ),
             ])),
             ListItem::new(Line::from(vec![
+                Span::styled("🔄 ", Style::default()),
+                styled_view_name(
+                    "Habits",
+                    ViewId::Habits,
+                    &self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
                 Span::styled("🔒 ", Style::default()),
                 styled_view_name(
                     "Blocked",
@@ -414,7 +424,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
+        // Height 25 to accommodate all views including Habits
+        let buffer = render_widget(sidebar, 30, 25);
         let content = buffer_content(&buffer);
 
         assert!(

@@ -15,7 +15,8 @@
 //! └── None        - No-op
 //! ```
 
-use crate::domain::{Priority, ProjectId, TaskId, TaskStatus};
+use crate::domain::{HabitId, Priority, ProjectId, TaskId, TaskStatus};
+use chrono::NaiveDate;
 
 /// Which pane currently has focus.
 ///
@@ -72,6 +73,8 @@ pub enum Message {
     Time(TimeMessage),
     /// Pomodoro timer operations
     Pomodoro(PomodoroMessage),
+    /// Habit tracking operations
+    Habit(HabitMessage),
     /// UI state changes
     Ui(UiMessage),
     /// System-level operations
@@ -192,6 +195,8 @@ pub enum ViewId {
     WeeklyPlanner,
     /// Snoozed tasks (hidden until snooze date)
     Snoozed,
+    /// Habit tracking view
+    Habits,
 }
 
 /// Task operation messages.
@@ -589,6 +594,28 @@ pub enum UiMessage {
     StartSnoozeTask,
     /// Clear snooze from selected task
     ClearSnooze,
+
+    // Habit tracking
+    /// Start creating a new habit
+    StartCreateHabit,
+    /// Start editing the selected habit
+    StartEditHabit(HabitId),
+    /// Navigate up in habit list
+    HabitUp,
+    /// Navigate down in habit list
+    HabitDown,
+    /// Toggle today's check-in for selected habit
+    HabitToggleToday,
+    /// Show habit analytics/details popup
+    ShowHabitAnalytics,
+    /// Hide habit analytics popup
+    HideHabitAnalytics,
+    /// Archive the selected habit
+    HabitArchive,
+    /// Delete the selected habit
+    HabitDelete,
+    /// Toggle showing archived habits
+    HabitToggleShowArchived,
 }
 
 /// System-level messages for application control.
@@ -694,6 +721,12 @@ impl From<PomodoroMessage> for Message {
     }
 }
 
+impl From<HabitMessage> for Message {
+    fn from(msg: HabitMessage) -> Self {
+        Self::Habit(msg)
+    }
+}
+
 /// Pomodoro timer messages.
 ///
 /// These messages control the Pomodoro timer in focus mode.
@@ -745,4 +778,44 @@ pub enum PomodoroMessage {
     IncrementGoal,
     /// Decrement session goal
     DecrementGoal,
+}
+
+/// Habit tracking messages.
+///
+/// These messages handle creating, modifying, and checking in habits.
+#[derive(Debug, Clone)]
+pub enum HabitMessage {
+    /// Create a new habit with the given name
+    Create(String),
+    /// Check in for today
+    CheckInToday {
+        /// The habit to check in
+        habit_id: HabitId,
+        /// Whether the habit was completed
+        completed: bool,
+    },
+    /// Check in for a specific date
+    CheckIn {
+        /// The habit to check in
+        habit_id: HabitId,
+        /// The date to check in for
+        date: NaiveDate,
+        /// Whether the habit was completed
+        completed: bool,
+    },
+    /// Toggle today's completion status
+    ToggleToday(HabitId),
+    /// Archive a habit
+    Archive(HabitId),
+    /// Unarchive a habit
+    Unarchive(HabitId),
+    /// Delete a habit
+    Delete(HabitId),
+    /// Update habit name
+    UpdateName {
+        /// The habit to update
+        habit_id: HabitId,
+        /// The new name
+        name: String,
+    },
 }

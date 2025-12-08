@@ -6,8 +6,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{PomodoroConfig, PomodoroSession, PomodoroStats};
 use crate::storage::{
-    ExportData, ProjectRepository, StorageBackend, StorageError, StorageResult, TagRepository,
-    TaskRepository, TimeEntryRepository, WorkLogRepository,
+    ExportData, HabitRepository, ProjectRepository, StorageBackend, StorageError, StorageResult,
+    TagRepository, TaskRepository, TimeEntryRepository, WorkLogRepository,
 };
 
 use super::SqliteBackendInner;
@@ -91,6 +91,7 @@ impl StorageBackend for SqliteBackend {
             tags: self.list_tags()?,
             time_entries: self.list_all_time_entries()?,
             work_logs: self.list_work_logs()?,
+            habits: self.list_habits()?,
             version: 1,
             pomodoro_session: self.get_pomodoro_value("session")?,
             pomodoro_config: self.get_pomodoro_value("config")?,
@@ -101,9 +102,9 @@ impl StorageBackend for SqliteBackend {
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
         let conn = self.inner.conn()?;
 
-        // Clear existing data
+        // Clear existing data (habits cascade to habit_check_ins)
         conn.execute_batch(
-            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags;",
+            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits;",
         )?;
 
         // Import data
@@ -121,6 +122,9 @@ impl StorageBackend for SqliteBackend {
         }
         for entry in &data.work_logs {
             self.create_work_log(entry)?;
+        }
+        for habit in &data.habits {
+            self.create_habit(habit)?;
         }
 
         // Import Pomodoro state

@@ -135,6 +135,15 @@ pub enum Action {
     PomodoroTogglePause,
     PomodoroSkip,
     PomodoroStop,
+
+    // Habit tracking
+    CreateHabit,
+    EditHabit,
+    DeleteHabit,
+    ToggleHabitToday,
+    ShowHabitAnalytics,
+    HabitToggleShowArchived,
+    HabitArchive,
 }
 
 /// Category for grouping actions in help display
@@ -144,6 +153,7 @@ pub enum ActionCategory {
     Tasks,
     Projects,
     TimeTracking,
+    Habits,
     ViewFilter,
     MultiSelect,
     Dependencies,
@@ -168,6 +178,7 @@ impl ActionCategory {
             Self::Tasks => "Tasks",
             Self::Projects => "Projects",
             Self::TimeTracking => "Time Tracking",
+            Self::Habits => "Habits",
             Self::ViewFilter => "View & Filter",
             Self::MultiSelect => "Multi-Select",
             Self::Dependencies => "Dependencies",
@@ -192,19 +203,20 @@ impl ActionCategory {
             Self::Tasks => 1,
             Self::Projects => 2,
             Self::TimeTracking => 3,
-            Self::ViewFilter => 4,
-            Self::MultiSelect => 5,
-            Self::Dependencies => 6,
-            Self::Recurrence => 7,
-            Self::TaskChains => 8,
-            Self::Calendar => 9,
-            Self::Reports => 10,
-            Self::Export => 11,
-            Self::Import => 12,
-            Self::Macros => 13,
-            Self::Templates => 14,
-            Self::Pomodoro => 15,
-            Self::System => 16,
+            Self::Habits => 4,
+            Self::ViewFilter => 5,
+            Self::MultiSelect => 6,
+            Self::Dependencies => 7,
+            Self::Recurrence => 8,
+            Self::TaskChains => 9,
+            Self::Calendar => 10,
+            Self::Reports => 11,
+            Self::Export => 12,
+            Self::Import => 13,
+            Self::Macros => 14,
+            Self::Templates => 15,
+            Self::Pomodoro => 16,
+            Self::System => 17,
         }
     }
 }
@@ -327,6 +339,14 @@ impl Action {
             Self::PomodoroStop => "Stop Pomodoro",
             // Storage
             Self::RefreshStorage => "Refresh storage",
+            // Habits
+            Self::CreateHabit => "Create habit",
+            Self::EditHabit => "Edit habit",
+            Self::DeleteHabit => "Delete habit",
+            Self::ToggleHabitToday => "Toggle today's check-in",
+            Self::ShowHabitAnalytics => "Show habit analytics",
+            Self::HabitToggleShowArchived => "Toggle show archived",
+            Self::HabitArchive => "Archive habit",
         }
     }
 
@@ -435,6 +455,14 @@ impl Action {
             Self::Save | Self::Undo | Self::Redo | Self::Quit | Self::RefreshStorage => {
                 ActionCategory::System
             }
+
+            Self::CreateHabit
+            | Self::EditHabit
+            | Self::DeleteHabit
+            | Self::ToggleHabitToday
+            | Self::ShowHabitAnalytics
+            | Self::HabitToggleShowArchived
+            | Self::HabitArchive => ActionCategory::Habits,
         }
     }
 }

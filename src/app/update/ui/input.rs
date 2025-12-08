@@ -368,6 +368,28 @@ pub fn handle_submit_input(model: &mut Model) {
             }
             model.refresh_visible_tasks();
         }
+        InputTarget::NewHabit => {
+            if !input.is_empty() {
+                let habit = crate::domain::Habit::new(input.to_string());
+                let id = habit.id;
+                model.sync_habit(&habit);
+                model.habits.insert(id, habit);
+                model.refresh_visible_habits();
+                model.status_message = Some("Habit created".to_string());
+            }
+        }
+        InputTarget::EditHabit(habit_id) => {
+            let habit_id = *habit_id;
+            if !input.is_empty() {
+                if let Some(habit) = model.habits.get_mut(&habit_id) {
+                    habit.name = input.to_string();
+                    habit.updated_at = chrono::Utc::now();
+                }
+                model.sync_habit_by_id(&habit_id);
+                model.refresh_visible_habits();
+                model.status_message = Some("Habit updated".to_string());
+            }
+        }
     }
     model.input_mode = InputMode::Normal;
     model.input_target = InputTarget::default();

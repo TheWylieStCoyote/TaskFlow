@@ -13,8 +13,8 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
-    DescriptionEditor, Eisenhower, FocusView, HelpPopup, InputDialog, InputMode, InputTarget,
-    Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar,
+    DescriptionEditor, Eisenhower, FocusView, HabitsView, HelpPopup, InputDialog, InputMode,
+    InputTarget, Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar,
     StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview,
     WorkLogEditor,
 };
@@ -79,6 +79,8 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             },
             InputTarget::SavedFilterName => "Save Filter As (enter name)",
             InputTarget::SnoozeTask(_) => "Snooze Until (YYYY-MM-DD)",
+            InputTarget::NewHabit => "New Habit",
+            InputTarget::EditHabit(_) => "Edit Habit",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -336,6 +338,10 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
         ViewId::Reports => {
             let reports = ReportsView::new(model, model.report_panel);
             frame.render_widget(reports, area);
+        }
+        ViewId::Habits => {
+            let habits = HabitsView::new(model, theme);
+            frame.render_widget(habits, area);
         }
         ViewId::Kanban => {
             let kanban = Kanban::new(model, theme);

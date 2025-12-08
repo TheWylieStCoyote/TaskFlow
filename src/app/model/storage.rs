@@ -4,8 +4,10 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 
-use crate::domain::{Project, ProjectId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId};
-use crate::storage::{self, BackendType, ProjectRepository, WorkLogRepository};
+use crate::domain::{
+    Habit, HabitId, Project, ProjectId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId,
+};
+use crate::storage::{self, BackendType, HabitRepository, ProjectRepository, WorkLogRepository};
 
 use super::{Model, UndoAction};
 
@@ -62,6 +64,12 @@ impl Model {
         for work_log in export_data.work_logs {
             self.work_logs.insert(work_log.id, work_log);
         }
+
+        // Load habits from storage
+        for habit in export_data.habits {
+            self.habits.insert(habit.id, habit);
+        }
+        self.refresh_visible_habits();
 
         // Load Pomodoro state
         if let Some(mut session) = export_data.pomodoro_session {
@@ -180,6 +188,43 @@ impl Model {
         }
     }
 
+    /// Syncs a habit to storage.
+    ///
+    /// Creates or updates the habit in the storage backend.
+    pub fn sync_habit(&mut self, habit: &Habit) {
+        if let Some(ref mut backend) = self.storage {
+            // Try update first, if not found, create
+            if HabitRepository::update_habit(backend.as_mut(), habit).is_err() {
+                let _ = HabitRepository::create_habit(backend.as_mut(), habit);
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Syncs a habit by ID to storage.
+    ///
+    /// Looks up the habit in the model and syncs it to the storage backend.
+    pub fn sync_habit_by_id(&mut self, habit_id: &HabitId) {
+        if let (Some(ref mut backend), Some(habit)) = (&mut self.storage, self.habits.get(habit_id))
+        {
+            // Try update first, if not found, create
+            if HabitRepository::update_habit(backend.as_mut(), habit).is_err() {
+                let _ = HabitRepository::create_habit(backend.as_mut(), habit);
+            }
+            self.dirty = true;
+        }
+    }
+
+    /// Deletes a habit from storage.
+    ///
+    /// Removes the habit from the storage backend.
+    pub fn delete_habit_from_storage(&mut self, id: &HabitId) {
+        if let Some(ref mut backend) = self.storage {
+            let _ = HabitRepository::delete_habit(backend.as_mut(), id);
+            self.dirty = true;
+        }
+    }
+
     /// Syncs a time entry to storage.
     ///
     /// Creates or updates the time entry in the storage backend.
@@ -216,6 +261,13 @@ impl Model {
                     for project in projects {
                         self.projects.insert(project.id, project);
                     }
+                }
+                if let Ok(habits) = HabitRepository::list_habits(backend.as_mut()) {
+                    self.habits.clear();
+                    for habit in habits {
+                        self.habits.insert(habit.id, habit);
+                    }
+                    self.refresh_visible_habits();
                 }
                 self.refresh_visible_tasks();
             }

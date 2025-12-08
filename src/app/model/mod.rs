@@ -62,8 +62,8 @@ use std::path::PathBuf;
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec, Task, TaskId,
-    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Filter, Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec,
+    Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::StorageBackend;
 use crate::ui::{InputMode, InputTarget};
@@ -84,9 +84,9 @@ use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
 /// Number of view items in the sidebar (before the separator).
 /// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
-///        Dashboard, Reports, Blocked, Untagged, No Project, Recent,
+///        Dashboard, Reports, Habits, Blocked, Untagged, No Project, Recent,
 ///        Kanban, Eisenhower, Weekly Planner, Snoozed
-pub const SIDEBAR_VIEW_COUNT: usize = 16;
+pub const SIDEBAR_VIEW_COUNT: usize = 17;
 
 /// Index of the separator line in the sidebar.
 pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
@@ -342,6 +342,18 @@ pub struct Model {
     /// Selected index within current review phase
     pub weekly_review_selected: usize,
 
+    // Habit tracking
+    /// All habits indexed by ID
+    pub habits: HashMap<HabitId, Habit>,
+    /// Visible habit IDs (filtered by archived status)
+    pub visible_habits: Vec<HabitId>,
+    /// Index of selected habit in list
+    pub habit_selected: usize,
+    /// Whether habit analytics popup is visible
+    pub show_habit_analytics: bool,
+    /// Whether to show archived habits
+    pub show_archived_habits: bool,
+
     // Performance caches
     /// Cached footer statistics (completed, overdue, due today counts)
     pub footer_stats: FooterStats,
@@ -446,6 +458,11 @@ impl Model {
             show_weekly_review: false,
             weekly_review_phase: crate::ui::WeeklyReviewPhase::default(),
             weekly_review_selected: 0,
+            habits: HashMap::new(),
+            visible_habits: Vec::new(),
+            habit_selected: 0,
+            show_habit_analytics: false,
+            show_archived_habits: false,
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
         }
@@ -538,6 +555,45 @@ impl Model {
             .values()
             .filter(|e| &e.task_id == task_id)
             .count()
+    }
+
+    /// Refresh the visible habits list based on archive status filter.
+    pub fn refresh_visible_habits(&mut self) {
+        self.visible_habits = self
+            .habits
+            .values()
+            .filter(|h| self.show_archived_habits || !h.archived)
+            .map(|h| h.id)
+            .collect();
+        // Sort by name
+        self.visible_habits.sort_by(|a, b| {
+            let habit_a = self.habits.get(a);
+            let habit_b = self.habits.get(b);
+            match (habit_a, habit_b) {
+                (Some(a), Some(b)) => a.name.cmp(&b.name),
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        // Clamp selection
+        if !self.visible_habits.is_empty() {
+            self.habit_selected = self.habit_selected.min(self.visible_habits.len() - 1);
+        } else {
+            self.habit_selected = 0;
+        }
+    }
+
+    /// Returns the currently selected habit (if any).
+    #[must_use]
+    pub fn selected_habit(&self) -> Option<&Habit> {
+        self.visible_habits
+            .get(self.habit_selected)
+            .and_then(|id| self.habits.get(id))
+    }
+
+    /// Returns all habits as a vector for export.
+    #[must_use]
+    pub fn habits_for_export(&self) -> Vec<Habit> {
+        self.habits.values().cloned().collect()
     }
 }
 

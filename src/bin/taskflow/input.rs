@@ -107,6 +107,23 @@ pub fn handle_key_event(
         }
     }
 
+    // In Habits view, handle habit-specific actions
+    if model.current_view == taskflow::app::ViewId::Habits {
+        if let Some(msg) = handle_habits_view(key, model) {
+            return msg;
+        }
+    }
+
+    // If habit analytics is showing, handle it
+    if model.show_habit_analytics {
+        return match key.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('a') => {
+                Message::Ui(UiMessage::HideHabitAnalytics)
+            }
+            _ => Message::None,
+        };
+    }
+
     // Handle macro slot selection if pending
     if model.pending_macro_slot.is_some() {
         return handle_macro_slot(key, model);
@@ -342,6 +359,35 @@ fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<Messa
     None
 }
 
+fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
+    match key.code {
+        // Navigation
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::Ui(UiMessage::HabitUp)),
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::Ui(UiMessage::HabitDown)),
+        // Create new habit
+        KeyCode::Char('n') => Some(Message::Ui(UiMessage::StartCreateHabit)),
+        // Edit selected habit
+        KeyCode::Char('e') => {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+                Some(Message::Ui(UiMessage::StartEditHabit(habit_id)))
+            } else {
+                None
+            }
+        }
+        // Delete selected habit
+        KeyCode::Char('d') => Some(Message::Ui(UiMessage::HabitDelete)),
+        // Toggle today's check-in
+        KeyCode::Char(' ') | KeyCode::Char('x') => Some(Message::Ui(UiMessage::HabitToggleToday)),
+        // Show analytics
+        KeyCode::Char('a') => Some(Message::Ui(UiMessage::ShowHabitAnalytics)),
+        // Archive habit
+        KeyCode::Char('A') => Some(Message::Ui(UiMessage::HabitArchive)),
+        // Toggle showing archived habits
+        KeyCode::Char('H') => Some(Message::Ui(UiMessage::HabitToggleShowArchived)),
+        _ => None,
+    }
+}
+
 fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     if let KeyCode::Char(c) = key.code {
         if let Some(digit) = c.to_digit(10) {
@@ -501,5 +547,17 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::PomodoroSkip => Message::Pomodoro(PomodoroMessage::Skip),
         Action::PomodoroStop => Message::Pomodoro(PomodoroMessage::Stop),
         Action::RefreshStorage => Message::System(SystemMessage::RefreshStorage),
+        // Habits
+        Action::CreateHabit => Message::Ui(UiMessage::StartCreateHabit),
+        Action::EditHabit => {
+            // Edit the selected habit (need to get the ID from model)
+            // This requires special handling in handle_key_event
+            Message::None
+        }
+        Action::DeleteHabit => Message::Ui(UiMessage::HabitDelete),
+        Action::ToggleHabitToday => Message::Ui(UiMessage::HabitToggleToday),
+        Action::ShowHabitAnalytics => Message::Ui(UiMessage::ShowHabitAnalytics),
+        Action::HabitToggleShowArchived => Message::Ui(UiMessage::HabitToggleShowArchived),
+        Action::HabitArchive => Message::Ui(UiMessage::HabitArchive),
     }
 }

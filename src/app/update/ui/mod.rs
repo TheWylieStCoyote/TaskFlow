@@ -624,6 +624,71 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.refresh_visible_tasks();
             }
         }
+
+        // Habit tracking UI
+        UiMessage::StartCreateHabit => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::NewHabit;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
+        UiMessage::StartEditHabit(habit_id) => {
+            if let Some(habit) = model.habits.get(&habit_id) {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::EditHabit(habit_id);
+                model.input_buffer.clone_from(&habit.name);
+                model.cursor_position = habit.name.len();
+            }
+        }
+        UiMessage::HabitUp => {
+            if model.habit_selected > 0 {
+                model.habit_selected -= 1;
+            }
+        }
+        UiMessage::HabitDown => {
+            if !model.visible_habits.is_empty()
+                && model.habit_selected < model.visible_habits.len() - 1
+            {
+                model.habit_selected += 1;
+            }
+        }
+        UiMessage::HabitToggleToday => {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+                let today = chrono::Utc::now().date_naive();
+                if let Some(habit) = model.habits.get_mut(&habit_id) {
+                    let currently_completed = habit.is_completed_on(today);
+                    habit.check_in(today, !currently_completed, None);
+                }
+                model.sync_habit_by_id(&habit_id);
+            }
+        }
+        UiMessage::ShowHabitAnalytics => {
+            model.show_habit_analytics = true;
+        }
+        UiMessage::HideHabitAnalytics => {
+            model.show_habit_analytics = false;
+        }
+        UiMessage::HabitArchive => {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+                if let Some(habit) = model.habits.get_mut(&habit_id) {
+                    habit.archived = true;
+                    habit.updated_at = chrono::Utc::now();
+                }
+                model.sync_habit_by_id(&habit_id);
+                model.refresh_visible_habits();
+            }
+        }
+        UiMessage::HabitDelete => {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+                model.habits.remove(&habit_id);
+                model.delete_habit_from_storage(&habit_id);
+                model.refresh_visible_habits();
+            }
+        }
+        UiMessage::HabitToggleShowArchived => {
+            model.show_archived_habits = !model.show_archived_habits;
+            model.refresh_visible_habits();
+        }
     }
 }
 

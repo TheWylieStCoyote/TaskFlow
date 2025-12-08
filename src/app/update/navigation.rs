@@ -256,12 +256,12 @@ fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
     // Sidebar layout - see SIDEBAR_* constants in model.rs:
-    // 0-15: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
-    //       Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent,
-    //       Kanban, Eisenhower, Weekly Planner, Snoozed)
-    // SIDEBAR_SEPARATOR_INDEX (16): Separator (skip)
-    // SIDEBAR_PROJECTS_HEADER_INDEX (17): "Projects" header
-    // SIDEBAR_FIRST_PROJECT_INDEX+ (18+): Individual projects
+    // 0-16: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
+    //       Calendar, Dashboard, Reports, Habits, Blocked, Untagged, No Project,
+    //       Recent, Kanban, Eisenhower, Weekly Planner, Snoozed)
+    // SIDEBAR_SEPARATOR_INDEX (17): Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX (18): "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+ (19+): Individual projects
 
     // Helper to activate a view
     let activate_view = |model: &mut Model, view: ViewId| {
@@ -281,14 +281,15 @@ fn handle_sidebar_selection(model: &mut Model) {
         5 => activate_view(model, ViewId::Calendar),
         6 => activate_view(model, ViewId::Dashboard),
         7 => activate_view(model, ViewId::Reports),
-        8 => activate_view(model, ViewId::Blocked),
-        9 => activate_view(model, ViewId::Untagged),
-        10 => activate_view(model, ViewId::NoProject),
-        11 => activate_view(model, ViewId::RecentlyModified),
-        12 => activate_view(model, ViewId::Kanban),
-        13 => activate_view(model, ViewId::Eisenhower),
-        14 => activate_view(model, ViewId::WeeklyPlanner),
-        15 => activate_view(model, ViewId::Snoozed),
+        8 => activate_view(model, ViewId::Habits),
+        9 => activate_view(model, ViewId::Blocked),
+        10 => activate_view(model, ViewId::Untagged),
+        11 => activate_view(model, ViewId::NoProject),
+        12 => activate_view(model, ViewId::RecentlyModified),
+        13 => activate_view(model, ViewId::Kanban),
+        14 => activate_view(model, ViewId::Eisenhower),
+        15 => activate_view(model, ViewId::WeeklyPlanner),
+        16 => activate_view(model, ViewId::Snoozed),
         n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks

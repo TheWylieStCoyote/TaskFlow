@@ -4,9 +4,11 @@
 //! - `navigation`: Movement, view switching, sidebar/calendar navigation
 //! - `task`: Task CRUD operations, completion, priority
 //! - `time`: Time tracking and Pomodoro timer
+//! - `habit`: Habit tracking and check-ins
 //! - `ui`: Input handling, multi-select, templates, keybindings
 //! - `system`: Quit, save, undo/redo, import/export
 
+mod habit;
 mod navigation;
 pub mod system;
 mod task;
@@ -50,6 +52,10 @@ pub fn update(model: &mut Model, message: Message) {
         Message::Pomodoro(msg) => {
             trace!(?msg, "Pomodoro tick"); // trace level since this fires every second
             time::handle_pomodoro(model, msg);
+        }
+        Message::Habit(msg) => {
+            debug!(?msg, "Habit tracking");
+            habit::handle_habit(model, msg);
         }
         Message::Ui(msg) => {
             trace!(?msg, "UI event"); // trace level since these are frequent

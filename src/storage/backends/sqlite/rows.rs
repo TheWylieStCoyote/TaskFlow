@@ -3,8 +3,8 @@
 use tracing::warn;
 
 use crate::domain::{
-    Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus, TimeEntry, TimeEntryId,
-    WorkLogEntry, WorkLogEntryId,
+    Habit, HabitFrequency, HabitId, Priority, Project, ProjectId, ProjectStatus, Task, TaskId,
+    TaskStatus, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 /// Parse a UUID string, logging a warning if invalid.
@@ -172,6 +172,39 @@ pub(crate) fn work_log_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Wor
         id: WorkLogEntryId(parse_uuid(&id, "work_log.id")),
         task_id: TaskId(parse_uuid(&task_id, "work_log.task_id")),
         content: row.get("content")?,
+        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
+        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now()),
+    })
+}
+
+/// Parse a Habit from a SQLite row (without check-ins).
+pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit> {
+    let id: String = row.get("id")?;
+    let frequency_json: String = row.get("frequency")?;
+    let start_date: String = row.get("start_date")?;
+    let end_date: Option<String> = row.get("end_date")?;
+    let tags_json: String = row.get("tags")?;
+    let archived: i32 = row.get("archived")?;
+    let created_at: String = row.get("created_at")?;
+    let updated_at: String = row.get("updated_at")?;
+
+    Ok(Habit {
+        id: HabitId(parse_uuid(&id, "habit.id")),
+        name: row.get("name")?,
+        description: row.get("description")?,
+        frequency: serde_json::from_str(&frequency_json).unwrap_or(HabitFrequency::Daily),
+        start_date: chrono::NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
+            .unwrap_or_else(|_| chrono::Utc::now().date_naive()),
+        end_date: end_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        check_ins: std::collections::HashMap::new(), // Populated separately
+        color: row.get("color")?,
+        icon: row.get("icon")?,
+        tags: parse_json(&tags_json, "habit.tags"),
+        archived: archived != 0,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now()),

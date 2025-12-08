@@ -116,6 +116,7 @@
 
 pub mod analytics;
 mod filter;
+mod habit;
 mod pomodoro;
 mod project;
 mod tag;
@@ -124,6 +125,7 @@ mod time_entry;
 mod work_log;
 
 pub use filter::*;
+pub use habit::*;
 pub use pomodoro::*;
 pub use project::*;
 pub use tag::*;

@@ -100,6 +100,33 @@ impl SqliteBackendInner {
             );
             CREATE INDEX IF NOT EXISTS idx_work_logs_task ON work_logs(task_id);
             CREATE INDEX IF NOT EXISTS idx_work_logs_created ON work_logs(created_at);
+
+            CREATE TABLE IF NOT EXISTS habits (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                frequency TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT,
+                color TEXT,
+                icon TEXT,
+                tags TEXT NOT NULL DEFAULT '[]',
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(archived);
+
+            CREATE TABLE IF NOT EXISTS habit_check_ins (
+                habit_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                completed INTEGER NOT NULL,
+                note TEXT,
+                checked_at TEXT NOT NULL,
+                PRIMARY KEY (habit_id, date),
+                FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_habit_check_ins_date ON habit_check_ins(date);
             ",
         )?;
 

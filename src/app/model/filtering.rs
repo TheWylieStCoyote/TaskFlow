@@ -316,6 +316,10 @@ impl Model {
                 // Show only snoozed tasks
                 task.is_snoozed()
             }
+            ViewId::Habits => {
+                // Habits view shows habits, not tasks - filter out all tasks
+                false
+            }
         }
     }
 

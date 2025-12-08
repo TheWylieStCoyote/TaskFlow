@@ -12,7 +12,7 @@ pub enum InputMode {
     Editing,
 }
 
-use crate::domain::{ProjectId, TaskId};
+use crate::domain::{HabitId, ProjectId, TaskId};
 
 use crate::storage::ImportFormat;
 
@@ -41,6 +41,8 @@ pub enum InputTarget {
     SavedFilterName,              // Name for a new saved filter
     SnoozeTask(TaskId),           // Snooze date for a task
     EditEstimate(TaskId),         // Time estimate for a task (e.g., "30m", "2h", "1h30m")
+    NewHabit,                     // Creating a new habit
+    EditHabit(HabitId),           // Editing an existing habit's name
 }
 
 /// Input dialog for creating/editing items

@@ -1,6 +1,6 @@
 use crate::domain::{
-    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
-    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Filter, Habit, HabitId, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId,
+    Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 use super::error::StorageResult;
@@ -230,6 +230,51 @@ pub trait WorkLogRepository {
     fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>>;
 }
 
+/// Repository trait for habit operations.
+pub trait HabitRepository {
+    /// Creates a new habit in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be persisted.
+    fn create_habit(&mut self, habit: &Habit) -> StorageResult<()>;
+
+    /// Retrieves a habit by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_habit(&self, id: &HabitId) -> StorageResult<Option<Habit>>;
+
+    /// Updates an existing habit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be updated.
+    fn update_habit(&mut self, habit: &Habit) -> StorageResult<()>;
+
+    /// Deletes a habit by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be deleted.
+    fn delete_habit(&mut self, id: &HabitId) -> StorageResult<()>;
+
+    /// Lists all habits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_habits(&self) -> StorageResult<Vec<Habit>>;
+
+    /// Lists all active (non-archived) habits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_active_habits(&self) -> StorageResult<Vec<Habit>>;
+}
+
 /// Data export structure for migration between backends
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportData {
@@ -240,6 +285,9 @@ pub struct ExportData {
     /// Work log entries for tasks
     #[serde(default)]
     pub work_logs: Vec<WorkLogEntry>,
+    /// Habits with check-in history
+    #[serde(default)]
+    pub habits: Vec<Habit>,
     pub version: u32,
     /// Active Pomodoro session (if any)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -260,6 +308,7 @@ impl Default for ExportData {
             tags: Vec::new(),
             time_entries: Vec::new(),
             work_logs: Vec::new(),
+            habits: Vec::new(),
             version: 1,
             pomodoro_session: None,
             pomodoro_config: None,
@@ -270,7 +319,12 @@ impl Default for ExportData {
 
 /// Unified storage backend trait combining all repositories.
 pub trait StorageBackend:
-    TaskRepository + ProjectRepository + TagRepository + TimeEntryRepository + WorkLogRepository
+    TaskRepository
+    + ProjectRepository
+    + TagRepository
+    + TimeEntryRepository
+    + WorkLogRepository
+    + HabitRepository
 {
     /// Initializes the storage backend (creates files/tables, etc.).
     ///

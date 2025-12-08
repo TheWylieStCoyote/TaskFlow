@@ -141,5 +141,10 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("f7".to_string(), Action::PomodoroSkip);
     bindings.insert("f8".to_string(), Action::PomodoroStop);
 
+    // Habit tracking (work in Habits view)
+    // Note: These use different keys to avoid conflicts with task actions
+    // In Habits view: n=create, e=edit, d=delete, space/x=toggle, a=analytics
+    // The habit-specific actions are mapped contextually in the key handler
+
     bindings
 }

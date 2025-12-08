@@ -3,6 +3,7 @@
 //! Stores all data in a single YAML file. More human-readable than JSON,
 //! good for manual editing and version control.
 
+mod habit_repo;
 mod project_repo;
 mod storage;
 mod tag_repo;

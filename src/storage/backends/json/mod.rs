@@ -3,6 +3,7 @@
 //! Stores all data in a single JSON file for simplicity.
 //! Good for small to medium datasets and easy backup/version control.
 
+mod habit_repo;
 mod project_repo;
 mod storage;
 mod tag_repo;

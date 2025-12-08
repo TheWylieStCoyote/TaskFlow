@@ -908,9 +908,13 @@ fn handle_key_event(key: event::KeyEvent, model: &mut Model, keybindings: &Keybi
                 Message::None
             }
             KeyCode::Char(c) if c.is_ascii_digit() => {
-                let index = c.to_digit(10).unwrap() as usize;
-                if index < model.template_manager.len() {
-                    Message::Ui(UiMessage::SelectTemplate(index))
+                if let Some(digit) = c.to_digit(10) {
+                    let index = digit as usize;
+                    if index < model.template_manager.len() {
+                        Message::Ui(UiMessage::SelectTemplate(index))
+                    } else {
+                        Message::None
+                    }
                 } else {
                     Message::None
                 }

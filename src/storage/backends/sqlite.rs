@@ -506,46 +506,45 @@ impl TaskRepository for SqliteBackend {
         let mut params: Vec<String> = Vec::new();
 
         // Tag filtering via junction table
-        let tag_filter_active = filter.tags.as_ref().is_some_and(|tags| !tags.is_empty());
-
-        if tag_filter_active {
-            let tags = filter.tags.as_ref().unwrap();
-            match filter.tags_mode {
-                crate::domain::TagFilterMode::Any => {
-                    // ANY mode: task has at least one of the specified tags
-                    let placeholders: Vec<String> = tags
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format!("?{}", params.len() + i + 1))
-                        .collect();
-                    sql.push_str(&format!(
-                        " INNER JOIN task_tags tt ON t.id = tt.task_id AND tt.tag_name IN ({})",
-                        placeholders.join(",")
-                    ));
-                    for tag in tags {
-                        params.push(tag.clone());
+        if let Some(tags) = &filter.tags {
+            if !tags.is_empty() {
+                match filter.tags_mode {
+                    crate::domain::TagFilterMode::Any => {
+                        // ANY mode: task has at least one of the specified tags
+                        let placeholders: Vec<String> = tags
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                            .collect();
+                        sql.push_str(&format!(
+                            " INNER JOIN task_tags tt ON t.id = tt.task_id AND tt.tag_name IN ({})",
+                            placeholders.join(",")
+                        ));
+                        for tag in tags {
+                            params.push(tag.clone());
+                        }
                     }
-                }
-                crate::domain::TagFilterMode::All => {
-                    // ALL mode: task has ALL of the specified tags
-                    // Use subquery with GROUP BY and HAVING COUNT
-                    let placeholders: Vec<String> = tags
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| format!("?{}", params.len() + i + 1))
-                        .collect();
-                    sql.push_str(&format!(
-                        " INNER JOIN (
-                            SELECT task_id FROM task_tags
-                            WHERE tag_name IN ({})
-                            GROUP BY task_id
-                            HAVING COUNT(DISTINCT tag_name) = {}
-                        ) tt ON t.id = tt.task_id",
-                        placeholders.join(","),
-                        tags.len()
-                    ));
-                    for tag in tags {
-                        params.push(tag.clone());
+                    crate::domain::TagFilterMode::All => {
+                        // ALL mode: task has ALL of the specified tags
+                        // Use subquery with GROUP BY and HAVING COUNT
+                        let placeholders: Vec<String> = tags
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format!("?{}", params.len() + i + 1))
+                            .collect();
+                        sql.push_str(&format!(
+                            " INNER JOIN (
+                                SELECT task_id FROM task_tags
+                                WHERE tag_name IN ({})
+                                GROUP BY task_id
+                                HAVING COUNT(DISTINCT tag_name) = {}
+                            ) tt ON t.id = tt.task_id",
+                            placeholders.join(","),
+                            tags.len()
+                        ));
+                        for tag in tags {
+                            params.push(tag.clone());
+                        }
                     }
                 }
             }

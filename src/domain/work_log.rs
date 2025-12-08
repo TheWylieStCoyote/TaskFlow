@@ -168,13 +168,12 @@ mod tests {
         let mut entry = WorkLogEntry::new(task_id, "Original content");
         let original_created = entry.created_at;
 
-        // Small delay to ensure timestamps differ
-        std::thread::sleep(std::time::Duration::from_millis(10));
-
         entry.update_content("Updated content");
 
         assert_eq!(entry.content, "Updated content");
+        // created_at should be unchanged
         assert_eq!(entry.created_at, original_created);
+        // updated_at should be >= created_at (may be equal on fast systems)
         assert!(entry.updated_at >= entry.created_at);
     }
 

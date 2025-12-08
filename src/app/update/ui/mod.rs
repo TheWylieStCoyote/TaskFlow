@@ -1,0 +1,694 @@
+//! UI message handlers
+//!
+//! Handles all user interface messages including:
+//! - Input mode handling (create, edit, search)
+//! - View controls (toggle completed, sidebar)
+//! - Multi-select and bulk operations
+//! - Calendar navigation
+//! - Macro recording/playback
+//! - Template picker
+//! - Keybindings editor
+
+mod calendar;
+mod editors;
+mod filters;
+mod input;
+mod keybindings;
+mod macros;
+mod reviews;
+mod task_ops;
+mod templates;
+mod time_tracking;
+
+use std::fmt::Write as _;
+
+use crate::app::{Model, UiMessage, UndoAction};
+use crate::ui::{InputMode, InputTarget};
+
+use calendar::handle_ui_calendar;
+use editors::{handle_ui_description_editor, handle_ui_work_log};
+use filters::handle_ui_saved_filters;
+use input::handle_submit_input;
+use keybindings::handle_ui_keybindings;
+use macros::handle_ui_macros;
+use reviews::{handle_ui_daily_review, handle_ui_weekly_review};
+use task_ops::handle_move_task;
+use templates::handle_ui_templates;
+use time_tracking::handle_ui_time_log;
+
+// Re-export for external use
+pub use input::create_task_from_quick_add;
+
+/// Handle UI messages
+#[allow(clippy::too_many_lines)]
+pub fn handle_ui(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::ToggleShowCompleted => {
+            model.show_completed = !model.show_completed;
+            model.refresh_visible_tasks();
+        }
+        UiMessage::ToggleSidebar => {
+            model.show_sidebar = !model.show_sidebar;
+        }
+        UiMessage::ShowHelp => {
+            model.show_help = true;
+        }
+        UiMessage::HideHelp => {
+            model.show_help = false;
+        }
+        UiMessage::ToggleFocusMode => {
+            // Only toggle focus mode if there's a selected task
+            if model.selected_task().is_some() {
+                model.focus_mode = !model.focus_mode;
+            }
+        }
+        // Input mode handling
+        UiMessage::StartCreateTask => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Task;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
+        UiMessage::StartCreateSubtask => {
+            // Create a subtask under the currently selected task
+            if let Some(parent_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&parent_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::Subtask(parent_id);
+                    model.input_buffer.clear();
+                    model.cursor_position = 0;
+                }
+            }
+        }
+        UiMessage::StartCreateProject => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Project;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
+        UiMessage::StartEditProject => {
+            // Edit the currently selected project (from sidebar)
+            if let Some(ref project_id) = model.selected_project.clone() {
+                if let Some(project) = model.projects.get(project_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditProject(project_id.clone());
+                    model.input_buffer = project.name.clone();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            } else {
+                model.status_message = Some("Select a project from the sidebar first".to_string());
+            }
+        }
+        UiMessage::DeleteProject => {
+            // Delete the currently selected project (from sidebar)
+            if let Some(ref project_id) = model.selected_project.clone() {
+                if let Some(project) = model.projects.remove(project_id) {
+                    // Find tasks in this project
+                    let tasks_to_unassign: Vec<_> = model
+                        .tasks
+                        .iter()
+                        .filter(|(_, task)| task.project_id.as_ref() == Some(project_id))
+                        .map(|(id, _)| id.clone())
+                        .collect();
+
+                    // Unassign tasks from this project
+                    for task_id in tasks_to_unassign {
+                        if let Some(task) = model.tasks.get_mut(&task_id) {
+                            task.project_id = None;
+                            let task_clone = task.clone();
+                            model.sync_task(&task_clone);
+                        }
+                    }
+
+                    // Push undo action
+                    model
+                        .undo_stack
+                        .push(UndoAction::ProjectDeleted(Box::new(project.clone())));
+                    // Clear selected project
+                    model.selected_project = None;
+                    model.dirty = true;
+                    model.refresh_visible_tasks();
+                    model.status_message = Some(format!(
+                        "Deleted project '{}' (tasks unassigned)",
+                        project.name
+                    ));
+                }
+            } else {
+                model.status_message = Some("Select a project from the sidebar first".to_string());
+            }
+        }
+        UiMessage::StartEditTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditTask(task_id);
+                    model.input_buffer = task.title.clone();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditDueDate => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDueDate(task_id);
+                    // Pre-fill with existing due date or empty
+                    model.input_buffer = task
+                        .due_date
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditScheduledDate => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditScheduledDate(task_id);
+                    // Pre-fill with existing scheduled date or empty
+                    model.input_buffer = task
+                        .scheduled_date
+                        .map(|d| d.format("%Y-%m-%d").to_string())
+                        .unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditTags => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditTags(task_id);
+                    // Pre-fill with existing tags as comma-separated
+                    model.input_buffer = task.tags.join(", ");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditDescription => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDescription(task_id);
+                    // Pre-fill with existing description
+                    model.input_buffer = task.description.clone().unwrap_or_default();
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartMoveToProject => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::MoveToProject(task_id);
+                    // Build project list string for display in input buffer
+                    // Format: "0: None, 1: ProjectA, 2: ProjectB, ..."
+                    let mut options = vec!["0: (none)".to_string()];
+                    for (i, project) in model.projects.values().enumerate() {
+                        options.push(format!("{}: {}", i + 1, project.name));
+                    }
+                    model.input_buffer = options.join(", ");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartSearch => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::Search;
+            // Pre-fill with existing search text if any
+            model.input_buffer = model.filter.search_text.clone().unwrap_or_default();
+            model.cursor_position = model.input_buffer.len();
+        }
+        UiMessage::ClearSearch => {
+            model.filter.search_text = None;
+            model.refresh_visible_tasks();
+        }
+        UiMessage::StartFilterByTag => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::FilterByTag;
+            // Collect all unique tags from tasks
+            let mut all_tags: Vec<String> = model
+                .tasks
+                .values()
+                .flat_map(|t| t.tags.iter().cloned())
+                .collect();
+            all_tags.sort();
+            all_tags.dedup();
+            // Pre-fill with existing filter or show available tags as hint
+            if let Some(ref tags) = model.filter.tags {
+                model.input_buffer = tags.join(", ");
+            } else if !all_tags.is_empty() {
+                model.input_buffer = format!("Available: {}", all_tags.join(", "));
+            } else {
+                model.input_buffer.clear();
+            }
+            model.cursor_position = if model.filter.tags.is_some() {
+                model.input_buffer.len()
+            } else {
+                0
+            };
+        }
+        UiMessage::ClearTagFilter => {
+            model.filter.tags = None;
+            model.refresh_visible_tasks();
+        }
+        UiMessage::CycleSortField => {
+            use crate::domain::SortField;
+            model.sort.field = match model.sort.field {
+                SortField::CreatedAt => SortField::Priority,
+                SortField::Priority => SortField::DueDate,
+                SortField::DueDate => SortField::Title,
+                SortField::Title => SortField::Status,
+                SortField::Status => SortField::UpdatedAt,
+                SortField::UpdatedAt => SortField::CreatedAt,
+            };
+            model.refresh_visible_tasks();
+        }
+        UiMessage::ToggleSortOrder => {
+            use crate::domain::SortOrder;
+            model.sort.order = match model.sort.order {
+                SortOrder::Ascending => SortOrder::Descending,
+                SortOrder::Descending => SortOrder::Ascending,
+            };
+            model.refresh_visible_tasks();
+        }
+        UiMessage::CancelInput => {
+            model.input_mode = InputMode::Normal;
+            model.input_target = InputTarget::default();
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
+        UiMessage::SubmitInput => {
+            handle_submit_input(model);
+        }
+        UiMessage::InputChar(c) => {
+            // Check if we're editing time log
+            if model.show_time_log
+                && matches!(
+                    model.time_log_mode,
+                    crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
+                )
+            {
+                model.time_log_buffer.push(c);
+            } else {
+                model.input_buffer.insert(model.cursor_position, c);
+                model.cursor_position += 1;
+            }
+        }
+        UiMessage::InputBackspace => {
+            // Check if we're editing time log
+            if model.show_time_log
+                && matches!(
+                    model.time_log_mode,
+                    crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
+                )
+            {
+                model.time_log_buffer.pop();
+            } else if model.cursor_position > 0 {
+                model.cursor_position -= 1;
+                model.input_buffer.remove(model.cursor_position);
+            }
+        }
+        UiMessage::InputDelete => {
+            if model.cursor_position < model.input_buffer.len() {
+                model.input_buffer.remove(model.cursor_position);
+            }
+        }
+        UiMessage::InputCursorLeft => {
+            model.cursor_position = model.cursor_position.saturating_sub(1);
+        }
+        UiMessage::InputCursorRight => {
+            if model.cursor_position < model.input_buffer.len() {
+                model.cursor_position += 1;
+            }
+        }
+        UiMessage::InputCursorStart => {
+            model.cursor_position = 0;
+        }
+        UiMessage::InputCursorEnd => {
+            model.cursor_position = model.input_buffer.len();
+        }
+        // Delete confirmation
+        UiMessage::ShowDeleteConfirm => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.has_subtasks(&task_id) {
+                    model.status_message = Some(
+                        "Cannot delete: task has subtasks. Delete subtasks first.".to_string(),
+                    );
+                } else {
+                    model.show_confirm_delete = true;
+                }
+            }
+        }
+        UiMessage::ConfirmDelete => {
+            if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.remove(&id) {
+                    // Collect time entries for this task before deleting
+                    let task_entries: Vec<_> = model
+                        .time_entries
+                        .values()
+                        .filter(|e| e.task_id == id)
+                        .cloned()
+                        .collect();
+
+                    // Clear active time entry if it belongs to this task
+                    if model
+                        .active_time_entry
+                        .as_ref()
+                        .and_then(|entry_id| model.time_entries.get(entry_id))
+                        .is_some_and(|e| e.task_id == id)
+                    {
+                        model.active_time_entry = None;
+                    }
+
+                    // Delete time entries (collect IDs first to avoid borrow issues)
+                    let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                    for entry_id in entry_ids {
+                        model.delete_time_entry(&entry_id);
+                    }
+
+                    model.delete_task_from_storage(&id);
+                    model.undo_stack.push(UndoAction::TaskDeleted {
+                        task: Box::new(task),
+                        time_entries: task_entries,
+                    });
+                }
+                model.refresh_visible_tasks();
+            }
+            model.show_confirm_delete = false;
+        }
+        UiMessage::CancelDelete => {
+            model.show_confirm_delete = false;
+        }
+        // Multi-select / Bulk operations
+        UiMessage::ToggleMultiSelect => {
+            model.multi_select_mode = !model.multi_select_mode;
+            if !model.multi_select_mode {
+                // Exiting multi-select mode clears selection
+                model.selected_tasks.clear();
+            }
+        }
+        UiMessage::ToggleTaskSelection => {
+            if model.multi_select_mode {
+                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                    if model.selected_tasks.contains(&task_id) {
+                        model.selected_tasks.remove(&task_id);
+                    } else {
+                        model.selected_tasks.insert(task_id);
+                    }
+                }
+            }
+        }
+        UiMessage::SelectAll => {
+            model.multi_select_mode = true;
+            model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+        }
+        UiMessage::ClearSelection => {
+            model.selected_tasks.clear();
+            model.multi_select_mode = false;
+        }
+        UiMessage::BulkDelete => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                // Delete all selected tasks
+                let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                for task_id in tasks_to_delete {
+                    if let Some(task) = model.tasks.remove(&task_id) {
+                        // Collect time entries for this task before deleting
+                        let task_entries: Vec<_> = model
+                            .time_entries
+                            .values()
+                            .filter(|e| e.task_id == task_id)
+                            .cloned()
+                            .collect();
+
+                        // Clear active time entry if it belongs to this task
+                        if model
+                            .active_time_entry
+                            .as_ref()
+                            .and_then(|id| model.time_entries.get(id))
+                            .is_some_and(|e| e.task_id == task_id)
+                        {
+                            model.active_time_entry = None;
+                        }
+
+                        // Delete time entries (collect IDs first to avoid borrow issues)
+                        let entry_ids: Vec<_> = task_entries.iter().map(|e| e.id.clone()).collect();
+                        for entry_id in entry_ids {
+                            model.delete_time_entry(&entry_id);
+                        }
+
+                        model.delete_task_from_storage(&task_id);
+                        model.undo_stack.push(UndoAction::TaskDeleted {
+                            task: Box::new(task),
+                            time_entries: task_entries,
+                        });
+                    }
+                }
+                model.selected_tasks.clear();
+                model.multi_select_mode = false;
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::StartBulkMoveToProject => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkMoveToProject;
+                // Build project list string
+                let mut options = vec!["0: (none)".to_string()];
+                for (i, project) in model.projects.values().enumerate() {
+                    options.push(format!("{}: {}", i + 1, project.name));
+                }
+                model.input_buffer = options.join(", ");
+                model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartBulkSetStatus => {
+            if model.multi_select_mode && !model.selected_tasks.is_empty() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::BulkSetStatus;
+                model.input_buffer =
+                    "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
+                model.cursor_position = model.input_buffer.len();
+            }
+        }
+        UiMessage::StartEditDependencies => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditDependencies(task_id.clone());
+                    // Build list of available tasks with numbers
+                    let mut buffer = String::new();
+                    for (i, id) in model.visible_tasks.iter().enumerate() {
+                        if *id != task.id {
+                            if let Some(t) = model.tasks.get(id) {
+                                let is_dep = task.dependencies.contains(id);
+                                let marker = if is_dep { "*" } else { "" };
+                                let _ = write!(buffer, "{}{}: {}, ", marker, i + 1, t.title);
+                            }
+                        }
+                    }
+                    if buffer.ends_with(", ") {
+                        buffer.truncate(buffer.len() - 2);
+                    }
+                    model.input_buffer = buffer;
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::StartEditRecurrence => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    model.input_target = InputTarget::EditRecurrence(task_id);
+                    // Show current recurrence setting
+                    let current = match &task.recurrence {
+                        Some(crate::domain::Recurrence::Daily) => "d (daily)",
+                        Some(crate::domain::Recurrence::Weekly { .. }) => "w (weekly)",
+                        Some(crate::domain::Recurrence::Monthly { .. }) => "m (monthly)",
+                        Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
+                        None => "0 (none)",
+                    };
+                    model.input_buffer = format!("Current: {current}");
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        // Manual ordering
+        UiMessage::MoveTaskUp => {
+            handle_move_task(model, -1);
+        }
+        UiMessage::MoveTaskDown => {
+            handle_move_task(model, 1);
+        }
+        // Task chains
+        UiMessage::StartLinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if model.tasks.contains_key(&task_id) {
+                    model.input_mode = InputMode::Editing;
+                    // Show current link if any
+                    if let Some(task) = model.tasks.get(&task_id) {
+                        if let Some(next_id) = &task.next_task_id {
+                            if let Some(next_task) = model.tasks.get(next_id) {
+                                model.input_buffer =
+                                    format!("Currently linked to: {}", next_task.title);
+                            } else {
+                                model.input_buffer = String::new();
+                            }
+                        } else {
+                            model.input_buffer = String::new();
+                        }
+                    }
+                    model.input_target = InputTarget::LinkTask(task_id);
+                    model.cursor_position = model.input_buffer.len();
+                }
+            }
+        }
+        UiMessage::UnlinkTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                // Only unlink if currently linked
+                let is_linked = model
+                    .tasks
+                    .get(&task_id)
+                    .is_some_and(|t| t.next_task_id.is_some());
+                if is_linked {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.next_task_id = None;
+                    });
+                }
+            }
+        }
+        // Calendar navigation - delegated to helper
+        UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
+            handle_ui_calendar(model, msg);
+        }
+        // Macro recording/playback - delegated to helper
+        UiMessage::StartRecordMacro | UiMessage::StopRecordMacro | UiMessage::PlayMacro(_) => {
+            handle_ui_macros(model, msg);
+        }
+        // Template picker - delegated to helper
+        UiMessage::ShowTemplates | UiMessage::HideTemplates | UiMessage::SelectTemplate(_) => {
+            handle_ui_templates(model, msg);
+        }
+        // Keybindings editor - delegated to helper
+        UiMessage::ShowKeybindingsEditor
+        | UiMessage::HideKeybindingsEditor
+        | UiMessage::KeybindingsUp
+        | UiMessage::KeybindingsDown
+        | UiMessage::StartEditKeybinding
+        | UiMessage::CancelEditKeybinding
+        | UiMessage::ApplyKeybinding(_)
+        | UiMessage::ResetKeybinding
+        | UiMessage::ResetAllKeybindings
+        | UiMessage::SaveKeybindings
+        | UiMessage::DismissOverdueAlert
+        | UiMessage::DismissStorageErrorAlert => {
+            handle_ui_keybindings(model, msg);
+        }
+        // Time log editor - delegated to helper
+        UiMessage::ShowTimeLog
+        | UiMessage::HideTimeLog
+        | UiMessage::TimeLogUp
+        | UiMessage::TimeLogDown
+        | UiMessage::TimeLogEditStart
+        | UiMessage::TimeLogEditEnd
+        | UiMessage::TimeLogConfirmDelete
+        | UiMessage::TimeLogCancel
+        | UiMessage::TimeLogSubmit
+        | UiMessage::TimeLogAddEntry
+        | UiMessage::TimeLogDelete => {
+            handle_ui_time_log(model, msg);
+        }
+        // Work log editor - delegated to helper
+        UiMessage::ShowWorkLog
+        | UiMessage::HideWorkLog
+        | UiMessage::WorkLogUp
+        | UiMessage::WorkLogDown
+        | UiMessage::WorkLogView
+        | UiMessage::WorkLogAdd
+        | UiMessage::WorkLogEdit
+        | UiMessage::WorkLogConfirmDelete
+        | UiMessage::WorkLogCancel
+        | UiMessage::WorkLogSubmit
+        | UiMessage::WorkLogDelete
+        | UiMessage::WorkLogInputChar(_)
+        | UiMessage::WorkLogInputBackspace
+        | UiMessage::WorkLogInputDelete
+        | UiMessage::WorkLogCursorLeft
+        | UiMessage::WorkLogCursorRight
+        | UiMessage::WorkLogCursorUp
+        | UiMessage::WorkLogCursorDown
+        | UiMessage::WorkLogNewline
+        | UiMessage::WorkLogCursorHome
+        | UiMessage::WorkLogCursorEnd => {
+            handle_ui_work_log(model, msg);
+        }
+        // Description editor - delegated to helper
+        UiMessage::StartEditDescriptionMultiline
+        | UiMessage::HideDescriptionEditor
+        | UiMessage::DescriptionSubmit
+        | UiMessage::DescriptionInputChar(_)
+        | UiMessage::DescriptionInputBackspace
+        | UiMessage::DescriptionInputDelete
+        | UiMessage::DescriptionCursorLeft
+        | UiMessage::DescriptionCursorRight
+        | UiMessage::DescriptionCursorUp
+        | UiMessage::DescriptionCursorDown
+        | UiMessage::DescriptionNewline
+        | UiMessage::DescriptionCursorHome
+        | UiMessage::DescriptionCursorEnd => {
+            handle_ui_description_editor(model, msg);
+        }
+        // Saved filters - delegated to helper
+        UiMessage::ShowSavedFilters
+        | UiMessage::HideSavedFilters
+        | UiMessage::SavedFilterUp
+        | UiMessage::SavedFilterDown
+        | UiMessage::ApplySavedFilter
+        | UiMessage::SaveCurrentFilter
+        | UiMessage::DeleteSavedFilter
+        | UiMessage::ClearSavedFilter => {
+            handle_ui_saved_filters(model, msg);
+        }
+        // Daily review - delegated to helper
+        UiMessage::ShowDailyReview
+        | UiMessage::HideDailyReview
+        | UiMessage::DailyReviewNext
+        | UiMessage::DailyReviewPrev
+        | UiMessage::DailyReviewUp
+        | UiMessage::DailyReviewDown
+        | UiMessage::DailyReviewComplete => {
+            handle_ui_daily_review(model, msg);
+        }
+        // Weekly review - delegated to helper
+        UiMessage::ShowWeeklyReview
+        | UiMessage::HideWeeklyReview
+        | UiMessage::WeeklyReviewNext
+        | UiMessage::WeeklyReviewPrev
+        | UiMessage::WeeklyReviewUp
+        | UiMessage::WeeklyReviewDown => {
+            handle_ui_weekly_review(model, msg);
+        }
+
+        // Task snooze
+        UiMessage::StartSnoozeTask => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                model.input_mode = InputMode::Editing;
+                model.input_target = InputTarget::SnoozeTask(task_id);
+                model.input_buffer.clear();
+                model.cursor_position = 0;
+            }
+        }
+        UiMessage::ClearSnooze => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task) = model.tasks.get_mut(&task_id) {
+                    task.clear_snooze();
+                    let task_clone = task.clone();
+                    model.sync_task(&task_clone);
+                    model.status_message = Some("Snooze cleared".to_string());
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
+    }
+}

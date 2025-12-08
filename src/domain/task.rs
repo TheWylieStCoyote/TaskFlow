@@ -773,4 +773,253 @@ mod tests {
         let task = Task::new("Test");
         assert_eq!(task.estimation_accuracy(), None);
     }
+
+    // Snooze functionality tests
+
+    #[test]
+    fn test_task_not_snoozed_by_default() {
+        let task = Task::new("Test");
+        assert!(!task.is_snoozed());
+        assert!(task.snooze_until.is_none());
+    }
+
+    #[test]
+    fn test_task_snooze_until_future_date() {
+        let mut task = Task::new("Test");
+        let future = Utc::now().date_naive() + chrono::Duration::days(7);
+        task.snooze_until_date(future);
+
+        assert!(task.is_snoozed());
+        assert_eq!(task.snooze_until, Some(future));
+    }
+
+    #[test]
+    fn test_task_snooze_until_past_date_not_snoozed() {
+        let mut task = Task::new("Test");
+        let past = Utc::now().date_naive() - chrono::Duration::days(1);
+        task.snooze_until_date(past);
+
+        // Snooze date is set, but is_snoozed returns false for past dates
+        assert!(!task.is_snoozed());
+        assert_eq!(task.snooze_until, Some(past));
+    }
+
+    #[test]
+    fn test_task_snooze_until_today_not_snoozed() {
+        let mut task = Task::new("Test");
+        let today = Utc::now().date_naive();
+        task.snooze_until_date(today);
+
+        // Today is not > today, so not snoozed
+        assert!(!task.is_snoozed());
+    }
+
+    #[test]
+    fn test_task_clear_snooze() {
+        let mut task = Task::new("Test");
+        let future = Utc::now().date_naive() + chrono::Duration::days(7);
+        task.snooze_until_date(future);
+        assert!(task.is_snoozed());
+
+        task.clear_snooze();
+        assert!(!task.is_snoozed());
+        assert!(task.snooze_until.is_none());
+    }
+
+    #[test]
+    fn test_snooze_updates_updated_at() {
+        let mut task = Task::new("Test");
+        let original_updated = task.updated_at;
+
+        // Small delay to ensure time difference
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        let future = Utc::now().date_naive() + chrono::Duration::days(1);
+        task.snooze_until_date(future);
+
+        assert!(task.updated_at > original_updated);
+    }
+
+    #[test]
+    fn test_clear_snooze_updates_updated_at() {
+        let mut task = Task::new("Test");
+        let future = Utc::now().date_naive() + chrono::Duration::days(1);
+        task.snooze_until_date(future);
+        let after_snooze = task.updated_at;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        task.clear_snooze();
+        assert!(task.updated_at > after_snooze);
+    }
+
+    // Scheduled date tests
+
+    #[test]
+    fn test_task_scheduled_date() {
+        let date = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let mut task = Task::new("Test");
+        task.scheduled_date = Some(date);
+
+        assert_eq!(task.scheduled_date, Some(date));
+    }
+
+    #[test]
+    fn test_task_scheduled_vs_due_dates_independent() {
+        let scheduled = NaiveDate::from_ymd_opt(2025, 6, 10).unwrap();
+        let due = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+
+        let task = Task::new("Test").with_due_date(due);
+        let mut task = task;
+        task.scheduled_date = Some(scheduled);
+
+        assert_eq!(task.scheduled_date, Some(scheduled));
+        assert_eq!(task.due_date, Some(due));
+    }
+
+    // Custom fields tests
+
+    #[test]
+    fn test_task_custom_fields_empty_by_default() {
+        let task = Task::new("Test");
+        assert!(task.custom_fields.is_empty());
+    }
+
+    #[test]
+    fn test_task_custom_fields_string() {
+        let mut task = Task::new("Test");
+        task.custom_fields
+            .insert("client".to_string(), serde_json::json!("Acme Corp"));
+
+        assert_eq!(
+            task.custom_fields.get("client"),
+            Some(&serde_json::json!("Acme Corp"))
+        );
+    }
+
+    #[test]
+    fn test_task_custom_fields_number() {
+        let mut task = Task::new("Test");
+        task.custom_fields
+            .insert("story_points".to_string(), serde_json::json!(5));
+
+        assert_eq!(
+            task.custom_fields.get("story_points"),
+            Some(&serde_json::json!(5))
+        );
+    }
+
+    #[test]
+    fn test_task_custom_fields_complex() {
+        let mut task = Task::new("Test");
+        task.custom_fields.insert(
+            "metadata".to_string(),
+            serde_json::json!({"reviewed": true, "reviewer": "alice"}),
+        );
+
+        let metadata = task.custom_fields.get("metadata").unwrap();
+        assert_eq!(metadata["reviewed"], serde_json::json!(true));
+        assert_eq!(metadata["reviewer"], serde_json::json!("alice"));
+    }
+
+    // Dependencies tests
+
+    #[test]
+    fn test_task_dependencies_empty_by_default() {
+        let task = Task::new("Test");
+        assert!(task.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_task_dependencies() {
+        let task1 = Task::new("Blocker");
+        let mut task2 = Task::new("Blocked task");
+        task2.dependencies.push(task1.id);
+
+        assert_eq!(task2.dependencies.len(), 1);
+        assert_eq!(task2.dependencies[0], task1.id);
+    }
+
+    // Task chain tests
+
+    #[test]
+    fn test_task_chain_next_task() {
+        let task1 = Task::new("First");
+        let mut task2 = Task::new("Second");
+        task2.next_task_id = Some(task1.id);
+
+        assert_eq!(task2.next_task_id, Some(task1.id));
+    }
+
+    #[test]
+    fn test_task_chain_none_by_default() {
+        let task = Task::new("Test");
+        assert!(task.next_task_id.is_none());
+    }
+
+    // Sort order tests
+
+    #[test]
+    fn test_task_sort_order() {
+        let mut task = Task::new("Test");
+        task.sort_order = Some(100);
+
+        assert_eq!(task.sort_order, Some(100));
+    }
+
+    #[test]
+    fn test_task_sort_order_negative() {
+        let mut task = Task::new("Test");
+        task.sort_order = Some(-50);
+
+        assert_eq!(task.sort_order, Some(-50));
+    }
+
+    // Serialization tests
+
+    #[test]
+    fn test_task_serialization_roundtrip() {
+        let task = Task::new("Roundtrip test")
+            .with_priority(Priority::High)
+            .with_status(TaskStatus::InProgress)
+            .with_tags(vec!["tag1".to_string(), "tag2".to_string()])
+            .with_description("A description");
+
+        let json = serde_json::to_string(&task).expect("Failed to serialize");
+        let restored: Task = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(restored.id, task.id);
+        assert_eq!(restored.title, task.title);
+        assert_eq!(restored.priority, task.priority);
+        assert_eq!(restored.status, task.status);
+        assert_eq!(restored.tags, task.tags);
+        assert_eq!(restored.description, task.description);
+    }
+
+    #[test]
+    fn test_task_serialization_with_snooze() {
+        let mut task = Task::new("Snoozed task");
+        let future = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+        task.snooze_until = Some(future);
+
+        let json = serde_json::to_string(&task).expect("Failed to serialize");
+        let restored: Task = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(restored.snooze_until, Some(future));
+    }
+
+    #[test]
+    fn test_task_serialization_with_custom_fields() {
+        let mut task = Task::new("Task with fields");
+        task.custom_fields
+            .insert("key".to_string(), serde_json::json!("value"));
+
+        let json = serde_json::to_string(&task).expect("Failed to serialize");
+        let restored: Task = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        assert_eq!(
+            restored.custom_fields.get("key"),
+            Some(&serde_json::json!("value"))
+        );
+    }
 }

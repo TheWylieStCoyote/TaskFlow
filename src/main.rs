@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -10,6 +11,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use tracing::{debug, info, warn};
 
 use taskflow::app::{
     update, Message, Model, NavigationMessage, PomodoroMessage, RunningState, SystemMessage,
@@ -49,6 +51,14 @@ struct Cli {
     /// Use sample data instead of loading from storage
     #[arg(long, global = true)]
     demo: bool,
+
+    /// Enable debug logging (writes to taskflow.log)
+    #[arg(long, global = true)]
+    debug: bool,
+
+    /// Set log level (trace, debug, info, warn, error)
+    #[arg(long, global = true, default_value = "info")]
+    log_level: String,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -124,8 +134,53 @@ enum Commands {
     },
 }
 
+/// Initialize the tracing/logging subsystem.
+///
+/// When `--debug` is passed, logs are written to `taskflow.log` in the current directory.
+/// The log level can be controlled via `--log-level` (trace, debug, info, warn, error).
+fn init_logging(debug: bool, log_level: &str) {
+    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+    if debug {
+        // Parse log level, defaulting to debug when --debug is set
+        let level = if log_level == "info" {
+            "debug" // Default to debug when --debug flag is used
+        } else {
+            log_level
+        };
+
+        let filter = EnvFilter::try_new(format!("taskflow={level}"))
+            .unwrap_or_else(|_| EnvFilter::new("taskflow=debug"));
+
+        // Try to create log file, fall back to stderr if it fails
+        if let Ok(file) = File::create("taskflow.log") {
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(
+                    fmt::layer()
+                        .with_writer(file)
+                        .with_ansi(false)
+                        .with_target(true)
+                        .with_thread_ids(false)
+                        .with_file(true)
+                        .with_line_number(true),
+                )
+                .init();
+        } else {
+            eprintln!("Warning: Could not create taskflow.log, logging disabled");
+        }
+    }
+    // When debug is false, no logging subscriber is installed (silent operation)
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Initialize logging if --debug flag is set
+    init_logging(cli.debug, &cli.log_level);
+
+    info!("TaskFlow starting");
+    debug!(backend = ?cli.backend, data = ?cli.data, demo = cli.demo, "CLI arguments parsed");
 
     // Handle subcommands
     match &cli.command {
@@ -668,6 +723,7 @@ fn mark_task_done(
 fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Load settings from config file
     let settings = Settings::load();
+    debug!("Settings loaded from config file");
 
     // CLI args override config file settings
     let backend_type = if cli.backend == BackendType::Json {
@@ -678,23 +734,28 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
 
     // Determine data path (CLI > config > default)
     let data_path = cli.data.unwrap_or_else(|| settings.get_data_path());
+    info!(backend = ?backend_type, path = %data_path.display(), "Initializing storage");
 
     // Create app state
     let mut model = if cli.demo {
+        debug!("Using demo/sample data");
         Model::new().with_sample_data()
     } else {
         // Try to load from storage, fall back to sample data on error
         match Model::new().with_storage(backend_type, data_path.clone()) {
             Ok(m) => {
                 if m.tasks.is_empty() {
+                    debug!("No tasks found, loading sample data");
                     // No tasks loaded, use sample data
                     m.with_sample_data()
                 } else {
+                    info!(task_count = m.tasks.len(), project_count = m.projects.len(), "Data loaded successfully");
                     m
                 }
             }
             Err(e) => {
                 // Set error state so TUI can show alert to user
+                warn!(error = %e, path = %data_path.display(), "Failed to load data");
                 let error_msg = format!("{}: {e}", data_path.display());
                 let mut m = Model::new().with_sample_data();
                 m.storage_load_error = Some(error_msg);
@@ -729,10 +790,16 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
 
     // Save before exit if storage is configured
     if model.has_storage() && model.dirty {
+        debug!("Saving data before exit");
         if let Err(e) = model.save() {
+            warn!(error = %e, "Could not save data on exit");
             eprintln!("Warning: Could not save data: {e}");
+        } else {
+            info!("Data saved successfully");
         }
     }
+
+    info!("TaskFlow shutting down");
 
     // Restore terminal
     disable_raw_mode()?;

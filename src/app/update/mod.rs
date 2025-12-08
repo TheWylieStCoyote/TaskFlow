@@ -13,6 +13,8 @@ mod task;
 mod time;
 mod ui;
 
+use tracing::{debug, trace};
+
 use crate::app::{Message, Model};
 
 pub use navigation::days_in_month;
@@ -29,13 +31,34 @@ pub fn update(model: &mut Model, message: Message) {
         model.macro_state.record(&message);
     }
 
+    // Log message at trace level (very verbose)
+    trace!(?message, "Processing message");
+
     match message {
-        Message::Navigation(msg) => navigation::handle_navigation(model, msg),
-        Message::Task(msg) => task::handle_task(model, msg),
-        Message::Time(msg) => time::handle_time(model, msg),
-        Message::Pomodoro(msg) => time::handle_pomodoro(model, msg),
-        Message::Ui(msg) => ui::handle_ui(model, msg),
-        Message::System(msg) => system::handle_system(model, msg),
+        Message::Navigation(msg) => {
+            debug!(?msg, "Navigation");
+            navigation::handle_navigation(model, msg);
+        }
+        Message::Task(msg) => {
+            debug!(?msg, "Task operation");
+            task::handle_task(model, msg);
+        }
+        Message::Time(msg) => {
+            debug!(?msg, "Time tracking");
+            time::handle_time(model, msg);
+        }
+        Message::Pomodoro(msg) => {
+            trace!(?msg, "Pomodoro tick"); // trace level since this fires every second
+            time::handle_pomodoro(model, msg);
+        }
+        Message::Ui(msg) => {
+            trace!(?msg, "UI event"); // trace level since these are frequent
+            ui::handle_ui(model, msg);
+        }
+        Message::System(msg) => {
+            debug!(?msg, "System operation");
+            system::handle_system(model, msg);
+        }
         Message::None => {}
     }
 }

@@ -378,6 +378,44 @@ auto_save_interval = 300
 theme = "default"
 ```
 
+### Pomodoro Configuration
+
+The Pomodoro timer can be customized in your data file. The configuration is stored alongside your tasks and uses the following defaults:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `work_duration_mins` | 25 | Length of work sessions |
+| `short_break_mins` | 5 | Length of short breaks |
+| `long_break_mins` | 15 | Length of long break (after completing cycles) |
+| `cycles_before_long_break` | 4 | Work cycles before a long break |
+
+**Example configuration (in JSON backend):**
+
+```json
+{
+  "pomodoro_config": {
+    "work_duration_mins": 25,
+    "short_break_mins": 5,
+    "long_break_mins": 15,
+    "cycles_before_long_break": 4
+  }
+}
+```
+
+**Pomodoro workflow:**
+1. Press `F5` to start a session (defaults to 4 cycles)
+2. Work for 25 minutes (🍅 icon in status bar)
+3. Take a 5-minute short break (☕ icon)
+4. Repeat steps 2-3 for 4 cycles
+5. After 4 cycles, take a 15-minute long break (🌴 icon)
+6. Session complete!
+
+**Tips:**
+- Use `F6` to pause/resume if interrupted
+- Use `F7` to skip the current phase (e.g., end break early)
+- Use `F8` to stop the session entirely
+- The timer persists across app restarts
+
 ### Keybindings (keybindings.toml)
 
 ```toml

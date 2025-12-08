@@ -385,7 +385,12 @@ fn test_start_edit_estimate() {
     let task_id = model.visible_tasks[0].clone();
 
     // Task starts with no estimate
-    assert!(model.tasks.get(&task_id).unwrap().estimated_minutes.is_none());
+    assert!(model
+        .tasks
+        .get(&task_id)
+        .unwrap()
+        .estimated_minutes
+        .is_none());
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
@@ -487,7 +492,10 @@ fn test_edit_estimate_invalid_keeps_old() {
     assert_eq!(task.estimated_minutes, Some(60));
 
     // Should show error message
-    assert!(model.status_message.as_ref().is_some_and(|m| m.contains("Invalid")));
+    assert!(model
+        .status_message
+        .as_ref()
+        .is_some_and(|m| m.contains("Invalid")));
 }
 
 #[test]
@@ -496,7 +504,12 @@ fn test_edit_estimate_undo() {
     let task_id = model.visible_tasks[0].clone();
 
     // Start with no estimate
-    assert!(model.tasks.get(&task_id).unwrap().estimated_minutes.is_none());
+    assert!(model
+        .tasks
+        .get(&task_id)
+        .unwrap()
+        .estimated_minutes
+        .is_none());
 
     // Add an estimate
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
@@ -505,19 +518,30 @@ fn test_edit_estimate_undo() {
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Verify estimate was set
-    assert_eq!(model.tasks.get(&task_id).unwrap().estimated_minutes, Some(45));
+    assert_eq!(
+        model.tasks.get(&task_id).unwrap().estimated_minutes,
+        Some(45)
+    );
 
     // Undo
     update(&mut model, Message::System(SystemMessage::Undo));
 
     // Estimate should be gone
-    assert!(model.tasks.get(&task_id).unwrap().estimated_minutes.is_none());
+    assert!(model
+        .tasks
+        .get(&task_id)
+        .unwrap()
+        .estimated_minutes
+        .is_none());
 
     // Redo
     update(&mut model, Message::System(SystemMessage::Redo));
 
     // Estimate should be back
-    assert_eq!(model.tasks.get(&task_id).unwrap().estimated_minutes, Some(45));
+    assert_eq!(
+        model.tasks.get(&task_id).unwrap().estimated_minutes,
+        Some(45)
+    );
 }
 
 #[test]
@@ -526,7 +550,13 @@ fn test_edit_estimate_prefill_existing() {
     let task_id = model.visible_tasks[0].clone();
 
     // Set various estimates and check prefill
-    let test_cases = [(30, "30m"), (60, "1h"), (90, "1h30m"), (120, "2h"), (135, "2h15m")];
+    let test_cases = [
+        (30, "30m"),
+        (60, "1h"),
+        (90, "1h30m"),
+        (120, "2h"),
+        (135, "2h15m"),
+    ];
 
     for (minutes, expected_display) in test_cases {
         model.tasks.get_mut(&task_id).unwrap().estimated_minutes = Some(minutes);

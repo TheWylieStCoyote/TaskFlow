@@ -749,7 +749,11 @@ fn run_tui(cli: Cli) -> anyhow::Result<()> {
                     // No tasks loaded, use sample data
                     m.with_sample_data()
                 } else {
-                    info!(task_count = m.tasks.len(), project_count = m.projects.len(), "Data loaded successfully");
+                    info!(
+                        task_count = m.tasks.len(),
+                        project_count = m.projects.len(),
+                        "Data loaded successfully"
+                    );
                     m
                 }
             }

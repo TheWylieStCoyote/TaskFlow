@@ -115,13 +115,16 @@ pub fn handle_submit_input(model: &mut Model) {
                 });
                 // Show feedback
                 if let Some(mins) = estimate {
-                    model.status_message =
-                        Some(format!("Estimate set to {}", super::format_duration_input(mins)));
+                    model.status_message = Some(format!(
+                        "Estimate set to {}",
+                        super::format_duration_input(mins)
+                    ));
                 } else {
                     model.status_message = Some("Estimate cleared".to_string());
                 }
             } else {
-                model.status_message = Some("Invalid duration format (try: 30m, 1h, 1h30m)".to_string());
+                model.status_message =
+                    Some("Invalid duration format (try: 30m, 1h, 1h30m)".to_string());
             }
             model.refresh_visible_tasks();
         }

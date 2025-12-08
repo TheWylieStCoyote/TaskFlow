@@ -45,6 +45,7 @@
 //! assert!(!model.projects.is_empty());
 //! ```
 
+mod cache;
 mod filtering;
 mod hierarchy;
 mod sample_data;
@@ -52,6 +53,7 @@ mod storage;
 mod time_tracking;
 mod types;
 
+pub use cache::{FooterStats, TaskCache};
 pub use types::{CalendarState, RunningState};
 
 use std::collections::HashMap;
@@ -339,6 +341,12 @@ pub struct Model {
     pub weekly_review_phase: crate::ui::WeeklyReviewPhase,
     /// Selected index within current review phase
     pub weekly_review_selected: usize,
+
+    // Performance caches
+    /// Cached footer statistics (completed, overdue, due today counts)
+    pub footer_stats: FooterStats,
+    /// Cached per-task metadata (time sums, depths, subtask progress)
+    pub task_cache: TaskCache,
 }
 
 impl Model {
@@ -438,6 +446,8 @@ impl Model {
             show_weekly_review: false,
             weekly_review_phase: crate::ui::WeeklyReviewPhase::default(),
             weekly_review_selected: 0,
+            footer_stats: FooterStats::default(),
+            task_cache: TaskCache::new(),
         }
     }
 

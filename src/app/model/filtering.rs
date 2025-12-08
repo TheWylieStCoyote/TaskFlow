@@ -9,14 +9,30 @@ use crate::domain::{ProjectId, SortField, SortOrder, TagFilterMode, Task, TaskId
 use super::{Model, ViewId};
 
 impl Model {
+    /// Rebuilds all performance caches.
+    ///
+    /// Should be called when:
+    /// - Tasks are added, removed, or modified
+    /// - Time entries change
+    /// - Task hierarchy changes
+    pub fn rebuild_caches(&mut self) {
+        self.footer_stats.rebuild(&self.tasks);
+        self.task_cache.rebuild_time_sums(&self.time_entries);
+        self.task_cache.rebuild_hierarchy(&self.tasks);
+    }
+
     /// Recalculates visible tasks based on current filters and sort.
     ///
     /// This should be called after any change that affects which tasks
     /// are visible (adding/removing tasks, changing filters, switching views).
     /// Updates `visible_tasks` with the filtered and sorted task IDs.
     ///
+    /// Also rebuilds performance caches to ensure UI data is current.
+    ///
     /// Subtasks are displayed directly after their parent task.
     pub fn refresh_visible_tasks(&mut self) {
+        // Rebuild caches when task list changes
+        self.rebuild_caches();
         // Collect all tasks that pass the filter
         let filtered_tasks: Vec<_> = self
             .tasks

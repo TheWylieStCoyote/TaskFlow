@@ -380,19 +380,11 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
         return;
     }
 
-    // Calculate counts
+    // Use cached counts for performance
     let task_count = model.visible_tasks.len();
-    let completed = model
-        .tasks
-        .values()
-        .filter(|t| t.status.is_complete())
-        .count();
-    let overdue = model.tasks.values().filter(|t| t.is_overdue()).count();
-    let due_today = model
-        .tasks
-        .values()
-        .filter(|t| t.is_due_today() && !t.status.is_complete())
-        .count();
+    let completed = model.footer_stats.completed_count;
+    let overdue = model.footer_stats.overdue_count;
+    let due_today = model.footer_stats.due_today_count;
 
     // Build footer with styled spans
     let mut spans = vec![

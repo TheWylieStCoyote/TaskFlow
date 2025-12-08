@@ -61,13 +61,14 @@ impl<'a> TaskList<'a> {
 
         for (idx, task_id) in model.visible_tasks.iter().enumerate() {
             if let Some(task) = model.tasks.get(task_id) {
-                let time_spent = model.total_time_for_task(task_id);
-                let nesting_depth = model.task_depth(task_id);
+                // Use cached values for performance
+                let time_spent = model.task_cache.get_time_sum(*task_id);
+                let nesting_depth = model.task_cache.get_depth(*task_id);
                 let is_multi_selected = model.selected_tasks.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
                 let is_recurring = task.recurrence.is_some();
                 let has_chain = task.next_task_id.is_some();
-                let subtask_progress = model.subtask_progress(task_id);
+                let subtask_progress = model.task_cache.get_subtask_progress(*task_id);
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
@@ -119,13 +120,14 @@ impl<'a> TaskList<'a> {
                         .iter()
                         .position(|id| id == &task_id)
                         .unwrap_or(0);
-                    let time_spent = model.total_time_for_task(&task_id);
-                    let nesting_depth = model.task_depth(&task_id);
+                    // Use cached values for performance
+                    let time_spent = model.task_cache.get_time_sum(task_id);
+                    let nesting_depth = model.task_cache.get_depth(task_id);
                     let is_multi_selected = model.selected_tasks.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
                     let is_recurring = task.recurrence.is_some();
                     let has_chain = task.next_task_id.is_some();
-                    let subtask_progress = model.subtask_progress(&task_id);
+                    let subtask_progress = model.task_cache.get_subtask_progress(task_id);
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,

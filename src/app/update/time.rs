@@ -183,6 +183,7 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
 }
 
 /// Transition to the next Pomodoro phase
+#[allow(clippy::too_many_lines)]
 fn transition_pomodoro_phase(model: &mut Model) {
     let (next_phase, next_remaining, cycles_completed, message) = {
         let Some(session) = model.pomodoro_session.as_ref() else {
@@ -245,5 +246,224 @@ fn transition_pomodoro_phase(model: &mut Model) {
         } else {
             model.status_message = Some(message);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::Task;
+
+    fn setup_model_with_task() -> Model {
+        let mut model = Model::new();
+        let task = Task::new("Test task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+        model
+    }
+
+    #[test]
+    fn test_start_tracking() {
+        let mut model = setup_model_with_task();
+        assert!(model.active_time_entry.is_none());
+
+        handle_time(&mut model, TimeMessage::StartTracking);
+
+        assert!(model.active_time_entry.is_some());
+        assert!(!model.undo_stack.is_empty());
+    }
+
+    #[test]
+    fn test_stop_tracking() {
+        let mut model = setup_model_with_task();
+        handle_time(&mut model, TimeMessage::StartTracking);
+        assert!(model.active_time_entry.is_some());
+
+        handle_time(&mut model, TimeMessage::StopTracking);
+
+        assert!(model.active_time_entry.is_none());
+    }
+
+    #[test]
+    fn test_toggle_tracking_start() {
+        let mut model = setup_model_with_task();
+        assert!(model.active_time_entry.is_none());
+
+        handle_time(&mut model, TimeMessage::ToggleTracking);
+
+        assert!(model.active_time_entry.is_some());
+    }
+
+    #[test]
+    fn test_toggle_tracking_stop() {
+        let mut model = setup_model_with_task();
+        handle_time(&mut model, TimeMessage::StartTracking);
+        assert!(model.active_time_entry.is_some());
+
+        handle_time(&mut model, TimeMessage::ToggleTracking);
+
+        assert!(model.active_time_entry.is_none());
+    }
+
+    #[test]
+    fn test_pomodoro_start() {
+        let mut model = setup_model_with_task();
+        assert!(model.pomodoro_session.is_none());
+
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        assert!(model.pomodoro_session.is_some());
+        assert!(model.focus_mode);
+        let session = model.pomodoro_session.as_ref().unwrap();
+        assert_eq!(session.session_goal, 4);
+    }
+
+    #[test]
+    fn test_pomodoro_start_without_task() {
+        let mut model = Model::new();
+        model.refresh_visible_tasks();
+
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        assert!(model.pomodoro_session.is_none());
+        assert!(model.status_message.is_some());
+    }
+
+    #[test]
+    fn test_pomodoro_pause_resume() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        handle_pomodoro(&mut model, PomodoroMessage::Pause);
+        assert!(model.pomodoro_session.as_ref().unwrap().paused);
+
+        handle_pomodoro(&mut model, PomodoroMessage::Resume);
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+    }
+
+    #[test]
+    fn test_pomodoro_toggle_pause() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        handle_pomodoro(&mut model, PomodoroMessage::TogglePause);
+        assert!(model.pomodoro_session.as_ref().unwrap().paused);
+
+        handle_pomodoro(&mut model, PomodoroMessage::TogglePause);
+        assert!(!model.pomodoro_session.as_ref().unwrap().paused);
+    }
+
+    #[test]
+    fn test_pomodoro_stop() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+        assert!(model.pomodoro_session.is_some());
+
+        handle_pomodoro(&mut model, PomodoroMessage::Stop);
+
+        assert!(model.pomodoro_session.is_none());
+    }
+
+    #[test]
+    fn test_pomodoro_tick() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        let initial_remaining = model.pomodoro_session.as_ref().unwrap().remaining_secs;
+        handle_pomodoro(&mut model, PomodoroMessage::Tick);
+
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().remaining_secs,
+            initial_remaining - 1
+        );
+    }
+
+    #[test]
+    fn test_pomodoro_tick_paused() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+        handle_pomodoro(&mut model, PomodoroMessage::Pause);
+
+        let initial_remaining = model.pomodoro_session.as_ref().unwrap().remaining_secs;
+        handle_pomodoro(&mut model, PomodoroMessage::Tick);
+
+        // Should not decrement when paused
+        assert_eq!(
+            model.pomodoro_session.as_ref().unwrap().remaining_secs,
+            initial_remaining
+        );
+    }
+
+    #[test]
+    fn test_pomodoro_config_changes() {
+        let mut model = Model::new();
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetWorkDuration(30));
+        assert_eq!(model.pomodoro_config.work_duration_mins, 30);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetShortBreak(10));
+        assert_eq!(model.pomodoro_config.short_break_mins, 10);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetLongBreak(20));
+        assert_eq!(model.pomodoro_config.long_break_mins, 20);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetCyclesBeforeLongBreak(6));
+        assert_eq!(model.pomodoro_config.cycles_before_long_break, 6);
+    }
+
+    #[test]
+    fn test_pomodoro_config_minimum_values() {
+        let mut model = Model::new();
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetWorkDuration(0));
+        assert_eq!(model.pomodoro_config.work_duration_mins, 1);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetShortBreak(0));
+        assert_eq!(model.pomodoro_config.short_break_mins, 1);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetLongBreak(0));
+        assert_eq!(model.pomodoro_config.long_break_mins, 1);
+
+        handle_pomodoro(&mut model, PomodoroMessage::SetCyclesBeforeLongBreak(0));
+        assert_eq!(model.pomodoro_config.cycles_before_long_break, 1);
+    }
+
+    #[test]
+    fn test_pomodoro_goal_increment_decrement() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        handle_pomodoro(&mut model, PomodoroMessage::IncrementGoal);
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 5);
+
+        handle_pomodoro(&mut model, PomodoroMessage::DecrementGoal);
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 4);
+    }
+
+    #[test]
+    fn test_pomodoro_goal_minimum() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 1 });
+
+        handle_pomodoro(&mut model, PomodoroMessage::DecrementGoal);
+        // Should not go below 1
+        assert_eq!(model.pomodoro_session.as_ref().unwrap().session_goal, 1);
+    }
+
+    #[test]
+    fn test_pomodoro_skip_phase() {
+        let mut model = setup_model_with_task();
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        let initial_phase = model.pomodoro_session.as_ref().unwrap().phase;
+        handle_pomodoro(&mut model, PomodoroMessage::Skip);
+
+        // Phase should have changed
+        assert_ne!(
+            model.pomodoro_session.as_ref().unwrap().phase,
+            initial_phase
+        );
     }
 }

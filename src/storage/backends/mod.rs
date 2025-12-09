@@ -22,14 +22,18 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```no_run
 //! use taskflow::storage::{create_backend, BackendType};
+//! use std::path::Path;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a JSON backend
-//! let backend = create_backend(BackendType::Json, "tasks.json")?;
+//! let _backend = create_backend(BackendType::Json, Path::new("tasks.json"))?;
 //!
 //! // Create a SQLite backend for better performance
-//! let backend = create_backend(BackendType::Sqlite, "tasks.db")?;
+//! let _backend = create_backend(BackendType::Sqlite, Path::new("tasks.db"))?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! [`StorageBackend`]: crate::storage::StorageBackend

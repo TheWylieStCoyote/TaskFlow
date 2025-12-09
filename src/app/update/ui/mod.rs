@@ -53,12 +53,13 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use taskflow::app::{Model, UiMessage};
-//! use taskflow::app::update::ui::handle_ui;
+//! ```
+//! use taskflow::app::{Model, Message, UiMessage, update};
 //!
 //! let mut model = Model::new();
-//! handle_ui(&mut model, UiMessage::ToggleSidebar);
+//! assert!(model.show_sidebar); // Sidebar visible by default
+//! update(&mut model, Message::Ui(UiMessage::ToggleSidebar));
+//! assert!(!model.show_sidebar); // Sidebar now hidden
 //! ```
 
 mod calendar;

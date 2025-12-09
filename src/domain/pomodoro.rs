@@ -356,7 +356,7 @@ mod tests {
     fn test_pomodoro_session_new() {
         let task_id = TaskId::new();
         let config = PomodoroConfig::default();
-        let session = PomodoroSession::new(task_id.clone(), &config, 4);
+        let session = PomodoroSession::new(task_id, &config, 4);
 
         assert_eq!(session.task_id, task_id);
         assert_eq!(session.phase, PomodoroPhase::Work);
@@ -451,7 +451,7 @@ mod tests {
     fn test_pomodoro_session_serialization_roundtrip() {
         let task_id = TaskId::new();
         let config = PomodoroConfig::default();
-        let session = PomodoroSession::new(task_id.clone(), &config, 4);
+        let session = PomodoroSession::new(task_id, &config, 4);
 
         // Serialize to JSON
         let json = serde_json::to_string(&session).expect("Failed to serialize");

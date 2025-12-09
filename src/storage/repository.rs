@@ -1,6 +1,6 @@
 use crate::domain::{
-    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
-    TimeEntry, TimeEntryId,
+    Filter, Habit, HabitId, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId,
+    Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 use super::error::StorageResult;
@@ -185,6 +185,96 @@ pub trait TimeEntryRepository {
     fn get_active_entry(&self) -> StorageResult<Option<TimeEntry>>;
 }
 
+/// Repository trait for work log entry operations.
+pub trait WorkLogRepository {
+    /// Creates a new work log entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be persisted.
+    fn create_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()>;
+
+    /// Retrieves a work log entry by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_work_log(&self, id: &WorkLogEntryId) -> StorageResult<Option<WorkLogEntry>>;
+
+    /// Updates an existing work log entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be updated.
+    fn update_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()>;
+
+    /// Deletes a work log entry by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be deleted.
+    fn delete_work_log(&mut self, id: &WorkLogEntryId) -> StorageResult<()>;
+
+    /// Gets all work log entries for a task, ordered by creation time (newest first).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_work_logs_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<WorkLogEntry>>;
+
+    /// Lists all work log entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>>;
+}
+
+/// Repository trait for habit operations.
+pub trait HabitRepository {
+    /// Creates a new habit in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be persisted.
+    fn create_habit(&mut self, habit: &Habit) -> StorageResult<()>;
+
+    /// Retrieves a habit by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_habit(&self, id: &HabitId) -> StorageResult<Option<Habit>>;
+
+    /// Updates an existing habit.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be updated.
+    fn update_habit(&mut self, habit: &Habit) -> StorageResult<()>;
+
+    /// Deletes a habit by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the habit cannot be deleted.
+    fn delete_habit(&mut self, id: &HabitId) -> StorageResult<()>;
+
+    /// Lists all habits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_habits(&self) -> StorageResult<Vec<Habit>>;
+
+    /// Lists all active (non-archived) habits.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_active_habits(&self) -> StorageResult<Vec<Habit>>;
+}
+
 /// Data export structure for migration between backends
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportData {
@@ -192,6 +282,12 @@ pub struct ExportData {
     pub projects: Vec<Project>,
     pub tags: Vec<Tag>,
     pub time_entries: Vec<TimeEntry>,
+    /// Work log entries for tasks
+    #[serde(default)]
+    pub work_logs: Vec<WorkLogEntry>,
+    /// Habits with check-in history
+    #[serde(default)]
+    pub habits: Vec<Habit>,
     pub version: u32,
     /// Active Pomodoro session (if any)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -211,6 +307,8 @@ impl Default for ExportData {
             projects: Vec::new(),
             tags: Vec::new(),
             time_entries: Vec::new(),
+            work_logs: Vec::new(),
+            habits: Vec::new(),
             version: 1,
             pomodoro_session: None,
             pomodoro_config: None,
@@ -221,7 +319,12 @@ impl Default for ExportData {
 
 /// Unified storage backend trait combining all repositories.
 pub trait StorageBackend:
-    TaskRepository + ProjectRepository + TagRepository + TimeEntryRepository
+    TaskRepository
+    + ProjectRepository
+    + TagRepository
+    + TimeEntryRepository
+    + WorkLogRepository
+    + HabitRepository
 {
     /// Initializes the storage backend (creates files/tables, etc.).
     ///

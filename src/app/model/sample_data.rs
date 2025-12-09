@@ -33,13 +33,13 @@ impl Model {
         let frontend_project = Project::new("Frontend UI");
         let docs_project = Project::new("Documentation");
 
-        let backend_id = backend_project.id.clone();
-        let frontend_id = frontend_project.id.clone();
-        let docs_id = docs_project.id.clone();
+        let backend_id = backend_project.id;
+        let frontend_id = frontend_project.id;
+        let docs_id = docs_project.id;
 
-        self.projects.insert(backend_id.clone(), backend_project);
-        self.projects.insert(frontend_id.clone(), frontend_project);
-        self.projects.insert(docs_id.clone(), docs_project);
+        self.projects.insert(backend_id, backend_project);
+        self.projects.insert(frontend_id, frontend_project);
+        self.projects.insert(docs_id, docs_project);
 
         let today = Utc::now().date_naive();
         let yesterday = today - chrono::Duration::days(1);
@@ -51,17 +51,17 @@ impl Model {
             Task::new("Set up database schema")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
-                .with_project(backend_id.clone())
+                .with_project(backend_id)
                 .with_tags(vec!["database".into(), "setup".into()]),
             Task::new("Implement REST endpoints")
                 .with_status(TaskStatus::InProgress)
                 .with_priority(Priority::High)
-                .with_project(backend_id.clone())
+                .with_project(backend_id)
                 .with_tags(vec!["api".into(), "rust".into()]),
             Task::new("Add authentication middleware")
                 .with_priority(Priority::Urgent)
                 .with_due_date(tomorrow)
-                .with_project(backend_id.clone())
+                .with_project(backend_id)
                 .with_tags(vec!["security".into(), "api".into()]),
             Task::new("Write integration tests")
                 .with_priority(Priority::Medium)
@@ -72,17 +72,17 @@ impl Model {
             Task::new("Design component library")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
-                .with_project(frontend_id.clone())
+                .with_project(frontend_id)
                 .with_tags(vec!["design".into(), "ui".into()]),
             Task::new("Build task list widget")
                 .with_status(TaskStatus::InProgress)
                 .with_priority(Priority::High)
-                .with_project(frontend_id.clone())
+                .with_project(frontend_id)
                 .with_tags(vec!["ui".into(), "rust".into()]),
             Task::new("Add keyboard navigation")
                 .with_priority(Priority::Medium)
                 .with_due_date(today)
-                .with_project(frontend_id.clone())
+                .with_project(frontend_id)
                 .with_tags(vec!["ux".into(), "accessibility".into()]),
             Task::new("Implement dark mode")
                 .with_priority(Priority::Low)
@@ -92,7 +92,7 @@ impl Model {
             Task::new("Write API documentation")
                 .with_priority(Priority::Medium)
                 .with_due_date(next_week)
-                .with_project(docs_id.clone())
+                .with_project(docs_id)
                 .with_tags(vec!["docs".into(), "api".into()]),
             Task::new("Create user guide")
                 .with_priority(Priority::Low)
@@ -122,7 +122,7 @@ impl Model {
         ];
 
         for task in tasks {
-            self.tasks.insert(task.id.clone(), task);
+            self.tasks.insert(task.id, task);
         }
 
         self.refresh_visible_tasks();

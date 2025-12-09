@@ -1,6 +1,6 @@
 [package]
 name = "taskflow"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A TUI project management application"
 license = "MIT"
@@ -39,6 +39,11 @@ anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 [dev-dependencies]
 tempfile = "3.13"
 pretty_assertions = "1.4"
+proptest = "1.5"

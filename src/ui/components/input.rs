@@ -12,7 +12,7 @@ pub enum InputMode {
     Editing,
 }
 
-use crate::domain::{ProjectId, TaskId};
+use crate::domain::{HabitId, ProjectId, TaskId};
 
 use crate::storage::ImportFormat;
 
@@ -38,6 +38,11 @@ pub enum InputTarget {
     EditRecurrence(TaskId),
     LinkTask(TaskId),             // Linking current task to next task in chain
     ImportFilePath(ImportFormat), // File path input for import
+    SavedFilterName,              // Name for a new saved filter
+    SnoozeTask(TaskId),           // Snooze date for a task
+    EditEstimate(TaskId),         // Time estimate for a task (e.g., "30m", "2h", "1h30m")
+    NewHabit,                     // Creating a new habit
+    EditHabit(HabitId),           // Editing an existing habit's name
 }
 
 /// Input dialog for creating/editing items
@@ -177,6 +182,45 @@ impl Widget for OverdueAlert {
     }
 }
 
+/// Storage error alert popup shown when data cannot be loaded
+pub struct StorageErrorAlert<'a> {
+    error_message: &'a str,
+}
+
+impl<'a> StorageErrorAlert<'a> {
+    #[must_use]
+    pub fn new(error_message: &'a str) -> Self {
+        Self { error_message }
+    }
+}
+
+impl Widget for StorageErrorAlert<'_> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        Clear.render(area, buf);
+
+        let text = format!(
+            "Could not load your task data:\n\n  {}\n\nStarting with sample data instead.\nYour existing data has not been modified.\n\nPress any key to continue",
+            self.error_message
+        );
+
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(Color::White))
+            .block(
+                Block::default()
+                    .title(" ⚠ Storage Error ")
+                    .title_style(
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow)),
+            );
+
+        paragraph.render(area, buf);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,18 +277,18 @@ mod tests {
 
         // Test each variant can be created
         let _ = InputTarget::Task;
-        let _ = InputTarget::Subtask(task_id.clone());
-        let _ = InputTarget::EditTask(task_id.clone());
-        let _ = InputTarget::EditDueDate(task_id.clone());
-        let _ = InputTarget::EditTags(task_id.clone());
-        let _ = InputTarget::EditDescription(task_id.clone());
+        let _ = InputTarget::Subtask(task_id);
+        let _ = InputTarget::EditTask(task_id);
+        let _ = InputTarget::EditDueDate(task_id);
+        let _ = InputTarget::EditTags(task_id);
+        let _ = InputTarget::EditDescription(task_id);
         let _ = InputTarget::Project;
         let _ = InputTarget::Search;
-        let _ = InputTarget::MoveToProject(task_id.clone());
+        let _ = InputTarget::MoveToProject(task_id);
         let _ = InputTarget::FilterByTag;
         let _ = InputTarget::BulkMoveToProject;
         let _ = InputTarget::BulkSetStatus;
-        let _ = InputTarget::EditDependencies(task_id.clone());
+        let _ = InputTarget::EditDependencies(task_id);
         let _ = InputTarget::EditRecurrence(task_id);
     }
 

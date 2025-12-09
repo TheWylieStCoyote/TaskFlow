@@ -21,7 +21,7 @@ fn test_toggle_multi_select() {
 fn test_toggle_task_selection() {
     let mut model = create_test_model_with_tasks();
     model.multi_select_mode = true;
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     assert!(!model.selected_tasks.contains(&task_id));
 
@@ -35,7 +35,7 @@ fn test_toggle_task_selection() {
 #[test]
 fn test_toggle_task_selection_not_in_multi_mode() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Not in multi-select mode
     update(&mut model, Message::Ui(UiMessage::ToggleTaskSelection));
@@ -77,8 +77,8 @@ fn test_bulk_delete() {
 
     // Select first two tasks
     model.multi_select_mode = true;
-    let task1 = model.visible_tasks[0].clone();
-    let task2 = model.visible_tasks[1].clone();
+    let task1 = model.visible_tasks[0];
+    let task2 = model.visible_tasks[1];
     model.selected_tasks.insert(task1);
     model.selected_tasks.insert(task2);
 

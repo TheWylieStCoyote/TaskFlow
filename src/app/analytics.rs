@@ -24,6 +24,17 @@
 use chrono::{Datelike, NaiveDate, Timelike, Weekday};
 use std::collections::{HashMap, HashSet};
 
+/// Maps array index to weekday (0 = Monday, 6 = Sunday).
+const WEEKDAYS: [Weekday; 7] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+    Weekday::Sat,
+    Weekday::Sun,
+];
+
 use crate::domain::analytics::{
     AnalyticsReport, BurnChart, CompletionTrend, PriorityBreakdown, ProductivityInsights,
     ReportConfig, StatusBreakdown, TagStats, TimeAnalytics, TimeSeriesPoint, VelocityMetrics,
@@ -129,7 +140,7 @@ impl<'a> AnalyticsEngine<'a> {
 
             // Calculate rate
             let rate = if total_created > 0 {
-                total_completed as f64 / total_created as f64
+                f64::from(total_completed) / f64::from(total_created)
             } else {
                 0.0
             };
@@ -158,9 +169,9 @@ impl<'a> AnalyticsEngine<'a> {
                 if completed_date >= start && completed_date <= end {
                     // Get start of week (Monday)
                     let week_start = completed_date
-                        - chrono::Duration::days(
-                            completed_date.weekday().num_days_from_monday() as i64
-                        );
+                        - chrono::Duration::days(i64::from(
+                            completed_date.weekday().num_days_from_monday(),
+                        ));
                     *weekly.entry(week_start).or_insert(0) += 1;
 
                     // Get start of month
@@ -183,7 +194,7 @@ impl<'a> AnalyticsEngine<'a> {
             0.0
         } else {
             let sum: u32 = weekly_vec.iter().map(|(_, v)| v).sum();
-            sum as f64 / weekly_vec.len() as f64
+            f64::from(sum) / weekly_vec.len() as f64
         };
 
         // Calculate trend (simple linear regression slope)
@@ -192,11 +203,11 @@ impl<'a> AnalyticsEngine<'a> {
         } else {
             let n = weekly_vec.len() as f64;
             let sum_x: f64 = (0..weekly_vec.len()).map(|i| i as f64).sum();
-            let sum_y: f64 = weekly_vec.iter().map(|(_, v)| *v as f64).sum();
+            let sum_y: f64 = weekly_vec.iter().map(|(_, v)| f64::from(*v)).sum();
             let sum_xy: f64 = weekly_vec
                 .iter()
                 .enumerate()
-                .map(|(i, (_, v))| i as f64 * *v as f64)
+                .map(|(i, (_, v))| i as f64 * f64::from(*v))
                 .sum();
             let sum_xx: f64 = (0..weekly_vec.len()).map(|i| (i * i) as f64).sum();
 
@@ -227,7 +238,7 @@ impl<'a> AnalyticsEngine<'a> {
         // Per-project burndowns
         for project in self.model.projects.values() {
             charts.push(self.compute_burn_chart_for_project(
-                Some(project.id.clone()),
+                Some(project.id),
                 &project.name,
                 start,
                 end,
@@ -298,8 +309,11 @@ impl<'a> AnalyticsEngine<'a> {
             running_scope += *scope_by_day.get(&current_date).unwrap_or(&0);
             running_completed += *completed_by_day.get(&current_date).unwrap_or(&0);
 
-            scope_line.push(TimeSeriesPoint::new(current_date, running_scope as f64));
-            completed_line.push(TimeSeriesPoint::new(current_date, running_completed as f64));
+            scope_line.push(TimeSeriesPoint::new(current_date, f64::from(running_scope)));
+            completed_line.push(TimeSeriesPoint::new(
+                current_date,
+                f64::from(running_completed),
+            ));
 
             current_date = current_date.succ_opt().unwrap_or(current_date);
         }
@@ -332,10 +346,7 @@ impl<'a> AnalyticsEngine<'a> {
                     analytics.total_minutes += minutes;
 
                     // By project
-                    *analytics
-                        .by_project
-                        .entry(task.project_id.clone())
-                        .or_insert(0) += minutes;
+                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
 
                     // By day of week
                     let dow = date.weekday().num_days_from_monday() as usize;
@@ -357,10 +368,7 @@ impl<'a> AnalyticsEngine<'a> {
 
                 // Find the task to get project ID
                 if let Some(task) = self.model.tasks.get(&entry.task_id) {
-                    *analytics
-                        .by_project
-                        .entry(task.project_id.clone())
-                        .or_insert(0) += minutes;
+                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
                 }
 
                 // By day of week
@@ -418,16 +426,7 @@ impl<'a> AnalyticsEngine<'a> {
             .filter(|(_, &v)| v > 0)
             .map(|(i, _)| i);
 
-        insights.best_day = max_day_idx.map(|i| match i {
-            0 => Weekday::Mon,
-            1 => Weekday::Tue,
-            2 => Weekday::Wed,
-            3 => Weekday::Thu,
-            4 => Weekday::Fri,
-            5 => Weekday::Sat,
-            6 => Weekday::Sun,
-            _ => unreachable!(),
-        });
+        insights.best_day = max_day_idx.map(|i| WEEKDAYS[i]);
 
         // Find peak hour
         insights.peak_hour = by_hour
@@ -456,7 +455,7 @@ impl<'a> AnalyticsEngine<'a> {
             let mut streak = 0u32;
             let mut prev_date: Option<NaiveDate> = None;
 
-            for date in sorted_unique.iter() {
+            for date in &sorted_unique {
                 if let Some(prev) = prev_date {
                     if *date - prev == chrono::Duration::days(1) {
                         streak += 1;
@@ -486,7 +485,8 @@ impl<'a> AnalyticsEngine<'a> {
             // Average tasks per day (on active days)
             let active_days = sorted_unique.len();
             if active_days > 0 {
-                insights.avg_tasks_per_day = insights.total_completed as f64 / active_days as f64;
+                insights.avg_tasks_per_day =
+                    f64::from(insights.total_completed) / active_days as f64;
             }
         }
 
@@ -577,7 +577,7 @@ mod tests {
         task1.completed_at = Some(chrono::Utc::now());
         task1.tags = vec!["work".to_string(), "urgent".to_string()];
         task1.actual_minutes = 60;
-        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task1.id, task1);
 
         let mut task2 = Task::new("Task 2");
         task2.status = TaskStatus::Done;
@@ -585,22 +585,22 @@ mod tests {
         task2.tags = vec!["work".to_string()];
         task2.priority = Priority::High;
         task2.actual_minutes = 30;
-        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task2.id, task2);
 
         let mut task3 = Task::new("Task 3");
         task3.status = TaskStatus::InProgress;
         task3.priority = Priority::Medium;
-        model.tasks.insert(task3.id.clone(), task3);
+        model.tasks.insert(task3.id, task3);
 
         let mut task4 = Task::new("Task 4");
         task4.status = TaskStatus::Todo;
         task4.priority = Priority::Low;
         task4.tags = vec!["personal".to_string()];
-        model.tasks.insert(task4.id.clone(), task4);
+        model.tasks.insert(task4.id, task4);
 
         // Add a project
         let project = Project::new("Test Project");
-        model.projects.insert(project.id.clone(), project);
+        model.projects.insert(project.id, project);
 
         model
     }
@@ -768,17 +768,17 @@ mod tests {
         let mut task1 = Task::new("Today");
         task1.status = TaskStatus::Done;
         task1.completed_at = Some(today);
-        model.tasks.insert(task1.id.clone(), task1);
+        model.tasks.insert(task1.id, task1);
 
         let mut task2 = Task::new("Yesterday");
         task2.status = TaskStatus::Done;
         task2.completed_at = Some(today - chrono::Duration::days(1));
-        model.tasks.insert(task2.id.clone(), task2);
+        model.tasks.insert(task2.id, task2);
 
         let mut task3 = Task::new("Day before");
         task3.status = TaskStatus::Done;
         task3.completed_at = Some(today - chrono::Duration::days(2));
-        model.tasks.insert(task3.id.clone(), task3);
+        model.tasks.insert(task3.id, task3);
 
         let engine = AnalyticsEngine::new(&model);
         let insights = engine.compute_insights();

@@ -1,7 +1,65 @@
-use crate::domain::{Project, Task, TimeEntry};
+use crate::domain::{Project, Task, TimeEntry, WorkLogEntry};
 
 /// Maximum number of undo/redo actions to keep in history
 pub const MAX_UNDO_HISTORY: usize = 50;
+
+/// Maximum length for names/titles in descriptions
+const DESC_MAX_LEN: usize = 20;
+
+/// Generate a description for create/delete/modify actions with entity name
+macro_rules! action_desc {
+    (create $entity:literal, $name:expr) => {
+        format!(
+            concat!("Create ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (delete $entity:literal, $name:expr) => {
+        format!(
+            concat!("Delete ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (modify $entity:literal, $name:expr) => {
+        format!(
+            concat!("Modify ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    // WorkLog uses different verbs
+    (add $entity:literal, $name:expr) => {
+        format!(
+            concat!("Add ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (edit $entity:literal, $name:expr) => {
+        format!(
+            concat!("Edit ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+}
+
+/// Generate inverse for self-inverse actions (create/delete pairs that clone as-is)
+macro_rules! inverse_clone {
+    ($self:expr, $variant:ident) => {
+        Self::$variant($self.clone())
+    };
+    ($self:expr, $variant:ident { $($field:ident),+ }) => {
+        Self::$variant { $($field: $field.clone()),+ }
+    };
+}
+
+/// Generate inverse for before/after actions (swap and clone)
+macro_rules! inverse_swap {
+    ($variant:ident, $before:expr, $after:expr) => {
+        Self::$variant {
+            before: $after.clone(),
+            after: $before.clone(),
+        }
+    };
+}
 
 /// Represents an action that can be undone/redone
 #[derive(Debug, Clone)]
@@ -44,6 +102,15 @@ pub enum UndoAction {
         stopped_entry_after: Box<TimeEntry>,
         started_entry: Box<TimeEntry>,
     },
+    /// Work log entry was created - undo by deleting it
+    WorkLogCreated(Box<WorkLogEntry>),
+    /// Work log entry was deleted - undo by restoring it
+    WorkLogDeleted(Box<WorkLogEntry>),
+    /// Work log entry was modified - undo by restoring previous state
+    WorkLogModified {
+        before: Box<WorkLogEntry>,
+        after: Box<WorkLogEntry>,
+    },
 }
 
 impl UndoAction {
@@ -51,29 +118,27 @@ impl UndoAction {
     #[must_use]
     pub fn description(&self) -> String {
         match self {
-            Self::TaskCreated(task) => {
-                format!("Create task \"{}\"", truncate(&task.title, 20))
-            }
-            Self::TaskDeleted { task, .. } => {
-                format!("Delete task \"{}\"", truncate(&task.title, 20))
-            }
-            Self::TaskModified { before, .. } => {
-                format!("Modify task \"{}\"", truncate(&before.title, 20))
-            }
-            Self::ProjectCreated(project) => {
-                format!("Create project \"{}\"", truncate(&project.name, 20))
-            }
-            Self::ProjectDeleted(project) => {
-                format!("Delete project \"{}\"", truncate(&project.name, 20))
-            }
-            Self::ProjectModified { before, .. } => {
-                format!("Modify project \"{}\"", truncate(&before.name, 20))
-            }
+            // Task actions
+            Self::TaskCreated(task) => action_desc!(create "task", &task.title),
+            Self::TaskDeleted { task, .. } => action_desc!(delete "task", &task.title),
+            Self::TaskModified { before, .. } => action_desc!(modify "task", &before.title),
+
+            // Project actions
+            Self::ProjectCreated(project) => action_desc!(create "project", &project.name),
+            Self::ProjectDeleted(project) => action_desc!(delete "project", &project.name),
+            Self::ProjectModified { before, .. } => action_desc!(modify "project", &before.name),
+
+            // Time entry actions (no entity name - actions are self-explanatory)
             Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
             Self::TimerSwitched { .. } => "Switch timer".to_string(),
+
+            // Work log actions (use add/edit verbs for consistency with UI)
+            Self::WorkLogCreated(entry) => action_desc!(add "work log", entry.summary()),
+            Self::WorkLogDeleted(entry) => action_desc!(delete "work log", entry.summary()),
+            Self::WorkLogModified { before, .. } => action_desc!(edit "work log", before.summary()),
         }
     }
 
@@ -81,42 +146,34 @@ impl UndoAction {
     #[must_use]
     pub fn inverse(&self) -> Self {
         match self {
-            // Undo create = delete, so redo = create again
-            Self::TaskCreated(task) => Self::TaskCreated(task.clone()),
-            // Undo delete = restore, so redo = delete again
-            Self::TaskDeleted { task, time_entries } => Self::TaskDeleted {
-                task: task.clone(),
-                time_entries: time_entries.clone(),
-            },
-            // Undo modify swaps before/after, so redo swaps them back
-            Self::TaskModified { before, after } => Self::TaskModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo project create = delete, so redo = create again
-            Self::ProjectCreated(project) => Self::ProjectCreated(project.clone()),
-            // Undo project delete = restore, so redo = delete again
-            Self::ProjectDeleted(project) => Self::ProjectDeleted(project.clone()),
-            // Undo project modify swaps before/after, so redo swaps them back
-            Self::ProjectModified { before, after } => Self::ProjectModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo time entry start = delete, so redo = start again
-            Self::TimeEntryStarted(entry) => Self::TimeEntryStarted(entry.clone()),
-            // Undo time entry stop swaps before/after, so redo swaps them back
-            Self::TimeEntryStopped { before, after } => Self::TimeEntryStopped {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo time entry delete = restore, so redo = delete again
-            Self::TimeEntryDeleted(entry) => Self::TimeEntryDeleted(entry.clone()),
-            // Undo time entry modify swaps before/after, so redo swaps them back
-            Self::TimeEntryModified { before, after } => Self::TimeEntryModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Timer switch inverse keeps the same data (undo/redo logic handles it)
+            // Self-inverse actions: clone as-is (create/delete pairs)
+            Self::TaskCreated(task) => inverse_clone!(task, TaskCreated),
+            Self::TaskDeleted { task, time_entries } => {
+                inverse_clone!(self, TaskDeleted { task, time_entries })
+            }
+            Self::ProjectCreated(project) => inverse_clone!(project, ProjectCreated),
+            Self::ProjectDeleted(project) => inverse_clone!(project, ProjectDeleted),
+            Self::TimeEntryStarted(entry) => inverse_clone!(entry, TimeEntryStarted),
+            Self::TimeEntryDeleted(entry) => inverse_clone!(entry, TimeEntryDeleted),
+            Self::WorkLogCreated(entry) => inverse_clone!(entry, WorkLogCreated),
+            Self::WorkLogDeleted(entry) => inverse_clone!(entry, WorkLogDeleted),
+
+            // Swap-inverse actions: swap before/after (modify actions)
+            Self::TaskModified { before, after } => inverse_swap!(TaskModified, before, after),
+            Self::ProjectModified { before, after } => {
+                inverse_swap!(ProjectModified, before, after)
+            }
+            Self::TimeEntryStopped { before, after } => {
+                inverse_swap!(TimeEntryStopped, before, after)
+            }
+            Self::TimeEntryModified { before, after } => {
+                inverse_swap!(TimeEntryModified, before, after)
+            }
+            Self::WorkLogModified { before, after } => {
+                inverse_swap!(WorkLogModified, before, after)
+            }
+
+            // Special case: TimerSwitched has 3 fields, clone all as-is
             Self::TimerSwitched {
                 stopped_entry_before,
                 stopped_entry_after,
@@ -415,17 +472,16 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::TaskModified {
+        let UndoAction::TaskModified {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.title, "After");
-            assert_eq!(inv_after.title, "Before");
-        } else {
-            panic!("Expected TaskModified");
-        }
+        else {
+            panic!("Expected TaskModified, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.title, "After");
+        assert_eq!(inv_after.title, "Before");
     }
 
     #[test]
@@ -465,11 +521,10 @@ mod tests {
         let project = Project::new("Test project");
         let action = UndoAction::ProjectDeleted(Box::new(project.clone()));
         let inverse = action.inverse();
-        if let UndoAction::ProjectDeleted(inv_project) = inverse {
-            assert_eq!(inv_project.name, "Test project");
-        } else {
-            panic!("Expected ProjectDeleted");
-        }
+        let UndoAction::ProjectDeleted(inv_project) = inverse else {
+            panic!("Expected ProjectDeleted, got {inverse:?}");
+        };
+        assert_eq!(inv_project.name, "Test project");
     }
 
     #[test]
@@ -482,17 +537,16 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::ProjectModified {
+        let UndoAction::ProjectModified {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.name, "After");
-            assert_eq!(inv_after.name, "Before");
-        } else {
-            panic!("Expected ProjectModified");
-        }
+        else {
+            panic!("Expected ProjectModified, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.name, "After");
+        assert_eq!(inv_after.name, "Before");
     }
 
     // Time entry undo tests
@@ -511,7 +565,7 @@ mod tests {
         use crate::domain::{TaskId, TimeEntry};
 
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
         let action = UndoAction::TimeEntryStopped {
@@ -537,15 +591,14 @@ mod tests {
 
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
         let action = UndoAction::TimeEntryStarted(Box::new(entry));
         let inverse = action.inverse();
 
-        if let UndoAction::TimeEntryStarted(inv_entry) = inverse {
-            assert_eq!(inv_entry.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(inv_entry) = inverse else {
+            panic!("Expected TimeEntryStarted, got {inverse:?}");
+        };
+        assert_eq!(inv_entry.id, entry_id);
     }
 
     #[test]
@@ -553,7 +606,7 @@ mod tests {
         use crate::domain::{TaskId, TimeEntry};
 
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
 
@@ -563,19 +616,18 @@ mod tests {
         };
 
         let inverse = action.inverse();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: inv_before,
             after: inv_after,
         } = inverse
-        {
-            // Inverse swaps before and after
-            assert_eq!(inv_before.id, after.id);
-            assert!(inv_before.ended_at.is_some());
-            assert_eq!(inv_after.id, before.id);
-            assert!(inv_after.ended_at.is_none());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {inverse:?}");
+        };
+        // Inverse swaps before and after
+        assert_eq!(inv_before.id, after.id);
+        assert!(inv_before.ended_at.is_some());
+        assert_eq!(inv_after.id, before.id);
+        assert!(inv_after.ended_at.is_none());
     }
 
     #[test]
@@ -584,15 +636,14 @@ mod tests {
 
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
         let action = UndoAction::TimeEntryDeleted(Box::new(entry));
         let inverse = action.inverse();
 
-        if let UndoAction::TimeEntryDeleted(inv_entry) = inverse {
-            assert_eq!(inv_entry.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryDeleted");
-        }
+        let UndoAction::TimeEntryDeleted(inv_entry) = inverse else {
+            panic!("Expected TimeEntryDeleted, got {inverse:?}");
+        };
+        assert_eq!(inv_entry.id, entry_id);
     }
 
     #[test]
@@ -602,7 +653,7 @@ mod tests {
         let mut stack = UndoStack::new();
         let task_id = TaskId::new();
         let entry = TimeEntry::start(task_id);
-        let entry_id = entry.id.clone();
+        let entry_id = entry.id;
 
         stack.push(UndoAction::TimeEntryStarted(Box::new(entry)));
         assert_eq!(stack.len(), 1);
@@ -610,21 +661,19 @@ mod tests {
 
         // Undo the action
         let action = stack.pop_for_undo().unwrap();
-        if let UndoAction::TimeEntryStarted(e) = action {
-            assert_eq!(e.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(e) = action else {
+            panic!("Expected TimeEntryStarted, got {action:?}");
+        };
+        assert_eq!(e.id, entry_id);
         assert!(stack.is_empty());
         assert!(stack.can_redo());
 
         // Redo the action
         let action = stack.pop_for_redo().unwrap();
-        if let UndoAction::TimeEntryStarted(e) = action {
-            assert_eq!(e.id, entry_id);
-        } else {
-            panic!("Expected TimeEntryStarted");
-        }
+        let UndoAction::TimeEntryStarted(e) = action else {
+            panic!("Expected TimeEntryStarted, got {action:?}");
+        };
+        assert_eq!(e.id, entry_id);
         assert!(!stack.is_empty());
         assert!(!stack.can_redo());
     }
@@ -635,7 +684,7 @@ mod tests {
 
         let mut stack = UndoStack::new();
         let task_id = TaskId::new();
-        let before = TimeEntry::start(task_id.clone());
+        let before = TimeEntry::start(task_id);
         let mut after = before.clone();
         after.stop();
 
@@ -646,29 +695,27 @@ mod tests {
 
         // Undo the stop
         let action = stack.pop_for_undo().unwrap();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: b,
             after: a,
         } = action
-        {
-            // After undo, the entry should be running again
-            assert!(b.ended_at.is_none());
-            assert!(a.ended_at.is_some());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {action:?}");
+        };
+        // After undo, the entry should be running again
+        assert!(b.ended_at.is_none());
+        assert!(a.ended_at.is_some());
 
         // Redo the stop
         let action = stack.pop_for_redo().unwrap();
-        if let UndoAction::TimeEntryStopped {
+        let UndoAction::TimeEntryStopped {
             before: b,
             after: _,
         } = action
-        {
-            // After redo, the entry should be stopped again
-            assert!(b.ended_at.is_some());
-        } else {
-            panic!("Expected TimeEntryStopped");
-        }
+        else {
+            panic!("Expected TimeEntryStopped, got {action:?}");
+        };
+        // After redo, the entry should be stopped again
+        assert!(b.ended_at.is_some());
     }
 }

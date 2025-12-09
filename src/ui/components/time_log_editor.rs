@@ -61,7 +61,7 @@ impl Widget for TimeLogEditor<'_> {
         let theme = self.theme;
 
         // Build list items
-        let items: Vec<ListItem> = self
+        let items: Vec<ListItem<'_>> = self
             .entries
             .iter()
             .enumerate()
@@ -74,8 +74,7 @@ impl Widget for TimeLogEditor<'_> {
                 let start_time = entry.started_at.format("%H:%M").to_string();
                 let end_time = entry
                     .ended_at
-                    .map(|t| t.format("%H:%M").to_string())
-                    .unwrap_or_else(|| "running".to_string());
+                    .map_or_else(|| "running".to_string(), |t| t.format("%H:%M").to_string());
                 let duration = entry.formatted_duration();
 
                 let status_indicator = if is_running { "●" } else { " " };

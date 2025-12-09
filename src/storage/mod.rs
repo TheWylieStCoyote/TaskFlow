@@ -103,8 +103,9 @@ mod repository;
 
 pub use error::*;
 pub use export::{
-    export_chains_to_string, export_report_to_html_string, export_report_to_markdown_string,
-    export_to_csv, export_to_dot, export_to_ics, export_to_mermaid, export_to_string, ExportFormat,
+    export_chains_to_string, export_report_to_html, export_report_to_html_string,
+    export_report_to_markdown, export_report_to_markdown_string, export_to_csv, export_to_dot,
+    export_to_ics, export_to_mermaid, export_to_string, ExportFormat,
 };
 pub use import::{
     apply_merge_strategy, import_from_csv, import_from_ics, DuplicateDetector, ImportError,

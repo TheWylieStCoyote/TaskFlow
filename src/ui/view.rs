@@ -12,13 +12,15 @@ use crate::config::Theme;
 use crate::app::ViewId;
 
 use super::components::{
-    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, Dashboard, FocusView,
-    HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor, OverdueAlert, ReportsView,
-    Sidebar, TaskList, TemplatePicker, TimeLogEditor,
+    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
+    DescriptionEditor, Eisenhower, FocusView, HabitAnalyticsPopup, HabitsView, HelpPopup,
+    InputDialog, InputMode, InputTarget, Kanban, KeybindingsEditor, OverdueAlert, ReportsView,
+    SavedFilterPicker, Sidebar, StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor,
+    Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
-pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
+pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     let area = frame.area();
 
     // Main layout: header, content, footer
@@ -58,6 +60,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             InputTarget::EditScheduledDate(_) => "Scheduled Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::EditDescription(_) => "Description (empty to clear)",
+            InputTarget::EditEstimate(_) => "Time Estimate (e.g., 30m, 1h, 1h30m)",
             InputTarget::Project => "New Project",
             InputTarget::EditProject(_) => "Rename Project",
             InputTarget::Search => "Search (Ctrl+L to clear)",
@@ -74,6 +77,10 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
                 crate::storage::ImportFormat::Csv => "Import CSV: Enter file path",
                 crate::storage::ImportFormat::Ics => "Import ICS: Enter file path",
             },
+            InputTarget::SavedFilterName => "Save Filter As (enter name)",
+            InputTarget::SnoozeTask(_) => "Snooze Until (YYYY-MM-DD)",
+            InputTarget::NewHabit => "New Habit",
+            InputTarget::EditHabit(_) => "Edit Habit",
         };
         frame.render_widget(
             InputDialog::new(title, &model.input_buffer, model.cursor_position),
@@ -87,8 +94,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let confirm_area = centered_rect_fixed_height(50, 5, area);
         let task_name = model
             .selected_task()
-            .map(|t| t.title.as_str())
-            .unwrap_or("this task");
+            .map_or("this task", |t| t.title.as_str());
         frame.render_widget(
             ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?")),
             confirm_area,
@@ -110,18 +116,49 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     }
 
     // Render template picker
-    if model.show_templates {
+    if model.template_picker.visible {
         // Height depends on number of templates, min 4, max 15
         let height = (model.template_manager.len() as u16 + 2).clamp(4, 15);
         let picker_area = centered_rect_fixed_height(60, height, area);
         frame.render_widget(
-            TemplatePicker::new(&model.template_manager, model.template_selected, theme),
+            TemplatePicker::new(
+                &model.template_manager,
+                model.template_picker.selected,
+                theme,
+            ),
+            picker_area,
+        );
+    }
+
+    // Render saved filter picker
+    if model.saved_filter_picker.visible {
+        // Get sorted filter list for display
+        let mut filter_list: Vec<_> = model.saved_filters.values().collect();
+        filter_list.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // Get active filter name for highlighting
+        let active_name = model
+            .active_saved_filter
+            .as_ref()
+            .and_then(|id| model.saved_filters.get(id))
+            .map(|f| f.name.as_str());
+
+        // Height depends on number of filters, min 4, max 15
+        let height = (filter_list.len() as u16 + 2).clamp(4, 15);
+        let picker_area = centered_rect_fixed_height(60, height, area);
+        frame.render_widget(
+            SavedFilterPicker::new(
+                filter_list,
+                model.saved_filter_picker.selected,
+                active_name,
+                theme,
+            ),
             picker_area,
         );
     }
 
     // Render keybindings editor
-    if model.show_keybindings_editor {
+    if model.keybindings_editor.visible {
         // Height depends on number of bindings, min 10, max 30
         let bindings_count = model.keybindings.sorted_bindings().len() as u16;
         let height = (bindings_count + 2).clamp(10, 30);
@@ -129,8 +166,8 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         frame.render_widget(
             KeybindingsEditor::new(
                 &model.keybindings,
-                model.keybinding_selected,
-                model.keybinding_capturing,
+                model.keybindings_editor.selected,
+                model.keybindings_editor.capturing,
                 theme,
             ),
             editor_area,
@@ -138,7 +175,7 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
     }
 
     // Render time log editor
-    if model.show_time_log {
+    if model.time_log.visible {
         if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
             let entries = model.time_entries_for_task(task_id);
             // Height: min 5, max 15 depending on entries
@@ -147,9 +184,9 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
             frame.render_widget(
                 TimeLogEditor::new(
                     entries,
-                    model.time_log_selected,
-                    model.time_log_mode,
-                    &model.time_log_buffer,
+                    model.time_log.selected,
+                    model.time_log.mode,
+                    &model.time_log.buffer,
                     theme,
                 ),
                 editor_area,
@@ -157,8 +194,66 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         }
     }
 
+    // Render work log editor
+    if model.work_log_editor.visible {
+        if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
+            let all_entries = model.work_logs_for_task(task_id);
+
+            // Filter entries based on search query
+            let entries: Vec<_> = if model.work_log_editor.search_query.is_empty() {
+                all_entries
+            } else {
+                let query = model.work_log_editor.search_query.to_lowercase();
+                all_entries
+                    .into_iter()
+                    .filter(|e| e.content.to_lowercase().contains(&query))
+                    .collect()
+            };
+
+            // Height: min 6, max 20 depending on entries and mode
+            let height = match model.work_log_editor.mode {
+                crate::ui::WorkLogMode::Browse => (entries.len() as u16 + 4).clamp(6, 15),
+                crate::ui::WorkLogMode::View | crate::ui::WorkLogMode::ConfirmDelete => 15,
+                crate::ui::WorkLogMode::Add | crate::ui::WorkLogMode::Edit => {
+                    (model.work_log_editor.buffer.len() as u16 + 4).clamp(10, 20)
+                }
+                crate::ui::WorkLogMode::Search => 15,
+            };
+            let editor_area = centered_rect_fixed_height(70, height, area);
+            frame.render_widget(
+                WorkLogEditor::new(
+                    entries,
+                    model.work_log_editor.selected,
+                    model.work_log_editor.mode,
+                    &model.work_log_editor.buffer,
+                    model.work_log_editor.cursor_line,
+                    model.work_log_editor.cursor_col,
+                    &model.work_log_editor.search_query,
+                    theme,
+                ),
+                editor_area,
+            );
+        }
+    }
+
+    // Render description editor (multi-line)
+    if model.description_editor.visible {
+        // Height: min 10, max 20 depending on buffer lines
+        let height = (model.description_editor.buffer.len() as u16 + 4).clamp(10, 20);
+        let editor_area = centered_rect_fixed_height(70, height, area);
+        frame.render_widget(
+            DescriptionEditor::new(
+                &model.description_editor.buffer,
+                model.description_editor.cursor_line,
+                model.description_editor.cursor_col,
+                theme,
+            ),
+            editor_area,
+        );
+    }
+
     // Render overdue alert popup (shown at startup if there are overdue tasks)
-    if model.show_overdue_alert {
+    if model.alerts.show_overdue {
         let (count, overdue_tasks) = model.overdue_summary();
         let task_titles: Vec<String> = overdue_tasks.iter().map(|t| t.title.clone()).collect();
         // Height: 4 + min(5, count) + 2 for header/footer
@@ -166,9 +261,53 @@ pub fn view(model: &Model, frame: &mut Frame, theme: &Theme) {
         let alert_area = centered_rect_fixed_height(50, height.max(7), area);
         frame.render_widget(OverdueAlert::new(count, task_titles), alert_area);
     }
+
+    // Render storage error alert popup (shown at startup if data couldn't be loaded)
+    if model.alerts.show_storage_error {
+        if let Some(ref error) = model.alerts.storage_error {
+            let alert_area = centered_rect_fixed_height(60, 10, area);
+            frame.render_widget(StorageErrorAlert::new(error), alert_area);
+        }
+    }
+
+    // Render daily review mode (full screen overlay)
+    if model.daily_review.visible {
+        // Use centered area for the review dialog
+        let review_area = centered_rect(70, 70, area);
+        frame.render_widget(
+            DailyReview::new(
+                model,
+                theme,
+                model.daily_review.phase,
+                model.daily_review.selected,
+            ),
+            review_area,
+        );
+    }
+
+    // Render weekly review mode (full screen overlay)
+    if model.weekly_review.visible {
+        // Use centered area for the review dialog
+        let review_area = centered_rect(75, 75, area);
+        frame.render_widget(
+            WeeklyReview::new(
+                model,
+                theme,
+                model.weekly_review.phase,
+                model.weekly_review.selected,
+            ),
+            review_area,
+        );
+    }
+
+    // Render habit analytics popup
+    if model.habit_view.show_analytics {
+        let popup_area = centered_rect_fixed_height(50, 12, area);
+        frame.render_widget(HabitAnalyticsPopup::new(model, theme), popup_area);
+    }
 }
 
-fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_header(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
             " TaskFlow ",
@@ -185,7 +324,7 @@ fn render_header(frame: &mut Frame, area: Rect, theme: &Theme) {
     frame.render_widget(title, area);
 }
 
-fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Focus mode takes over the entire content area
     if model.focus_mode {
         let focus_view = FocusView::new(model, theme);
@@ -214,7 +353,7 @@ fn render_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
     }
 }
 
-fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     match model.current_view {
         ViewId::Calendar => {
             let calendar = Calendar::new(model, theme);
@@ -228,6 +367,26 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
             let reports = ReportsView::new(model, model.report_panel);
             frame.render_widget(reports, area);
         }
+        ViewId::Habits => {
+            let habits = HabitsView::new(model, theme);
+            frame.render_widget(habits, area);
+        }
+        ViewId::Kanban => {
+            let kanban = Kanban::new(model, theme);
+            frame.render_widget(kanban, area);
+        }
+        ViewId::Eisenhower => {
+            let eisenhower = Eisenhower::new(model, theme);
+            frame.render_widget(eisenhower, area);
+        }
+        ViewId::WeeklyPlanner => {
+            let planner = WeeklyPlanner::new(model, theme);
+            frame.render_widget(planner, area);
+        }
+        ViewId::Timeline => {
+            let timeline = Timeline::new(model, theme);
+            frame.render_widget(timeline, area);
+        }
         _ => {
             let task_list = TaskList::new(model, theme);
             frame.render_widget(task_list, area);
@@ -235,7 +394,15 @@ fn render_main_content(model: &Model, frame: &mut Frame, area: Rect, theme: &The
     }
 }
 
-fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
+fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    // Show error message if available (in red, higher priority than status)
+    if let Some(ref msg) = model.alerts.error_message {
+        let footer =
+            Paragraph::new(msg.clone()).style(Style::default().fg(theme.colors.danger.to_color()));
+        frame.render_widget(footer, area);
+        return;
+    }
+
     // Show status message if available, otherwise show normal footer
     if let Some(ref msg) = model.status_message {
         let footer =
@@ -251,19 +418,11 @@ fn render_footer(model: &Model, frame: &mut Frame, area: Rect, theme: &Theme) {
         return;
     }
 
-    // Calculate counts
+    // Use cached counts for performance
     let task_count = model.visible_tasks.len();
-    let completed = model
-        .tasks
-        .values()
-        .filter(|t| t.status.is_complete())
-        .count();
-    let overdue = model.tasks.values().filter(|t| t.is_overdue()).count();
-    let due_today = model
-        .tasks
-        .values()
-        .filter(|t| t.is_due_today() && !t.status.is_complete())
-        .count();
+    let completed = model.footer_stats.completed_count;
+    let overdue = model.footer_stats.overdue_count;
+    let due_today = model.footer_stats.due_today_count;
 
     // Build footer with styled spans
     let mut spans = vec![

@@ -9,14 +9,30 @@ use crate::domain::{ProjectId, SortField, SortOrder, TagFilterMode, Task, TaskId
 use super::{Model, ViewId};
 
 impl Model {
+    /// Rebuilds all performance caches.
+    ///
+    /// Should be called when:
+    /// - Tasks are added, removed, or modified
+    /// - Time entries change
+    /// - Task hierarchy changes
+    pub fn rebuild_caches(&mut self) {
+        self.footer_stats.rebuild(&self.tasks);
+        self.task_cache.rebuild_time_sums(&self.time_entries);
+        self.task_cache.rebuild_hierarchy(&self.tasks);
+    }
+
     /// Recalculates visible tasks based on current filters and sort.
     ///
     /// This should be called after any change that affects which tasks
     /// are visible (adding/removing tasks, changing filters, switching views).
     /// Updates `visible_tasks` with the filtered and sorted task IDs.
     ///
+    /// Also rebuilds performance caches to ensure UI data is current.
+    ///
     /// Subtasks are displayed directly after their parent task.
     pub fn refresh_visible_tasks(&mut self) {
+        // Rebuild caches when task list changes
+        self.rebuild_caches();
         // Collect all tasks that pass the filter
         let filtered_tasks: Vec<_> = self
             .tasks
@@ -114,7 +130,7 @@ impl Model {
             subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
             result: &mut Vec<TaskId>,
         ) {
-            result.push(task_id.clone());
+            result.push(*task_id);
             if let Some(children) = subtasks_by_parent.get(task_id) {
                 for child in children {
                     add_with_descendants(&child.id, subtasks_by_parent, result);
@@ -130,7 +146,7 @@ impl Model {
         // These are shown at the end
         for task in &filtered_tasks {
             if task.parent_task_id.is_some() && !result.contains(&task.id) {
-                result.push(task.id.clone());
+                result.push(task.id);
             }
         }
 
@@ -145,6 +161,11 @@ impl Model {
     fn task_matches_filter(&self, task: &Task) -> bool {
         // Filter out completed tasks unless show_completed is true
         if !self.show_completed && task.status.is_complete() {
+            return false;
+        }
+
+        // Filter out snoozed tasks unless viewing the Snoozed view
+        if self.current_view != ViewId::Snoozed && task.is_snoozed() {
             return false;
         }
 
@@ -270,6 +291,39 @@ impl Model {
                 // Reports view shows all tasks (used for analytics)
                 true
             }
+            ViewId::Kanban => {
+                // Kanban view shows all tasks (grouped by status in the UI)
+                true
+            }
+            ViewId::Eisenhower => {
+                // Eisenhower matrix shows all tasks (grouped by urgency/importance in the UI)
+                true
+            }
+            ViewId::WeeklyPlanner => {
+                // Weekly planner shows tasks with due dates or scheduled dates in the current week
+                let today = Utc::now().date_naive();
+                let week_start =
+                    today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+                let week_end = week_start + chrono::Duration::days(6);
+
+                task.due_date
+                    .is_some_and(|d| d >= week_start && d <= week_end)
+                    || task
+                        .scheduled_date
+                        .is_some_and(|d| d >= week_start && d <= week_end)
+            }
+            ViewId::Snoozed => {
+                // Show only snoozed tasks
+                task.is_snoozed()
+            }
+            ViewId::Habits => {
+                // Habits view shows habits, not tasks - filter out all tasks
+                false
+            }
+            ViewId::Timeline => {
+                // Timeline shows tasks with at least one date (scheduled or due)
+                task.scheduled_date.is_some() || task.due_date.is_some()
+            }
         }
     }
 
@@ -286,7 +340,7 @@ impl Model {
     /// Returns the currently selected task mutably, if any.
     #[must_use]
     pub fn selected_task_mut(&mut self) -> Option<&mut Task> {
-        let id = self.visible_tasks.get(self.selected_index)?.clone();
+        let id = *self.visible_tasks.get(self.selected_index)?;
         self.tasks.get_mut(&id)
     }
 
@@ -302,12 +356,12 @@ impl Model {
 
         for task_id in &self.visible_tasks {
             if let Some(task) = self.tasks.get(task_id) {
-                let project_id = task.project_id.clone();
+                let project_id = task.project_id;
                 // Find existing group or create new one
                 if let Some(group) = grouped.iter_mut().find(|(pid, _)| *pid == project_id) {
-                    group.1.push(task_id.clone());
+                    group.1.push(*task_id);
                 } else {
-                    grouped.push((project_id, vec![task_id.clone()]));
+                    grouped.push((project_id, vec![*task_id]));
                 }
             }
         }

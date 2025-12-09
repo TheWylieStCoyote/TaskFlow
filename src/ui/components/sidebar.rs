@@ -34,7 +34,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "All Tasks",
                     ViewId::TaskList,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -44,7 +44,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Today",
                     ViewId::Today,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -54,7 +54,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Upcoming",
                     ViewId::Upcoming,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -64,7 +64,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Overdue",
                     ViewId::Overdue,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -74,7 +74,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Scheduled",
                     ViewId::Scheduled,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -84,7 +84,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Calendar",
                     ViewId::Calendar,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -94,7 +94,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Dashboard",
                     ViewId::Dashboard,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -104,7 +104,17 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Reports",
                     ViewId::Reports,
-                    &self.model.current_view,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🔄 ", Style::default()),
+                styled_view_name(
+                    "Habits",
+                    ViewId::Habits,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -114,7 +124,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Blocked",
                     ViewId::Blocked,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -124,7 +134,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Untagged",
                     ViewId::Untagged,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -134,7 +144,7 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "No Project",
                     ViewId::NoProject,
-                    &self.model.current_view,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -144,7 +154,57 @@ impl Widget for Sidebar<'_> {
                 styled_view_name(
                     "Recent",
                     ViewId::RecentlyModified,
-                    &self.model.current_view,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🎯 ", Style::default()),
+                styled_view_name(
+                    "Kanban",
+                    ViewId::Kanban,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("⚡ ", Style::default()),
+                styled_view_name(
+                    "Eisenhower",
+                    ViewId::Eisenhower,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📅 ", Style::default()),
+                styled_view_name(
+                    "Week",
+                    ViewId::WeeklyPlanner,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📊 ", Style::default()),
+                styled_view_name(
+                    "Timeline",
+                    ViewId::Timeline,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("💤 ", Style::default()),
+                styled_view_name(
+                    "Snoozed",
+                    ViewId::Snoozed,
+                    self.model.current_view,
                     self.model.selected_project.is_none(),
                     theme,
                 ),
@@ -225,12 +285,12 @@ impl Widget for Sidebar<'_> {
 fn styled_view_name(
     name: &str,
     view_id: ViewId,
-    current: &ViewId,
+    current: ViewId,
     no_project_selected: bool,
     theme: &Theme,
 ) -> Span<'static> {
     // Highlight if this view is current AND no project is selected
-    if view_id == *current && no_project_selected {
+    if view_id == current && no_project_selected {
         Span::styled(
             name.to_string(),
             Style::default()
@@ -374,7 +434,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
+        // Height 25 to accommodate all views including Habits
+        let buffer = render_widget(sidebar, 30, 25);
         let content = buffer_content(&buffer);
 
         assert!(
@@ -388,7 +449,7 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
+        let buffer = render_widget(sidebar, 30, 25);
         let content = buffer_content(&buffer);
 
         assert!(

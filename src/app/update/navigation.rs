@@ -8,7 +8,7 @@
 
 use crate::app::{
     FocusPane, Model, NavigationMessage, ViewId, SIDEBAR_FIRST_PROJECT_INDEX,
-    SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
+    SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX, SIDEBAR_VIEWS,
 };
 
 /// Handle navigation messages
@@ -110,6 +110,8 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             model.current_view = view_id;
             model.selected_index = 0;
             model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.habit_view.show_analytics = false; // Clear modal state when switching views
             model.refresh_visible_tasks();
         }
         NavigationMessage::FocusSidebar => {
@@ -187,10 +189,110 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.report_panel = model.report_panel.prev();
             }
         }
+        NavigationMessage::TimelineScrollLeft => {
+            if model.current_view == ViewId::Timeline {
+                model.timeline_state.viewport_start -= chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineScrollRight => {
+            if model.current_view == ViewId::Timeline {
+                model.timeline_state.viewport_start += chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineZoomIn => {
+            if model.current_view == ViewId::Timeline {
+                use crate::app::TimelineZoom;
+                if model.timeline_state.zoom_level == TimelineZoom::Week {
+                    model.timeline_state.zoom_level = TimelineZoom::Day;
+                }
+            }
+        }
+        NavigationMessage::TimelineZoomOut => {
+            if model.current_view == ViewId::Timeline {
+                use crate::app::TimelineZoom;
+                if model.timeline_state.zoom_level == TimelineZoom::Day {
+                    model.timeline_state.zoom_level = TimelineZoom::Week;
+                }
+            }
+        }
+        NavigationMessage::TimelineGoToday => {
+            if model.current_view == ViewId::Timeline {
+                let today = chrono::Utc::now().date_naive();
+                model.timeline_state.viewport_start = today - chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineUp => {
+            if model.current_view == ViewId::Timeline
+                && model.timeline_state.selected_task_index > 0
+            {
+                model.timeline_state.selected_task_index -= 1;
+            }
+        }
+        NavigationMessage::TimelineDown => {
+            if model.current_view == ViewId::Timeline {
+                let max_index = model.visible_tasks.len().saturating_sub(1);
+                if model.timeline_state.selected_task_index < max_index {
+                    model.timeline_state.selected_task_index += 1;
+                }
+            }
+        }
+        NavigationMessage::KanbanLeft => {
+            if model.current_view == ViewId::Kanban && model.view_selection.kanban_column > 0 {
+                model.view_selection.kanban_column -= 1;
+            }
+        }
+        NavigationMessage::KanbanRight => {
+            if model.current_view == ViewId::Kanban && model.view_selection.kanban_column < 3 {
+                model.view_selection.kanban_column += 1;
+            }
+        }
+        NavigationMessage::EisenhowerUp => {
+            if model.current_view == ViewId::Eisenhower
+                && model.view_selection.eisenhower_quadrant >= 2
+            {
+                model.view_selection.eisenhower_quadrant -= 2;
+            }
+        }
+        NavigationMessage::EisenhowerDown => {
+            if model.current_view == ViewId::Eisenhower
+                && model.view_selection.eisenhower_quadrant < 2
+            {
+                model.view_selection.eisenhower_quadrant += 2;
+            }
+        }
+        NavigationMessage::EisenhowerLeft => {
+            if model.current_view == ViewId::Eisenhower
+                && model.view_selection.eisenhower_quadrant % 2 == 1
+            {
+                model.view_selection.eisenhower_quadrant -= 1;
+            }
+        }
+        NavigationMessage::EisenhowerRight => {
+            if model.current_view == ViewId::Eisenhower
+                && model.view_selection.eisenhower_quadrant.is_multiple_of(2)
+            {
+                model.view_selection.eisenhower_quadrant += 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerLeft => {
+            if model.current_view == ViewId::WeeklyPlanner
+                && model.view_selection.weekly_planner_day > 0
+            {
+                model.view_selection.weekly_planner_day -= 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerRight => {
+            if model.current_view == ViewId::WeeklyPlanner
+                && model.view_selection.weekly_planner_day < 6
+            {
+                model.view_selection.weekly_planner_day += 1;
+            }
+        }
     }
 }
 
 /// Helper to get days in a month
+#[must_use]
 pub fn days_in_month(year: i32, month: u32) -> u32 {
     use chrono::{Datelike, NaiveDate};
     if month == 12 {
@@ -199,8 +301,7 @@ pub fn days_in_month(year: i32, month: u32) -> u32 {
         NaiveDate::from_ymd_opt(year, month + 1, 1)
     }
     .and_then(|d| d.pred_opt())
-    .map(|d| d.day())
-    .unwrap_or(28)
+    .map_or(28, |d| d.day())
 }
 
 /// Handle calendar up navigation (move to previous week)
@@ -255,12 +356,11 @@ fn handle_calendar_down(model: &mut Model) {
 fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
-    // Sidebar layout - see SIDEBAR_* constants in model.rs:
-    // 0-11: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
-    //       Calendar, Dashboard, Reports, Blocked, Untagged, No Project, Recent)
-    // SIDEBAR_SEPARATOR_INDEX (12): Separator (skip)
-    // SIDEBAR_PROJECTS_HEADER_INDEX (13): "Projects" header
-    // SIDEBAR_FIRST_PROJECT_INDEX+ (14+): Individual projects
+    // Sidebar layout uses SIDEBAR_VIEWS array from model.rs:
+    // [0..SIDEBAR_VIEW_COUNT-1]: View items from SIDEBAR_VIEWS
+    // SIDEBAR_SEPARATOR_INDEX: Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX: "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+: Individual projects
 
     // Helper to activate a view
     let activate_view = |model: &mut Model, view: ViewId| {
@@ -271,19 +371,14 @@ fn handle_sidebar_selection(model: &mut Model) {
         model.refresh_visible_tasks();
     };
 
+    // Check if it's a view from SIDEBAR_VIEWS array
+    if let Some(&view_id) = SIDEBAR_VIEWS.get(selected) {
+        activate_view(model, view_id);
+        return;
+    }
+
+    // Handle special items after the views
     match selected {
-        0 => activate_view(model, ViewId::TaskList),
-        1 => activate_view(model, ViewId::Today),
-        2 => activate_view(model, ViewId::Upcoming),
-        3 => activate_view(model, ViewId::Overdue),
-        4 => activate_view(model, ViewId::Scheduled),
-        5 => activate_view(model, ViewId::Calendar),
-        6 => activate_view(model, ViewId::Dashboard),
-        7 => activate_view(model, ViewId::Reports),
-        8 => activate_view(model, ViewId::Blocked),
-        9 => activate_view(model, ViewId::Untagged),
-        10 => activate_view(model, ViewId::NoProject),
-        11 => activate_view(model, ViewId::RecentlyModified),
         n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks
@@ -292,10 +387,10 @@ fn handle_sidebar_selection(model: &mut Model) {
         n if n >= SIDEBAR_FIRST_PROJECT_INDEX => {
             // Select a specific project
             let project_index = n - SIDEBAR_FIRST_PROJECT_INDEX;
-            let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+            let project_ids: Vec<_> = model.projects.keys().copied().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
-                model.selected_project = Some(project_id.clone());
+                model.selected_project = Some(*project_id);
                 model.focus_pane = FocusPane::TaskList;
                 model.selected_index = 0;
                 model.refresh_visible_tasks();

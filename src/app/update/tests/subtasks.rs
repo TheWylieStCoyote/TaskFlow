@@ -9,7 +9,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_create_subtask() {
     let mut model = create_test_model_with_tasks();
-    let _parent_id = model.visible_tasks[0].clone();
+    let _parent_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
@@ -32,7 +32,7 @@ fn test_start_create_subtask_no_selection() {
 #[test]
 fn test_submit_subtask_creates_with_parent() {
     let mut model = create_test_model_with_tasks();
-    let parent_id = model.visible_tasks[0].clone();
+    let parent_id = model.visible_tasks[0];
     let initial_count = model.tasks.len();
 
     // Start creating subtask

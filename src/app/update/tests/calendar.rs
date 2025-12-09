@@ -43,9 +43,9 @@ fn test_calendar_task_navigation() {
     let task2 = Task::new("Task 2").with_due_date(today);
     let task3 = Task::new("Task 3").with_due_date(today);
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
-    model.tasks.insert(task3.id.clone(), task3);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+    model.tasks.insert(task3.id, task3);
 
     model.current_view = ViewId::Calendar;
     model.calendar_state.selected_day = Some(today.day());
@@ -118,8 +118,8 @@ fn test_calendar_task_actions_when_focused() {
     // Add a task for today
     let today = chrono::Utc::now().date_naive();
     let task = Task::new("Test task").with_due_date(today);
-    let task_id = task.id.clone();
-    model.tasks.insert(task_id.clone(), task);
+    let task_id = task.id;
+    model.tasks.insert(task_id, task);
 
     model.current_view = ViewId::Calendar;
     model.calendar_state.selected_day = Some(today.day());

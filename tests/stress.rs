@@ -86,7 +86,7 @@ fn create_model_with_n_tasks(n: usize) -> Model {
             task = task.with_due_date(date);
         }
 
-        model.tasks.insert(task.id.clone(), task);
+        model.tasks.insert(task.id, task);
     }
 
     model.refresh_visible_tasks();

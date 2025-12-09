@@ -50,7 +50,7 @@ impl Model {
     #[must_use]
     pub fn task_depth(&self, task_id: &TaskId) -> usize {
         let mut depth = 0;
-        let mut current_id = task_id.clone();
+        let mut current_id = *task_id;
         let mut visited = HashSet::new();
 
         while let Some(task) = self.tasks.get(&current_id) {
@@ -59,9 +59,9 @@ impl Model {
                     // Circular reference detected - break to prevent infinite loop
                     break;
                 }
-                visited.insert(current_id.clone());
+                visited.insert(current_id);
                 depth += 1;
-                current_id = parent_id.clone();
+                current_id = *parent_id;
             } else {
                 break;
             }
@@ -80,7 +80,7 @@ impl Model {
     /// Call this after loading tasks from storage.
     pub fn check_overdue_alert(&mut self) {
         let (count, _) = self.overdue_summary();
-        self.show_overdue_alert = count > 0;
+        self.alerts.show_overdue = count > 0;
     }
 
     /// Returns all descendant task IDs (children, grandchildren, etc.)
@@ -89,19 +89,19 @@ impl Model {
     #[must_use]
     pub fn get_all_descendants(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut descendants = Vec::new();
-        let mut stack = vec![task_id.clone()];
+        let mut stack = vec![*task_id];
         let mut visited = HashSet::new();
 
         while let Some(current_id) = stack.pop() {
             if visited.contains(&current_id) {
                 continue; // Prevent cycles
             }
-            visited.insert(current_id.clone());
+            visited.insert(current_id);
 
             for (id, task) in &self.tasks {
                 if task.parent_task_id.as_ref() == Some(&current_id) {
-                    descendants.push(id.clone());
-                    stack.push(id.clone());
+                    descendants.push(*id);
+                    stack.push(*id);
                 }
             }
         }
@@ -114,7 +114,7 @@ impl Model {
     #[must_use]
     pub fn get_all_ancestors(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut ancestors = Vec::new();
-        let mut current_id = task_id.clone();
+        let mut current_id = *task_id;
         let mut visited = HashSet::new();
 
         while let Some(task) = self.tasks.get(&current_id) {
@@ -122,9 +122,9 @@ impl Model {
                 if visited.contains(parent_id) {
                     break; // Circular reference
                 }
-                visited.insert(current_id.clone());
-                ancestors.push(parent_id.clone());
-                current_id = parent_id.clone();
+                visited.insert(current_id);
+                ancestors.push(*parent_id);
+                current_id = *parent_id;
             } else {
                 break;
             }
@@ -161,5 +161,47 @@ impl Model {
         } else {
             Some(((completed * 100) / total) as u8)
         }
+    }
+
+    /// Returns true if the task has any incomplete dependencies (is blocked).
+    ///
+    /// A task is blocked if any of its dependencies (tasks it depends on)
+    /// are not yet completed.
+    #[must_use]
+    pub fn is_task_blocked(&self, task_id: &TaskId) -> bool {
+        if let Some(task) = self.tasks.get(task_id) {
+            task.dependencies.iter().any(|dep_id| {
+                self.tasks
+                    .get(dep_id)
+                    .is_some_and(|dep| !dep.status.is_complete())
+            })
+        } else {
+            false
+        }
+    }
+
+    /// Returns the count of incomplete dependencies for a task.
+    #[must_use]
+    pub fn incomplete_dependency_count(&self, task_id: &TaskId) -> usize {
+        if let Some(task) = self.tasks.get(task_id) {
+            task.dependencies
+                .iter()
+                .filter(|dep_id| {
+                    self.tasks
+                        .get(dep_id)
+                        .is_some_and(|dep| !dep.status.is_complete())
+                })
+                .count()
+        } else {
+            0
+        }
+    }
+
+    /// Returns true if this task has any dependencies (regardless of completion).
+    #[must_use]
+    pub fn has_dependencies(&self, task_id: &TaskId) -> bool {
+        self.tasks
+            .get(task_id)
+            .is_some_and(|task| !task.dependencies.is_empty())
     }
 }

@@ -159,28 +159,27 @@ pub struct TimeAnalytics {
     pub total_minutes: u32,
 }
 
+/// Maps array index to weekday (0 = Monday, 6 = Sunday).
+const WEEKDAYS: [Weekday; 7] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+    Weekday::Sat,
+    Weekday::Sun,
+];
+
 impl TimeAnalytics {
     /// Returns the most productive day of the week.
     #[must_use]
     pub fn most_productive_day(&self) -> Option<Weekday> {
-        let max_idx = self
-            .by_day_of_week
+        self.by_day_of_week
             .iter()
             .enumerate()
             .max_by_key(|(_, &v)| v)
             .filter(|(_, &v)| v > 0)
-            .map(|(i, _)| i);
-
-        max_idx.map(|i| match i {
-            0 => Weekday::Mon,
-            1 => Weekday::Tue,
-            2 => Weekday::Wed,
-            3 => Weekday::Thu,
-            4 => Weekday::Fri,
-            5 => Weekday::Sat,
-            6 => Weekday::Sun,
-            _ => unreachable!(),
-        })
+            .map(|(i, _)| WEEKDAYS[i])
     }
 
     /// Returns the peak productivity hour (0-23).
@@ -197,7 +196,7 @@ impl TimeAnalytics {
     /// Returns total hours tracked.
     #[must_use]
     pub fn total_hours(&self) -> f64 {
-        self.total_minutes as f64 / 60.0
+        f64::from(self.total_minutes) / 60.0
     }
 }
 
@@ -259,7 +258,7 @@ impl StatusBreakdown {
         if total == 0 {
             return 0.0;
         }
-        self.done as f64 / total as f64
+        f64::from(self.done) / f64::from(total)
     }
 }
 
@@ -287,7 +286,7 @@ impl PriorityBreakdown {
         if total == 0 {
             return 0.0;
         }
-        (self.high + self.urgent) as f64 / total as f64 * 100.0
+        f64::from(self.high + self.urgent) / f64::from(total) * 100.0
     }
 }
 
@@ -309,7 +308,7 @@ impl TagStats {
         if self.count == 0 {
             return 0.0;
         }
-        self.completed as f64 / self.count as f64
+        f64::from(self.completed) / f64::from(self.count)
     }
 }
 

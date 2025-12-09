@@ -1,3 +1,4 @@
+mod filter_utils;
 mod json;
 mod markdown;
 mod sqlite;

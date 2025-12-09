@@ -30,8 +30,19 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::Tick => {
             // Handle periodic updates (e.g., timer display)
-            // Clear status message after a tick
-            model.status_message = None;
+
+            // Clear status message after timeout (3 seconds)
+            if model.status_message.is_some() {
+                if let Some(set_at) = model.status_message_set_at {
+                    if set_at.elapsed().as_secs() >= 3 {
+                        model.status_message = None;
+                        model.status_message_set_at = None;
+                    }
+                } else {
+                    // Message exists but no timestamp - set it now
+                    model.status_message_set_at = Some(std::time::Instant::now());
+                }
+            }
         }
         SystemMessage::ExportCsv => {
             handle_export_csv(model);
@@ -69,7 +80,7 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::RefreshStorage => {
             let changes = model.refresh_storage();
             if changes > 0 {
-                model.status_message = Some(format!("Refreshed: {} change(s) detected", changes));
+                model.status_message = Some(format!("Refreshed: {changes} change(s) detected"));
             } else {
                 model.status_message = Some("No external changes detected".to_string());
             }
@@ -88,7 +99,7 @@ fn handle_undo(model: &mut Model) {
             UndoAction::TaskDeleted { task, time_entries } => {
                 // Undo delete by restoring the task
                 model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), *task);
+                model.tasks.insert(task.id, *task);
                 // Restore time entries
                 for entry in time_entries {
                     model.restore_time_entry(entry);
@@ -97,7 +108,7 @@ fn handle_undo(model: &mut Model) {
             UndoAction::TaskModified { before, after: _ } => {
                 // Undo modify by restoring previous state
                 model.sync_task(&before);
-                model.tasks.insert(before.id.clone(), *before);
+                model.tasks.insert(before.id, *before);
             }
             UndoAction::ProjectCreated(project) => {
                 // Undo project create by removing it
@@ -107,12 +118,12 @@ fn handle_undo(model: &mut Model) {
             UndoAction::ProjectDeleted(project) => {
                 // Undo project delete by restoring it
                 model.sync_project(&project);
-                model.projects.insert(project.id.clone(), *project);
+                model.projects.insert(project.id, *project);
             }
             UndoAction::ProjectModified { before, after: _ } => {
                 // Undo modify by restoring previous state
                 model.sync_project(&before);
-                model.projects.insert(before.id.clone(), *before);
+                model.projects.insert(before.id, *before);
             }
             UndoAction::TimeEntryStarted(entry) => {
                 // Undo start by deleting the entry
@@ -139,6 +150,21 @@ fn handle_undo(model: &mut Model) {
                 model.delete_time_entry(&started_entry.id);
                 model.restore_time_entry(*stopped_entry_before);
             }
+            UndoAction::WorkLogCreated(entry) => {
+                // Undo work log create by deleting it
+                model.delete_work_log_from_storage(&entry.id);
+                model.work_logs.remove(&entry.id);
+            }
+            UndoAction::WorkLogDeleted(entry) => {
+                // Undo work log delete by restoring it
+                model.sync_work_log(&entry);
+                model.work_logs.insert(entry.id, *entry);
+            }
+            UndoAction::WorkLogModified { before, after: _ } => {
+                // Undo work log modify by restoring previous state
+                model.sync_work_log(&before);
+                model.work_logs.insert(before.id, *before);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -150,7 +176,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TaskCreated(task) => {
                 // Redo create by restoring the task
                 model.sync_task(&task);
-                model.tasks.insert(task.id.clone(), *task);
+                model.tasks.insert(task.id, *task);
             }
             UndoAction::TaskDeleted { task, time_entries } => {
                 // Redo delete by removing the task and its time entries
@@ -164,12 +190,12 @@ fn handle_redo(model: &mut Model) {
             UndoAction::TaskModified { before, after: _ } => {
                 // Redo modify: the redo stack holds the inverse, so "before" is the state we want
                 model.sync_task(&before);
-                model.tasks.insert(before.id.clone(), *before);
+                model.tasks.insert(before.id, *before);
             }
             UndoAction::ProjectCreated(project) => {
                 // Redo project create by restoring it
                 model.sync_project(&project);
-                model.projects.insert(project.id.clone(), *project);
+                model.projects.insert(project.id, *project);
             }
             UndoAction::ProjectDeleted(project) => {
                 // Redo project delete by removing it
@@ -179,7 +205,7 @@ fn handle_redo(model: &mut Model) {
             UndoAction::ProjectModified { before, after: _ } => {
                 // Redo modify: the redo stack holds the inverse, so "before" is the state we want
                 model.sync_project(&before);
-                model.projects.insert(before.id.clone(), *before);
+                model.projects.insert(before.id, *before);
             }
             UndoAction::TimeEntryStarted(entry) => {
                 // Redo start by restoring the entry
@@ -210,6 +236,21 @@ fn handle_redo(model: &mut Model) {
                 // Restore the new entry (will become active since we cleared active above)
                 model.restore_time_entry(*started_entry);
             }
+            UndoAction::WorkLogCreated(entry) => {
+                // Redo work log create by restoring it
+                model.sync_work_log(&entry);
+                model.work_logs.insert(entry.id, *entry);
+            }
+            UndoAction::WorkLogDeleted(entry) => {
+                // Redo work log delete by removing it
+                model.delete_work_log_from_storage(&entry.id);
+                model.work_logs.remove(&entry.id);
+            }
+            UndoAction::WorkLogModified { before, after: _ } => {
+                // Redo work log modify: inverse has swapped before/after, so "before" is the new state
+                model.sync_work_log(&before);
+                model.work_logs.insert(before.id, *before);
+            }
         }
         model.refresh_visible_tasks();
     }
@@ -222,11 +263,10 @@ fn handle_export_csv(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Csv) {
         Ok(content) => {
             // Determine export path
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("csv"))
-                .unwrap_or_else(|| std::path::PathBuf::from("tasks.csv"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("tasks.csv"),
+                |p| p.with_extension("csv"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -254,11 +294,10 @@ fn handle_export_ics(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Ics) {
         Ok(content) => {
             // Determine export path
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("ics"))
-                .unwrap_or_else(|| std::path::PathBuf::from("tasks.ics"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("tasks.ics"),
+                |p| p.with_extension("ics"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -285,11 +324,10 @@ fn handle_export_chains_dot(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Dot) {
         Ok(content) => {
             // Determine export path
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("dot"))
-                .unwrap_or_else(|| std::path::PathBuf::from("task_chains.dot"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("task_chains.dot"),
+                |p| p.with_extension("dot"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -315,11 +353,10 @@ fn handle_export_chains_mermaid(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Mermaid) {
         Ok(content) => {
             // Determine export path
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("md"))
-                .unwrap_or_else(|| std::path::PathBuf::from("task_chains.md"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("task_chains.md"),
+                |p| p.with_extension("md"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -350,11 +387,10 @@ fn handle_export_report_markdown(model: &mut Model) {
 
     match export_report_to_markdown_string(&report) {
         Ok(content) => {
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("report.md"))
-                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.md"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("taskflow_report.md"),
+                |p| p.with_extension("report.md"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -385,11 +421,10 @@ fn handle_export_report_html(model: &mut Model) {
 
     match export_report_to_html_string(&report) {
         Ok(content) => {
-            let export_path = model
-                .data_path
-                .as_ref()
-                .map(|p| p.with_extension("report.html"))
-                .unwrap_or_else(|| std::path::PathBuf::from("taskflow_report.html"));
+            let export_path = model.data_path.as_ref().map_or_else(
+                || std::path::PathBuf::from("taskflow_report.html"),
+                |p| p.with_extension("report.html"),
+            );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
@@ -499,8 +534,7 @@ pub fn handle_execute_import(model: &mut Model) {
     model.pending_import = Some(result);
     model.show_import_preview = true;
     model.status_message = Some(format!(
-        "Preview: {} to import, {} skipped, {} errors. Press Enter to confirm, Esc to cancel.",
-        import_count, skip_count, error_count
+        "Preview: {import_count} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
     ));
 }
 
@@ -511,13 +545,13 @@ fn handle_confirm_import(model: &mut Model) {
         // Add all imported tasks
         for task in result.imported {
             model.sync_task(&task);
-            model.tasks.insert(task.id.clone(), task);
+            model.tasks.insert(task.id, task);
         }
 
         model.dirty = true;
         model.show_import_preview = false;
         model.refresh_visible_tasks();
-        model.status_message = Some(format!("Imported {} tasks", count));
+        model.status_message = Some(format!("Imported {count} tasks"));
     }
 }
 

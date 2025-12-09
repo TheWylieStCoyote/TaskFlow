@@ -106,7 +106,7 @@ impl Widget for BarChart<'_> {
             let label_display: String = if label.len() > max_label_len {
                 format!("{}...", &label[..max_label_len - 3])
             } else {
-                format!("{:>width$}", label, width = max_label_len)
+                format!("{label:>max_label_len$}")
             };
 
             buf.set_string(
@@ -132,7 +132,7 @@ impl Widget for BarChart<'_> {
             }
 
             // Render value
-            let value_str = format!(" {:>4}", value);
+            let value_str = format!(" {value:>4}");
             let value_x = inner.x + inner.width - 6;
             buf.set_string(value_x, y, &value_str, Style::default().fg(Color::DarkGray));
         }
@@ -312,7 +312,7 @@ impl Widget for BurndownChart<'_> {
             let completed_val = self.completed.get(chunk_idx).copied().unwrap_or(0.0);
             let remaining = (scope_val - completed_val).max(0.0);
 
-            let height = ((remaining / max_val) * chart_height as f64).round() as u16;
+            let height = ((remaining / max_val) * f64::from(chart_height)).round() as u16;
 
             // Draw vertical bar for remaining work
             for h in 0..height {
@@ -395,7 +395,7 @@ impl Widget for ProgressGauge<'_> {
         let label_width = (self.label.len() + 1).min(area.width as usize / 3) as u16;
         let percent_width = 5u16; // " XXX%"
         let bar_width = area.width.saturating_sub(label_width + percent_width + 2);
-        let filled_width = ((progress * bar_width as f64).round() as u16).min(bar_width);
+        let filled_width = ((progress * f64::from(bar_width)).round() as u16).min(bar_width);
 
         // Render label
         let label: String = if self.label.len() > label_width as usize - 1 {
@@ -432,7 +432,7 @@ impl Widget for ProgressGauge<'_> {
         );
 
         // Render percentage
-        let percent_str = format!(" {:>3}%", percentage);
+        let percent_str = format!(" {percentage:>3}%");
         buf.set_string(
             bar_x + bar_width + 2,
             area.y,

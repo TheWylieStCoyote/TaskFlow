@@ -20,12 +20,12 @@ fn test_start_link_task_enters_editing_mode() {
 #[test]
 fn test_start_link_task_shows_current_link() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let target_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let target_id = model.visible_tasks[1];
     let target_title = model.tasks.get(&target_id).unwrap().title.clone();
 
     // Set existing link
-    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id.clone());
+    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id);
 
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
@@ -39,8 +39,8 @@ fn test_start_link_task_shows_current_link() {
 #[test]
 fn test_link_task_by_number() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let target_id = model.visible_tasks[2].clone();
+    let task_id = model.visible_tasks[0];
+    let target_id = model.visible_tasks[2];
 
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
@@ -65,12 +65,12 @@ fn test_link_task_by_title_search() {
     let task1 = Task::new("First task");
     let task2 = Task::new("Second task");
     let task3 = Task::new("Target unique title");
-    let task1_id = task1.id.clone();
-    let task3_id = task3.id.clone();
+    let task1_id = task1.id;
+    let task3_id = task3.id;
 
-    model.tasks.insert(task1.id.clone(), task1);
-    model.tasks.insert(task2.id.clone(), task2);
-    model.tasks.insert(task3.id.clone(), task3);
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+    model.tasks.insert(task3.id, task3);
     model.refresh_visible_tasks();
 
     // Find the visible index for task1
@@ -99,7 +99,7 @@ fn test_link_task_by_title_search() {
 #[test]
 fn test_link_task_prevents_self_linking() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
@@ -116,8 +116,8 @@ fn test_link_task_prevents_self_linking() {
 #[test]
 fn test_link_task_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let target_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let target_id = model.visible_tasks[1];
 
     // Link task
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
@@ -139,8 +139,8 @@ fn test_link_task_undo() {
 #[test]
 fn test_unlink_task_removes_link() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let target_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let target_id = model.visible_tasks[1];
 
     // Set existing link
     model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id);
@@ -153,7 +153,7 @@ fn test_unlink_task_removes_link() {
 #[test]
 fn test_unlink_task_when_not_linked_is_noop() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Ensure no link exists
     assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());
@@ -167,11 +167,11 @@ fn test_unlink_task_when_not_linked_is_noop() {
 #[test]
 fn test_unlink_task_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let target_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let target_id = model.visible_tasks[1];
 
     // Set existing link
-    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id.clone());
+    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(target_id);
 
     // Unlink
     update(&mut model, Message::Ui(UiMessage::UnlinkTask));
@@ -189,11 +189,11 @@ fn test_unlink_task_undo() {
 #[test]
 fn test_completing_chained_task_schedules_next() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let next_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let next_id = model.visible_tasks[1];
 
     // Link tasks
-    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(next_id.clone());
+    model.tasks.get_mut(&task_id).unwrap().next_task_id = Some(next_id);
 
     // Next task should have no scheduled date initially
     assert!(model.tasks.get(&next_id).unwrap().scheduled_date.is_none());
@@ -212,8 +212,8 @@ fn test_completing_chained_task_schedules_next() {
 #[test]
 fn test_completing_unchained_task_no_scheduling() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
-    let other_id = model.visible_tasks[1].clone();
+    let task_id = model.visible_tasks[0];
+    let other_id = model.visible_tasks[1];
 
     // No link - task is standalone
     assert!(model.tasks.get(&task_id).unwrap().next_task_id.is_none());

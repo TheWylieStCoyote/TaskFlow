@@ -20,7 +20,7 @@ use uuid::Uuid;
 /// let id = ProjectId::new();
 /// println!("Project ID: {}", id);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ProjectId(pub Uuid);
 
 impl ProjectId {
@@ -109,7 +109,7 @@ impl ProjectStatus {
 ///
 /// let parent = Project::new("Engineering");
 /// let child = Project::new("Backend Team")
-///     .with_parent(parent.id.clone());
+///     .with_parent(parent.id);
 ///
 /// assert_eq!(child.parent_id, Some(parent.id));
 /// ```
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn test_project_with_parent() {
         let parent = Project::new("Parent");
-        let child = Project::new("Child").with_parent(parent.id.clone());
+        let child = Project::new("Child").with_parent(parent.id);
         assert_eq!(child.parent_id, Some(parent.id));
     }
 

@@ -9,7 +9,7 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_filter_by_tag() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add tags to task
     model.tasks.get_mut(&task_id).unwrap().tags = vec!["work".to_string(), "urgent".to_string()];
@@ -32,10 +32,8 @@ fn test_filter_by_tag_submit() {
     let task_tagged = Task::new("Tagged task").with_tags(vec!["work".to_string()]);
     let task_untagged = Task::new("Untagged task");
 
-    model
-        .tasks
-        .insert(task_tagged.id.clone(), task_tagged.clone());
-    model.tasks.insert(task_untagged.id.clone(), task_untagged);
+    model.tasks.insert(task_tagged.id, task_tagged.clone());
+    model.tasks.insert(task_untagged.id, task_untagged);
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 2);
 
@@ -65,11 +63,11 @@ fn test_filter_by_tag_multiple_tags() {
     let task_home = Task::new("Home task").with_tags(vec!["home".to_string()]);
     let task_work_only = Task::new("Work only").with_tags(vec!["work".to_string()]);
 
-    model.tasks.insert(task_work.id.clone(), task_work.clone());
-    model.tasks.insert(task_home.id.clone(), task_home);
+    model.tasks.insert(task_work.id, task_work.clone());
+    model.tasks.insert(task_home.id, task_home);
     model
         .tasks
-        .insert(task_work_only.id.clone(), task_work_only.clone());
+        .insert(task_work_only.id, task_work_only.clone());
     model.refresh_visible_tasks();
 
     // Start filter
@@ -96,8 +94,8 @@ fn test_clear_tag_filter() {
     let task_tagged = Task::new("Tagged").with_tags(vec!["work".to_string()]);
     let task_untagged = Task::new("Untagged");
 
-    model.tasks.insert(task_tagged.id.clone(), task_tagged);
-    model.tasks.insert(task_untagged.id.clone(), task_untagged);
+    model.tasks.insert(task_tagged.id, task_tagged);
+    model.tasks.insert(task_untagged.id, task_untagged);
     model.refresh_visible_tasks();
 
     // Set tag filter

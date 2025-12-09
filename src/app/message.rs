@@ -15,7 +15,8 @@
 //! └── None        - No-op
 //! ```
 
-use crate::domain::{Priority, ProjectId, TaskId, TaskStatus};
+use crate::domain::{HabitId, Priority, ProjectId, TaskId, TaskStatus};
+use chrono::NaiveDate;
 
 /// Which pane currently has focus.
 ///
@@ -72,6 +73,8 @@ pub enum Message {
     Time(TimeMessage),
     /// Pomodoro timer operations
     Pomodoro(PomodoroMessage),
+    /// Habit tracking operations
+    Habit(HabitMessage),
     /// UI state changes
     Ui(UiMessage),
     /// System-level operations
@@ -136,6 +139,36 @@ pub enum NavigationMessage {
     ReportsNextPanel,
     /// Navigate to previous panel in reports view
     ReportsPrevPanel,
+    /// Scroll timeline viewport left (earlier dates)
+    TimelineScrollLeft,
+    /// Scroll timeline viewport right (later dates)
+    TimelineScrollRight,
+    /// Zoom in on timeline (Week → Day)
+    TimelineZoomIn,
+    /// Zoom out on timeline (Day → Week)
+    TimelineZoomOut,
+    /// Jump to today in timeline
+    TimelineGoToday,
+    /// Navigate up in timeline task list
+    TimelineUp,
+    /// Navigate down in timeline task list
+    TimelineDown,
+    /// Navigate left in Kanban view (previous column)
+    KanbanLeft,
+    /// Navigate right in Kanban view (next column)
+    KanbanRight,
+    /// Navigate up in Eisenhower view (to upper quadrant)
+    EisenhowerUp,
+    /// Navigate down in Eisenhower view (to lower quadrant)
+    EisenhowerDown,
+    /// Navigate left in Eisenhower view (to left quadrant)
+    EisenhowerLeft,
+    /// Navigate right in Eisenhower view (to right quadrant)
+    EisenhowerRight,
+    /// Navigate left in WeeklyPlanner view (previous day)
+    WeeklyPlannerLeft,
+    /// Navigate right in WeeklyPlanner view (next day)
+    WeeklyPlannerRight,
 }
 
 /// View identifiers for different application screens.
@@ -155,7 +188,7 @@ pub enum NavigationMessage {
 /// let upcoming = ViewId::Upcoming;
 /// assert_ne!(today, upcoming);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ViewId {
     /// All tasks view (default)
     #[default]
@@ -184,6 +217,18 @@ pub enum ViewId {
     RecentlyModified,
     /// Analytics and reports view
     Reports,
+    /// Kanban board view with columns for each status
+    Kanban,
+    /// Eisenhower matrix (urgent/important quadrants)
+    Eisenhower,
+    /// Weekly planner view with day columns
+    WeeklyPlanner,
+    /// Timeline/Gantt view showing tasks as bars on time axis
+    Timeline,
+    /// Snoozed tasks (hidden until snooze date)
+    Snoozed,
+    /// Habit tracking view
+    Habits,
 }
 
 /// Task operation messages.
@@ -301,6 +346,8 @@ pub enum UiMessage {
     StartEditTags,
     /// Enter input mode to edit description
     StartEditDescription,
+    /// Enter input mode to edit time estimate
+    StartEditEstimate,
     /// Enter input mode to move task to project
     StartMoveToProject,
     /// Enter input mode to search tasks
@@ -446,9 +493,179 @@ pub enum UiMessage {
     /// Delete the selected time entry
     TimeLogDelete,
 
+    // Work log editor
+    /// Show the work log editor for selected task
+    ShowWorkLog,
+    /// Hide the work log editor
+    HideWorkLog,
+    /// Navigate up in work log list
+    WorkLogUp,
+    /// Navigate down in work log list
+    WorkLogDown,
+    /// View the selected work log entry
+    WorkLogView,
+    /// Start adding a new work log entry
+    WorkLogAdd,
+    /// Start editing the selected work log entry
+    WorkLogEdit,
+    /// Show delete confirmation for work log entry
+    WorkLogConfirmDelete,
+    /// Cancel work log operation (return to browse mode)
+    WorkLogCancel,
+    /// Submit work log entry (save add/edit)
+    WorkLogSubmit,
+    /// Delete the selected work log entry
+    WorkLogDelete,
+    /// Insert a character in work log buffer
+    WorkLogInputChar(char),
+    /// Delete character before cursor in work log buffer
+    WorkLogInputBackspace,
+    /// Delete character at cursor in work log buffer
+    WorkLogInputDelete,
+    /// Move cursor left in work log buffer
+    WorkLogCursorLeft,
+    /// Move cursor right in work log buffer
+    WorkLogCursorRight,
+    /// Move cursor up (to previous line)
+    WorkLogCursorUp,
+    /// Move cursor down (to next line)
+    WorkLogCursorDown,
+    /// Insert a newline in work log buffer
+    WorkLogNewline,
+    /// Move cursor to start of line
+    WorkLogCursorHome,
+    /// Move cursor to end of line
+    WorkLogCursorEnd,
+    /// Start work log search mode
+    WorkLogSearchStart,
+    /// Cancel work log search (return to browse without applying)
+    WorkLogSearchCancel,
+    /// Apply work log search filter (return to browse with filter active)
+    WorkLogSearchApply,
+    /// Clear work log search filter
+    WorkLogSearchClear,
+    /// Input character in work log search
+    WorkLogSearchChar(char),
+    /// Backspace in work log search
+    WorkLogSearchBackspace,
+
+    // Description editor (multi-line)
+    /// Start editing description in multi-line mode
+    StartEditDescriptionMultiline,
+    /// Hide description editor (cancel)
+    HideDescriptionEditor,
+    /// Submit description edit (save)
+    DescriptionSubmit,
+    /// Insert a character in description buffer
+    DescriptionInputChar(char),
+    /// Delete character before cursor in description buffer
+    DescriptionInputBackspace,
+    /// Delete character at cursor in description buffer
+    DescriptionInputDelete,
+    /// Move cursor left in description buffer
+    DescriptionCursorLeft,
+    /// Move cursor right in description buffer
+    DescriptionCursorRight,
+    /// Move cursor up (to previous line)
+    DescriptionCursorUp,
+    /// Move cursor down (to next line)
+    DescriptionCursorDown,
+    /// Insert a newline in description buffer
+    DescriptionNewline,
+    /// Move cursor to start of line
+    DescriptionCursorHome,
+    /// Move cursor to end of line
+    DescriptionCursorEnd,
+
     // Overdue alert
     /// Dismiss the overdue tasks alert
     DismissOverdueAlert,
+
+    // Storage error alert
+    /// Dismiss the storage error alert
+    DismissStorageErrorAlert,
+
+    // Saved filters
+    /// Show saved filter picker
+    ShowSavedFilters,
+    /// Hide saved filter picker
+    HideSavedFilters,
+    /// Navigate up in saved filter list
+    SavedFilterUp,
+    /// Navigate down in saved filter list
+    SavedFilterDown,
+    /// Apply the selected saved filter
+    ApplySavedFilter,
+    /// Save current filter as a new saved filter
+    SaveCurrentFilter,
+    /// Delete the selected saved filter
+    DeleteSavedFilter,
+    /// Clear the active saved filter
+    ClearSavedFilter,
+
+    // Daily review mode
+    /// Show daily review mode
+    ShowDailyReview,
+    /// Hide daily review mode
+    HideDailyReview,
+    /// Move to next phase in daily review
+    DailyReviewNext,
+    /// Move to previous phase in daily review
+    DailyReviewPrev,
+    /// Navigate up in daily review task list
+    DailyReviewUp,
+    /// Navigate down in daily review task list
+    DailyReviewDown,
+    /// Complete the selected task in daily review
+    DailyReviewComplete,
+
+    // Weekly review mode
+    /// Show weekly review mode
+    ShowWeeklyReview,
+    /// Hide weekly review mode
+    HideWeeklyReview,
+    /// Move to next phase in weekly review
+    WeeklyReviewNext,
+    /// Move to previous phase in weekly review
+    WeeklyReviewPrev,
+    /// Navigate up in weekly review list
+    WeeklyReviewUp,
+    /// Navigate down in weekly review list
+    WeeklyReviewDown,
+
+    // Task snooze
+    /// Start editing snooze date for selected task
+    StartSnoozeTask,
+    /// Clear snooze from selected task
+    ClearSnooze,
+
+    // Habit tracking
+    /// Start creating a new habit
+    StartCreateHabit,
+    /// Start editing the selected habit
+    StartEditHabit(HabitId),
+    /// Navigate up in habit list
+    HabitUp,
+    /// Navigate down in habit list
+    HabitDown,
+    /// Toggle today's check-in for selected habit
+    HabitToggleToday,
+    /// Show habit analytics/details popup
+    ShowHabitAnalytics,
+    /// Hide habit analytics popup
+    HideHabitAnalytics,
+    /// Archive the selected habit
+    HabitArchive,
+    /// Delete the selected habit
+    HabitDelete,
+    /// Toggle showing archived habits
+    HabitToggleShowArchived,
+
+    // Timeline view
+    /// Toggle showing dependency lines in timeline
+    TimelineToggleDependencies,
+    /// View selected task details from timeline (opens focus mode)
+    TimelineViewSelected,
 }
 
 /// System-level messages for application control.
@@ -554,6 +771,12 @@ impl From<PomodoroMessage> for Message {
     }
 }
 
+impl From<HabitMessage> for Message {
+    fn from(msg: HabitMessage) -> Self {
+        Self::Habit(msg)
+    }
+}
+
 /// Pomodoro timer messages.
 ///
 /// These messages control the Pomodoro timer in focus mode.
@@ -605,4 +828,44 @@ pub enum PomodoroMessage {
     IncrementGoal,
     /// Decrement session goal
     DecrementGoal,
+}
+
+/// Habit tracking messages.
+///
+/// These messages handle creating, modifying, and checking in habits.
+#[derive(Debug, Clone)]
+pub enum HabitMessage {
+    /// Create a new habit with the given name
+    Create(String),
+    /// Check in for today
+    CheckInToday {
+        /// The habit to check in
+        habit_id: HabitId,
+        /// Whether the habit was completed
+        completed: bool,
+    },
+    /// Check in for a specific date
+    CheckIn {
+        /// The habit to check in
+        habit_id: HabitId,
+        /// The date to check in for
+        date: NaiveDate,
+        /// Whether the habit was completed
+        completed: bool,
+    },
+    /// Toggle today's completion status
+    ToggleToday(HabitId),
+    /// Archive a habit
+    Archive(HabitId),
+    /// Unarchive a habit
+    Unarchive(HabitId),
+    /// Delete a habit
+    Delete(HabitId),
+    /// Update habit name
+    UpdateName {
+        /// The habit to update
+        habit_id: HabitId,
+        /// The new name
+        name: String,
+    },
 }

@@ -10,17 +10,17 @@ fn test_completing_parent_cascades_to_descendants() {
     // Create a 3-level hierarchy: root -> child -> grandchild
     let root = Task::new("Root Task");
     let mut child = Task::new("Child Task");
-    child.parent_task_id = Some(root.id.clone());
+    child.parent_task_id = Some(root.id);
     let mut grandchild = Task::new("Grandchild Task");
-    grandchild.parent_task_id = Some(child.id.clone());
+    grandchild.parent_task_id = Some(child.id);
 
-    let root_id = root.id.clone();
-    let child_id = child.id.clone();
-    let grandchild_id = grandchild.id.clone();
+    let root_id = root.id;
+    let child_id = child.id;
+    let grandchild_id = grandchild.id;
 
-    model.tasks.insert(root.id.clone(), root);
-    model.tasks.insert(child.id.clone(), child);
-    model.tasks.insert(grandchild.id.clone(), grandchild);
+    model.tasks.insert(root.id, root);
+    model.tasks.insert(child.id, child);
+    model.tasks.insert(grandchild.id, grandchild);
     model.refresh_visible_tasks();
 
     // Select the root task
@@ -59,14 +59,14 @@ fn test_uncompleting_parent_does_not_affect_descendants() {
     let mut root = Task::new("Root Task");
     root.status = TaskStatus::Done;
     let mut child = Task::new("Child Task");
-    child.parent_task_id = Some(root.id.clone());
+    child.parent_task_id = Some(root.id);
     child.status = TaskStatus::Done;
 
-    let root_id = root.id.clone();
-    let child_id = child.id.clone();
+    let root_id = root.id;
+    let child_id = child.id;
 
-    model.tasks.insert(root.id.clone(), root);
-    model.tasks.insert(child.id.clone(), child);
+    model.tasks.insert(root.id, root);
+    model.tasks.insert(child.id, child);
     model.refresh_visible_tasks();
 
     // Select the root task
@@ -95,13 +95,13 @@ fn test_cascade_completion_undo() {
     // Create a hierarchy: root -> child
     let root = Task::new("Root Task");
     let mut child = Task::new("Child Task");
-    child.parent_task_id = Some(root.id.clone());
+    child.parent_task_id = Some(root.id);
 
-    let root_id = root.id.clone();
-    let child_id = child.id.clone();
+    let root_id = root.id;
+    let child_id = child.id;
 
-    model.tasks.insert(root.id.clone(), root);
-    model.tasks.insert(child.id.clone(), child);
+    model.tasks.insert(root.id, root);
+    model.tasks.insert(child.id, child);
     model.refresh_visible_tasks();
 
     // Select the root task
@@ -134,12 +134,12 @@ fn test_delete_blocked_for_task_with_subtasks() {
     // Create a parent with a child
     let parent = Task::new("Parent Task");
     let mut child = Task::new("Child Task");
-    child.parent_task_id = Some(parent.id.clone());
+    child.parent_task_id = Some(parent.id);
 
-    let parent_id = parent.id.clone();
+    let parent_id = parent.id;
 
-    model.tasks.insert(parent.id.clone(), parent);
-    model.tasks.insert(child.id.clone(), child);
+    model.tasks.insert(parent.id, parent);
+    model.tasks.insert(child.id, child);
     model.refresh_visible_tasks();
 
     // Select the parent task
@@ -170,9 +170,9 @@ fn test_delete_allowed_for_task_without_subtasks() {
 
     // Create a task without children
     let task = Task::new("Standalone Task");
-    let task_id = task.id.clone();
+    let task_id = task.id;
 
-    model.tasks.insert(task.id.clone(), task);
+    model.tasks.insert(task.id, task);
     model.refresh_visible_tasks();
 
     // Select the task
@@ -196,12 +196,12 @@ fn test_delete_subtask_allowed() {
     // Create parent -> child hierarchy
     let parent = Task::new("Parent Task");
     let mut child = Task::new("Child Task");
-    child.parent_task_id = Some(parent.id.clone());
+    child.parent_task_id = Some(parent.id);
 
-    let child_id = child.id.clone();
+    let child_id = child.id;
 
-    model.tasks.insert(parent.id.clone(), parent);
-    model.tasks.insert(child.id.clone(), child);
+    model.tasks.insert(parent.id, parent);
+    model.tasks.insert(child.id, child);
     model.refresh_visible_tasks();
 
     // Select the child task (leaf node)

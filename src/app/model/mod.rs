@@ -45,6 +45,7 @@
 //! assert!(!model.projects.is_empty());
 //! ```
 
+mod cache;
 mod filtering;
 mod hierarchy;
 mod sample_data;
@@ -52,15 +53,23 @@ mod storage;
 mod time_tracking;
 mod types;
 
-pub use types::{CalendarState, RunningState};
+pub use cache::{FooterStats, TaskCache};
+pub use types::{
+    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
+    KeybindingsEditorState, RunningState, SavedFilterPickerState, TemplatePickerState,
+    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
+    WorkLogEditorState,
+};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Filter, Priority, Project, ProjectId, SortSpec, Task, TaskId, TimeEntry, TimeEntryId,
+    Filter, Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec,
+    Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::StorageBackend;
 use crate::ui::{InputMode, InputTarget};
@@ -68,30 +77,56 @@ use crate::ui::{InputMode, InputTarget};
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
 // ============================================================================
-// Sidebar Layout Constants
+// Sidebar Layout
 // ============================================================================
-// These constants define the sidebar structure. When adding/removing views,
-// update SIDEBAR_VIEW_COUNT and the indices will adjust automatically.
+// The sidebar layout is defined by SIDEBAR_VIEWS array. When adding/removing
+// views, update the array and all indices will adjust automatically.
 //
 // Layout:
-//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (All Tasks, Today, etc.)
+//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (from SIDEBAR_VIEWS array)
 //   SIDEBAR_SEPARATOR_INDEX       = Separator line
 //   SIDEBAR_PROJECTS_HEADER_INDEX = "Projects" header
 //   SIDEBAR_FIRST_PROJECT_INDEX+  = Individual projects
 
+/// Ordered list of views shown in the sidebar.
+/// This is the single source of truth for sidebar view order.
+/// When adding a new view:
+/// 1. Add the ViewId variant to message.rs
+/// 2. Add it to this array in the desired position
+/// 3. Add rendering in sidebar.rs (must match this order!)
+pub const SIDEBAR_VIEWS: &[ViewId] = &[
+    ViewId::TaskList,         // 0: All Tasks
+    ViewId::Today,            // 1: Today
+    ViewId::Upcoming,         // 2: Upcoming
+    ViewId::Overdue,          // 3: Overdue
+    ViewId::Scheduled,        // 4: Scheduled
+    ViewId::Calendar,         // 5: Calendar
+    ViewId::Dashboard,        // 6: Dashboard
+    ViewId::Reports,          // 7: Reports
+    ViewId::Habits,           // 8: Habits
+    ViewId::Blocked,          // 9: Blocked
+    ViewId::Untagged,         // 10: Untagged
+    ViewId::NoProject,        // 11: No Project
+    ViewId::RecentlyModified, // 12: Recent
+    ViewId::Kanban,           // 13: Kanban
+    ViewId::Eisenhower,       // 14: Eisenhower
+    ViewId::WeeklyPlanner,    // 15: Weekly Planner
+    ViewId::Timeline,         // 16: Timeline
+    ViewId::Snoozed,          // 17: Snoozed
+];
+
 /// Number of view items in the sidebar (before the separator).
-/// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
-///        Dashboard, Reports, Blocked, Untagged, No Project, Recent
-pub const SIDEBAR_VIEW_COUNT: usize = 12;
+/// Derived from SIDEBAR_VIEWS array length.
+pub const SIDEBAR_VIEW_COUNT: usize = SIDEBAR_VIEWS.len();
 
 /// Index of the separator line in the sidebar.
-pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
+pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT;
 
 /// Index of the "Projects" header in the sidebar.
-pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1; // 13
+pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1;
 
 /// Index where individual projects start in the sidebar.
-pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1; // 14
+pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1;
 
 /// The complete application state (Model in TEA).
 ///
@@ -221,6 +256,8 @@ pub struct Model {
     // Status message for user feedback
     /// Temporary status message to display to user
     pub status_message: Option<String>,
+    /// When the status message was set (for auto-clear after timeout)
+    pub status_message_set_at: Option<Instant>,
 
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
@@ -231,10 +268,8 @@ pub struct Model {
     // Task templates
     /// Task template manager
     pub template_manager: TemplateManager,
-    /// Whether template picker is visible
-    pub show_templates: bool,
-    /// Index of selected template in picker
-    pub template_selected: usize,
+    /// Template picker state
+    pub template_picker: TemplatePickerState,
 
     // Pomodoro timer
     /// Active Pomodoro session (if any)
@@ -245,12 +280,8 @@ pub struct Model {
     pub pomodoro_stats: crate::domain::PomodoroStats,
 
     // Keybindings editor
-    /// Whether keybindings editor is visible
-    pub show_keybindings_editor: bool,
-    /// Selected keybinding index in editor
-    pub keybinding_selected: usize,
-    /// Whether currently capturing a new key
-    pub keybinding_capturing: bool,
+    /// Keybindings editor state
+    pub keybindings_editor: KeybindingsEditorState,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
 
@@ -264,19 +295,61 @@ pub struct Model {
     /// Whether import preview dialog is showing
     pub show_import_preview: bool,
 
-    // Overdue alert state
-    /// Whether overdue tasks alert is visible (shown at startup)
-    pub show_overdue_alert: bool,
+    // Alert state
+    /// Consolidated alert and error state
+    pub alerts: AlertState,
 
     // Time log editor state
-    /// Whether time log editor is visible
-    pub show_time_log: bool,
-    /// Selected time entry index in log
-    pub time_log_selected: usize,
-    /// Current mode in time log editor
-    pub time_log_mode: crate::ui::TimeLogMode,
-    /// Text buffer for editing time entries
-    pub time_log_buffer: String,
+    /// Time log editor state
+    pub time_log: TimeLogEditorState,
+
+    // Work log state
+    /// All work log entries indexed by ID
+    pub work_logs: HashMap<WorkLogEntryId, WorkLogEntry>,
+    /// Work log editor state
+    pub work_log_editor: WorkLogEditorState,
+
+    // Description editor state (multi-line)
+    /// Description editor state
+    pub description_editor: DescriptionEditorState,
+
+    // Saved filters
+    /// User-defined saved filters (smart lists)
+    pub saved_filters: HashMap<SavedFilterId, SavedFilter>,
+    /// Currently active saved filter (if any)
+    pub active_saved_filter: Option<SavedFilterId>,
+    /// Saved filter picker state
+    pub saved_filter_picker: SavedFilterPickerState,
+
+    // Daily review mode
+    /// Daily review state
+    pub daily_review: DailyReviewState,
+
+    // Weekly review mode
+    /// Weekly review state
+    pub weekly_review: WeeklyReviewState,
+
+    // Timeline state
+    /// State for the timeline/Gantt view
+    pub timeline_state: TimelineState,
+
+    // View-specific selection state
+    /// Selection state for specialized views (Kanban, Eisenhower, WeeklyPlanner)
+    pub view_selection: ViewSelectionState,
+
+    // Habit tracking
+    /// All habits indexed by ID
+    pub habits: HashMap<HabitId, Habit>,
+    /// Visible habit IDs (filtered by archived status)
+    pub visible_habits: Vec<HabitId>,
+    /// Habit view state (selection, analytics, archive filter)
+    pub habit_view: HabitViewState,
+
+    // Performance caches
+    /// Cached footer statistics (completed, overdue, due today counts)
+    pub footer_stats: FooterStats,
+    /// Cached per-task metadata (time sums, depths, subtask progress)
+    pub task_cache: TaskCache,
 }
 
 impl Model {
@@ -332,26 +405,36 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             status_message: None,
+            status_message_set_at: None,
             macro_state: MacroState::new(),
             pending_macro_slot: None,
             template_manager: TemplateManager::new(),
-            show_templates: false,
-            template_selected: 0,
+            template_picker: TemplatePickerState::default(),
             pomodoro_session: None,
             pomodoro_config: crate::domain::PomodoroConfig::default(),
             pomodoro_stats: crate::domain::PomodoroStats::default(),
-            show_keybindings_editor: false,
-            keybinding_selected: 0,
-            keybinding_capturing: false,
+            keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
             pending_import: None,
             show_import_preview: false,
-            show_overdue_alert: false,
-            show_time_log: false,
-            time_log_selected: 0,
-            time_log_mode: crate::ui::TimeLogMode::default(),
-            time_log_buffer: String::new(),
+            alerts: AlertState::default(),
+            time_log: TimeLogEditorState::default(),
+            work_logs: HashMap::new(),
+            work_log_editor: WorkLogEditorState::default(),
+            description_editor: DescriptionEditorState::default(),
+            saved_filters: HashMap::new(),
+            active_saved_filter: None,
+            saved_filter_picker: SavedFilterPickerState::default(),
+            daily_review: DailyReviewState::default(),
+            weekly_review: WeeklyReviewState::default(),
+            timeline_state: TimelineState::default(),
+            view_selection: ViewSelectionState::default(),
+            habits: HashMap::new(),
+            visible_habits: Vec::new(),
+            habit_view: HabitViewState::default(),
+            footer_stats: FooterStats::default(),
+            task_cache: TaskCache::new(),
         }
     }
 
@@ -421,6 +504,66 @@ impl Model {
                 .tasks
                 .values()
                 .any(|t| t.due_date == Some(date) && !t.status.is_complete())
+    }
+
+    /// Returns work log entries for a specific task, ordered by creation time (newest first).
+    #[must_use]
+    pub fn work_logs_for_task(&self, task_id: &TaskId) -> Vec<&WorkLogEntry> {
+        let mut logs: Vec<_> = self
+            .work_logs
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .collect();
+        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs
+    }
+
+    /// Returns the count of work log entries for a specific task.
+    #[must_use]
+    pub fn work_log_count_for_task(&self, task_id: &TaskId) -> usize {
+        self.work_logs
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .count()
+    }
+
+    /// Refresh the visible habits list based on archive status filter.
+    pub fn refresh_visible_habits(&mut self) {
+        self.visible_habits = self
+            .habits
+            .values()
+            .filter(|h| self.habit_view.show_archived || !h.archived)
+            .map(|h| h.id)
+            .collect();
+        // Sort by name
+        self.visible_habits.sort_by(|a, b| {
+            let habit_a = self.habits.get(a);
+            let habit_b = self.habits.get(b);
+            match (habit_a, habit_b) {
+                (Some(a), Some(b)) => a.name.cmp(&b.name),
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        // Clamp selection
+        if self.visible_habits.is_empty() {
+            self.habit_view.selected = 0;
+        } else {
+            self.habit_view.selected = self.habit_view.selected.min(self.visible_habits.len() - 1);
+        }
+    }
+
+    /// Returns the currently selected habit (if any).
+    #[must_use]
+    pub fn selected_habit(&self) -> Option<&Habit> {
+        self.visible_habits
+            .get(self.habit_view.selected)
+            .and_then(|id| self.habits.get(id))
+    }
+
+    /// Returns all habits as a vector for export.
+    #[must_use]
+    pub fn habits_for_export(&self) -> Vec<Habit> {
+        self.habits.values().cloned().collect()
     }
 }
 

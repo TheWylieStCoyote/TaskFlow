@@ -27,8 +27,8 @@ TaskFlow is a TUI project management application built with Rust using the Elm A
 - `src/domain/` - Core entities: Task, Project, Tag, TimeEntry, Filter
 - `src/app/` - TEA architecture: Model (state), Message (events), Update (state transitions)
 - `src/ui/` - View rendering and UI components
-- `src/storage/` - Storage abstraction and backends (to be implemented)
-- `src/config/` - Configuration loading and parsing (to be implemented)
+- `src/storage/` - Storage abstraction with 4 backends (JSON, YAML, SQLite, Markdown), plus import/export (CSV, ICS, DOT, Mermaid, HTML)
+- `src/config/` - Configuration system: settings, keybindings (70+ actions), and themes
 
 ### Key Keybindings (in the TUI)
 

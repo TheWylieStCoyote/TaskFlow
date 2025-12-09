@@ -9,13 +9,13 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_move_to_project() {
     let mut model = create_test_model_with_tasks();
-    let _task_id = model.visible_tasks[0].clone();
+    let _task_id = model.visible_tasks[0];
 
     // Add some projects
     let project1 = Project::new("Project Alpha");
     let project2 = Project::new("Project Beta");
-    model.projects.insert(project1.id.clone(), project1);
-    model.projects.insert(project2.id.clone(), project2);
+    model.projects.insert(project1.id, project1);
+    model.projects.insert(project2.id, project2);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -29,15 +29,15 @@ fn test_start_move_to_project() {
 #[test]
 fn test_move_to_project_assign() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Initially no project
     assert!(model.tasks.get(&task_id).unwrap().project_id.is_none());
 
     // Add a project
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -58,12 +58,12 @@ fn test_move_to_project_assign() {
 #[test]
 fn test_move_to_project_remove() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add a project and assign task to it
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
     model.tasks.get_mut(&task_id).unwrap().project_id = Some(project_id);
 
     // Start move to project
@@ -84,12 +84,12 @@ fn test_move_to_project_remove() {
 #[test]
 fn test_move_to_project_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add a project
     let project = Project::new("Test Project");
-    let project_id = project.id.clone();
-    model.projects.insert(project.id.clone(), project);
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
 
     // Move task to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -113,11 +113,11 @@ fn test_move_to_project_undo() {
 #[test]
 fn test_move_to_project_invalid_input_ignored() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add a project
     let project = Project::new("Test Project");
-    model.projects.insert(project.id.clone(), project);
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
@@ -137,11 +137,11 @@ fn test_move_to_project_invalid_input_ignored() {
 #[test]
 fn test_move_to_project_out_of_range_ignored() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0].clone();
+    let task_id = model.visible_tasks[0];
 
     // Add one project
     let project = Project::new("Test Project");
-    model.projects.insert(project.id.clone(), project);
+    model.projects.insert(project.id, project);
 
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));

@@ -44,8 +44,7 @@ impl<'a> Calendar<'a> {
             NaiveDate::from_ymd_opt(year, month + 1, 1)
         }
         .and_then(|d| d.pred_opt())
-        .map(|d| d.day())
-        .unwrap_or(28)
+        .map_or(28, |d| d.day())
     }
 
     /// Get the weekday of the first day (0=Mon, 6=Sun)
@@ -164,7 +163,7 @@ impl Calendar<'_> {
                     day,
                 );
 
-                let task_count = date.map(|d| self.model.task_count_for_day(d)).unwrap_or(0);
+                let task_count = date.map_or(0, |d| self.model.task_count_for_day(d));
                 let has_overdue = date.is_some_and(|d| self.model.has_overdue_on_day(d));
 
                 // Determine style
@@ -286,7 +285,7 @@ impl Calendar<'_> {
         }
 
         // Render task items
-        let items: Vec<ListItem> = tasks
+        let items: Vec<ListItem<'_>> = tasks
             .iter()
             .take(inner.height as usize)
             .map(|task| {
@@ -506,7 +505,7 @@ mod tests {
 
         // Add a task due today
         let task = Task::new("Today's Task").with_due_date(today);
-        let task_id = task.id.clone();
+        let task_id = task.id;
         model.tasks.insert(task_id, task);
         model.calendar_state.selected_day = Some(today.day());
         model.calendar_state.year = today.year();

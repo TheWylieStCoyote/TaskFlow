@@ -35,7 +35,7 @@ impl Widget for TemplatePicker<'_> {
         let theme = self.theme;
 
         // Build list items
-        let items: Vec<ListItem> = self
+        let items: Vec<ListItem<'_>> = self
             .templates
             .templates
             .iter()

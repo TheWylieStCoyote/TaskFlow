@@ -21,6 +21,7 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::domain::Priority;
 use crate::storage::BackendType;
@@ -66,24 +67,15 @@ impl Default for Settings {
 }
 
 /// Error type for settings loading
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SettingsError {
     /// File could not be read
-    ReadError(std::io::Error),
+    #[error("failed to read settings file: {0}")]
+    ReadError(#[from] std::io::Error),
     /// File content could not be parsed as TOML
-    ParseError(toml::de::Error),
+    #[error("failed to parse settings file (check TOML syntax): {0}")]
+    ParseError(#[from] toml::de::Error),
 }
-
-impl std::fmt::Display for SettingsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ReadError(e) => write!(f, "failed to read config file: {e}"),
-            Self::ParseError(e) => write!(f, "failed to parse config file: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for SettingsError {}
 
 impl Settings {
     /// Load settings from the default config path.
@@ -137,8 +129,8 @@ impl Settings {
             return Ok(None);
         }
 
-        let content = std::fs::read_to_string(&path).map_err(SettingsError::ReadError)?;
-        let settings: Self = toml::from_str(&content).map_err(SettingsError::ParseError)?;
+        let content = std::fs::read_to_string(&path)?;
+        let settings: Self = toml::from_str(&content)?;
         Ok(Some(settings))
     }
 
@@ -408,13 +400,33 @@ mod tests {
             std::io::ErrorKind::NotFound,
             "file not found",
         ));
-        assert!(io_err.to_string().contains("failed to read"));
+        let display = io_err.to_string();
+        assert!(display.contains("failed to read"));
+        assert!(display.contains("settings file"));
 
-        // Parse error display
+        // Parse error display with helpful hint
         let parse_result: Result<Settings, _> = toml::from_str("invalid { toml");
         if let Err(e) = parse_result {
             let settings_err = SettingsError::ParseError(e);
-            assert!(settings_err.to_string().contains("failed to parse"));
+            let display = settings_err.to_string();
+            assert!(display.contains("failed to parse"));
+            assert!(display.contains("check TOML syntax"));
+        }
+    }
+
+    #[test]
+    fn test_settings_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let settings_err: SettingsError = io_err.into();
+        assert!(matches!(settings_err, SettingsError::ReadError(_)));
+    }
+
+    #[test]
+    fn test_settings_error_from_toml() {
+        let parse_result: Result<Settings, toml::de::Error> = toml::from_str("not valid toml {");
+        if let Err(toml_err) = parse_result {
+            let settings_err: SettingsError = toml_err.into();
+            assert!(matches!(settings_err, SettingsError::ParseError(_)));
         }
     }
 }

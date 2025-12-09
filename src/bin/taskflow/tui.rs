@@ -97,7 +97,8 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
         debug!("Saving data before exit");
         if let Err(e) = model.save() {
             warn!(error = %e, "Could not save data on exit");
-            eprintln!("Warning: Could not save data: {e}");
+            eprintln!("Warning: Could not save data on exit: {e}");
+            eprintln!("  Your changes may be lost. Check disk space and permissions.");
         } else {
             info!("Data saved successfully");
         }

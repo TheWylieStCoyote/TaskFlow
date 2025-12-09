@@ -171,6 +171,7 @@ pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('j') | KeyCode::Down => {
             Some(Message::Navigation(NavigationMessage::EisenhowerDown))
         }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::EisenhowerViewSelected)),
         _ => None,
     }
 }

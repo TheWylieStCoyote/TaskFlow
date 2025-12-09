@@ -371,6 +371,52 @@ impl Model {
             .collect()
     }
 
+    /// Returns task IDs for a specific Eisenhower quadrant.
+    ///
+    /// Quadrant indices:
+    /// - 0: Urgent + Important (Do First)
+    /// - 1: Not Urgent + Important (Schedule)
+    /// - 2: Urgent + Not Important (Delegate)
+    /// - 3: Not Urgent + Not Important (Eliminate)
+    ///
+    /// Urgency is determined by due date (within 2 days or overdue).
+    /// Importance is determined by priority (High or Urgent).
+    #[must_use]
+    pub fn eisenhower_quadrant_tasks(&self, quadrant: usize) -> Vec<TaskId> {
+        use crate::domain::Priority;
+
+        let today = Utc::now().date_naive();
+
+        // Helper to check if task is urgent (due within 2 days or overdue)
+        let is_urgent = |task: &Task| {
+            task.due_date.is_some_and(|due| {
+                let days_until = (due - today).num_days();
+                days_until <= 2
+            })
+        };
+
+        // Helper to check if task is important (High or Urgent priority)
+        let is_important = |task: &Task| matches!(task.priority, Priority::High | Priority::Urgent);
+
+        self.visible_tasks
+            .iter()
+            .filter_map(|id| self.tasks.get(id).map(|t| (*id, t)))
+            .filter(|(_, t)| !t.status.is_complete())
+            .filter(|(_, task)| {
+                let urgent = is_urgent(task);
+                let important = is_important(task);
+                match quadrant {
+                    0 => urgent && important,   // Do First
+                    1 => !urgent && important,  // Schedule
+                    2 => urgent && !important,  // Delegate
+                    3 => !urgent && !important, // Eliminate
+                    _ => false,
+                }
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
+
     /// Returns visible tasks grouped by project.
     ///
     /// Returns a `Vec` of (`Option<ProjectId>`, `project_name`, `Vec<TaskId>`).

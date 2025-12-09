@@ -692,6 +692,8 @@ pub enum UiMessage {
     TimelineViewSelected,
     /// View selected task details from Kanban (opens focus mode)
     KanbanViewSelected,
+    /// View selected task details from Eisenhower matrix (opens focus mode)
+    EisenhowerViewSelected,
 }
 
 /// System-level messages for application control.

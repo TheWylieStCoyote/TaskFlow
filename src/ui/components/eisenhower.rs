@@ -106,7 +106,8 @@ impl Widget for Eisenhower<'_> {
         };
 
         // Render quadrants (0=TL, 1=TR, 2=BL, 3=BR)
-        let selected = self.model.view_selection.eisenhower_quadrant;
+        let selected_quadrant = self.model.view_selection.eisenhower_quadrant;
+        let selected_task_index = self.model.view_selection.eisenhower_task_index;
 
         // Top-left: Urgent + Important (DO FIRST)
         self.render_quadrant(
@@ -116,7 +117,12 @@ impl Widget for Eisenhower<'_> {
             "Urgent & Important",
             &urgent_important,
             theme.colors.danger.to_color(),
-            selected == 0,
+            selected_quadrant == 0,
+            if selected_quadrant == 0 {
+                Some(selected_task_index)
+            } else {
+                None
+            },
         );
 
         // Top-right: Not Urgent + Important (SCHEDULE)
@@ -127,7 +133,12 @@ impl Widget for Eisenhower<'_> {
             "Important, Not Urgent",
             &not_urgent_important,
             theme.colors.accent.to_color(),
-            selected == 1,
+            selected_quadrant == 1,
+            if selected_quadrant == 1 {
+                Some(selected_task_index)
+            } else {
+                None
+            },
         );
 
         // Bottom-left: Urgent + Not Important (DELEGATE)
@@ -138,7 +149,12 @@ impl Widget for Eisenhower<'_> {
             "Urgent, Not Important",
             &urgent_not_important,
             theme.colors.warning.to_color(),
-            selected == 2,
+            selected_quadrant == 2,
+            if selected_quadrant == 2 {
+                Some(selected_task_index)
+            } else {
+                None
+            },
         );
 
         // Bottom-right: Not Urgent + Not Important (ELIMINATE)
@@ -149,12 +165,18 @@ impl Widget for Eisenhower<'_> {
             "Not Urgent or Important",
             &not_urgent_not_important,
             theme.colors.muted.to_color(),
-            selected == 3,
+            selected_quadrant == 3,
+            if selected_quadrant == 3 {
+                Some(selected_task_index)
+            } else {
+                None
+            },
         );
     }
 }
 
 impl Eisenhower<'_> {
+    #[allow(clippy::too_many_arguments)]
     fn render_quadrant(
         &self,
         area: Rect,
@@ -164,6 +186,7 @@ impl Eisenhower<'_> {
         tasks: &[&Task],
         title_color: Color,
         is_selected: bool,
+        selected_task_index: Option<usize>,
     ) {
         let theme = self.theme;
 
@@ -214,8 +237,10 @@ impl Eisenhower<'_> {
         // Create list items
         let items: Vec<ListItem<'_>> = tasks
             .iter()
+            .enumerate()
             .take(tasks_area.height as usize) // Limit to visible area
-            .map(|task| {
+            .map(|(idx, task)| {
+                let is_selected_task = selected_task_index == Some(idx);
                 // Check if task is blocked by incomplete dependencies
                 let is_blocked = self.model.is_task_blocked(&task.id);
                 let has_deps = self.model.has_dependencies(&task.id);
@@ -271,7 +296,16 @@ impl Eisenhower<'_> {
                     ));
                 }
 
-                ListItem::new(Line::from(spans))
+                // Apply selection highlighting
+                let mut item = ListItem::new(Line::from(spans));
+                if is_selected_task {
+                    item = item.style(
+                        Style::default()
+                            .bg(theme.colors.accent_secondary.to_color())
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+                item
             })
             .collect();
 

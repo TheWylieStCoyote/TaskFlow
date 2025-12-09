@@ -262,17 +262,29 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             }
         }
         NavigationMessage::EisenhowerUp => {
-            if model.current_view == ViewId::Eisenhower
-                && model.view_selection.eisenhower_quadrant >= 2
-            {
-                model.view_selection.eisenhower_quadrant -= 2;
+            if model.current_view == ViewId::Eisenhower {
+                // First try to navigate tasks within the quadrant
+                if model.view_selection.eisenhower_task_index > 0 {
+                    model.view_selection.eisenhower_task_index -= 1;
+                } else if model.view_selection.eisenhower_quadrant >= 2 {
+                    // At top of task list, move to upper quadrant
+                    model.view_selection.eisenhower_quadrant -= 2;
+                    model.view_selection.eisenhower_task_index = 0;
+                }
             }
         }
         NavigationMessage::EisenhowerDown => {
-            if model.current_view == ViewId::Eisenhower
-                && model.view_selection.eisenhower_quadrant < 2
-            {
-                model.view_selection.eisenhower_quadrant += 2;
+            if model.current_view == ViewId::Eisenhower {
+                let quadrant_tasks =
+                    model.eisenhower_quadrant_tasks(model.view_selection.eisenhower_quadrant);
+                // First try to navigate tasks within the quadrant
+                if model.view_selection.eisenhower_task_index + 1 < quadrant_tasks.len() {
+                    model.view_selection.eisenhower_task_index += 1;
+                } else if model.view_selection.eisenhower_quadrant < 2 {
+                    // At bottom of task list, move to lower quadrant
+                    model.view_selection.eisenhower_quadrant += 2;
+                    model.view_selection.eisenhower_task_index = 0;
+                }
             }
         }
         NavigationMessage::EisenhowerLeft => {
@@ -280,6 +292,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.eisenhower_quadrant % 2 == 1
             {
                 model.view_selection.eisenhower_quadrant -= 1;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::EisenhowerRight => {
@@ -287,6 +300,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.eisenhower_quadrant.is_multiple_of(2)
             {
                 model.view_selection.eisenhower_quadrant += 1;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::WeeklyPlannerLeft => {
@@ -321,6 +335,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::EisenhowerSelectQuadrant(quadrant) => {
             if model.current_view == ViewId::Eisenhower && quadrant < 4 {
                 model.view_selection.eisenhower_quadrant = quadrant;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
                 model.selected_index = 0;
             }
         }

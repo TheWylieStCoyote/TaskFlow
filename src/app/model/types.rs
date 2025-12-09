@@ -133,6 +133,8 @@ pub struct ViewSelectionState {
     pub kanban_task_index: usize,
     /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
     pub eisenhower_quadrant: usize,
+    /// Selected task index within the current Eisenhower quadrant
+    pub eisenhower_task_index: usize,
     /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
     pub weekly_planner_day: usize,
 }

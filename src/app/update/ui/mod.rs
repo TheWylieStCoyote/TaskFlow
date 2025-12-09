@@ -735,6 +735,20 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::EisenhowerViewSelected => {
+            // Get tasks in the current Eisenhower quadrant
+            let quadrant_tasks =
+                model.eisenhower_quadrant_tasks(model.view_selection.eisenhower_quadrant);
+
+            // Get the selected task from the quadrant
+            if let Some(&task_id) = quadrant_tasks.get(model.view_selection.eisenhower_task_index) {
+                // Find this task's position in visible_tasks
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                    model.focus_mode = true;
+                }
+            }
+        }
     }
 }
 

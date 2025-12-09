@@ -23,10 +23,15 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
     }
 
     if model.calendar_state.focus_task_list {
-        // When focused on task list, h goes back to calendar grid
+        // When focused on task list
         match key.code {
+            // h goes back to calendar grid
             KeyCode::Char('h') | KeyCode::Left => {
                 return Some(Message::Navigation(NavigationMessage::CalendarFocusGrid));
+            }
+            // Enter opens task detail view (focus mode)
+            KeyCode::Enter => {
+                return Some(Message::Ui(UiMessage::ToggleFocusMode));
             }
             _ => {}
         }

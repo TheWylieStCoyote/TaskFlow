@@ -40,12 +40,14 @@ static ORDINAL_DAY_RE: LazyLock<Regex> =
 /// - `YYYY-MM-DD` - ISO format
 /// - `MM/DD` - Month/Day (current year)
 /// - `MM-DD` - Month-Day (current year)
+#[must_use]
 pub fn parse_date(s: &str) -> Option<NaiveDate> {
     let today = Utc::now().date_naive();
     parse_date_with_reference(s, today)
 }
 
 /// Parse a date string with a reference date (for testing).
+#[must_use]
 pub fn parse_date_with_reference(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     let s_trimmed = s.trim();
     let s_lower = s_trimmed.to_lowercase();
@@ -123,7 +125,8 @@ fn parse_weekday(s: &str) -> Option<Weekday> {
 pub(crate) fn next_weekday(from: NaiveDate, target: Weekday) -> NaiveDate {
     let current = from.weekday();
     let days_until =
-        (target.num_days_from_monday() as i64 - current.num_days_from_monday() as i64 + 7) % 7;
+        (i64::from(target.num_days_from_monday()) - i64::from(current.num_days_from_monday()) + 7)
+            % 7;
 
     // If it's the same day, return next week
     let days = if days_until == 0 { 7 } else { days_until };
@@ -157,7 +160,7 @@ fn parse_relative_duration(s: &str, today: NaiveDate) -> Option<NaiveDate> {
         "w" | "week" | "weeks" => Some(today + chrono::Duration::weeks(count)),
         "m" | "month" | "months" => {
             // Add months by advancing the month number
-            let new_month = today.month() as i64 + count;
+            let new_month = i64::from(today.month()) + count;
             let years_to_add = (new_month - 1) / 12;
             let final_month = ((new_month - 1) % 12 + 1) as u32;
             let final_year = today.year() + years_to_add as i32;
@@ -213,7 +216,7 @@ fn end_of_week(from: NaiveDate) -> NaiveDate {
     let days_until_sunday = if current_day == 6 {
         0 // Already Sunday
     } else {
-        (6 - current_day) as i64 // Days until Sunday
+        i64::from(6 - current_day) // Days until Sunday
     };
     from + chrono::Duration::days(days_until_sunday)
 }
@@ -276,8 +279,8 @@ fn parse_extended_weekday(s: &str, today: NaiveDate) -> Option<NaiveDate> {
         if let Some(weekday) = parse_weekday(rest.trim()) {
             // "next monday" means the monday of next week (7+ days from now)
             // First find days until that weekday
-            let target_day = weekday.num_days_from_monday() as i64;
-            let current_day = today.weekday().num_days_from_monday() as i64;
+            let target_day = i64::from(weekday.num_days_from_monday());
+            let current_day = i64::from(today.weekday().num_days_from_monday());
             let days_until = (target_day - current_day + 7) % 7;
             // Always add 7 to get next week's occurrence
             let days = days_until + 7;
@@ -289,8 +292,8 @@ fn parse_extended_weekday(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     if let Some(rest) = s_lower.strip_prefix("this ") {
         if let Some(weekday) = parse_weekday(rest.trim()) {
             // "this friday" means this week's friday (past or future)
-            let days_diff = weekday.num_days_from_monday() as i64
-                - today.weekday().num_days_from_monday() as i64;
+            let days_diff = i64::from(weekday.num_days_from_monday())
+                - i64::from(today.weekday().num_days_from_monday());
             return Some(today + chrono::Duration::days(days_diff));
         }
     }
@@ -305,7 +308,7 @@ fn parse_next_period(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     match s_lower.as_str() {
         "next week" | "nextweek" => {
             // Next week = Monday of next week
-            let days_until_monday = (7 - today.weekday().num_days_from_monday() as i64) % 7;
+            let days_until_monday = (7 - i64::from(today.weekday().num_days_from_monday())) % 7;
             let days = if days_until_monday == 0 {
                 7
             } else {

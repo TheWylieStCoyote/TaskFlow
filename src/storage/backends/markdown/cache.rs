@@ -16,10 +16,9 @@ impl MarkdownBackend {
     pub(crate) fn check_task_modified(&mut self, id: &TaskId) -> bool {
         let path = self.tasks_dir.join(format!("{}.md", id.0));
 
-        // Check current file mtime
-        let current_mtime = match fs::metadata(&path).and_then(|m| m.modified()) {
-            Ok(mtime) => mtime,
-            Err(_) => return false, // File doesn't exist or can't read metadata
+        // Check current file mtime - return false if file doesn't exist or can't read metadata
+        let Ok(current_mtime) = fs::metadata(&path).and_then(|m| m.modified()) else {
+            return false;
         };
 
         // Compare with cached mtime
@@ -43,10 +42,9 @@ impl MarkdownBackend {
     pub(crate) fn check_project_modified(&mut self, id: &ProjectId) -> bool {
         let path = self.projects_dir.join(format!("{}.md", id.0));
 
-        // Check current file mtime
-        let current_mtime = match fs::metadata(&path).and_then(|m| m.modified()) {
-            Ok(mtime) => mtime,
-            Err(_) => return false, // File doesn't exist or can't read metadata
+        // Check current file mtime - return false if file doesn't exist or can't read metadata
+        let Ok(current_mtime) = fs::metadata(&path).and_then(|m| m.modified()) else {
+            return false;
         };
 
         // Compare with cached mtime

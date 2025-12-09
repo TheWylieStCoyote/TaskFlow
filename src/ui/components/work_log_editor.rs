@@ -108,7 +108,7 @@ impl WorkLogEditor<'_> {
 
                 let mut spans = vec![
                     Span::styled(
-                        format!("{:<15}", timestamp),
+                        format!("{timestamp:<15}"),
                         Style::default().fg(theme.colors.muted.to_color()),
                     ),
                     Span::styled(
@@ -119,7 +119,7 @@ impl WorkLogEditor<'_> {
 
                 if line_count > 1 {
                     spans.push(Span::styled(
-                        format!(" ({} lines)", line_count),
+                        format!(" ({line_count} lines)"),
                         Style::default()
                             .fg(theme.colors.muted.to_color())
                             .add_modifier(Modifier::ITALIC),
@@ -367,7 +367,7 @@ impl WorkLogEditor<'_> {
                 let summary = entry.summary();
                 ListItem::new(Line::from(vec![
                     Span::styled(
-                        format!("{:<15}", timestamp),
+                        format!("{timestamp:<15}"),
                         Style::default().fg(theme.colors.muted.to_color()),
                     ),
                     Span::styled(

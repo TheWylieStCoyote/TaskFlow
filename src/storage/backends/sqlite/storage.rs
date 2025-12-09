@@ -28,7 +28,7 @@ impl SqliteBackend {
     /// Returns a [`StorageError`] if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
-            inner: SqliteBackendInner::new(path)?,
+            inner: SqliteBackendInner::new(path),
         })
     }
 

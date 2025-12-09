@@ -140,7 +140,7 @@ impl<'a> AnalyticsEngine<'a> {
 
             // Calculate rate
             let rate = if total_created > 0 {
-                total_completed as f64 / total_created as f64
+                f64::from(total_completed) / f64::from(total_created)
             } else {
                 0.0
             };
@@ -169,9 +169,9 @@ impl<'a> AnalyticsEngine<'a> {
                 if completed_date >= start && completed_date <= end {
                     // Get start of week (Monday)
                     let week_start = completed_date
-                        - chrono::Duration::days(
-                            completed_date.weekday().num_days_from_monday() as i64
-                        );
+                        - chrono::Duration::days(i64::from(
+                            completed_date.weekday().num_days_from_monday(),
+                        ));
                     *weekly.entry(week_start).or_insert(0) += 1;
 
                     // Get start of month
@@ -194,7 +194,7 @@ impl<'a> AnalyticsEngine<'a> {
             0.0
         } else {
             let sum: u32 = weekly_vec.iter().map(|(_, v)| v).sum();
-            sum as f64 / weekly_vec.len() as f64
+            f64::from(sum) / weekly_vec.len() as f64
         };
 
         // Calculate trend (simple linear regression slope)
@@ -203,11 +203,11 @@ impl<'a> AnalyticsEngine<'a> {
         } else {
             let n = weekly_vec.len() as f64;
             let sum_x: f64 = (0..weekly_vec.len()).map(|i| i as f64).sum();
-            let sum_y: f64 = weekly_vec.iter().map(|(_, v)| *v as f64).sum();
+            let sum_y: f64 = weekly_vec.iter().map(|(_, v)| f64::from(*v)).sum();
             let sum_xy: f64 = weekly_vec
                 .iter()
                 .enumerate()
-                .map(|(i, (_, v))| i as f64 * *v as f64)
+                .map(|(i, (_, v))| i as f64 * f64::from(*v))
                 .sum();
             let sum_xx: f64 = (0..weekly_vec.len()).map(|i| (i * i) as f64).sum();
 
@@ -309,8 +309,11 @@ impl<'a> AnalyticsEngine<'a> {
             running_scope += *scope_by_day.get(&current_date).unwrap_or(&0);
             running_completed += *completed_by_day.get(&current_date).unwrap_or(&0);
 
-            scope_line.push(TimeSeriesPoint::new(current_date, running_scope as f64));
-            completed_line.push(TimeSeriesPoint::new(current_date, running_completed as f64));
+            scope_line.push(TimeSeriesPoint::new(current_date, f64::from(running_scope)));
+            completed_line.push(TimeSeriesPoint::new(
+                current_date,
+                f64::from(running_completed),
+            ));
 
             current_date = current_date.succ_opt().unwrap_or(current_date);
         }
@@ -452,7 +455,7 @@ impl<'a> AnalyticsEngine<'a> {
             let mut streak = 0u32;
             let mut prev_date: Option<NaiveDate> = None;
 
-            for date in sorted_unique.iter() {
+            for date in &sorted_unique {
                 if let Some(prev) = prev_date {
                     if *date - prev == chrono::Duration::days(1) {
                         streak += 1;
@@ -482,7 +485,8 @@ impl<'a> AnalyticsEngine<'a> {
             // Average tasks per day (on active days)
             let active_days = sorted_unique.len();
             if active_days > 0 {
-                insights.avg_tasks_per_day = insights.total_completed as f64 / active_days as f64;
+                insights.avg_tasks_per_day =
+                    f64::from(insights.total_completed) / active_days as f64;
             }
         }
 

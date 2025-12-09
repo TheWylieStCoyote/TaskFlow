@@ -44,14 +44,14 @@ impl ReportsView<'_> {
             .map(|t| (t.tag.clone(), t.count))
             .collect();
 
-        if !tag_data.is_empty() {
-            let chart =
-                BarChart::new("Top Tags by Task Count", &tag_data).bar_color(Color::Magenta);
-            chart.render(chunks[1], buf);
-        } else {
+        if tag_data.is_empty() {
             let msg =
                 Paragraph::new("No tags found. Add tags to your tasks to see statistics here.");
             msg.render(chunks[1], buf);
+        } else {
+            let chart =
+                BarChart::new("Top Tags by Task Count", &tag_data).bar_color(Color::Magenta);
+            chart.render(chunks[1], buf);
         }
     }
 }

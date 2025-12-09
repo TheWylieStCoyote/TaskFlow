@@ -32,8 +32,7 @@ impl SqliteBackend {
                 let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
                     .unwrap_or_else(|_| Utc::now().date_naive());
                 let checked_at = chrono::DateTime::parse_from_rfc3339(&checked_at_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                    .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc));
 
                 Ok((
                     date,
@@ -70,7 +69,7 @@ impl SqliteBackend {
                 params![
                     habit_id_str,
                     date.format("%Y-%m-%d").to_string(),
-                    if check_in.completed { 1 } else { 0 },
+                    i32::from(check_in.completed),
                     check_in.note,
                     check_in.checked_at.to_rfc3339(),
                 ],
@@ -103,7 +102,7 @@ impl HabitRepository for SqliteBackend {
                 habit.color,
                 habit.icon,
                 tags_json,
-                if habit.archived { 1 } else { 0 },
+                i32::from(habit.archived),
                 habit.created_at.to_rfc3339(),
                 habit.updated_at.to_rfc3339(),
             ],
@@ -153,7 +152,7 @@ impl HabitRepository for SqliteBackend {
                 habit.color,
                 habit.icon,
                 tags_json,
-                if habit.archived { 1 } else { 0 },
+                i32::from(habit.archived),
                 habit.updated_at.to_rfc3339(),
             ],
         )?;

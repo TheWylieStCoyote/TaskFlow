@@ -43,7 +43,7 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                     .set_binding(new_key.clone(), action.clone());
 
                 if conflicts.is_empty() {
-                    model.status_message = Some(format!("Bound '{new_key}' to {:?}", action));
+                    model.status_message = Some(format!("Bound '{new_key}' to {action:?}"));
                 } else {
                     model.status_message = Some(format!(
                         "Bound '{new_key}' to {:?}. {}",
@@ -67,10 +67,8 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                         .set_binding(default_key.clone(), action.clone());
 
                     if conflicts.is_empty() {
-                        model.status_message = Some(format!(
-                            "Reset {:?} to default key '{}'",
-                            action, default_key
-                        ));
+                        model.status_message =
+                            Some(format!("Reset {action:?} to default key '{default_key}'"));
                     } else {
                         model.status_message = Some(format!(
                             "Reset {:?} to '{}'. {}",

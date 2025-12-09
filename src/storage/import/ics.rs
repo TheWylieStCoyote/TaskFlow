@@ -154,29 +154,28 @@ fn parse_ics_vtodo(props: &HashMap<String, String>, validate: bool) -> Result<Ta
         .map_or_else(TaskId::new, TaskId);
 
     // Parse STATUS
-    let status = props
-        .get("STATUS")
-        .map(|s| match s.to_uppercase().as_str() {
-            "NEEDS-ACTION" => TaskStatus::Todo,
-            "IN-PROCESS" => TaskStatus::InProgress,
-            "COMPLETED" => TaskStatus::Done,
-            "CANCELLED" => TaskStatus::Cancelled,
-            _ => TaskStatus::Todo,
-        })
-        .unwrap_or(TaskStatus::Todo);
+    let status =
+        props
+            .get("STATUS")
+            .map_or(TaskStatus::Todo, |s| match s.to_uppercase().as_str() {
+                "NEEDS-ACTION" => TaskStatus::Todo,
+                "IN-PROCESS" => TaskStatus::InProgress,
+                "COMPLETED" => TaskStatus::Done,
+                "CANCELLED" => TaskStatus::Cancelled,
+                _ => TaskStatus::Todo,
+            });
 
     // Parse PRIORITY (1-9 in ICS, 1 is highest)
     let priority = props
         .get("PRIORITY")
         .and_then(|s| s.parse::<u8>().ok())
-        .map(|p| match p {
+        .map_or(Priority::None, |p| match p {
             1 => Priority::Urgent,
             2..=3 => Priority::High,
             4..=6 => Priority::Medium,
             7..=8 => Priority::Low,
             _ => Priority::None,
-        })
-        .unwrap_or(Priority::None);
+        });
 
     // Parse DUE date
     let due_date = props.get("DUE").and_then(|s| parse_ics_date(s));

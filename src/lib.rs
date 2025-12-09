@@ -1,6 +1,21 @@
 #![forbid(unsafe_code)]
-#![warn(clippy::all, rust_2018_idioms)]
+#![warn(clippy::all, clippy::pedantic, rust_2018_idioms)]
+// Allowed pedantic lints - either too noisy or intentional design choices
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::module_name_repetitions)] // Common in domain-driven design
+#![allow(clippy::doc_markdown)] // Would require backticks around many identifiers
+#![allow(clippy::cast_possible_truncation)] // Intentional in many numeric conversions
+#![allow(clippy::cast_sign_loss)] // Values are known positive in context
+#![allow(clippy::cast_precision_loss)] // Acceptable for statistics/percentages
+#![allow(clippy::cast_possible_wrap)] // Values are bounded in context
+#![allow(clippy::similar_names)] // Variable naming is clear in context
+#![allow(clippy::needless_pass_by_value)] // Often intentional for API ergonomics
+#![allow(clippy::implicit_hasher)] // HashMap<K,V> in public APIs is fine
+#![allow(clippy::match_same_arms)] // Often clearer to keep arms separate for documentation
+#![allow(clippy::items_after_statements)] // Sometimes clearer to define helpers near use
+#![allow(clippy::missing_panics_doc)] // Internal functions with known-valid inputs
+#![allow(clippy::comparison_chain)] // if-else chains often clearer than match on Ordering
+#![allow(clippy::format_push_string)] // Minor perf, readability preferred
 
 //! # `TaskFlow`
 //!

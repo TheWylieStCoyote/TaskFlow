@@ -91,8 +91,7 @@ impl TimeEntryRepository for SqliteBackend {
                     task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
                     description: row.get("description")?,
                     started_at: chrono::DateTime::parse_from_rfc3339(&started_at)
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .unwrap_or_else(|_| chrono::Utc::now()),
+                        .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
                     ended_at: None,
                     duration_minutes: None,
                 })

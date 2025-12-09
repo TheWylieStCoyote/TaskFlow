@@ -148,9 +148,10 @@ impl Settings {
     /// Get the default config directory
     #[must_use]
     pub fn config_dir() -> PathBuf {
-        directories::ProjectDirs::from("com", "taskflow", "taskflow")
-            .map(|dirs| dirs.config_dir().to_path_buf())
-            .unwrap_or_else(|| PathBuf::from("."))
+        directories::ProjectDirs::from("com", "taskflow", "taskflow").map_or_else(
+            || PathBuf::from("."),
+            |dirs| dirs.config_dir().to_path_buf(),
+        )
     }
 
     /// Get the default config file path
@@ -170,8 +171,7 @@ impl Settings {
     pub fn get_data_path(&self) -> PathBuf {
         self.data_path.clone().unwrap_or_else(|| {
             let data_dir = directories::ProjectDirs::from("com", "taskflow", "taskflow")
-                .map(|dirs| dirs.data_dir().to_path_buf())
-                .unwrap_or_else(|| PathBuf::from("."));
+                .map_or_else(|| PathBuf::from("."), |dirs| dirs.data_dir().to_path_buf());
 
             let ext = self.backend_type().file_extension();
             data_dir.join(format!("tasks.{ext}"))

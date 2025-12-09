@@ -495,7 +495,7 @@ impl Habit {
         if due_days == 0 {
             None
         } else {
-            Some(completed_days as f64 / due_days as f64 * 100.0)
+            Some(f64::from(completed_days) / f64::from(due_days) * 100.0)
         }
     }
 

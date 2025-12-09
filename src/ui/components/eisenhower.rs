@@ -244,7 +244,7 @@ impl Eisenhower<'_> {
                 };
 
                 let mut spans = vec![Span::styled(
-                    format!("{} ", status_icon),
+                    format!("{status_icon} "),
                     Style::default().fg(theme.colors.muted.to_color()),
                 )];
 
@@ -252,7 +252,7 @@ impl Eisenhower<'_> {
                 if has_deps {
                     let dep_icon = if is_blocked { "🔒" } else { "🔗" };
                     spans.push(Span::styled(
-                        format!("{} ", dep_icon),
+                        format!("{dep_icon} "),
                         Style::default().fg(if is_blocked {
                             theme.colors.warning.to_color()
                         } else {

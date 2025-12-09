@@ -108,7 +108,7 @@ impl HabitsView<'_> {
                 // Current streak
                 let streak = habit.current_streak();
                 let streak_text = if streak > 0 {
-                    format!(" {}d", streak)
+                    format!(" {streak}d")
                 } else {
                     String::new()
                 };
@@ -206,7 +206,7 @@ impl HabitsView<'_> {
                 Style::default().fg(theme.colors.muted.to_color()),
             ),
             Span::styled(
-                format!("{} days", current_streak),
+                format!("{current_streak} days"),
                 Style::default()
                     .fg(theme.colors.accent.to_color())
                     .add_modifier(Modifier::BOLD),
@@ -219,7 +219,7 @@ impl HabitsView<'_> {
                 Style::default().fg(theme.colors.muted.to_color()),
             ),
             Span::styled(
-                format!("{} days", longest_streak),
+                format!("{longest_streak} days"),
                 Style::default().fg(theme.colors.success.to_color()),
             ),
         ]));
@@ -256,7 +256,7 @@ impl HabitsView<'_> {
 
             lines.push(Line::from(vec![
                 Span::styled(
-                    format!("{}: ", day),
+                    format!("{day}: "),
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
                 Span::styled(bar, Style::default().fg(self.completion_rate_color(rate))),
@@ -293,7 +293,7 @@ impl HabitsView<'_> {
                     format!("Weekly: {}", day_names.join(", "))
                 }
             }
-            crate::domain::HabitFrequency::EveryNDays { n } => format!("Every {} days", n),
+            crate::domain::HabitFrequency::EveryNDays { n } => format!("Every {n} days"),
         };
 
         lines.push(Line::from(vec![
@@ -402,7 +402,7 @@ impl Widget for HabitAnalyticsPopup<'_> {
         lines.push(Line::from(vec![
             Span::raw("🔥 Current Streak: "),
             Span::styled(
-                format!("{} days", current_streak),
+                format!("{current_streak} days"),
                 Style::default()
                     .fg(theme.colors.accent.to_color())
                     .add_modifier(Modifier::BOLD),
@@ -412,7 +412,7 @@ impl Widget for HabitAnalyticsPopup<'_> {
         lines.push(Line::from(vec![
             Span::raw("🏆 Best Streak: "),
             Span::styled(
-                format!("{} days", longest_streak),
+                format!("{longest_streak} days"),
                 Style::default().fg(theme.colors.success.to_color()),
             ),
         ]));
@@ -420,7 +420,7 @@ impl Widget for HabitAnalyticsPopup<'_> {
         lines.push(Line::from(vec![
             Span::raw("📊 Completion: "),
             Span::styled(
-                format!("{:.1}%", completion_rate),
+                format!("{completion_rate:.1}%"),
                 Style::default().fg(theme.colors.foreground.to_color()),
             ),
         ]));
@@ -442,7 +442,7 @@ impl Widget for HabitAnalyticsPopup<'_> {
         lines.push(Line::from(vec![
             Span::raw("📈 Trend: "),
             Span::styled(
-                format!("{} {}", trend_symbol, trend_text),
+                format!("{trend_symbol} {trend_text}"),
                 Style::default().fg(trend_color),
             ),
         ]));

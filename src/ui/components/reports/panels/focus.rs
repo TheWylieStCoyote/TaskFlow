@@ -49,7 +49,7 @@ impl ReportsView<'_> {
 
         // Total hours
         let total_hours = stats.total_work_mins / 60;
-        let hours_str = format!("{}h", total_hours);
+        let hours_str = format!("{total_hours}h");
         let hours_stat = StatBox::new("Focus Time", &hours_str);
         hours_stat.render(stat_chunks[2], buf);
 

@@ -196,7 +196,7 @@ impl TimeAnalytics {
     /// Returns total hours tracked.
     #[must_use]
     pub fn total_hours(&self) -> f64 {
-        self.total_minutes as f64 / 60.0
+        f64::from(self.total_minutes) / 60.0
     }
 }
 
@@ -258,7 +258,7 @@ impl StatusBreakdown {
         if total == 0 {
             return 0.0;
         }
-        self.done as f64 / total as f64
+        f64::from(self.done) / f64::from(total)
     }
 }
 
@@ -286,7 +286,7 @@ impl PriorityBreakdown {
         if total == 0 {
             return 0.0;
         }
-        (self.high + self.urgent) as f64 / total as f64 * 100.0
+        f64::from(self.high + self.urgent) / f64::from(total) * 100.0
     }
 }
 
@@ -308,7 +308,7 @@ impl TagStats {
         if self.count == 0 {
             return 0.0;
         }
-        self.completed as f64 / self.count as f64
+        f64::from(self.completed) / f64::from(self.count)
     }
 }
 

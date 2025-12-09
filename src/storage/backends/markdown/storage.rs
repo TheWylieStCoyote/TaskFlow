@@ -49,10 +49,10 @@ impl StorageBackend for MarkdownBackend {
     #[allow(clippy::needless_collect)]
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
         // Clear existing data - collect needed to avoid borrow conflict
-        for id in self.tasks_cache.keys().cloned().collect::<Vec<_>>() {
+        for id in self.tasks_cache.keys().copied().collect::<Vec<_>>() {
             self.delete_task_file(&id)?;
         }
-        for id in self.projects_cache.keys().cloned().collect::<Vec<_>>() {
+        for id in self.projects_cache.keys().copied().collect::<Vec<_>>() {
             self.delete_project_file(&id)?;
         }
 

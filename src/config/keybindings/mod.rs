@@ -125,7 +125,7 @@ impl Keybindings {
         }
 
         // Sort each group's bindings alphabetically by key
-        for (_, (_, bindings)) in groups.iter_mut() {
+        for (_, bindings) in groups.values_mut() {
             bindings.sort_by(|a, b| a.0.cmp(&b.0));
         }
 
@@ -209,8 +209,7 @@ impl Keybindings {
         for (default_key, action) in &defaults {
             if self.key_for_action(action).is_none() {
                 warnings.push(format!(
-                    "Action {:?} has no keybinding (default was '{}')",
-                    action, default_key
+                    "Action {action:?} has no keybinding (default was '{default_key}')"
                 ));
             }
         }
@@ -229,8 +228,7 @@ impl Keybindings {
         if let Some(existing) = self.bindings.get(new_key) {
             if existing != new_action {
                 conflicts.push(format!(
-                    "Key '{}' is currently bound to {:?}",
-                    new_key, existing
+                    "Key '{new_key}' is currently bound to {existing:?}"
                 ));
             }
         }
@@ -239,8 +237,7 @@ impl Keybindings {
         if let Some(current_key) = self.key_for_action(new_action) {
             if current_key != new_key {
                 conflicts.push(format!(
-                    "Action {:?} will be unbound from '{}'",
-                    new_action, current_key
+                    "Action {new_action:?} will be unbound from '{current_key}'"
                 ));
             }
         }

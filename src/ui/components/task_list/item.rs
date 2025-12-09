@@ -25,6 +25,7 @@ pub struct TaskItemContext<'a> {
 }
 
 /// Render a project header as a list item
+#[must_use]
 pub fn project_header_to_list_item(
     name: &str,
     task_count: usize,
@@ -48,6 +49,7 @@ pub fn project_header_to_list_item(
 
 /// Render a task as a list item with all indicators
 #[allow(clippy::too_many_lines)]
+#[must_use]
 pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
     let task = ctx.task;
     let theme = ctx.theme;

@@ -184,7 +184,7 @@ impl Widget for DailyReview<'_> {
                 "No overdue tasks! 🎉",
             ),
             DailyReviewPhase::TodayTasks => {
-                self.render_task_list(chunks[0], buf, &self.today_tasks(), "No tasks due today")
+                self.render_task_list(chunks[0], buf, &self.today_tasks(), "No tasks due today");
             }
             DailyReviewPhase::ScheduledTasks => self.render_task_list(
                 chunks[0],

@@ -15,7 +15,7 @@ pub fn toggle_multi_select(model: &mut Model) {
 /// Toggle selection of the current task.
 pub fn toggle_task_selection(model: &mut Model) {
     if model.multi_select_mode {
-        if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+        if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
             if model.selected_tasks.contains(&task_id) {
                 model.selected_tasks.remove(&task_id);
             } else {
@@ -28,7 +28,7 @@ pub fn toggle_task_selection(model: &mut Model) {
 /// Select all visible tasks.
 pub fn select_all(model: &mut Model) {
     model.multi_select_mode = true;
-    model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+    model.selected_tasks = model.visible_tasks.iter().copied().collect();
 }
 
 /// Clear all selections.
@@ -40,7 +40,7 @@ pub fn clear_selection(model: &mut Model) {
 /// Bulk delete all selected tasks.
 pub fn bulk_delete(model: &mut Model) {
     if model.multi_select_mode && !model.selected_tasks.is_empty() {
-        let tasks_to_delete: Vec<_> = model.selected_tasks.iter().cloned().collect();
+        let tasks_to_delete: Vec<_> = model.selected_tasks.iter().copied().collect();
         for task_id in tasks_to_delete {
             if let Some(task) = model.tasks.remove(&task_id) {
                 // Collect time entries for this task before deleting

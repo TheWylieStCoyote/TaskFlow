@@ -62,16 +62,13 @@ impl Widget for FocusView<'_> {
         let theme = self.theme;
 
         // Get the selected task
-        let task = match self.model.selected_task() {
-            Some(t) => t,
-            None => {
-                // No task selected - shouldn't happen but handle gracefully
-                let msg = Paragraph::new("No task selected")
-                    .alignment(Alignment::Center)
-                    .style(Style::default().fg(theme.colors.muted.to_color()));
-                msg.render(area, buf);
-                return;
-            }
+        let Some(task) = self.model.selected_task() else {
+            // No task selected - shouldn't happen but handle gracefully
+            let msg = Paragraph::new("No task selected")
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(theme.colors.muted.to_color()));
+            msg.render(area, buf);
+            return;
         };
 
         // Create centered layout
@@ -106,6 +103,7 @@ impl Widget for FocusView<'_> {
 }
 
 impl FocusView<'_> {
+    #[allow(clippy::unused_self)] // Keep self for API consistency
     fn render_task_title(&self, task: &Task, area: Rect, buf: &mut Buffer, theme: &Theme) {
         // Split area for title, metadata, and description
         let chunks = Layout::default()

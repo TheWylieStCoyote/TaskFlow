@@ -94,8 +94,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
         let confirm_area = centered_rect_fixed_height(50, 5, area);
         let task_name = model
             .selected_task()
-            .map(|t| t.title.as_str())
-            .unwrap_or("this task");
+            .map_or("this task", |t| t.title.as_str());
         frame.render_widget(
             ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?")),
             confirm_area,

@@ -125,7 +125,7 @@ fn validate_csv_headers(headers: &[&str]) -> StorageResult<()> {
         let normalized = header.to_lowercase().trim().to_string();
         if !normalized.is_empty() && !seen.insert(normalized.clone()) {
             return Err(StorageError::Deserialization {
-                message: format!("Duplicate column name: '{}'", header),
+                message: format!("Duplicate column name: '{header}'"),
             });
         }
     }
@@ -247,7 +247,7 @@ fn parse_csv_task(
     // Parse description
     let description = get_field("description")
         .filter(|s| !s.is_empty())
-        .map(|s| s.replace("\"\"", "\"").to_string());
+        .map(|s| s.replace("\"\"", "\"").clone());
 
     // Parse created timestamp
     let created_at = get_field("created")

@@ -66,11 +66,9 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
             .map(|s| TaskId(parse_uuid(&s, "task.dependencies[]")))
             .collect(),
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
         scheduled_date: scheduled_date
             .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
@@ -124,11 +122,9 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
         color: row.get("color")?,
         icon: row.get("icon")?,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
         due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
         default_tags: parse_json(&default_tags_json, "project.default_tags"),
@@ -148,8 +144,7 @@ pub(crate) fn time_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<T
         task_id: TaskId(parse_uuid(&task_id, "time_entry.task_id")),
         description: row.get("description")?,
         started_at: chrono::DateTime::parse_from_rfc3339(&started_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         ended_at: ended_at.and_then(|s| {
             chrono::DateTime::parse_from_rfc3339(&s)
                 .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -173,11 +168,9 @@ pub(crate) fn work_log_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Wor
         task_id: TaskId(parse_uuid(&task_id, "work_log.task_id")),
         content: row.get("content")?,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
     })
 }
 
@@ -206,10 +199,8 @@ pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit>
         tags: parse_json(&tags_json, "habit.tags"),
         archived: archived != 0,
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now()),
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
     })
 }

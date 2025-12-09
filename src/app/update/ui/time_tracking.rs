@@ -36,7 +36,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::TimeLogEditStart => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let entries = model.time_entries_for_task(&task_id);
                 if let Some(entry) = entries.get(model.time_log.selected) {
                     let start_time = entry.started_at.format("%H:%M").to_string();
@@ -46,7 +46,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::TimeLogEditEnd => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let entries = model.time_entries_for_task(&task_id);
                 if let Some(entry) = entries.get(model.time_log.selected) {
                     // Can't edit end time of running entry
@@ -72,7 +72,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             model.time_log.buffer.clear();
         }
         UiMessage::TimeLogSubmit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let entries = model.time_entries_for_task(&task_id);
                 if let Some(entry) = entries.get(model.time_log.selected) {
                     let entry_id = entry.id;
@@ -133,7 +133,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             model.time_log.buffer.clear();
         }
         UiMessage::TimeLogAddEntry => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 // Create a new 30-minute entry ending now
                 let ended_at = Utc::now();
                 let started_at = ended_at - chrono::Duration::minutes(30);
@@ -154,7 +154,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::TimeLogDelete => {
             if model.time_log.mode == TimeLogMode::ConfirmDelete {
-                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                     let entries = model.time_entries_for_task(&task_id);
                     if let Some(entry) = entries.get(model.time_log.selected) {
                         let entry_id = entry.id;

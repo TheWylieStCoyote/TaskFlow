@@ -34,7 +34,7 @@ impl ReportsView<'_> {
             .velocity
             .weekly_velocity
             .iter()
-            .map(|(_, v)| *v as f64)
+            .map(|(_, v)| f64::from(*v))
             .collect();
 
         if !velocity_values.is_empty() {

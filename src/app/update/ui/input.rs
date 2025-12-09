@@ -41,7 +41,7 @@ pub fn handle_submit_input(model: &mut Model) {
             let task_id = *task_id;
             if !input.is_empty() {
                 model.modify_task_with_undo(&task_id, |task| {
-                    task.title = input.clone();
+                    task.title.clone_from(&input);
                 });
                 model.refresh_visible_tasks();
             }
@@ -151,7 +151,7 @@ pub fn handle_submit_input(model: &mut Model) {
             if should_rename {
                 let new_name = input.clone();
                 model.modify_project_with_undo(&project_id, |project| {
-                    project.name = new_name.clone();
+                    project.name.clone_from(&new_name);
                 });
                 model.status_message = Some(format!("Renamed project to '{new_name}'"));
             }
@@ -168,11 +168,11 @@ pub fn handle_submit_input(model: &mut Model) {
             let task_id = *task_id;
             // Parse the number input to select a project
             if let Ok(choice) = input.parse::<usize>() {
-                let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                let project_ids: Vec<_> = model.projects.keys().copied().collect();
                 let new_project = if choice == 0 {
                     Some(None) // Remove from project
                 } else {
-                    project_ids.get(choice - 1).cloned().map(Some) // Move to project or None if invalid
+                    project_ids.get(choice - 1).copied().map(Some) // Move to project or None if invalid
                 };
                 if let Some(project_id) = new_project {
                     model.modify_task_with_undo(&task_id, |task| {
@@ -203,15 +203,15 @@ pub fn handle_submit_input(model: &mut Model) {
         }
         InputTarget::BulkMoveToProject => {
             if let Ok(choice) = input.parse::<usize>() {
-                let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+                let project_ids: Vec<_> = model.projects.keys().copied().collect();
                 let target_project = if choice == 0 {
                     None
                 } else {
-                    project_ids.get(choice - 1).cloned()
+                    project_ids.get(choice - 1).copied()
                 };
 
                 // Move all selected tasks
-                let tasks_to_move: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                let tasks_to_move: Vec<_> = model.selected_tasks.iter().copied().collect();
                 for task_id in tasks_to_move {
                     let proj = target_project;
                     model.modify_task_with_undo(&task_id, |task| {
@@ -235,7 +235,7 @@ pub fn handle_submit_input(model: &mut Model) {
             };
 
             if let Some(new_status) = status {
-                let tasks_to_update: Vec<_> = model.selected_tasks.iter().cloned().collect();
+                let tasks_to_update: Vec<_> = model.selected_tasks.iter().copied().collect();
                 for task_id in tasks_to_update {
                     model.modify_task_with_undo(&task_id, |task| {
                         task.status = new_status;
@@ -262,7 +262,7 @@ pub fn handle_submit_input(model: &mut Model) {
             // Convert indices to task IDs (can't depend on self)
             let new_deps: Vec<_> = dep_indices
                 .iter()
-                .filter_map(|i| model.visible_tasks.get(i.saturating_sub(1)).cloned())
+                .filter_map(|i| model.visible_tasks.get(i.saturating_sub(1)).copied())
                 .filter(|id| *id != task_id)
                 .collect();
 
@@ -305,7 +305,7 @@ pub fn handle_submit_input(model: &mut Model) {
             // Parse the input - support task number or task title search
             let target_task_id = if let Ok(num) = input.parse::<usize>() {
                 // User entered a task number
-                model.visible_tasks.get(num.saturating_sub(1)).cloned()
+                model.visible_tasks.get(num.saturating_sub(1)).copied()
             } else {
                 // User entered a task title - find matching task
                 let input_lower = input.to_lowercase();
@@ -370,7 +370,7 @@ pub fn handle_submit_input(model: &mut Model) {
         }
         InputTarget::NewHabit => {
             if !input.is_empty() {
-                let habit = crate::domain::Habit::new(input.to_string());
+                let habit = crate::domain::Habit::new(input.clone());
                 let id = habit.id;
                 model.sync_habit(&habit);
                 model.habits.insert(id, habit);
@@ -382,7 +382,7 @@ pub fn handle_submit_input(model: &mut Model) {
             let habit_id = *habit_id;
             if !input.is_empty() {
                 if let Some(habit) = model.habits.get_mut(&habit_id) {
-                    habit.name = input.to_string();
+                    habit.name.clone_from(&input);
                     habit.updated_at = chrono::Utc::now();
                 }
                 model.sync_habit_by_id(&habit_id);
@@ -398,6 +398,7 @@ pub fn handle_submit_input(model: &mut Model) {
 }
 
 /// Create a task from quick add input, applying parsed metadata
+#[must_use]
 pub fn create_task_from_quick_add(
     input: &str,
     model: &Model,

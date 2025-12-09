@@ -78,12 +78,12 @@ impl<'a> Timeline<'a> {
             (Some(start), Some(end), _) => (start, end),
             // Only scheduled date with estimate
             (Some(start), None, Some(mins)) => {
-                let days = (mins / 480).max(1) as i64; // 8 hours per day
+                let days = i64::from((mins / 480).max(1)); // 8 hours per day
                 (start, start + Duration::days(days))
             }
             // Only due date with estimate
             (None, Some(end), Some(mins)) => {
-                let days = (mins / 480).max(1) as i64;
+                let days = i64::from((mins / 480).max(1));
                 (end - Duration::days(days), end)
             }
             // Single date (milestone)

@@ -19,7 +19,8 @@ impl Timeline<'_> {
         let theme = self.theme;
         let state = &self.model.timeline_state;
 
-        let viewport_end = state.viewport_start + Duration::days(state.viewport_days as i64 - 1);
+        let viewport_end =
+            state.viewport_start + Duration::days(i64::from(state.viewport_days) - 1);
         let zoom_str = match state.zoom_level {
             TimelineZoom::Day => "Day",
             TimelineZoom::Week => "Week",
@@ -79,7 +80,7 @@ impl Timeline<'_> {
                         chrono::Weekday::Sat => "Sa",
                         chrono::Weekday::Sun => "Su",
                     };
-                    weekday_row.push_str(&format!("{:>width$}", weekday, width = col_width));
+                    weekday_row.push_str(&format!("{weekday:>col_width$}"));
                 }
 
                 // Render day numbers row
@@ -290,6 +291,7 @@ impl Timeline<'_> {
         }
     }
 
+    #[allow(clippy::unused_self)] // Keep self for API consistency
     pub(crate) fn build_bar_string(
         &self,
         len: usize,
@@ -315,7 +317,7 @@ impl Timeline<'_> {
         let end_char = if extends_right { '>' } else { ']' };
         let fill = "=".repeat(len.saturating_sub(2));
 
-        format!("{}{}{}", start_char, fill, end_char)
+        format!("{start_char}{fill}{end_char}")
     }
 
     pub(crate) fn render_dependency_lines(

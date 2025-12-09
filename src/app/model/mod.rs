@@ -545,10 +545,10 @@ impl Model {
             }
         });
         // Clamp selection
-        if !self.visible_habits.is_empty() {
-            self.habit_view.selected = self.habit_view.selected.min(self.visible_habits.len() - 1);
-        } else {
+        if self.visible_habits.is_empty() {
             self.habit_view.selected = 0;
+        } else {
+            self.habit_view.selected = self.habit_view.selected.min(self.visible_habits.len() - 1);
         }
     }
 

@@ -85,7 +85,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                 _ => vec![],
             };
 
-            if let Some(task_id) = task_ids.get(model.daily_review.selected).cloned() {
+            if let Some(task_id) = task_ids.get(model.daily_review.selected).copied() {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.toggle_complete();
                 });

@@ -103,7 +103,7 @@ impl<'a> DashboardStats<'a> {
     pub fn tasks_this_week(&self) -> usize {
         let today = Utc::now().date_naive();
         let week_start =
-            today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+            today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
 
         self.model
             .tasks
@@ -117,7 +117,7 @@ impl<'a> DashboardStats<'a> {
     pub fn completed_this_week(&self) -> usize {
         let today = Utc::now().date_naive();
         let week_start =
-            today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+            today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
 
         self.model
             .tasks

@@ -101,7 +101,7 @@ impl Kanban<'_> {
         };
 
         let block = Block::default()
-            .title(format!(" {} ({}) ", title, count))
+            .title(format!(" {title} ({count}) "))
             .title_style(
                 Style::default()
                     .fg(title_color)
@@ -166,7 +166,7 @@ impl Kanban<'_> {
                 if has_deps {
                     let dep_icon = if is_blocked { "🔒" } else { "🔗" };
                     spans.push(Span::styled(
-                        format!("{} ", dep_icon),
+                        format!("{dep_icon} "),
                         Style::default().fg(if is_blocked {
                             theme.colors.warning.to_color()
                         } else {

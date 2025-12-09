@@ -292,6 +292,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
 }
 
 /// Helper to get days in a month
+#[must_use]
 pub fn days_in_month(year: i32, month: u32) -> u32 {
     use chrono::{Datelike, NaiveDate};
     if month == 12 {
@@ -300,8 +301,7 @@ pub fn days_in_month(year: i32, month: u32) -> u32 {
         NaiveDate::from_ymd_opt(year, month + 1, 1)
     }
     .and_then(|d| d.pred_opt())
-    .map(|d| d.day())
-    .unwrap_or(28)
+    .map_or(28, |d| d.day())
 }
 
 /// Handle calendar up navigation (move to previous week)
@@ -387,7 +387,7 @@ fn handle_sidebar_selection(model: &mut Model) {
         n if n >= SIDEBAR_FIRST_PROJECT_INDEX => {
             // Select a specific project
             let project_index = n - SIDEBAR_FIRST_PROJECT_INDEX;
-            let project_ids: Vec<_> = model.projects.keys().cloned().collect();
+            let project_ids: Vec<_> = model.projects.keys().copied().collect();
             if let Some(project_id) = project_ids.get(project_index) {
                 model.current_view = ViewId::TaskList;
                 model.selected_project = Some(*project_id);

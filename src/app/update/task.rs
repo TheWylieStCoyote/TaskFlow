@@ -16,7 +16,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
     match msg {
         TaskMessage::ToggleComplete => {
             // Get the task id first to avoid borrow issues
-            let task_id = model.visible_tasks.get(model.selected_index).cloned();
+            let task_id = model.visible_tasks.get(model.selected_index).copied();
 
             if let Some(id) = task_id {
                 // Check if completing a recurring task
@@ -31,10 +31,10 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
 
                 // Check for task chain - if completing and has next_task_id, schedule it
                 let chain_next_id = model.tasks.get(&id).and_then(|task| {
-                    if task.status != TaskStatus::Done {
-                        task.next_task_id
-                    } else {
+                    if task.status == TaskStatus::Done {
                         None
+                    } else {
+                        task.next_task_id
                     }
                 });
 
@@ -107,7 +107,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             model.refresh_visible_tasks();
         }
         TaskMessage::CyclePriority => {
-            if let Some(id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
                 model.modify_task_with_undo(&id, |task| {
                     task.priority = match task.priority {
                         Priority::None => Priority::Low,
@@ -173,6 +173,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
 }
 
 /// Create the next occurrence of a recurring task
+#[must_use]
 pub fn create_next_recurring_task(task: &Task) -> Task {
     let today = Utc::now().date_naive();
     let base_date = task.due_date.unwrap_or(today);

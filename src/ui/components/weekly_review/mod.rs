@@ -84,15 +84,15 @@ impl Widget for WeeklyReview<'_> {
             WeeklyReviewPhase::Welcome => self.render_welcome(chunks[0], buf),
             WeeklyReviewPhase::CompletedTasks => {
                 let tasks = self.completed_this_week();
-                self.render_task_list(chunks[0], buf, &tasks, "No completed tasks this week", true)
+                self.render_task_list(chunks[0], buf, &tasks, "No completed tasks this week", true);
             }
             WeeklyReviewPhase::OverdueTasks => {
                 let tasks = self.overdue_tasks();
-                self.render_task_list(chunks[0], buf, &tasks, "No overdue tasks! 🎉", false)
+                self.render_task_list(chunks[0], buf, &tasks, "No overdue tasks! 🎉", false);
             }
             WeeklyReviewPhase::UpcomingWeek => {
                 let tasks = self.upcoming_week_tasks();
-                self.render_task_list(chunks[0], buf, &tasks, "No tasks due this week", false)
+                self.render_task_list(chunks[0], buf, &tasks, "No tasks due this week", false);
             }
             WeeklyReviewPhase::StaleProjects => self.render_stale_projects(chunks[0], buf),
             WeeklyReviewPhase::Summary => self.render_summary(chunks[0], buf),

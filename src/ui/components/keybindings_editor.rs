@@ -59,8 +59,8 @@ impl Widget for KeybindingsEditor<'_> {
         let items: Vec<ListItem<'_>> = bindings
             .iter()
             .map(|(key, action)| {
-                let key_display = format!("{:>12}", key);
-                let action_display = format!("{:?}", action);
+                let key_display = format!("{key:>12}");
+                let action_display = format!("{action:?}");
 
                 ListItem::new(Line::from(vec![
                     Span::styled(
@@ -81,7 +81,7 @@ impl Widget for KeybindingsEditor<'_> {
         let title = if self.capturing {
             if let Some(msg) = self.conflict_message {
                 // Show conflict warning in red
-                format!(" Keybindings - {} (Enter=overwrite, Esc=cancel) ", msg)
+                format!(" Keybindings - {msg} (Enter=overwrite, Esc=cancel) ")
             } else {
                 " Keybindings - Press a key combination (Esc to cancel) ".to_string()
             }

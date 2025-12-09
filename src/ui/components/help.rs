@@ -43,7 +43,7 @@ impl Widget for HelpPopup<'_> {
                 let display_key = format_key_for_display(&key);
 
                 // Pad key to align descriptions
-                let padded_key = format!("{:<10}", display_key);
+                let padded_key = format!("{display_key:<10}");
 
                 help_lines.push(Line::from(vec![
                     Span::styled(padded_key, Style::default().fg(Color::Cyan)),
@@ -56,11 +56,7 @@ impl Widget for HelpPopup<'_> {
         }
 
         // Remove trailing empty line if present
-        if help_lines
-            .last()
-            .map(|l| l.spans.is_empty())
-            .unwrap_or(false)
-        {
+        if help_lines.last().is_some_and(|l| l.spans.is_empty()) {
             help_lines.pop();
         }
 

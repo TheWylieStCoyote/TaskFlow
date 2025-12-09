@@ -249,7 +249,7 @@ impl WeeklyPlanner<'_> {
 
                 if !type_indicator.is_empty() {
                     spans.push(Span::styled(
-                        format!("{} ", type_indicator),
+                        format!("{type_indicator} "),
                         Style::default().fg(theme.colors.muted.to_color()),
                     ));
                 }

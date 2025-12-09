@@ -524,8 +524,7 @@ fn write_projects_card<W: Write>(writer: &mut W, report: &AnalyticsReport) -> st
         writeln!(writer, "  <div class=\"progress-bar\">")?;
         writeln!(
             writer,
-            "    <div class=\"progress-fill\" style=\"width: {:.1}%\"></div>",
-            pct
+            "    <div class=\"progress-fill\" style=\"width: {pct:.1}%\"></div>"
         )?;
         writeln!(writer, "  </div>")?;
     }

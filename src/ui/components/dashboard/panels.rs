@@ -278,7 +278,7 @@ impl Dashboard<'_> {
             } else {
                 0.0
             };
-            let bar_width = ((inner.width as f32 - 18.0) * (pct / 100.0)) as usize;
+            let bar_width = ((f32::from(inner.width) - 18.0) * (pct / 100.0)) as usize;
             let bar = "█".repeat(bar_width.min(20));
 
             let line = Line::from(vec![
@@ -367,7 +367,7 @@ impl Dashboard<'_> {
             stats.estimation_stats();
 
         // Calculate total variance
-        let total_variance = total_actual as i64 - total_est as i64;
+        let total_variance = i64::from(total_actual) - i64::from(total_est);
         let variance_str = if total_variance > 0 {
             format!("+{}", format_duration(total_variance as u32))
         } else if total_variance < 0 {

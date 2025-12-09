@@ -91,7 +91,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
             model.work_log_editor.cursor_col = 0;
         }
         UiMessage::WorkLogSubmit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let content = model.work_log_editor.buffer.join("\n");
 
                 // Don't save empty entries
@@ -138,7 +138,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::WorkLogDelete => {
             if model.work_log_editor.mode == WorkLogMode::ConfirmDelete {
-                if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+                if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                     let entries = model.work_logs_for_task(&task_id);
                     if let Some(entry) = entries.get(model.work_log_editor.selected) {
                         let entry_id = entry.id;
@@ -395,7 +395,7 @@ pub fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
             model.description_editor.cursor_col = 0;
         }
         UiMessage::DescriptionSubmit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let content = model.description_editor.buffer.join("\n");
                 let description = if content.trim().is_empty() {
                     None

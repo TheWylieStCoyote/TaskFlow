@@ -30,11 +30,11 @@ pub(crate) struct SqliteBackendInner {
 }
 
 impl SqliteBackendInner {
-    pub(crate) fn new(path: &Path) -> StorageResult<Self> {
-        Ok(Self {
+    pub(crate) fn new(path: &Path) -> Self {
+        Self {
             path: path.to_path_buf(),
             conn: None,
-        })
+        }
     }
 
     pub(crate) fn conn(&self) -> StorageResult<&Connection> {

@@ -32,6 +32,7 @@ impl<'a> DuplicateDetector<'a> {
     }
 
     /// Check if a task is a duplicate
+    #[must_use]
     pub fn check(&self, task: &Task) -> Option<ImportSkipReason> {
         // Check by ID first
         if self.existing_by_id.contains_key(&task.id) {

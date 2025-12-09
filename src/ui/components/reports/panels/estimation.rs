@@ -80,7 +80,7 @@ impl ReportsView<'_> {
         actual_stat.render(stat_chunks[1], buf);
 
         // Variance
-        let variance = total_actual as i64 - total_estimated as i64;
+        let variance = i64::from(total_actual) - i64::from(total_estimated);
         let variance_str = if variance > 0 {
             format!("+{}", format_duration(variance as u32))
         } else if variance < 0 {
@@ -92,7 +92,7 @@ impl ReportsView<'_> {
         variance_stat.render(stat_chunks[2], buf);
 
         // Accuracy
-        let accuracy_str = avg_accuracy.map_or("N/A".to_string(), |a| format!("{:.0}%", a));
+        let accuracy_str = avg_accuracy.map_or("N/A".to_string(), |a| format!("{a:.0}%"));
         let accuracy_stat = StatBox::new("Accuracy", &accuracy_str);
         accuracy_stat.render(stat_chunks[3], buf);
 

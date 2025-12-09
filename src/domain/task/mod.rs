@@ -272,18 +272,18 @@ impl Task {
                 let hours = variance / 60;
                 let mins = variance % 60;
                 if hours > 0 {
-                    format!("+{}h {}m over", hours, mins)
+                    format!("+{hours}h {mins}m over")
                 } else {
-                    format!("+{}m over", mins)
+                    format!("+{mins}m over")
                 }
             } else {
                 let abs = variance.abs();
                 let hours = abs / 60;
                 let mins = abs % 60;
                 if hours > 0 {
-                    format!("-{}h {}m under", hours, mins)
+                    format!("-{hours}h {mins}m under")
                 } else {
-                    format!("-{}m under", mins)
+                    format!("-{mins}m under")
                 }
             }
         })

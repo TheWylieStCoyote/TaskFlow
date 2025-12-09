@@ -12,7 +12,7 @@ use crate::domain::{PomodoroPhase, PomodoroSession};
 pub fn handle_time(model: &mut Model, msg: TimeMessage) {
     match msg {
         TimeMessage::StartTracking => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
 
                 if let Some((before, after)) = stopped_entry {
@@ -39,7 +39,7 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
             }
         }
         TimeMessage::ToggleTracking => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
                 if model.is_tracking_task(&task_id) {
                     // Stop tracking current task
                     if let Some((before, after)) = model.stop_time_tracking() {
@@ -85,8 +85,7 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
                 ));
                 // Automatically enter focus mode
                 model.focus_mode = true;
-                model.status_message =
-                    Some(format!("Pomodoro started: {} cycle goal", goal_cycles));
+                model.status_message = Some(format!("Pomodoro started: {goal_cycles} cycle goal"));
             } else {
                 model.status_message = Some("Select a task to start Pomodoro".to_string());
             }
@@ -186,9 +185,8 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
 /// Transition to the next Pomodoro phase
 fn transition_pomodoro_phase(model: &mut Model) {
     let (next_phase, next_remaining, cycles_completed, message) = {
-        let session = match model.pomodoro_session.as_ref() {
-            Some(s) => s,
-            None => return,
+        let Some(session) = model.pomodoro_session.as_ref() else {
+            return;
         };
 
         match session.phase {
@@ -204,14 +202,14 @@ fn transition_pomodoro_phase(model: &mut Model) {
                         PomodoroPhase::LongBreak,
                         model.pomodoro_config.long_break_mins * 60,
                         new_cycles,
-                        format!("🎉 Cycle {} complete! Time for a long break.", new_cycles),
+                        format!("🎉 Cycle {new_cycles} complete! Time for a long break."),
                     )
                 } else {
                     (
                         PomodoroPhase::ShortBreak,
                         model.pomodoro_config.short_break_mins * 60,
                         new_cycles,
-                        format!("🍅 Cycle {} complete! Take a short break.", new_cycles),
+                        format!("🍅 Cycle {new_cycles} complete! Take a short break."),
                     )
                 }
             }

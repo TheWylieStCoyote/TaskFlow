@@ -1,3 +1,16 @@
+//! Help popup component.
+//!
+//! Displays a modal overlay with keybinding hints organized by category.
+//! The help popup dynamically reads from the user's keybinding configuration
+//! to show the actual bound keys.
+//!
+//! # Categories
+//!
+//! - Navigation (j/k, arrows, page up/down)
+//! - Task operations (create, edit, delete, complete)
+//! - Views and panels (sidebar, calendar, dashboard)
+//! - Time tracking (start/stop, Pomodoro)
+
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},

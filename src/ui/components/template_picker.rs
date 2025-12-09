@@ -1,3 +1,15 @@
+//! Template picker component.
+//!
+//! A modal popup for selecting task templates. Templates are predefined
+//! task configurations that can be quickly applied to create new tasks
+//! with common settings (tags, priority, project, etc.).
+//!
+//! # Features
+//!
+//! - List of available templates with preview
+//! - Keyboard navigation and selection
+//! - Template categories for organization
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,

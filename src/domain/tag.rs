@@ -1,3 +1,18 @@
+//! Tag entity for task categorization.
+//!
+//! Tags provide a flexible way to categorize and filter tasks across projects.
+//! Unlike projects which are hierarchical, tags are flat labels that can be
+//! applied to any task.
+//!
+//! # Examples
+//!
+//! ```
+//! use taskflow::domain::Tag;
+//!
+//! let tag = Tag::new("urgent").with_color("#e74c3c");
+//! assert_eq!(tag.name, "urgent");
+//! ```
+
 use serde::{Deserialize, Serialize};
 
 /// Tag entity for categorizing tasks

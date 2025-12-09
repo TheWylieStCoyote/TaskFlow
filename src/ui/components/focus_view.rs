@@ -1,3 +1,16 @@
+//! Focus mode view component.
+//!
+//! A minimalist, distraction-free view for working on a single task.
+//! Displays the current task prominently with an optional Pomodoro timer
+//! and task chain navigation.
+//!
+//! # Features
+//!
+//! - Large, centered task display
+//! - Pomodoro timer with visual progress
+//! - Task chain navigation (previous/next in sequence)
+//! - Subtask progress indicator
+
 use std::time::Duration;
 
 use ratatui::{

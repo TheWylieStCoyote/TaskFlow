@@ -1,3 +1,15 @@
+//! Calendar view component.
+//!
+//! Displays a monthly calendar grid with task indicators. Users can navigate
+//! between months, select days, and view tasks due on each date.
+//!
+//! # Features
+//!
+//! - Month/year navigation with arrow keys
+//! - Visual indicators for days with tasks
+//! - Highlighting for today, selected day, and overdue tasks
+//! - Task list panel showing tasks for the selected day
+
 use chrono::{Datelike, NaiveDate, Utc};
 use ratatui::{
     buffer::Buffer,

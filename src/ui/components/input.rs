@@ -1,3 +1,19 @@
+//! Text input component and input state management.
+//!
+//! Provides the input field widget for task creation, editing, and search.
+//! Handles different input modes (normal vs editing) and input targets
+//! (task, project, tag, etc.).
+//!
+//! # Input Modes
+//!
+//! - **Normal**: Regular navigation, keypresses trigger actions
+//! - **Editing**: Text input mode, keypresses insert characters
+//!
+//! # Input Targets
+//!
+//! The input field can target different entity types: tasks, subtasks,
+//! projects, tags, due dates, and more.
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

@@ -1,3 +1,22 @@
+//! Theme configuration and color management.
+//!
+//! This module handles visual theming for the application. Themes define
+//! colors for various UI elements and can be loaded from TOML configuration
+//! files or use built-in defaults.
+//!
+//! # Color Specification
+//!
+//! Colors can be specified in multiple formats:
+//! - Named colors: `"red"`, `"blue"`, `"cyan"`
+//! - Hex colors: `"#ff0000"`, `"#3498db"`
+//! - RGB tuples: `{ r = 255, g = 0, b = 0 }`
+//!
+//! # Built-in Themes
+//!
+//! - `default`: Dark theme with cyan accents
+//! - `light`: Light background with dark text
+//! - `gruvbox`: Warm retro colors
+
 use std::path::PathBuf;
 
 use ratatui::style::Color;

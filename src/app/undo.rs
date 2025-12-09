@@ -1,3 +1,23 @@
+//! Undo/redo system for reversible operations.
+//!
+//! This module implements a command pattern for undo/redo functionality.
+//! Each [`UndoAction`] captures the state needed to reverse an operation,
+//! enabling users to undo recent changes and redo them if needed.
+//!
+//! # History Management
+//!
+//! - Actions are stored in a bounded stack (max 50 items)
+//! - Undo moves actions to the redo stack
+//! - New actions clear the redo stack
+//!
+//! # Supported Operations
+//!
+//! - Task CRUD (create, update, delete, complete)
+//! - Project CRUD
+//! - Time entry management
+//! - Work log entries
+//! - Bulk operations
+
 use crate::domain::{Project, Task, TimeEntry, WorkLogEntry};
 
 /// Maximum number of undo/redo actions to keep in history

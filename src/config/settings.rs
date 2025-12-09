@@ -1,3 +1,23 @@
+//! Application settings and configuration.
+//!
+//! This module defines user-configurable settings that control application
+//! behavior. Settings are loaded from a TOML file in the config directory
+//! and can be overridden via CLI arguments.
+//!
+//! # Configuration File
+//!
+//! Settings are stored in `~/.config/taskflow/settings.toml` (or equivalent
+//! on other platforms). Missing settings use sensible defaults.
+//!
+//! # Available Settings
+//!
+//! - Storage backend (JSON, YAML, SQLite, Markdown)
+//! - Default priority for new tasks
+//! - Sidebar visibility
+//! - Completed task visibility
+//! - Auto-save interval
+//! - Pomodoro timer durations
+
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};

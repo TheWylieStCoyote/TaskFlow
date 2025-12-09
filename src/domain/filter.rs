@@ -1,3 +1,28 @@
+//! Task filtering and sorting functionality.
+//!
+//! This module provides the [`Filter`] struct for querying tasks based on various
+//! criteria, and [`SortSpec`] for ordering results. Filters can be saved as
+//! [`SavedFilter`] for quick access.
+//!
+//! # Examples
+//!
+//! ```
+//! use taskflow::domain::{Filter, SortField, SortOrder, SortSpec, TaskStatus, Priority};
+//!
+//! // Filter for high-priority incomplete tasks
+//! let filter = Filter {
+//!     priority: Some(vec![Priority::High, Priority::Urgent]),
+//!     status: Some(vec![TaskStatus::Todo, TaskStatus::InProgress]),
+//!     ..Default::default()
+//! };
+//!
+//! // Sort by due date, then priority
+//! let sort = SortSpec {
+//!     field: SortField::DueDate,
+//!     order: SortOrder::Ascending,
+//! };
+//! ```
+
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

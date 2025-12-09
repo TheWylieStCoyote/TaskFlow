@@ -1,3 +1,24 @@
+//! Storage repository traits.
+//!
+//! This module defines the repository pattern interfaces for data persistence.
+//! Each entity type has a corresponding repository trait that storage backends
+//! implement to provide CRUD operations.
+//!
+//! # Repository Traits
+//!
+//! - [`TaskRepository`]: Task CRUD and filtered queries
+//! - [`ProjectRepository`]: Project management
+//! - [`TagRepository`]: Tag retrieval
+//! - [`TimeEntryRepository`]: Time tracking entries
+//! - [`WorkLogRepository`]: Work log entries
+//! - [`HabitRepository`]: Habit tracking
+//! - [`PomodoroRepository`]: Pomodoro session tracking
+//!
+//! # Implementing a Backend
+//!
+//! Storage backends implement these traits to provide persistence.
+//! See [`super::backends`] for existing implementations.
+
 use crate::domain::{
     Filter, Habit, HabitId, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId,
     Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,

@@ -1,3 +1,16 @@
+//! Keybindings editor component.
+//!
+//! A modal popup for viewing and customizing keyboard shortcuts.
+//! Users can navigate the list of actions, enter capture mode to
+//! rebind keys, and see conflict warnings for duplicate bindings.
+//!
+//! # Features
+//!
+//! - Browse all available actions grouped by category
+//! - Capture mode for recording new key combinations
+//! - Conflict detection with warning messages
+//! - Reset to defaults option
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,

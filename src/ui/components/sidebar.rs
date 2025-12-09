@@ -1,3 +1,14 @@
+//! Sidebar navigation component.
+//!
+//! The sidebar provides quick access to different views and projects.
+//! It displays view counts (inbox, today, upcoming) and allows project selection.
+//!
+//! # Sections
+//!
+//! - **Views**: Task List, Today, Upcoming, Overdue, Calendar, etc.
+//! - **Projects**: User-created project folders with task counts
+//! - **Tags**: Quick filters by tag (when expanded)
+
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},

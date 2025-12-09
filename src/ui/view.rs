@@ -1,3 +1,24 @@
+//! Main view rendering module.
+//!
+//! This module contains the primary [`view`] function that renders the entire
+//! application UI based on the current model state. It composes the various
+//! UI components (sidebar, task list, modals, etc.) into a cohesive layout.
+//!
+//! # Layout Structure
+//!
+//! ```text
+//! ┌─────────────────────────────────────────┐
+//! │              Header (title)             │
+//! ├──────────┬──────────────────────────────┤
+//! │          │                              │
+//! │ Sidebar  │       Main Content           │
+//! │          │    (view-dependent)          │
+//! │          │                              │
+//! ├──────────┴──────────────────────────────┤
+//! │              Footer (status)            │
+//! └─────────────────────────────────────────┘
+//! ```
+
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},

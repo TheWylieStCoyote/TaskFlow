@@ -8,6 +8,18 @@ use ratatui::{
 
 use crate::config::Keybindings;
 
+/// View-specific navigation hints (key, description)
+const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
+    ("1-0", "Switch views (Task/Calendar/Dashboard/...)"),
+    ("Kanban", "h/l columns, j/k tasks"),
+    ("Eisenhwr", "h/l/j/k quadrants"),
+    ("Weekly", "h/l days, j/k tasks"),
+    ("Timeline", "h/l scroll, </> zoom, t today"),
+    ("Habits", "n new, Space check-in, e edit"),
+    ("Network", "h/l/j/k navigate nodes"),
+    ("Focus", "[/] chain nav, t timer, f exit"),
+];
+
 /// Help popup widget that displays keybindings dynamically
 pub struct HelpPopup<'a> {
     keybindings: &'a Keybindings,
@@ -58,6 +70,19 @@ impl Widget for HelpPopup<'_> {
         // Remove trailing empty line if present
         if help_lines.last().is_some_and(|l| l.spans.is_empty()) {
             help_lines.pop();
+        }
+
+        // Add specialized views section
+        help_lines.push(Line::from(""));
+        help_lines.push(Line::from(vec![Span::styled(
+            "Specialized Views",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
+        for (keys, desc) in SPECIALIZED_VIEW_HINTS {
+            help_lines.push(Line::from(vec![
+                Span::styled(format!("{keys:<10}"), Style::default().fg(Color::Cyan)),
+                Span::raw(*desc),
+            ]));
         }
 
         let paragraph = Paragraph::new(help_lines)

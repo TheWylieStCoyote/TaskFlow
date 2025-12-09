@@ -217,8 +217,11 @@ pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
             taskflow::app::ViewId::TaskList,
         ))),
-        KeyCode::Char('k') | KeyCode::Up => Some(Message::Navigation(NavigationMessage::NetworkUp)),
-        KeyCode::Char('j') | KeyCode::Down => {
+        // h/l as aliases for k/j to match other views
+        KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::NetworkUp))
+        }
+        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('l') | KeyCode::Right => {
             Some(Message::Navigation(NavigationMessage::NetworkDown))
         }
         KeyCode::Enter => Some(Message::Ui(UiMessage::NetworkViewSelected)),

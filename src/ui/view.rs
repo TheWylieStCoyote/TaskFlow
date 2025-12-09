@@ -616,6 +616,18 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
         ));
     }
 
+    // Add view-specific navigation hints
+    if let Some(hint) = get_view_hint(model) {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+        spans.push(Span::styled(
+            hint,
+            Style::default().fg(theme.colors.accent.to_color()),
+        ));
+    }
+
     // Add show mode and help
     spans.push(Span::styled(
         " | ",
@@ -630,10 +642,30 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
         Style::default().fg(theme.colors.muted.to_color()),
     ));
     spans.push(Span::styled(
-        " | Press ? for help ",
+        " | ? help",
         Style::default().fg(theme.colors.muted.to_color()),
     ));
 
     let footer = Paragraph::new(Line::from(spans));
     frame.render_widget(footer, area);
+}
+
+/// Returns view-specific navigation hints for the footer
+fn get_view_hint(model: &Model) -> Option<&'static str> {
+    // Focus mode has its own hints
+    if model.focus_mode {
+        return Some("[/]: chain | t: timer | f: exit");
+    }
+
+    match model.current_view {
+        ViewId::Kanban => Some("h/l: columns | j/k: tasks"),
+        ViewId::Eisenhower => Some("h/l/j/k: quadrants"),
+        ViewId::WeeklyPlanner => Some("h/l: days | j/k: tasks"),
+        ViewId::Timeline => Some("h/l: scroll | </>: zoom | t: today"),
+        ViewId::Network => Some("h/l/j/k: navigate"),
+        ViewId::Habits => Some("n: new | Space: check-in"),
+        ViewId::Calendar => Some("h/l: months | Enter: day tasks"),
+        ViewId::Heatmap | ViewId::Forecast | ViewId::Burndown => None, // View-only
+        _ => None, // Task list and others use default controls
+    }
 }

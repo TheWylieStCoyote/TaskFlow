@@ -504,13 +504,18 @@ mod tests {
         let model = Model::new().with_sample_data();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        // Height 30 to accommodate all views including analytics views
-        let buffer = render_widget(sidebar, 30, 30);
+        // Height 50 to accommodate all views (20+) plus 10 projects
+        let buffer = render_widget(sidebar, 30, 50);
         let content = buffer_content(&buffer);
 
-        // Sample data has "Backend API", "Frontend UI", "Documentation" projects
+        // Sample data has 10 projects; at least one should be visible
         assert!(
-            content.contains("Backend") || content.contains("Frontend") || content.contains("Doc"),
+            content.contains("Backend")
+                || content.contains("Frontend")
+                || content.contains("Doc")
+                || content.contains("DevOps")
+                || content.contains("Mobile")
+                || content.contains("Personal"),
             "Project names should be visible"
         );
     }

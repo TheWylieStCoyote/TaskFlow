@@ -70,53 +70,44 @@ impl Model {
         let days_ago = |d: i64| today - Duration::days(d);
         let days_from_now = |d: i64| today + Duration::days(d);
 
-        // Helper to create task with estimated minutes
-        let with_estimate = |mut task: Task, minutes: u32| -> Task {
-            task.estimated_minutes = Some(minutes);
-            task
-        };
-
         // ========== BACKEND API TASKS ==========
         let mut tasks = vec![
             Task::new("Set up database schema")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(backend_id)
-                .with_tags(vec!["database".into(), "setup".into()]),
+                .with_tags(vec!["database".into(), "setup".into()])
+                .with_completed_at(now - Duration::days(45)),
             Task::new("Implement user authentication")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Urgent)
                 .with_project(backend_id)
-                .with_tags(vec!["security".into(), "auth".into()]),
+                .with_tags(vec!["security".into(), "auth".into()])
+                .with_completed_at(now - Duration::days(38)),
             Task::new("Create REST API endpoints")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(backend_id)
-                .with_tags(vec!["api".into(), "rust".into()]),
-            with_estimate(
-                Task::new("Add rate limiting middleware")
-                    .with_status(TaskStatus::InProgress)
-                    .with_priority(Priority::High)
-                    .with_project(backend_id)
-                    .with_tags(vec!["security".into(), "api".into()]),
-                120,
-            ),
-            with_estimate(
-                Task::new("Implement caching layer")
-                    .with_priority(Priority::Medium)
-                    .with_due_date(days_from_now(3))
-                    .with_project(backend_id)
-                    .with_tags(vec!["performance".into(), "redis".into()]),
-                180,
-            ),
-            with_estimate(
-                Task::new("Write API integration tests")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(5))
-                    .with_project(backend_id)
-                    .with_tags(vec!["testing".into(), "api".into()]),
-                240,
-            ),
+                .with_tags(vec!["api".into(), "rust".into()])
+                .with_completed_at(now - Duration::days(30)),
+            Task::new("Add rate limiting middleware")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(backend_id)
+                .with_tags(vec!["security".into(), "api".into()])
+                .with_estimated_minutes(120),
+            Task::new("Implement caching layer")
+                .with_priority(Priority::Medium)
+                .with_due_date(days_from_now(3))
+                .with_project(backend_id)
+                .with_tags(vec!["performance".into(), "redis".into()])
+                .with_estimated_minutes(180),
+            Task::new("Write API integration tests")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(5))
+                .with_project(backend_id)
+                .with_tags(vec!["testing".into(), "api".into()])
+                .with_estimated_minutes(240),
             Task::new("Set up database migrations")
                 .with_priority(Priority::Medium)
                 .with_project(backend_id)
@@ -143,58 +134,54 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(frontend_id)
-                .with_tags(vec!["design".into(), "ui".into()]),
+                .with_tags(vec!["design".into(), "ui".into()])
+                .with_completed_at(now - Duration::days(60)),
             Task::new("Build task list widget")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(frontend_id)
-                .with_tags(vec!["ui".into(), "rust".into()]),
+                .with_tags(vec!["ui".into(), "rust".into()])
+                .with_completed_at(now - Duration::days(42)),
             Task::new("Implement sidebar navigation")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(frontend_id)
-                .with_tags(vec!["ui".into(), "navigation".into()]),
-            with_estimate(
-                Task::new("Add keyboard shortcuts")
-                    .with_status(TaskStatus::InProgress)
-                    .with_priority(Priority::High)
-                    .with_project(frontend_id)
-                    .with_tags(vec!["ux".into(), "accessibility".into()]),
-                90,
-            ),
-            with_estimate(
-                Task::new("Implement dark mode theme")
-                    .with_priority(Priority::Medium)
-                    .with_due_date(days_from_now(4))
-                    .with_project(frontend_id)
-                    .with_tags(vec!["ui".into(), "theme".into()]),
-                120,
-            ),
+                .with_tags(vec!["ui".into(), "navigation".into()])
+                .with_completed_at(now - Duration::days(28)),
+            Task::new("Add keyboard shortcuts")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(frontend_id)
+                .with_tags(vec!["ux".into(), "accessibility".into()])
+                .with_estimated_minutes(90),
+            Task::new("Implement dark mode theme")
+                .with_priority(Priority::Medium)
+                .with_due_date(days_from_now(4))
+                .with_project(frontend_id)
+                .with_tags(vec!["ui".into(), "theme".into()])
+                .with_estimated_minutes(120),
             Task::new("Add drag-and-drop task reordering")
                 .with_priority(Priority::Low)
                 .with_project(frontend_id)
                 .with_tags(vec!["ui".into(), "ux".into()]),
-            with_estimate(
-                Task::new("Create calendar view")
-                    .with_priority(Priority::Medium)
-                    .with_due_date(days_from_now(10))
-                    .with_project(frontend_id)
-                    .with_tags(vec!["ui".into(), "feature".into()]),
-                300,
-            ),
+            Task::new("Create calendar view")
+                .with_priority(Priority::Medium)
+                .with_due_date(days_from_now(10))
+                .with_project(frontend_id)
+                .with_tags(vec!["ui".into(), "feature".into()])
+                .with_estimated_minutes(300),
             Task::new("Add task filtering UI")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium)
                 .with_project(frontend_id)
-                .with_tags(vec!["ui".into(), "ux".into()]),
-            with_estimate(
-                Task::new("Implement search functionality")
-                    .with_priority(Priority::High)
-                    .with_due_date(today)
-                    .with_project(frontend_id)
-                    .with_tags(vec!["ui".into(), "feature".into()]),
-                150,
-            ),
+                .with_tags(vec!["ui".into(), "ux".into()])
+                .with_completed_at(now - Duration::days(14)),
+            Task::new("Implement search functionality")
+                .with_priority(Priority::High)
+                .with_due_date(today)
+                .with_project(frontend_id)
+                .with_tags(vec!["ui".into(), "feature".into()])
+                .with_estimated_minutes(150),
             Task::new("Add responsive layout")
                 .with_priority(Priority::Low)
                 .with_project(frontend_id)
@@ -203,27 +190,24 @@ impl Model {
 
         // ========== DOCUMENTATION TASKS ==========
         tasks.extend(vec![
-            with_estimate(
-                Task::new("Write API documentation")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(7))
-                    .with_project(docs_id)
-                    .with_tags(vec!["docs".into(), "api".into()]),
-                240,
-            ),
-            with_estimate(
-                Task::new("Create user guide")
-                    .with_priority(Priority::Medium)
-                    .with_due_date(days_from_now(14))
-                    .with_project(docs_id)
-                    .with_tags(vec!["docs".into(), "guide".into()]),
-                360,
-            ),
+            Task::new("Write API documentation")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(7))
+                .with_project(docs_id)
+                .with_tags(vec!["docs".into(), "api".into()])
+                .with_estimated_minutes(240),
+            Task::new("Create user guide")
+                .with_priority(Priority::Medium)
+                .with_due_date(days_from_now(14))
+                .with_project(docs_id)
+                .with_tags(vec!["docs".into(), "guide".into()])
+                .with_estimated_minutes(360),
             Task::new("Write installation instructions")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(docs_id)
-                .with_tags(vec!["docs".into(), "setup".into()]),
+                .with_tags(vec!["docs".into(), "setup".into()])
+                .with_completed_at(now - Duration::days(21)),
             Task::new("Document configuration options")
                 .with_priority(Priority::Medium)
                 .with_project(docs_id)
@@ -245,41 +229,37 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Urgent)
                 .with_project(devops_id)
-                .with_tags(vec!["devops".into(), "ci".into()]),
+                .with_tags(vec!["devops".into(), "ci".into()])
+                .with_completed_at(now - Duration::days(90)),
             Task::new("Configure Docker containers")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(devops_id)
-                .with_tags(vec!["devops".into(), "docker".into()]),
-            with_estimate(
-                Task::new("Set up monitoring and alerts")
-                    .with_status(TaskStatus::InProgress)
-                    .with_priority(Priority::High)
-                    .with_project(devops_id)
-                    .with_tags(vec!["devops".into(), "monitoring".into()]),
-                180,
-            ),
+                .with_tags(vec!["devops".into(), "docker".into()])
+                .with_completed_at(now - Duration::days(75)),
+            Task::new("Set up monitoring and alerts")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(devops_id)
+                .with_tags(vec!["devops".into(), "monitoring".into()])
+                .with_estimated_minutes(180),
             Task::new("Configure auto-scaling")
                 .with_priority(Priority::Medium)
                 .with_due_date(days_from_now(12))
                 .with_project(devops_id)
                 .with_tags(vec!["devops".into(), "infrastructure".into()]),
-            with_estimate(
-                Task::new("Set up staging environment")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(5))
-                    .with_project(devops_id)
-                    .with_tags(vec!["devops".into(), "environment".into()]),
-                120,
-            ),
-            with_estimate(
-                Task::new("Implement backup strategy")
-                    .with_priority(Priority::Urgent)
-                    .with_due_date(days_from_now(2))
-                    .with_project(devops_id)
-                    .with_tags(vec!["devops".into(), "backup".into()]),
-                90,
-            ),
+            Task::new("Set up staging environment")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(5))
+                .with_project(devops_id)
+                .with_tags(vec!["devops".into(), "environment".into()])
+                .with_estimated_minutes(120),
+            Task::new("Implement backup strategy")
+                .with_priority(Priority::Urgent)
+                .with_due_date(days_from_now(2))
+                .with_project(devops_id)
+                .with_tags(vec!["devops".into(), "backup".into()])
+                .with_estimated_minutes(90),
             Task::new("Security audit")
                 .with_priority(Priority::High)
                 .with_due_date(days_from_now(21))
@@ -293,23 +273,20 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(mobile_id)
-                .with_tags(vec!["mobile".into(), "design".into()]),
-            with_estimate(
-                Task::new("Set up React Native project")
-                    .with_status(TaskStatus::InProgress)
-                    .with_priority(Priority::High)
-                    .with_project(mobile_id)
-                    .with_tags(vec!["mobile".into(), "setup".into()]),
-                60,
-            ),
-            with_estimate(
-                Task::new("Implement offline sync")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(14))
-                    .with_project(mobile_id)
-                    .with_tags(vec!["mobile".into(), "sync".into()]),
-                480,
-            ),
+                .with_tags(vec!["mobile".into(), "design".into()])
+                .with_completed_at(now - Duration::days(35)),
+            Task::new("Set up React Native project")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(mobile_id)
+                .with_tags(vec!["mobile".into(), "setup".into()])
+                .with_estimated_minutes(60),
+            Task::new("Implement offline sync")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(14))
+                .with_project(mobile_id)
+                .with_tags(vec!["mobile".into(), "sync".into()])
+                .with_estimated_minutes(480),
             Task::new("Add push notifications")
                 .with_priority(Priority::Medium)
                 .with_due_date(days_from_now(21))
@@ -351,7 +328,8 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Urgent)
                 .with_project(personal_id)
-                .with_tags(vec!["finance".into(), "bills".into()]),
+                .with_tags(vec!["finance".into(), "bills".into()])
+                .with_completed_at(now - Duration::days(5)),
         ]);
 
         // ========== HOME & ERRANDS TASKS ==========
@@ -361,14 +339,12 @@ impl Model {
                 .with_due_date(today)
                 .with_project(home_id)
                 .with_tags(vec!["errands".into(), "shopping".into()]),
-            with_estimate(
-                Task::new("Clean garage")
-                    .with_priority(Priority::Low)
-                    .with_due_date(days_from_now(14))
-                    .with_project(home_id)
-                    .with_tags(vec!["home".into(), "cleaning".into()]),
-                180,
-            ),
+            Task::new("Clean garage")
+                .with_priority(Priority::Low)
+                .with_due_date(days_from_now(14))
+                .with_project(home_id)
+                .with_tags(vec!["home".into(), "cleaning".into()])
+                .with_estimated_minutes(180),
             Task::new("Fix leaky faucet")
                 .with_priority(Priority::Medium)
                 .with_project(home_id)
@@ -387,7 +363,8 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Low)
                 .with_project(home_id)
-                .with_tags(vec!["home".into(), "organizing".into()]),
+                .with_tags(vec!["home".into(), "organizing".into()])
+                .with_completed_at(now - Duration::days(8)),
             Task::new("Return Amazon package")
                 .with_priority(Priority::Medium)
                 .with_due_date(days_from_now(2))
@@ -397,26 +374,22 @@ impl Model {
 
         // ========== LEARNING TASKS ==========
         tasks.extend(vec![
-            with_estimate(
-                Task::new("Complete Rust async chapter")
-                    .with_status(TaskStatus::InProgress)
-                    .with_priority(Priority::High)
-                    .with_project(learning_id)
-                    .with_tags(vec!["learning".into(), "rust".into()]),
-                120,
-            ),
+            Task::new("Complete Rust async chapter")
+                .with_status(TaskStatus::InProgress)
+                .with_priority(Priority::High)
+                .with_project(learning_id)
+                .with_tags(vec!["learning".into(), "rust".into()])
+                .with_estimated_minutes(120),
             Task::new("Watch system design videos")
                 .with_priority(Priority::Medium)
                 .with_due_date(days_from_now(7))
                 .with_project(learning_id)
                 .with_tags(vec!["learning".into(), "architecture".into()]),
-            with_estimate(
-                Task::new("Practice LeetCode problems")
-                    .with_priority(Priority::Medium)
-                    .with_project(learning_id)
-                    .with_tags(vec!["learning".into(), "algorithms".into()]),
-                60,
-            ),
+            Task::new("Practice LeetCode problems")
+                .with_priority(Priority::Medium)
+                .with_project(learning_id)
+                .with_tags(vec!["learning".into(), "algorithms".into()])
+                .with_estimated_minutes(60),
             Task::new("Read 'Designing Data-Intensive Applications'")
                 .with_priority(Priority::Low)
                 .with_project(learning_id)
@@ -430,7 +403,8 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium)
                 .with_project(learning_id)
-                .with_tags(vec!["learning".into(), "devops".into()]),
+                .with_tags(vec!["learning".into(), "devops".into()])
+                .with_completed_at(now - Duration::days(18)),
         ]);
 
         // ========== SIDE PROJECT TASKS ==========
@@ -439,25 +413,26 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium)
                 .with_project(side_id)
-                .with_tags(vec!["feature".into(), "ux".into()]),
+                .with_tags(vec!["feature".into(), "ux".into()])
+                .with_completed_at(now - Duration::days(3)),
             Task::new("Implement heatmap view")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::Medium)
                 .with_project(side_id)
-                .with_tags(vec!["feature".into(), "analytics".into()]),
+                .with_tags(vec!["feature".into(), "analytics".into()])
+                .with_completed_at(now - Duration::days(2)),
             Task::new("Add quick capture mode")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(side_id)
-                .with_tags(vec!["feature".into(), "ux".into()]),
-            with_estimate(
-                Task::new("Write unit tests for new features")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(2))
-                    .with_project(side_id)
-                    .with_tags(vec!["testing".into()]),
-                180,
-            ),
+                .with_tags(vec!["feature".into(), "ux".into()])
+                .with_completed_at(now - Duration::days(1)),
+            Task::new("Write unit tests for new features")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(2))
+                .with_project(side_id)
+                .with_tags(vec!["testing".into()])
+                .with_estimated_minutes(180),
             Task::new("Optimize rendering performance")
                 .with_priority(Priority::Medium)
                 .with_project(side_id)
@@ -470,12 +445,14 @@ impl Model {
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(side_id)
-                .with_tags(vec!["feature".into()]),
+                .with_tags(vec!["feature".into()])
+                .with_completed_at(now - Duration::days(25)),
             Task::new("Add time tracking")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::High)
                 .with_project(side_id)
-                .with_tags(vec!["feature".into()]),
+                .with_tags(vec!["feature".into()])
+                .with_completed_at(now - Duration::days(20)),
         ]);
 
         // ========== HEALTH & FITNESS TASKS ==========
@@ -494,14 +471,12 @@ impl Model {
                 .with_due_date(days_from_now(7))
                 .with_project(health_id)
                 .with_tags(vec!["fitness".into(), "shopping".into()]),
-            with_estimate(
-                Task::new("Meal prep for the week")
-                    .with_priority(Priority::Medium)
-                    .with_due_date(days_from_now(2))
-                    .with_project(health_id)
-                    .with_tags(vec!["health".into(), "nutrition".into()]),
-                120,
-            ),
+            Task::new("Meal prep for the week")
+                .with_priority(Priority::Medium)
+                .with_due_date(days_from_now(2))
+                .with_project(health_id)
+                .with_tags(vec!["health".into(), "nutrition".into()])
+                .with_estimated_minutes(120),
         ]);
 
         // ========== STANDALONE TASKS (No Project) ==========
@@ -525,18 +500,17 @@ impl Model {
             Task::new("Team sync meeting")
                 .with_status(TaskStatus::Done)
                 .with_priority(Priority::None)
-                .with_tags(vec!["meeting".into()]),
+                .with_tags(vec!["meeting".into()])
+                .with_completed_at(now - Duration::days(1)),
             Task::new("Send weekly status report")
                 .with_priority(Priority::High)
                 .with_due_date(days_from_now(1))
                 .with_tags(vec!["reporting".into()]),
-            with_estimate(
-                Task::new("Prepare presentation for stakeholders")
-                    .with_priority(Priority::High)
-                    .with_due_date(days_from_now(6))
-                    .with_tags(vec!["presentation".into(), "stakeholders".into()]),
-                240,
-            ),
+            Task::new("Prepare presentation for stakeholders")
+                .with_priority(Priority::High)
+                .with_due_date(days_from_now(6))
+                .with_tags(vec!["presentation".into(), "stakeholders".into()])
+                .with_estimated_minutes(240),
             Task::new("1:1 with manager")
                 .with_priority(Priority::Medium)
                 .with_due_date(days_from_now(3))
@@ -564,6 +538,71 @@ impl Model {
                 .with_due_date(days_from_now(8))
                 .with_tags(vec!["demo".into(), "client".into()]),
         ]);
+
+        // ========== ADDITIONAL HISTORICAL COMPLETED TASKS FOR HEATMAP ==========
+        // Spread completed tasks across the past few months to populate the heatmap
+        let historical_titles = [
+            "Fix login redirect bug",
+            "Update API rate limits",
+            "Refactor database queries",
+            "Add error logging",
+            "Write unit tests",
+            "Code review feedback",
+            "Update README",
+            "Fix CSS styling",
+            "Optimize image loading",
+            "Add form validation",
+            "Fix memory leak",
+            "Update npm packages",
+            "Add loading spinner",
+            "Fix timezone bug",
+            "Improve search results",
+            "Add pagination",
+            "Fix mobile layout",
+            "Update API docs",
+            "Add caching headers",
+            "Fix authentication bug",
+            "Optimize SQL queries",
+            "Add dark mode toggle",
+            "Fix scroll behavior",
+            "Update error messages",
+            "Add keyboard navigation",
+            "Fix date formatting",
+            "Improve performance",
+            "Add analytics tracking",
+            "Fix email templates",
+            "Update dependencies",
+        ];
+
+        for (i, title) in historical_titles.iter().enumerate() {
+            // Spread across past 120 days with varying intervals
+            let days_back = (i as i64 * 4) + (i as i64 % 3);
+            tasks.push(
+                Task::new(*title)
+                    .with_status(TaskStatus::Done)
+                    .with_priority(if i % 3 == 0 {
+                        Priority::High
+                    } else {
+                        Priority::Medium
+                    })
+                    .with_tags(vec!["historical".into()])
+                    .with_completed_at(now - Duration::days(days_back)),
+            );
+        }
+
+        // Add some clusters of completions (productive days)
+        let productive_days = [7, 14, 21, 28, 35, 42, 56, 70];
+        for day in productive_days {
+            for j in 0..3 {
+                tasks.push(
+                    Task::new(format!("Batch task {} from day {}", j + 1, day))
+                        .with_status(TaskStatus::Done)
+                        .with_priority(Priority::Medium)
+                        .with_tags(vec!["batch".into()])
+                        .with_completed_at(now - Duration::days(day)),
+                );
+            }
+        }
 
         // Insert all tasks and collect IDs for dependencies/subtasks
         let mut task_ids: Vec<_> = Vec::new();
@@ -611,7 +650,8 @@ impl Model {
                     .with_status(TaskStatus::Done)
                     .with_priority(Priority::High)
                     .with_project(docs_id)
-                    .with_parent(parent_id),
+                    .with_parent(parent_id)
+                    .with_completed_at(now - Duration::days(10)),
                 Task::new("Document keyboard shortcuts")
                     .with_status(TaskStatus::InProgress)
                     .with_priority(Priority::Medium)
@@ -659,16 +699,18 @@ impl Model {
         // Add some time entries for completed tasks
         for task in self.tasks.values() {
             if task.status.is_complete() {
-                // Add 1-3 time entries per completed task
-                let entry_count = (task.id.0.as_u128() % 3 + 1) as i64;
-                for i in 0..entry_count {
-                    let started = now - Duration::days((task.id.0.as_u128() % 20) as i64 + i);
-                    let duration = (30 + (task.id.0.as_u128() % 90)) as i64;
-                    let mut entry = TimeEntry::start(task.id);
-                    entry.started_at = started;
-                    entry.ended_at = Some(started + Duration::minutes(duration));
-                    entry.duration_minutes = Some(duration as u32);
-                    self.time_entries.insert(entry.id, entry);
+                if let Some(completed_at) = task.completed_at {
+                    // Add 1-3 time entries per completed task
+                    let entry_count = (task.id.0.as_u128() % 3 + 1) as i64;
+                    for i in 0..entry_count {
+                        let started = completed_at - Duration::hours(i + 1);
+                        let duration = (30 + (task.id.0.as_u128() % 90)) as i64;
+                        let mut entry = TimeEntry::start(task.id);
+                        entry.started_at = started;
+                        entry.ended_at = Some(started + Duration::minutes(duration));
+                        entry.duration_minutes = Some(duration as u32);
+                        self.time_entries.insert(entry.id, entry);
+                    }
                 }
             }
         }

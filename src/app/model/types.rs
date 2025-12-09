@@ -129,6 +129,8 @@ pub struct AlertState {
 pub struct ViewSelectionState {
     /// Selected column in Kanban view (0-3: Todo, InProgress, Blocked, Done)
     pub kanban_column: usize,
+    /// Selected task index within the current Kanban column
+    pub kanban_task_index: usize,
     /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
     pub eisenhower_quadrant: usize,
     /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)

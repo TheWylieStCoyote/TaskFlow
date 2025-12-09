@@ -239,11 +239,26 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::KanbanLeft => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column > 0 {
                 model.view_selection.kanban_column -= 1;
+                model.view_selection.kanban_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::KanbanRight => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column < 3 {
                 model.view_selection.kanban_column += 1;
+                model.view_selection.kanban_task_index = 0; // Reset task selection
+            }
+        }
+        NavigationMessage::KanbanUp => {
+            if model.current_view == ViewId::Kanban && model.view_selection.kanban_task_index > 0 {
+                model.view_selection.kanban_task_index -= 1;
+            }
+        }
+        NavigationMessage::KanbanDown => {
+            if model.current_view == ViewId::Kanban {
+                let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
+                if model.view_selection.kanban_task_index + 1 < column_tasks.len() {
+                    model.view_selection.kanban_task_index += 1;
+                }
             }
         }
         NavigationMessage::EisenhowerUp => {

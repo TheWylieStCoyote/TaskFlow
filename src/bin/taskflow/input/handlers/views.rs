@@ -144,6 +144,11 @@ pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('l') | KeyCode::Right => {
             Some(Message::Navigation(NavigationMessage::KanbanRight))
         }
+        KeyCode::Char('k') | KeyCode::Up => Some(Message::Navigation(NavigationMessage::KanbanUp)),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::KanbanDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::KanbanViewSelected)),
         _ => None,
     }
 }

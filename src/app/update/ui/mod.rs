@@ -722,6 +722,19 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::KanbanViewSelected => {
+            // Get tasks in the current Kanban column
+            let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
+
+            // Get the selected task from the column
+            if let Some(&task_id) = column_tasks.get(model.view_selection.kanban_task_index) {
+                // Find this task's position in visible_tasks
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                    model.focus_mode = true;
+                }
+            }
+        }
     }
 }
 

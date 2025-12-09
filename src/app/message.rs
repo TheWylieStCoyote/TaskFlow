@@ -157,6 +157,10 @@ pub enum NavigationMessage {
     KanbanLeft,
     /// Navigate right in Kanban view (next column)
     KanbanRight,
+    /// Navigate up in Kanban view (previous task in column)
+    KanbanUp,
+    /// Navigate down in Kanban view (next task in column)
+    KanbanDown,
     /// Navigate up in Eisenhower view (to upper quadrant)
     EisenhowerUp,
     /// Navigate down in Eisenhower view (to lower quadrant)
@@ -686,6 +690,8 @@ pub enum UiMessage {
     TimelineToggleDependencies,
     /// View selected task details from timeline (opens focus mode)
     TimelineViewSelected,
+    /// View selected task details from Kanban (opens focus mode)
+    KanbanViewSelected,
 }
 
 /// System-level messages for application control.

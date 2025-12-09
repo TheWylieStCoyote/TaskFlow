@@ -64,8 +64,23 @@ impl Widget for Kanban<'_> {
 
         // Render each column
         let selected_column = self.model.view_selection.kanban_column;
+        let selected_task_index = self.model.view_selection.kanban_task_index;
         for (i, (status, title, color)) in columns.iter().enumerate() {
-            self.render_column(chunks[i], buf, *status, title, *color, i == selected_column);
+            let is_selected_column = i == selected_column;
+            let task_index = if is_selected_column {
+                Some(selected_task_index)
+            } else {
+                None
+            };
+            self.render_column(
+                chunks[i],
+                buf,
+                *status,
+                title,
+                *color,
+                is_selected_column,
+                task_index,
+            );
         }
     }
 }
@@ -78,7 +93,8 @@ impl Kanban<'_> {
         status: TaskStatus,
         title: &str,
         title_color: Color,
-        is_selected: bool,
+        is_selected_column: bool,
+        selected_task_index: Option<usize>,
     ) {
         let theme = self.theme;
 
@@ -94,7 +110,7 @@ impl Kanban<'_> {
         let count = tasks.len();
 
         // Create the column block with selection highlight
-        let border_color = if is_selected {
+        let border_color = if is_selected_column {
             theme.colors.accent.to_color()
         } else {
             theme.colors.border.to_color()
@@ -124,7 +140,9 @@ impl Kanban<'_> {
         // Create list items for each task
         let items: Vec<ListItem<'_>> = tasks
             .iter()
-            .map(|task| {
+            .enumerate()
+            .map(|(idx, task)| {
+                let is_selected_task = selected_task_index == Some(idx);
                 // Check if task is blocked by incomplete dependencies
                 let is_blocked = self.model.is_task_blocked(&task.id);
                 let has_deps = self.model.has_dependencies(&task.id);
@@ -194,7 +212,16 @@ impl Kanban<'_> {
                     ));
                 }
 
-                ListItem::new(Line::from(spans))
+                // Apply selection highlighting
+                let mut item = ListItem::new(Line::from(spans));
+                if is_selected_task {
+                    item = item.style(
+                        Style::default()
+                            .bg(theme.colors.accent_secondary.to_color())
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+                item
             })
             .collect();
 

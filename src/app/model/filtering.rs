@@ -348,6 +348,29 @@ impl Model {
         self.tasks.get_mut(&id)
     }
 
+    /// Returns task IDs for a specific Kanban column (by status).
+    ///
+    /// Column indices: 0=Todo, 1=InProgress, 2=Blocked, 3=Done
+    #[must_use]
+    pub fn kanban_column_tasks(&self, column: usize) -> Vec<TaskId> {
+        use crate::domain::TaskStatus;
+
+        let status = match column {
+            0 => TaskStatus::Todo,
+            1 => TaskStatus::InProgress,
+            2 => TaskStatus::Blocked,
+            3 => TaskStatus::Done,
+            _ => return Vec::new(),
+        };
+
+        self.visible_tasks
+            .iter()
+            .filter_map(|id| self.tasks.get(id).map(|t| (id, t)))
+            .filter(|(_, t)| t.status == status)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
     /// Returns visible tasks grouped by project.
     ///
     /// Returns a `Vec` of (`Option<ProjectId>`, `project_name`, `Vec<TaskId>`).

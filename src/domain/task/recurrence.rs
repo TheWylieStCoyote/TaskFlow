@@ -75,3 +75,105 @@ impl std::fmt::Display for Recurrence {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Weekday;
+
+    #[test]
+    fn test_daily_display() {
+        let recurrence = Recurrence::Daily;
+        assert_eq!(recurrence.to_string(), "Daily");
+    }
+
+    #[test]
+    fn test_weekly_display_single_day() {
+        let recurrence = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        assert_eq!(recurrence.to_string(), "Weekly (Mon)");
+    }
+
+    #[test]
+    fn test_weekly_display_multiple_days() {
+        let recurrence = Recurrence::Weekly {
+            days: vec![Weekday::Mon, Weekday::Wed, Weekday::Fri],
+        };
+        assert_eq!(recurrence.to_string(), "Weekly (Mon, Wed, Fri)");
+    }
+
+    #[test]
+    fn test_weekly_display_all_days() {
+        let recurrence = Recurrence::Weekly {
+            days: vec![
+                Weekday::Mon,
+                Weekday::Tue,
+                Weekday::Wed,
+                Weekday::Thu,
+                Weekday::Fri,
+                Weekday::Sat,
+                Weekday::Sun,
+            ],
+        };
+        assert_eq!(
+            recurrence.to_string(),
+            "Weekly (Mon, Tue, Wed, Thu, Fri, Sat, Sun)"
+        );
+    }
+
+    #[test]
+    fn test_monthly_display() {
+        let recurrence = Recurrence::Monthly { day: 15 };
+        assert_eq!(recurrence.to_string(), "Monthly (day 15)");
+    }
+
+    #[test]
+    fn test_yearly_display() {
+        let recurrence = Recurrence::Yearly { month: 3, day: 1 };
+        assert_eq!(recurrence.to_string(), "Yearly (3/1)");
+    }
+
+    #[test]
+    fn test_recurrence_equality() {
+        assert_eq!(Recurrence::Daily, Recurrence::Daily);
+        assert_ne!(Recurrence::Daily, Recurrence::Monthly { day: 1 });
+
+        let weekly1 = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        let weekly2 = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        let weekly3 = Recurrence::Weekly {
+            days: vec![Weekday::Tue],
+        };
+        assert_eq!(weekly1, weekly2);
+        assert_ne!(weekly1, weekly3);
+    }
+
+    #[test]
+    fn test_recurrence_serialization() {
+        let daily = Recurrence::Daily;
+        let json = serde_json::to_string(&daily).expect("serialize");
+        let restored: Recurrence = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(daily, restored);
+
+        let weekly = Recurrence::Weekly {
+            days: vec![Weekday::Mon, Weekday::Fri],
+        };
+        let json = serde_json::to_string(&weekly).expect("serialize");
+        let restored: Recurrence = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(weekly, restored);
+
+        let monthly = Recurrence::Monthly { day: 28 };
+        let json = serde_json::to_string(&monthly).expect("serialize");
+        let restored: Recurrence = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(monthly, restored);
+
+        let yearly = Recurrence::Yearly { month: 12, day: 25 };
+        let json = serde_json::to_string(&yearly).expect("serialize");
+        let restored: Recurrence = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(yearly, restored);
+    }
+}

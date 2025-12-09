@@ -78,3 +78,85 @@ impl Priority {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_priority_default() {
+        assert_eq!(Priority::default(), Priority::None);
+    }
+
+    #[test]
+    fn test_priority_as_str() {
+        assert_eq!(Priority::None.as_str(), "none");
+        assert_eq!(Priority::Low.as_str(), "low");
+        assert_eq!(Priority::Medium.as_str(), "medium");
+        assert_eq!(Priority::High.as_str(), "high");
+        assert_eq!(Priority::Urgent.as_str(), "urgent");
+    }
+
+    #[test]
+    fn test_priority_symbol() {
+        assert_eq!(Priority::None.symbol(), " ");
+        assert_eq!(Priority::Low.symbol(), "!");
+        assert_eq!(Priority::Medium.symbol(), "!!");
+        assert_eq!(Priority::High.symbol(), "!!!");
+        assert_eq!(Priority::Urgent.symbol(), "!!!!");
+    }
+
+    #[test]
+    fn test_priority_parse_lowercase() {
+        assert_eq!(Priority::parse("none"), Some(Priority::None));
+        assert_eq!(Priority::parse("low"), Some(Priority::Low));
+        assert_eq!(Priority::parse("medium"), Some(Priority::Medium));
+        assert_eq!(Priority::parse("high"), Some(Priority::High));
+        assert_eq!(Priority::parse("urgent"), Some(Priority::Urgent));
+    }
+
+    #[test]
+    fn test_priority_parse_uppercase() {
+        assert_eq!(Priority::parse("NONE"), Some(Priority::None));
+        assert_eq!(Priority::parse("LOW"), Some(Priority::Low));
+        assert_eq!(Priority::parse("MEDIUM"), Some(Priority::Medium));
+        assert_eq!(Priority::parse("HIGH"), Some(Priority::High));
+        assert_eq!(Priority::parse("URGENT"), Some(Priority::Urgent));
+    }
+
+    #[test]
+    fn test_priority_parse_mixed_case() {
+        assert_eq!(Priority::parse("None"), Some(Priority::None));
+        assert_eq!(Priority::parse("Low"), Some(Priority::Low));
+        assert_eq!(Priority::parse("MeDiUm"), Some(Priority::Medium));
+    }
+
+    #[test]
+    fn test_priority_parse_shorthand() {
+        assert_eq!(Priority::parse("med"), Some(Priority::Medium));
+        assert_eq!(Priority::parse("MED"), Some(Priority::Medium));
+    }
+
+    #[test]
+    fn test_priority_parse_invalid() {
+        assert_eq!(Priority::parse(""), None);
+        assert_eq!(Priority::parse("invalid"), None);
+        assert_eq!(Priority::parse("hi"), None);
+        assert_eq!(Priority::parse("lo"), None);
+    }
+
+    #[test]
+    fn test_priority_serialization() {
+        for priority in [
+            Priority::None,
+            Priority::Low,
+            Priority::Medium,
+            Priority::High,
+            Priority::Urgent,
+        ] {
+            let json = serde_json::to_string(&priority).expect("serialize");
+            let restored: Priority = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(priority, restored);
+        }
+    }
+}

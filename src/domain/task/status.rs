@@ -67,3 +67,70 @@ impl TaskStatus {
         matches!(self, Self::Done | Self::Cancelled)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_default() {
+        assert_eq!(TaskStatus::default(), TaskStatus::Todo);
+    }
+
+    #[test]
+    fn test_status_as_str() {
+        assert_eq!(TaskStatus::Todo.as_str(), "todo");
+        assert_eq!(TaskStatus::InProgress.as_str(), "in_progress");
+        assert_eq!(TaskStatus::Blocked.as_str(), "blocked");
+        assert_eq!(TaskStatus::Done.as_str(), "done");
+        assert_eq!(TaskStatus::Cancelled.as_str(), "cancelled");
+    }
+
+    #[test]
+    fn test_status_symbol() {
+        assert_eq!(TaskStatus::Todo.symbol(), "[ ]");
+        assert_eq!(TaskStatus::InProgress.symbol(), "[~]");
+        assert_eq!(TaskStatus::Blocked.symbol(), "[!]");
+        assert_eq!(TaskStatus::Done.symbol(), "[x]");
+        assert_eq!(TaskStatus::Cancelled.symbol(), "[-]");
+    }
+
+    #[test]
+    fn test_is_complete_done() {
+        assert!(TaskStatus::Done.is_complete());
+    }
+
+    #[test]
+    fn test_is_complete_cancelled() {
+        assert!(TaskStatus::Cancelled.is_complete());
+    }
+
+    #[test]
+    fn test_is_complete_not_complete() {
+        assert!(!TaskStatus::Todo.is_complete());
+        assert!(!TaskStatus::InProgress.is_complete());
+        assert!(!TaskStatus::Blocked.is_complete());
+    }
+
+    #[test]
+    fn test_status_serialization() {
+        for status in [
+            TaskStatus::Todo,
+            TaskStatus::InProgress,
+            TaskStatus::Blocked,
+            TaskStatus::Done,
+            TaskStatus::Cancelled,
+        ] {
+            let json = serde_json::to_string(&status).expect("serialize");
+            let restored: TaskStatus = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(status, restored);
+        }
+    }
+
+    #[test]
+    fn test_status_equality() {
+        assert_eq!(TaskStatus::Todo, TaskStatus::Todo);
+        assert_ne!(TaskStatus::Todo, TaskStatus::Done);
+        assert_ne!(TaskStatus::InProgress, TaskStatus::Blocked);
+    }
+}

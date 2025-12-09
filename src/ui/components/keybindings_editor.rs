@@ -119,7 +119,7 @@ impl Widget for KeybindingsEditor<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(self.theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("> ");

@@ -5,7 +5,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, StatefulWidget, Widget},
 };
@@ -132,7 +132,7 @@ impl Widget for SavedFilterPicker<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             )
             .highlight_symbol("> ");

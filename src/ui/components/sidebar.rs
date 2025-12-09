@@ -11,7 +11,7 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
@@ -319,7 +319,7 @@ impl Widget for Sidebar<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(self.theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             );
 

@@ -110,12 +110,12 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             // Height: 9 rows (input + hints area)
             let quick_area = centered_rect_fixed_height(70, 9, area);
             frame.render_widget(
-                QuickCaptureDialog::new(&model.input_buffer, model.cursor_position),
+                QuickCaptureDialog::new(&model.input_buffer, model.cursor_position, theme),
                 quick_area,
             );
         } else {
             frame.render_widget(
-                InputDialog::new(title, &model.input_buffer, model.cursor_position),
+                InputDialog::new(title, &model.input_buffer, model.cursor_position, theme),
                 input_area,
             );
         }
@@ -129,7 +129,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             .selected_task()
             .map_or("this task", |t| t.title.as_str());
         frame.render_widget(
-            ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?")),
+            ConfirmDialog::new("Delete Task", &format!("Delete \"{task_name}\"?"), theme),
             confirm_area,
         );
     }
@@ -144,7 +144,10 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
                 result.skipped.len(),
                 result.errors.len()
             );
-            frame.render_widget(ConfirmDialog::new("Import Preview", &message), confirm_area);
+            frame.render_widget(
+                ConfirmDialog::new("Import Preview", &message, theme),
+                confirm_area,
+            );
         }
     }
 
@@ -292,14 +295,14 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
         // Height: 4 + min(5, count) + 2 for header/footer
         let height = (6 + count.min(5)) as u16;
         let alert_area = centered_rect_fixed_height(50, height.max(7), area);
-        frame.render_widget(OverdueAlert::new(count, task_titles), alert_area);
+        frame.render_widget(OverdueAlert::new(count, task_titles, theme), alert_area);
     }
 
     // Render storage error alert popup (shown at startup if data couldn't be loaded)
     if model.alerts.show_storage_error {
         if let Some(ref error) = model.alerts.storage_error {
             let alert_area = centered_rect_fixed_height(60, 10, area);
-            frame.render_widget(StorageErrorAlert::new(error), alert_area);
+            frame.render_widget(StorageErrorAlert::new(error, theme), alert_area);
         }
     }
 

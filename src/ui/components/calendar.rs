@@ -350,7 +350,7 @@ impl Calendar<'_> {
 
         let list = List::new(items).highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(self.theme.colors.accent_secondary.to_color())
                 .add_modifier(Modifier::BOLD),
         );
 

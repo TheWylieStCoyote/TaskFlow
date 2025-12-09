@@ -129,7 +129,7 @@ impl HabitsView<'_> {
                 let item = if is_selected {
                     ListItem::new(line).style(
                         Style::default()
-                            .bg(Color::DarkGray)
+                            .bg(theme.colors.accent_secondary.to_color())
                             .fg(theme.colors.foreground.to_color()),
                     )
                 } else {

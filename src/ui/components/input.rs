@@ -16,9 +16,11 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
+
+use crate::config::Theme;
 
 /// Input mode for the application
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -67,15 +69,22 @@ pub struct InputDialog<'a> {
     title: &'a str,
     input: &'a str,
     cursor_position: usize,
+    theme: &'a Theme,
 }
 
 impl<'a> InputDialog<'a> {
     #[must_use]
-    pub const fn new(title: &'a str, input: &'a str, cursor_position: usize) -> Self {
+    pub const fn new(
+        title: &'a str,
+        input: &'a str,
+        cursor_position: usize,
+        theme: &'a Theme,
+    ) -> Self {
         Self {
             title,
             input,
             cursor_position,
+            theme,
         }
     }
 }
@@ -94,18 +103,15 @@ impl Widget for InputDialog<'_> {
             format!("{}▌", self.input)
         };
 
+        let accent = self.theme.colors.accent.to_color();
         let paragraph = Paragraph::new(display_text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(format!(" {} ", self.title))
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
+                    .border_style(Style::default().fg(accent)),
             );
 
         paragraph.render(area, buf);
@@ -116,14 +122,16 @@ impl Widget for InputDialog<'_> {
 pub struct QuickCaptureDialog<'a> {
     input: &'a str,
     cursor_position: usize,
+    theme: &'a Theme,
 }
 
 impl<'a> QuickCaptureDialog<'a> {
     #[must_use]
-    pub const fn new(input: &'a str, cursor_position: usize) -> Self {
+    pub const fn new(input: &'a str, cursor_position: usize, theme: &'a Theme) -> Self {
         Self {
             input,
             cursor_position,
+            theme,
         }
     }
 }
@@ -135,15 +143,12 @@ impl Widget for QuickCaptureDialog<'_> {
 
         Clear.render(area, buf);
 
+        let accent = self.theme.colors.accent.to_color();
         let block = Block::default()
             .title(" Quick Capture (Esc to close, Enter to add) ")
-            .title_style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
+            .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan));
+            .border_style(Style::default().fg(accent));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -167,28 +172,41 @@ impl Widget for QuickCaptureDialog<'_> {
             format!("{}▌", self.input)
         };
 
-        let input_line = Paragraph::new(display_text).style(Style::default().fg(Color::White));
+        let input_line = Paragraph::new(display_text)
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()));
         input_line.render(chunks[0], buf);
 
-        // Render hints
+        // Render hints using theme colors
         let hints = [
             Line::from(vec![
-                Span::styled("#tag ", Style::default().fg(Color::Green)),
-                Span::styled("@project ", Style::default().fg(Color::Magenta)),
-                Span::styled("!priority ", Style::default().fg(Color::Yellow)),
-                Span::styled("due:date ", Style::default().fg(Color::Red)),
-                Span::styled("sched:date", Style::default().fg(Color::Blue)),
+                Span::styled(
+                    "#tag ",
+                    Style::default().fg(self.theme.colors.success.to_color()),
+                ),
+                Span::styled(
+                    "@project ",
+                    Style::default().fg(self.theme.priority.high.to_color()),
+                ),
+                Span::styled(
+                    "!priority ",
+                    Style::default().fg(self.theme.colors.warning.to_color()),
+                ),
+                Span::styled(
+                    "due:date ",
+                    Style::default().fg(self.theme.colors.danger.to_color()),
+                ),
+                Span::styled("sched:date", Style::default().fg(accent)),
             ]),
             Line::from(vec![
                 Span::styled(
                     "Examples: ",
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(self.theme.colors.muted.to_color())
                         .add_modifier(Modifier::ITALIC),
                 ),
                 Span::styled(
                     "Buy milk #groceries @Home !high due:tomorrow",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
             ]),
         ];
@@ -206,12 +224,17 @@ impl Widget for QuickCaptureDialog<'_> {
 pub struct ConfirmDialog<'a> {
     title: &'a str,
     message: &'a str,
+    theme: &'a Theme,
 }
 
 impl<'a> ConfirmDialog<'a> {
     #[must_use]
-    pub const fn new(title: &'a str, message: &'a str) -> Self {
-        Self { title, message }
+    pub const fn new(title: &'a str, message: &'a str, theme: &'a Theme) -> Self {
+        Self {
+            title,
+            message,
+            theme,
+        }
     }
 }
 
@@ -220,19 +243,16 @@ impl Widget for ConfirmDialog<'_> {
         Clear.render(area, buf);
 
         let text = format!("{}\n\n[y]es / [n]o", self.message);
+        let warning = self.theme.colors.warning.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(format!(" {} ", self.title))
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(warning).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(warning)),
             );
 
         paragraph.render(area, buf);
@@ -240,19 +260,24 @@ impl Widget for ConfirmDialog<'_> {
 }
 
 /// Overdue tasks alert popup shown at startup
-pub struct OverdueAlert {
+pub struct OverdueAlert<'a> {
     count: usize,
     task_titles: Vec<String>,
+    theme: &'a Theme,
 }
 
-impl OverdueAlert {
+impl<'a> OverdueAlert<'a> {
     #[must_use]
-    pub fn new(count: usize, task_titles: Vec<String>) -> Self {
-        Self { count, task_titles }
+    pub fn new(count: usize, task_titles: Vec<String>, theme: &'a Theme) -> Self {
+        Self {
+            count,
+            task_titles,
+            theme,
+        }
     }
 }
 
-impl Widget for OverdueAlert {
+impl Widget for OverdueAlert<'_> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         Clear.render(area, buf);
 
@@ -274,15 +299,16 @@ impl Widget for OverdueAlert {
         lines.push("Press any key to dismiss".to_string());
 
         let text = lines.join("\n");
+        let danger = self.theme.colors.danger.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(" ⚠ Overdue Tasks ")
-                    .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().fg(danger).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Red)),
+                    .border_style(Style::default().fg(danger)),
             );
 
         paragraph.render(area, buf);
@@ -292,12 +318,16 @@ impl Widget for OverdueAlert {
 /// Storage error alert popup shown when data cannot be loaded
 pub struct StorageErrorAlert<'a> {
     error_message: &'a str,
+    theme: &'a Theme,
 }
 
 impl<'a> StorageErrorAlert<'a> {
     #[must_use]
-    pub fn new(error_message: &'a str) -> Self {
-        Self { error_message }
+    pub fn new(error_message: &'a str, theme: &'a Theme) -> Self {
+        Self {
+            error_message,
+            theme,
+        }
     }
 }
 
@@ -309,19 +339,16 @@ impl Widget for StorageErrorAlert<'_> {
             "Could not load your task data:\n\n  {}\n\nStarting with sample data instead.\nYour existing data has not been modified.\n\nPress any key to continue",
             self.error_message
         );
+        let warning = self.theme.colors.warning.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(" ⚠ Storage Error ")
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(warning).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(warning)),
             );
 
         paragraph.render(area, buf);
@@ -355,6 +382,11 @@ mod tests {
             content.push('\n');
         }
         content
+    }
+
+    /// Create a default theme for testing
+    fn test_theme() -> Theme {
+        Theme::default()
     }
 
     // InputMode tests
@@ -402,7 +434,8 @@ mod tests {
     // InputDialog tests
     #[test]
     fn test_input_dialog_renders_title() {
-        let dialog = InputDialog::new("New Task", "", 0);
+        let theme = test_theme();
+        let dialog = InputDialog::new("New Task", "", 0, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -411,7 +444,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_renders_input_text() {
-        let dialog = InputDialog::new("Edit", "Hello World", 11);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Edit", "Hello World", 11, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -423,7 +457,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_shows_cursor() {
-        let dialog = InputDialog::new("Test", "abc", 3);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "abc", 3, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -433,7 +468,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_cursor_in_middle() {
-        let dialog = InputDialog::new("Test", "abcdef", 3);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "abcdef", 3, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -446,7 +482,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_empty_input() {
-        let dialog = InputDialog::new("New", "", 0);
+        let theme = test_theme();
+        let dialog = InputDialog::new("New", "", 0, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -460,7 +497,8 @@ mod tests {
     // ConfirmDialog tests
     #[test]
     fn test_confirm_dialog_renders_title() {
-        let dialog = ConfirmDialog::new("Confirm Delete", "Are you sure?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Confirm Delete", "Are you sure?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 
@@ -472,7 +510,8 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_renders_message() {
-        let dialog = ConfirmDialog::new("Delete", "Delete this task?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Delete", "Delete this task?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 
@@ -484,7 +523,8 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_shows_yes_no_options() {
-        let dialog = ConfirmDialog::new("Confirm", "Proceed?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Confirm", "Proceed?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 

@@ -9,7 +9,7 @@ mod tests;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, List, ListState, StatefulWidget, Widget},
 };
 
@@ -225,7 +225,7 @@ impl Widget for TaskList<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             );
 

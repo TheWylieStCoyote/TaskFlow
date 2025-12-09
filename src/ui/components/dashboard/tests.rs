@@ -213,7 +213,7 @@ fn test_dashboard_completion_rate_empty() {
     let stats = DashboardStats::new(&model);
 
     // No tasks = 0% completion
-    assert_eq!(stats.completion_rate(), 0.0);
+    assert!(stats.completion_rate().abs() < 0.01);
 }
 
 #[test]

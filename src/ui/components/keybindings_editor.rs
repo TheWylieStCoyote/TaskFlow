@@ -167,7 +167,7 @@ mod tests {
 
         // Default keybindings should include common keys
         assert!(
-            content.contains("j") || content.contains("k"),
+            content.contains('j') || content.contains('k'),
             "Common navigation keys should be visible"
         );
     }
@@ -247,8 +247,7 @@ mod tests {
 
         assert!(
             content.contains("overwrite") || content.contains("MoveDown"),
-            "Conflict message should be visible: {}",
-            content
+            "Conflict message should be visible: {content}"
         );
     }
 }

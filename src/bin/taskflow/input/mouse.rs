@@ -290,6 +290,7 @@ fn is_leap_year(year: i32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::MouseEvent;
 
     #[test]
     fn test_days_in_month() {
@@ -305,5 +306,98 @@ mod tests {
         assert!(!is_leap_year(2023));
         assert!(is_leap_year(2000));
         assert!(!is_leap_year(1900));
+    }
+
+    #[test]
+    fn test_days_in_month_all_months() {
+        // January, March, May, July, August, October, December have 31 days
+        for month in [1, 3, 5, 7, 8, 10, 12] {
+            assert_eq!(days_in_month(2024, month), 31);
+        }
+
+        // April, June, September, November have 30 days
+        for month in [4, 6, 9, 11] {
+            assert_eq!(days_in_month(2024, month), 30);
+        }
+    }
+
+    #[test]
+    fn test_scroll_up_returns_up_message() {
+        let model = Model::new();
+        let result = handle_scroll_up(&model);
+        assert!(matches!(result, Message::Navigation(NavigationMessage::Up)));
+    }
+
+    #[test]
+    fn test_scroll_down_returns_down_message() {
+        let model = Model::new();
+        let result = handle_scroll_down(&model);
+        assert!(matches!(
+            result,
+            Message::Navigation(NavigationMessage::Down)
+        ));
+    }
+
+    #[test]
+    fn test_handle_mouse_event_scroll_up() {
+        let model = Model::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let result = handle_mouse_event(event, &model);
+        assert!(matches!(result, Message::Navigation(NavigationMessage::Up)));
+    }
+
+    #[test]
+    fn test_handle_mouse_event_scroll_down() {
+        let model = Model::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let result = handle_mouse_event(event, &model);
+        assert!(matches!(
+            result,
+            Message::Navigation(NavigationMessage::Down)
+        ));
+    }
+
+    #[test]
+    fn test_handle_mouse_event_other_button_returns_none() {
+        let model = Model::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Right),
+            column: 0,
+            row: 0,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let result = handle_mouse_event(event, &model);
+        assert!(matches!(result, Message::None));
+    }
+
+    #[test]
+    fn test_handle_mouse_event_mouse_move_returns_none() {
+        let model = Model::new();
+        let event = MouseEvent {
+            kind: MouseEventKind::Moved,
+            column: 10,
+            row: 10,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        };
+        let result = handle_mouse_event(event, &model);
+        assert!(matches!(result, Message::None));
+    }
+
+    #[test]
+    fn test_left_click_no_cached_areas_returns_none() {
+        let model = Model::new();
+        // Without any cached layout areas, click should return None
+        let result = handle_left_click(50, 50, &model);
+        assert!(matches!(result, Message::None));
     }
 }

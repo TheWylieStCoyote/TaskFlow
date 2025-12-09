@@ -557,7 +557,7 @@ mod tests {
             model.calendar_state.month = month;
             let calendar = Calendar::new(&model, &theme);
             let name = calendar.month_name();
-            assert!(!name.is_empty(), "Month {} should have a name", month);
+            assert!(!name.is_empty(), "Month {month} should have a name");
         }
     }
 

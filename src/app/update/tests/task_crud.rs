@@ -152,7 +152,7 @@ fn test_task_duplicate() {
         .expect("Should find duplicated task");
 
     // Verify properties were copied
-    assert_eq!(new_task.title, format!("Copy of {}", original_title));
+    assert_eq!(new_task.title, format!("Copy of {original_title}"));
     assert_eq!(new_task.priority, Priority::High);
     assert_eq!(
         new_task.tags,

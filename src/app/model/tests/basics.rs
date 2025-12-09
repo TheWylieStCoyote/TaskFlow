@@ -68,7 +68,7 @@ fn test_model_selected_index_adjustment() {
 
     // Add 3 tasks
     for i in 0..3 {
-        let task = Task::new(format!("Task {}", i));
+        let task = Task::new(format!("Task {i}"));
         model.tasks.insert(task.id, task);
     }
     model.refresh_visible_tasks();
@@ -77,7 +77,7 @@ fn test_model_selected_index_adjustment() {
     model.selected_index = 2;
 
     // Remove all tasks except one
-    let ids: Vec<_> = model.tasks.keys().skip(1).cloned().collect();
+    let ids: Vec<_> = model.tasks.keys().skip(1).copied().collect();
     for id in ids {
         model.tasks.remove(&id);
     }
@@ -96,7 +96,7 @@ fn test_model_dirty_flag() {
     let task = Task::new("Task");
     model.tasks.insert(task.id, task);
 
-    model.start_time_tracking(model.tasks.keys().next().cloned().unwrap());
+    model.start_time_tracking(model.tasks.keys().next().copied().unwrap());
     assert!(model.dirty);
 }
 

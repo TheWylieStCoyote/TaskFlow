@@ -51,7 +51,7 @@ pub fn create_test_model_with_tasks() -> Model {
     let mut model = Model::new();
 
     for i in 0..5 {
-        let task = Task::new(format!("Task {}", i));
+        let task = Task::new(format!("Task {i}"));
         model.tasks.insert(task.id, task);
     }
     model.refresh_visible_tasks();

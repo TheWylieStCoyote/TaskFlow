@@ -62,7 +62,7 @@ fn test_select_all() {
 fn test_clear_selection() {
     let mut model = create_test_model_with_tasks();
     model.multi_select_mode = true;
-    model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+    model.selected_tasks = model.visible_tasks.iter().copied().collect();
 
     update(&mut model, Message::Ui(UiMessage::ClearSelection));
 
@@ -105,7 +105,7 @@ fn test_bulk_delete_not_in_multi_mode() {
 fn test_exiting_multi_select_clears_selection() {
     let mut model = create_test_model_with_tasks();
     model.multi_select_mode = true;
-    model.selected_tasks = model.visible_tasks.iter().cloned().collect();
+    model.selected_tasks = model.visible_tasks.iter().copied().collect();
 
     // Exit multi-select mode
     update(&mut model, Message::Ui(UiMessage::ToggleMultiSelect));

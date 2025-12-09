@@ -437,6 +437,8 @@ impl Widget for Burndown<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{Task, TaskStatus};
+    use ratatui::buffer::Buffer;
 
     #[test]
     fn test_burndown_empty_model() {
@@ -447,5 +449,67 @@ mod tests {
         assert_eq!(data.total, 0);
         assert_eq!(data.completed, 0);
         assert_eq!(data.remaining, 0);
+    }
+
+    #[test]
+    fn test_burndown_with_tasks() {
+        let mut model = Model::new();
+
+        // Add some tasks
+        let task1 = Task::new("Task 1").with_status(TaskStatus::Done);
+        let task2 = Task::new("Task 2").with_status(TaskStatus::Done);
+        let task3 = Task::new("Task 3").with_status(TaskStatus::Todo);
+        let task4 = Task::new("Task 4").with_status(TaskStatus::InProgress);
+
+        model.tasks.insert(task1.id, task1);
+        model.tasks.insert(task2.id, task2);
+        model.tasks.insert(task3.id, task3);
+        model.tasks.insert(task4.id, task4);
+
+        let theme = Theme::default();
+        let burndown = Burndown::new(&model, &theme);
+        let data = burndown.get_burndown_data(None);
+
+        assert_eq!(data.total, 4);
+        assert_eq!(data.completed, 2);
+        assert_eq!(data.remaining, 2);
+    }
+
+    #[test]
+    fn test_burndown_daily_completions_length() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let burndown = Burndown::new(&model, &theme);
+        let data = burndown.get_burndown_data(None);
+
+        // Should have 14 days of completion history
+        assert_eq!(data.daily_completions.len(), 14);
+    }
+
+    #[test]
+    fn test_burndown_renders_without_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let burndown = Burndown::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        burndown.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
+    }
+
+    #[test]
+    fn test_burndown_small_area_does_not_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let burndown = Burndown::new(&model, &theme);
+
+        // Very small area - should early return without panic
+        let area = Rect::new(0, 0, 20, 10);
+        let mut buffer = Buffer::empty(area);
+        burndown.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
     }
 }

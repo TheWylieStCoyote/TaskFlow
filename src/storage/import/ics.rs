@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_import_ics_basic() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VTODO
 UID:test-123
@@ -282,7 +282,7 @@ STATUS:NEEDS-ACTION
 PRIORITY:5
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -296,13 +296,13 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_with_due_date() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Task with due
 DUE;VALUE=DATE:20251225
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -317,13 +317,13 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_with_categories() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Tagged task
 CATEGORIES:work,urgent,project
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -335,14 +335,14 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_completed() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Completed task
 STATUS:COMPLETED
 COMPLETED:20251201T120000Z
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -355,13 +355,13 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_line_folding() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Task with a very long title that spans
   multiple lines due to line folding
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -374,13 +374,13 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_escaped_chars() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Task with\, commas
 DESCRIPTION:Line 1\nLine 2
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 
@@ -396,7 +396,7 @@ END:VCALENDAR
 
     #[test]
     fn test_import_ics_multiple_vtodos() {
-        let ics = r#"BEGIN:VCALENDAR
+        let ics = r"BEGIN:VCALENDAR
 BEGIN:VTODO
 SUMMARY:Task 1
 END:VTODO
@@ -407,7 +407,7 @@ BEGIN:VTODO
 SUMMARY:Task 3
 END:VTODO
 END:VCALENDAR
-"#;
+";
         let reader = Cursor::new(ics);
         let options = ImportOptions::default();
 

@@ -706,8 +706,8 @@ mod tests {
         );
 
         let rates = habit.completion_rate_by_weekday();
-        assert_eq!(rates[0], 100.0); // Monday: 2/2 = 100%
-        assert_eq!(rates[1], 0.0); // Tuesday: 0/1 = 0%
+        assert!((rates[0] - 100.0).abs() < 0.01); // Monday: 2/2 = 100%
+        assert!(rates[1].abs() < 0.01); // Tuesday: 0/1 = 0%
     }
 
     #[test]
@@ -727,7 +727,7 @@ mod tests {
     #[test]
     fn test_habit_id_display() {
         let id = HabitId::new();
-        let display = format!("{}", id);
+        let display = format!("{id}");
         assert!(!display.is_empty());
     }
 

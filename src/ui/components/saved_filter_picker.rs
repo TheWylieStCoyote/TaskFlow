@@ -180,7 +180,7 @@ mod tests {
             name: name.to_string(),
             filter: Filter::default(),
             sort: SortSpec::default(),
-            icon: icon.map(|s| s.to_string()),
+            icon: icon.map(std::string::ToString::to_string),
         }
     }
 

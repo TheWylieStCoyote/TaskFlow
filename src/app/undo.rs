@@ -324,7 +324,7 @@ mod tests {
 
         // Push more than MAX_UNDO_HISTORY actions
         for i in 0..MAX_UNDO_HISTORY + 10 {
-            let task = Task::new(format!("Task {}", i));
+            let task = Task::new(format!("Task {i}"));
             stack.push(UndoAction::TaskCreated(Box::new(task)));
         }
 
@@ -366,7 +366,7 @@ mod tests {
         let mut stack = UndoStack::new();
 
         for i in 0..5 {
-            let task = Task::new(format!("Task {}", i));
+            let task = Task::new(format!("Task {i}"));
             stack.push(UndoAction::TaskCreated(Box::new(task)));
         }
 
@@ -423,7 +423,7 @@ mod tests {
 
         // Push 3 actions
         for i in 1..=3 {
-            let task = Task::new(format!("Task {}", i));
+            let task = Task::new(format!("Task {i}"));
             stack.push(UndoAction::TaskCreated(Box::new(task)));
         }
         assert_eq!(stack.len(), 3);

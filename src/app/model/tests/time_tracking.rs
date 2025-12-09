@@ -10,7 +10,7 @@ fn test_model_start_time_tracking() {
     let task = Task::new("Task");
     model.tasks.insert(task.id, task);
 
-    model.start_time_tracking(model.tasks.keys().next().cloned().unwrap());
+    model.start_time_tracking(model.tasks.keys().next().copied().unwrap());
 
     assert!(model.active_time_entry.is_some());
     assert!(model.time_entries.len() == 1);

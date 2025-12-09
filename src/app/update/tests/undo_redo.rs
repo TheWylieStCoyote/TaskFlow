@@ -140,7 +140,7 @@ fn test_undo_multiple_actions() {
     for i in 1..=3 {
         update(
             &mut model,
-            Message::Task(TaskMessage::Create(format!("Task {}", i))),
+            Message::Task(TaskMessage::Create(format!("Task {i}"))),
         );
     }
 
@@ -345,7 +345,7 @@ fn test_multiple_undo_redo() {
     for i in 1..=3 {
         update(
             &mut model,
-            Message::Task(TaskMessage::Create(format!("Task {}", i))),
+            Message::Task(TaskMessage::Create(format!("Task {i}"))),
         );
     }
     assert_eq!(model.tasks.len(), 3);

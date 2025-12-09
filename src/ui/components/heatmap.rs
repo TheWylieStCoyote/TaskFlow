@@ -308,6 +308,7 @@ impl Widget for Heatmap<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ratatui::buffer::Buffer;
 
     #[test]
     fn test_heatmap_intensity_levels() {
@@ -320,5 +321,60 @@ mod tests {
         assert_ne!(color0, color1);
         assert_ne!(color1, color5);
         assert_ne!(color5, color10);
+    }
+
+    #[test]
+    fn test_heatmap_intensity_highest_level() {
+        // High counts should all get the same intense green
+        let color7 = Heatmap::get_intensity_color(7);
+        let color10 = Heatmap::get_intensity_color(10);
+        let color100 = Heatmap::get_intensity_color(100);
+
+        assert_eq!(color7, color10);
+        assert_eq!(color10, color100);
+    }
+
+    #[test]
+    fn test_heatmap_empty_model() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let heatmap = Heatmap::new(&model, &theme);
+
+        // Empty model should return empty completion data
+        let data = heatmap.get_completion_data();
+        assert!(data.is_empty());
+    }
+
+    #[test]
+    fn test_heatmap_renders_without_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let heatmap = Heatmap::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+        heatmap.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
+    }
+
+    #[test]
+    fn test_heatmap_small_area_does_not_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let heatmap = Heatmap::new(&model, &theme);
+
+        // Very small area - should early return without panic
+        let area = Rect::new(0, 0, 10, 5);
+        let mut buffer = Buffer::empty(area);
+        heatmap.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
+    }
+
+    #[test]
+    fn test_weeks_to_display_constant() {
+        // Verify we show a full year
+        assert_eq!(WEEKS_TO_DISPLAY, 52);
     }
 }

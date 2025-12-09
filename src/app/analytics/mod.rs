@@ -10,10 +10,10 @@
 //!
 //! | Module | Responsibility |
 //! |--------|----------------|
-//! | [`trends`] | Completion trends and velocity calculations |
-//! | [`breakdowns`] | Status, priority, and tag breakdowns |
-//! | [`insights`] | Productivity insights (streaks, best day, peak hour) |
-//! | [`time`] | Time tracking analytics and burndown charts |
+//! | `trends` | Completion trends and velocity calculations |
+//! | `breakdowns` | Status, priority, and tag breakdowns |
+//! | `insights` | Productivity insights (streaks, best day, peak hour) |
+//! | `time` | Time tracking analytics and burndown charts |
 //!
 //! # Example
 //!

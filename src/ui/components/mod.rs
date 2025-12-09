@@ -1,3 +1,49 @@
+//! UI components for the TaskFlow TUI.
+//!
+//! This module provides all the visual components used to render the TaskFlow
+//! terminal user interface. Each component is a Ratatui widget that can be
+//! composed to build the complete UI.
+//!
+//! # Component Categories
+//!
+//! ## Core Views
+//! - [`TaskList`] - Main task list with selection and status indicators
+//! - [`Sidebar`] - Navigation panel with views and projects
+//! - [`FocusView`] - Detailed single-task view
+//!
+//! ## Specialized Views
+//! - [`Calendar`] - Monthly calendar with task indicators
+//! - [`Kanban`] - Kanban board with status columns
+//! - [`Eisenhower`] - Urgency/importance matrix
+//! - [`WeeklyPlanner`] - Week-at-a-glance planning view
+//! - [`Timeline`] - Chronological task timeline
+//! - [`Network`] - Task dependency graph visualization
+//!
+//! ## Analytics & Reports
+//! - [`Dashboard`] - Overview statistics and metrics
+//! - [`Reports`] - Detailed analytics panels
+//! - [`Burndown`] - Project burndown charts
+//! - [`Forecast`] - Workload forecasting
+//! - [`Heatmap`] - GitHub-style activity heatmap
+//!
+//! ## Editors & Pickers
+//! - [`InputWidget`] - Text input with cursor
+//! - [`DescriptionEditor`] - Multi-line text editor
+//! - [`TemplatePicker`] - Task template selection
+//! - [`SavedFilterPicker`] - Filter preset selection
+//! - [`KeybindingsEditor`] - Keybinding customization
+//! - [`TimeLogEditor`] - Time entry management
+//! - [`WorkLogEditor`] - Work log entry editor
+//!
+//! ## Reviews
+//! - [`DailyReview`] - Daily task review workflow
+//! - [`WeeklyReview`] - Weekly planning review
+//!
+//! ## Utilities
+//! - [`Help`] - Keybinding help popup
+//! - [`Habits`] - Habit tracking view
+//! - [`charts`] - Shared chart rendering utilities
+
 mod burndown;
 mod calendar;
 pub mod charts;

@@ -25,6 +25,7 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("x".to_string(), Action::ToggleComplete);
     bindings.insert("space".to_string(), Action::ToggleComplete);
     bindings.insert("a".to_string(), Action::CreateTask);
+    bindings.insert("Q".to_string(), Action::QuickCapture);
     bindings.insert("A".to_string(), Action::CreateSubtask);
     bindings.insert("P".to_string(), Action::CreateProject);
     bindings.insert("E".to_string(), Action::EditProject);

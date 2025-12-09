@@ -15,8 +15,8 @@ use super::components::{
     centered_rect, centered_rect_fixed_height, Burndown, Calendar, ConfirmDialog, DailyReview,
     Dashboard, DescriptionEditor, Eisenhower, FocusView, Forecast, HabitAnalyticsPopup, HabitsView,
     Heatmap, HelpPopup, InputDialog, InputMode, InputTarget, Kanban, KeybindingsEditor, Network,
-    OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, StorageErrorAlert, TaskList,
-    TemplatePicker, TimeLogEditor, Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
+    OverdueAlert, QuickCaptureDialog, ReportsView, SavedFilterPicker, Sidebar, StorageErrorAlert,
+    TaskList, TemplatePicker, TimeLogEditor, Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -81,11 +81,23 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             InputTarget::SnoozeTask(_) => "Snooze Until (YYYY-MM-DD)",
             InputTarget::NewHabit => "New Habit",
             InputTarget::EditHabit(_) => "Edit Habit",
+            InputTarget::QuickCapture => "Quick Capture",
         };
-        frame.render_widget(
-            InputDialog::new(title, &model.input_buffer, model.cursor_position),
-            input_area,
-        );
+
+        // QuickCapture gets a special larger dialog with syntax hints
+        if model.input_target == InputTarget::QuickCapture {
+            // Height: 9 rows (input + hints area)
+            let quick_area = centered_rect_fixed_height(70, 9, area);
+            frame.render_widget(
+                QuickCaptureDialog::new(&model.input_buffer, model.cursor_position),
+                quick_area,
+            );
+        } else {
+            frame.render_widget(
+                InputDialog::new(title, &model.input_buffer, model.cursor_position),
+                input_area,
+            );
+        }
     }
 
     // Render delete confirmation dialog

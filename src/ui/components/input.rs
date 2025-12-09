@@ -43,6 +43,7 @@ pub enum InputTarget {
     EditEstimate(TaskId),         // Time estimate for a task (e.g., "30m", "2h", "1h30m")
     NewHabit,                     // Creating a new habit
     EditHabit(HabitId),           // Editing an existing habit's name
+    QuickCapture,                 // Quick capture mode with syntax hints
 }
 
 /// Input dialog for creating/editing items
@@ -92,6 +93,96 @@ impl Widget for InputDialog<'_> {
             );
 
         paragraph.render(area, buf);
+    }
+}
+
+/// Quick capture dialog with syntax hints
+pub struct QuickCaptureDialog<'a> {
+    input: &'a str,
+    cursor_position: usize,
+}
+
+impl<'a> QuickCaptureDialog<'a> {
+    #[must_use]
+    pub const fn new(input: &'a str, cursor_position: usize) -> Self {
+        Self {
+            input,
+            cursor_position,
+        }
+    }
+}
+
+impl Widget for QuickCaptureDialog<'_> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        use ratatui::layout::{Constraint, Direction, Layout};
+        use ratatui::text::{Line, Span};
+
+        Clear.render(area, buf);
+
+        let block = Block::default()
+            .title(" Quick Capture (Esc to close, Enter to add) ")
+            .title_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        // Split into input line and hints
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
+            .split(inner);
+
+        // Render input with cursor
+        let display_text = if self.cursor_position < self.input.len() {
+            let (before, after) = self.input.split_at(self.cursor_position);
+            let (_cursor_char, rest) = after.split_at(1);
+            format!("{before}▌{rest}")
+        } else {
+            format!("{}▌", self.input)
+        };
+
+        let input_line = Paragraph::new(display_text).style(Style::default().fg(Color::White));
+        input_line.render(chunks[0], buf);
+
+        // Render hints
+        let hints = [
+            Line::from(vec![
+                Span::styled("#tag ", Style::default().fg(Color::Green)),
+                Span::styled("@project ", Style::default().fg(Color::Magenta)),
+                Span::styled("!priority ", Style::default().fg(Color::Yellow)),
+                Span::styled("due:date ", Style::default().fg(Color::Red)),
+                Span::styled("sched:date", Style::default().fg(Color::Blue)),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Examples: ",
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled(
+                    "Buy milk #groceries @Home !high due:tomorrow",
+                    Style::default().fg(Color::DarkGray),
+                ),
+            ]),
+        ];
+
+        for (i, line) in hints.iter().enumerate() {
+            if i + 2 < chunks.len() {
+                let hint_para = Paragraph::new(line.clone());
+                hint_para.render(chunks[i + 2], buf);
+            }
+        }
     }
 }
 

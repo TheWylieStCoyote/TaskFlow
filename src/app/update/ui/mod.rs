@@ -120,6 +120,12 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.input_buffer.clear();
             model.cursor_position = 0;
         }
+        UiMessage::StartQuickCapture => {
+            model.input_mode = InputMode::Editing;
+            model.input_target = InputTarget::QuickCapture;
+            model.input_buffer.clear();
+            model.cursor_position = 0;
+        }
         UiMessage::StartCreateSubtask => {
             // Create a subtask under the currently selected task
             if let Some(parent_id) = model.visible_tasks.get(model.selected_index).copied() {

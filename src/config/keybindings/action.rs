@@ -17,6 +17,7 @@ pub enum Action {
     // Task actions
     ToggleComplete,
     CreateTask,
+    QuickCapture,
     CreateSubtask,
     CreateProject,
     EditProject,
@@ -236,6 +237,7 @@ impl Action {
             // Task actions
             Self::ToggleComplete => "Toggle complete",
             Self::CreateTask => "Create task",
+            Self::QuickCapture => "Quick capture with hints",
             Self::CreateSubtask => "Create subtask",
             Self::EditTask => "Edit task title",
             Self::EditDueDate => "Edit due date",
@@ -363,6 +365,7 @@ impl Action {
 
             Self::ToggleComplete
             | Self::CreateTask
+            | Self::QuickCapture
             | Self::CreateSubtask
             | Self::EditTask
             | Self::EditDueDate

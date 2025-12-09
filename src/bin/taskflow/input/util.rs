@@ -58,6 +58,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::PageDown => Message::Navigation(NavigationMessage::PageDown),
         Action::ToggleComplete => Message::Task(taskflow::app::TaskMessage::ToggleComplete),
         Action::CreateTask => Message::Ui(UiMessage::StartCreateTask),
+        Action::QuickCapture => Message::Ui(UiMessage::StartQuickCapture),
         Action::CreateSubtask => Message::Ui(UiMessage::StartCreateSubtask),
         Action::CreateProject => Message::Ui(UiMessage::StartCreateProject),
         Action::EditProject => Message::Ui(UiMessage::StartEditProject),

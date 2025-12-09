@@ -346,6 +346,8 @@ pub enum UiMessage {
     // Input mode - starting various edit operations
     /// Enter input mode to create a new task
     StartCreateTask,
+    /// Enter quick capture mode with syntax hints
+    StartQuickCapture,
     /// Enter input mode to create a subtask
     StartCreateSubtask,
     /// Enter input mode to create a new project

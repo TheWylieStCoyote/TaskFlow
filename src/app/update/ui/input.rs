@@ -24,6 +24,26 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.refresh_visible_tasks();
             }
         }
+        InputTarget::QuickCapture => {
+            if !input.is_empty() {
+                let task = create_task_from_quick_add(&input, model, None);
+                let title = task.title.clone();
+                let task_id = task.id;
+                // Insert first (moves task), then sync by id
+                model
+                    .undo_stack
+                    .push(UndoAction::TaskCreated(Box::new(task.clone())));
+                model.tasks.insert(task_id, task);
+                model.sync_task_by_id(&task_id);
+                model.refresh_visible_tasks();
+                // Show confirmation and stay ready for another capture
+                model.status_message = Some(format!("Task created: {title}"));
+                model.input_buffer.clear();
+                model.cursor_position = 0;
+                // Don't reset input_mode - stay in QuickCapture mode
+                return;
+            }
+        }
         InputTarget::Subtask(parent_id) => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, Some(*parent_id));

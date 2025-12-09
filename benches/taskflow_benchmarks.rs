@@ -217,6 +217,253 @@ fn bench_undo_redo(c: &mut Criterion) {
     group.finish();
 }
 
+// ============================================================================
+// Storage Backend Benchmarks
+// ============================================================================
+
+use taskflow::storage::{create_backend, BackendType};
+use tempfile::tempdir;
+
+/// Create N tasks for storage benchmarks.
+fn create_tasks(n: usize) -> Vec<Task> {
+    (0..n)
+        .map(|i| {
+            let mut task = Task::new(format!("Task {}", i));
+            if i % 5 == 0 {
+                task.status = TaskStatus::Done;
+            }
+            if i % 3 == 0 {
+                task.priority = Priority::High;
+            }
+            if i % 7 == 0 {
+                task.tags.push("urgent".to_string());
+            }
+            task
+        })
+        .collect()
+}
+
+/// Benchmark storage backend write operations.
+fn bench_storage_write(c: &mut Criterion) {
+    let mut group = c.benchmark_group("storage_write");
+
+    // JSON backend write
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("json", size), size, |b, &size| {
+            let tasks = create_tasks(size);
+            b.iter_batched(
+                || {
+                    let dir = tempdir().unwrap();
+                    let path = dir.path().join("bench.json");
+                    let backend = create_backend(BackendType::Json, &path).unwrap();
+                    (dir, backend, tasks.clone())
+                },
+                |(_dir, mut backend, tasks)| {
+                    for task in &tasks {
+                        backend.create_task(task).unwrap();
+                    }
+                    backend.flush().unwrap();
+                    black_box(())
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+
+    // SQLite backend write
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("sqlite", size), size, |b, &size| {
+            let tasks = create_tasks(size);
+            b.iter_batched(
+                || {
+                    let dir = tempdir().unwrap();
+                    let path = dir.path().join("bench.db");
+                    let backend = create_backend(BackendType::Sqlite, &path).unwrap();
+                    (dir, backend, tasks.clone())
+                },
+                |(_dir, mut backend, tasks)| {
+                    for task in &tasks {
+                        backend.create_task(task).unwrap();
+                    }
+                    backend.flush().unwrap();
+                    black_box(())
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+
+    // YAML backend write
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("yaml", size), size, |b, &size| {
+            let tasks = create_tasks(size);
+            b.iter_batched(
+                || {
+                    let dir = tempdir().unwrap();
+                    let path = dir.path().join("bench.yaml");
+                    let backend = create_backend(BackendType::Yaml, &path).unwrap();
+                    (dir, backend, tasks.clone())
+                },
+                |(_dir, mut backend, tasks)| {
+                    for task in &tasks {
+                        backend.create_task(task).unwrap();
+                    }
+                    backend.flush().unwrap();
+                    black_box(())
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark storage backend read operations.
+fn bench_storage_read(c: &mut Criterion) {
+    let mut group = c.benchmark_group("storage_read");
+
+    // JSON backend read
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("json", size), size, |b, &size| {
+            // Setup: create backend with tasks
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("bench.json");
+            let tasks = create_tasks(size);
+            {
+                let mut backend = create_backend(BackendType::Json, &path).unwrap();
+                for task in &tasks {
+                    backend.create_task(task).unwrap();
+                }
+                backend.flush().unwrap();
+            }
+
+            b.iter(|| {
+                let backend = create_backend(BackendType::Json, &path).unwrap();
+                let listed = backend.list_tasks().unwrap();
+                black_box(listed.len())
+            });
+        });
+    }
+
+    // SQLite backend read
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("sqlite", size), size, |b, &size| {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("bench.db");
+            let tasks = create_tasks(size);
+            {
+                let mut backend = create_backend(BackendType::Sqlite, &path).unwrap();
+                for task in &tasks {
+                    backend.create_task(task).unwrap();
+                }
+                backend.flush().unwrap();
+            }
+
+            b.iter(|| {
+                let backend = create_backend(BackendType::Sqlite, &path).unwrap();
+                let listed = backend.list_tasks().unwrap();
+                black_box(listed.len())
+            });
+        });
+    }
+
+    // YAML backend read
+    for size in [10, 50, 100].iter() {
+        group.bench_with_input(BenchmarkId::new("yaml", size), size, |b, &size| {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("bench.yaml");
+            let tasks = create_tasks(size);
+            {
+                let mut backend = create_backend(BackendType::Yaml, &path).unwrap();
+                for task in &tasks {
+                    backend.create_task(task).unwrap();
+                }
+                backend.flush().unwrap();
+            }
+
+            b.iter(|| {
+                let backend = create_backend(BackendType::Yaml, &path).unwrap();
+                let listed = backend.list_tasks().unwrap();
+                black_box(listed.len())
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark storage backend filtered queries.
+fn bench_storage_filtered(c: &mut Criterion) {
+    use taskflow::domain::Filter;
+
+    let mut group = c.benchmark_group("storage_filtered");
+
+    for size in [50, 100, 200].iter() {
+        // JSON filtered query
+        group.bench_with_input(
+            BenchmarkId::new("json_filter_status", size),
+            size,
+            |b, &size| {
+                let dir = tempdir().unwrap();
+                let path = dir.path().join("bench.json");
+                let tasks = create_tasks(size);
+                {
+                    let mut backend = create_backend(BackendType::Json, &path).unwrap();
+                    for task in &tasks {
+                        backend.create_task(task).unwrap();
+                    }
+                    backend.flush().unwrap();
+                }
+
+                let filter = Filter {
+                    status: Some(vec![TaskStatus::Done]),
+                    include_completed: true,
+                    ..Default::default()
+                };
+
+                b.iter(|| {
+                    let backend = create_backend(BackendType::Json, &path).unwrap();
+                    let filtered = backend.list_tasks_filtered(&filter).unwrap();
+                    black_box(filtered.len())
+                });
+            },
+        );
+
+        // SQLite filtered query
+        group.bench_with_input(
+            BenchmarkId::new("sqlite_filter_status", size),
+            size,
+            |b, &size| {
+                let dir = tempdir().unwrap();
+                let path = dir.path().join("bench.db");
+                let tasks = create_tasks(size);
+                {
+                    let mut backend = create_backend(BackendType::Sqlite, &path).unwrap();
+                    for task in &tasks {
+                        backend.create_task(task).unwrap();
+                    }
+                    backend.flush().unwrap();
+                }
+
+                let filter = Filter {
+                    status: Some(vec![TaskStatus::Done]),
+                    include_completed: true,
+                    ..Default::default()
+                };
+
+                b.iter(|| {
+                    let backend = create_backend(BackendType::Sqlite, &path).unwrap();
+                    let filtered = backend.list_tasks_filtered(&filter).unwrap();
+                    black_box(filtered.len())
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_task_filtering,
@@ -225,6 +472,9 @@ criterion_group!(
     bench_navigation,
     bench_search,
     bench_undo_redo,
+    bench_storage_write,
+    bench_storage_read,
+    bench_storage_filtered,
 );
 
 criterion_main!(benches);

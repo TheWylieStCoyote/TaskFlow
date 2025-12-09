@@ -36,14 +36,17 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
             KeyCode::Left => return Some(Message::Ui(UiMessage::CalendarPrevDay)),
             KeyCode::Right => return Some(Message::Ui(UiMessage::CalendarNextDay)),
             KeyCode::Char('h') => return Some(Message::Ui(UiMessage::CalendarPrevDay)),
-            KeyCode::Char('l') => {
-                // l moves to task list if there are tasks, otherwise next day
+            KeyCode::Char('l') | KeyCode::Enter => {
+                // l/Enter moves to task list if there are tasks, otherwise next day (for l only)
                 if !model.tasks_for_selected_day().is_empty() {
                     return Some(Message::Navigation(
                         NavigationMessage::CalendarFocusTaskList,
                     ));
                 }
-                return Some(Message::Ui(UiMessage::CalendarNextDay));
+                // Enter stays on grid if no tasks, l advances to next day
+                if key.code == KeyCode::Char('l') {
+                    return Some(Message::Ui(UiMessage::CalendarNextDay));
+                }
             }
             _ => {}
         }

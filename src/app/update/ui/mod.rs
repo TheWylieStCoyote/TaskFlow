@@ -689,6 +689,28 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.show_archived_habits = !model.show_archived_habits;
             model.refresh_visible_habits();
         }
+        UiMessage::TimelineToggleDependencies => {
+            model.timeline_state.show_dependencies = !model.timeline_state.show_dependencies;
+        }
+        UiMessage::TimelineViewSelected => {
+            // Get timeline tasks (filtered and sorted same as timeline widget)
+            let timeline_tasks: Vec<_> = model
+                .visible_tasks
+                .iter()
+                .filter_map(|id| model.tasks.get(id))
+                .filter(|t| t.scheduled_date.is_some() || t.due_date.is_some())
+                .collect();
+
+            // Get the selected task from timeline
+            if let Some(task) = timeline_tasks.get(model.timeline_state.selected_task_index) {
+                let task_id = task.id;
+                // Find this task's position in visible_tasks
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                    model.focus_mode = true;
+                }
+            }
+        }
     }
 }
 

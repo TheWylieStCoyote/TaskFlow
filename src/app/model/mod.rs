@@ -54,7 +54,7 @@ mod time_tracking;
 mod types;
 
 pub use cache::{FooterStats, TaskCache};
-pub use types::{CalendarState, RunningState};
+pub use types::{CalendarState, RunningState, TimelineState, TimelineZoom};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -85,8 +85,8 @@ use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 /// Number of view items in the sidebar (before the separator).
 /// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
 ///        Dashboard, Reports, Habits, Blocked, Untagged, No Project, Recent,
-///        Kanban, Eisenhower, Weekly Planner, Snoozed
-pub const SIDEBAR_VIEW_COUNT: usize = 17;
+///        Kanban, Eisenhower, Weekly Planner, Timeline, Snoozed
+pub const SIDEBAR_VIEW_COUNT: usize = 18;
 
 /// Index of the separator line in the sidebar.
 pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
@@ -342,6 +342,18 @@ pub struct Model {
     /// Selected index within current review phase
     pub weekly_review_selected: usize,
 
+    // Timeline state
+    /// State for the timeline/Gantt view
+    pub timeline_state: TimelineState,
+
+    // View-specific selection state
+    /// Selected column in Kanban view (0-3: Todo, InProgress, Blocked, Done)
+    pub kanban_selected_column: usize,
+    /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
+    pub eisenhower_selected_quadrant: usize,
+    /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
+    pub weekly_planner_selected_day: usize,
+
     // Habit tracking
     /// All habits indexed by ID
     pub habits: HashMap<HabitId, Habit>,
@@ -458,6 +470,10 @@ impl Model {
             show_weekly_review: false,
             weekly_review_phase: crate::ui::WeeklyReviewPhase::default(),
             weekly_review_selected: 0,
+            timeline_state: TimelineState::default(),
+            kanban_selected_column: 0,
+            eisenhower_selected_quadrant: 0,
+            weekly_planner_selected_day: 0,
             habits: HashMap::new(),
             visible_habits: Vec::new(),
             habit_selected: 0,

@@ -63,8 +63,9 @@ impl Widget for Kanban<'_> {
             .split(area);
 
         // Render each column
+        let selected_column = self.model.kanban_selected_column;
         for (i, (status, title, color)) in columns.iter().enumerate() {
-            self.render_column(chunks[i], buf, *status, title, *color);
+            self.render_column(chunks[i], buf, *status, title, *color, i == selected_column);
         }
     }
 }
@@ -77,6 +78,7 @@ impl Kanban<'_> {
         status: TaskStatus,
         title: &str,
         title_color: Color,
+        is_selected: bool,
     ) {
         let theme = self.theme;
 
@@ -91,7 +93,13 @@ impl Kanban<'_> {
 
         let count = tasks.len();
 
-        // Create the column block
+        // Create the column block with selection highlight
+        let border_color = if is_selected {
+            theme.colors.accent.to_color()
+        } else {
+            theme.colors.border.to_color()
+        };
+
         let block = Block::default()
             .title(format!(" {} ({}) ", title, count))
             .title_style(
@@ -100,7 +108,7 @@ impl Kanban<'_> {
                     .add_modifier(Modifier::BOLD),
             )
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+            .border_style(Style::default().fg(border_color));
 
         let inner = block.inner(area);
         block.render(area, buf);

@@ -139,6 +139,36 @@ pub enum NavigationMessage {
     ReportsNextPanel,
     /// Navigate to previous panel in reports view
     ReportsPrevPanel,
+    /// Scroll timeline viewport left (earlier dates)
+    TimelineScrollLeft,
+    /// Scroll timeline viewport right (later dates)
+    TimelineScrollRight,
+    /// Zoom in on timeline (Week → Day)
+    TimelineZoomIn,
+    /// Zoom out on timeline (Day → Week)
+    TimelineZoomOut,
+    /// Jump to today in timeline
+    TimelineGoToday,
+    /// Navigate up in timeline task list
+    TimelineUp,
+    /// Navigate down in timeline task list
+    TimelineDown,
+    /// Navigate left in Kanban view (previous column)
+    KanbanLeft,
+    /// Navigate right in Kanban view (next column)
+    KanbanRight,
+    /// Navigate up in Eisenhower view (to upper quadrant)
+    EisenhowerUp,
+    /// Navigate down in Eisenhower view (to lower quadrant)
+    EisenhowerDown,
+    /// Navigate left in Eisenhower view (to left quadrant)
+    EisenhowerLeft,
+    /// Navigate right in Eisenhower view (to right quadrant)
+    EisenhowerRight,
+    /// Navigate left in WeeklyPlanner view (previous day)
+    WeeklyPlannerLeft,
+    /// Navigate right in WeeklyPlanner view (next day)
+    WeeklyPlannerRight,
 }
 
 /// View identifiers for different application screens.
@@ -193,6 +223,8 @@ pub enum ViewId {
     Eisenhower,
     /// Weekly planner view with day columns
     WeeklyPlanner,
+    /// Timeline/Gantt view showing tasks as bars on time axis
+    Timeline,
     /// Snoozed tasks (hidden until snooze date)
     Snoozed,
     /// Habit tracking view
@@ -616,6 +648,12 @@ pub enum UiMessage {
     HabitDelete,
     /// Toggle showing archived habits
     HabitToggleShowArchived,
+
+    // Timeline view
+    /// Toggle showing dependency lines in timeline
+    TimelineToggleDependencies,
+    /// View selected task details from timeline (opens focus mode)
+    TimelineViewSelected,
 }
 
 /// System-level messages for application control.

@@ -26,6 +26,7 @@ struct DayColumnParams<'a> {
     tasks: Vec<&'a Task>,
     is_today: bool,
     is_past: bool,
+    is_selected: bool,
 }
 
 /// Weekly planner widget showing tasks organized by day.
@@ -114,6 +115,7 @@ impl Widget for WeeklyPlanner<'_> {
             .split(main_chunks[1]);
 
         // Render each day column
+        let selected_day = self.model.weekly_planner_selected_day;
         for (i, (date, day_name)) in days.iter().enumerate() {
             let params = DayColumnParams {
                 area: day_columns[i],
@@ -122,6 +124,7 @@ impl Widget for WeeklyPlanner<'_> {
                 tasks: self.tasks_for_date(*date),
                 is_today: *date == today,
                 is_past: *date < today,
+                is_selected: i == selected_day,
             };
             self.render_day_column(buf, params);
         }
@@ -137,6 +140,7 @@ impl WeeklyPlanner<'_> {
             tasks,
             is_today,
             is_past,
+            is_selected,
         } = params;
         let theme = self.theme;
 
@@ -152,8 +156,11 @@ impl WeeklyPlanner<'_> {
         // Format title with day name and date
         let title = format!(" {} {} ({}) ", day_name, date.day(), tasks.len());
 
-        let border_color = if is_today {
+        // Selection takes precedence over today highlight for border
+        let border_color = if is_selected {
             theme.colors.accent.to_color()
+        } else if is_today {
+            theme.colors.success.to_color()
         } else {
             theme.colors.border.to_color()
         };

@@ -320,6 +320,10 @@ impl Model {
                 // Habits view shows habits, not tasks - filter out all tasks
                 false
             }
+            ViewId::Timeline => {
+                // Timeline shows tasks with at least one date (scheduled or due)
+                task.scheduled_date.is_some() || task.due_date.is_some()
+            }
         }
     }
 

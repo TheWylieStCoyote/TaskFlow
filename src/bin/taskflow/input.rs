@@ -114,6 +114,41 @@ pub fn handle_key_event(
         }
     }
 
+    // In Timeline view, handle timeline-specific actions
+    if model.current_view == taskflow::app::ViewId::Timeline {
+        if let Some(msg) = handle_timeline_view(key) {
+            return msg;
+        }
+    }
+
+    // In Kanban view, handle column navigation
+    if model.current_view == taskflow::app::ViewId::Kanban {
+        if let Some(msg) = handle_kanban_view(key) {
+            return msg;
+        }
+    }
+
+    // In Eisenhower view, handle quadrant navigation
+    if model.current_view == taskflow::app::ViewId::Eisenhower {
+        if let Some(msg) = handle_eisenhower_view(key) {
+            return msg;
+        }
+    }
+
+    // In WeeklyPlanner view, handle day navigation
+    if model.current_view == taskflow::app::ViewId::WeeklyPlanner {
+        if let Some(msg) = handle_weekly_planner_view(key) {
+            return msg;
+        }
+    }
+
+    // In Reports view, handle exit
+    if model.current_view == taskflow::app::ViewId::Reports {
+        if let Some(msg) = handle_reports_view(key) {
+            return msg;
+        }
+    }
+
     // If habit analytics is showing, handle it
     if model.show_habit_analytics {
         return match key.code {
@@ -320,6 +355,13 @@ fn handle_description_editor(key: event::KeyEvent) -> Message {
 }
 
 fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<Message> {
+    // Esc exits to task list
+    if key.code == KeyCode::Esc {
+        return Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        )));
+    }
+
     // Tab toggles focus between calendar grid and task list
     if key.code == KeyCode::Tab {
         return Some(if model.calendar_state.focus_task_list {
@@ -361,6 +403,10 @@ fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<Messa
 
 fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
     match key.code {
+        // Exit to task list
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => Some(Message::Ui(UiMessage::HabitUp)),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::Ui(UiMessage::HabitDown)),
@@ -384,6 +430,43 @@ fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
         KeyCode::Char('A') => Some(Message::Ui(UiMessage::HabitArchive)),
         // Toggle showing archived habits
         KeyCode::Char('H') => Some(Message::Ui(UiMessage::HabitToggleShowArchived)),
+        _ => None,
+    }
+}
+
+fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        // Exit timeline view
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        // Scroll time axis
+        KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::TimelineScrollLeft))
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            Some(Message::Navigation(NavigationMessage::TimelineScrollRight))
+        }
+        // Navigate tasks
+        KeyCode::Up | KeyCode::Char('k') => {
+            Some(Message::Navigation(NavigationMessage::TimelineUp))
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            Some(Message::Navigation(NavigationMessage::TimelineDown))
+        }
+        // Zoom controls
+        KeyCode::Char('<') | KeyCode::Char(',') => {
+            Some(Message::Navigation(NavigationMessage::TimelineZoomOut))
+        }
+        KeyCode::Char('>') | KeyCode::Char('.') => {
+            Some(Message::Navigation(NavigationMessage::TimelineZoomIn))
+        }
+        // Jump to today
+        KeyCode::Char('t') => Some(Message::Navigation(NavigationMessage::TimelineGoToday)),
+        // Toggle dependency lines
+        KeyCode::Char('d') => Some(Message::Ui(UiMessage::TimelineToggleDependencies)),
+        // View task details (focus mode)
+        KeyCode::Enter => Some(Message::Ui(UiMessage::TimelineViewSelected)),
         _ => None,
     }
 }
@@ -559,5 +642,67 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowHabitAnalytics => Message::Ui(UiMessage::ShowHabitAnalytics),
         Action::HabitToggleShowArchived => Message::Ui(UiMessage::HabitToggleShowArchived),
         Action::HabitArchive => Message::Ui(UiMessage::HabitArchive),
+    }
+}
+
+fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::KanbanLeft))
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            Some(Message::Navigation(NavigationMessage::KanbanRight))
+        }
+        _ => None,
+    }
+}
+
+fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::EisenhowerLeft))
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            Some(Message::Navigation(NavigationMessage::EisenhowerRight))
+        }
+        KeyCode::Char('k') | KeyCode::Up => {
+            Some(Message::Navigation(NavigationMessage::EisenhowerUp))
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::EisenhowerDown))
+        }
+        _ => None,
+    }
+}
+
+fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerLeft))
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerRight))
+        }
+        _ => None,
+    }
+}
+
+fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
+        KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
+        _ => None,
     }
 }

@@ -1,6 +1,6 @@
 //! Core types for the application model.
 
-use chrono::{Datelike, Utc};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 
 /// State for the calendar view.
 ///
@@ -59,4 +59,50 @@ pub enum RunningState {
     Running,
     /// Application is shutting down
     Quitting,
+}
+
+/// Zoom level for the timeline view.
+///
+/// Controls how time is displayed on the horizontal axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimelineZoom {
+    /// Each column represents one day
+    #[default]
+    Day,
+    /// Each column represents one week
+    Week,
+}
+
+/// State for the timeline/Gantt view.
+///
+/// Tracks the viewport position, selection, and display options.
+#[derive(Debug, Clone)]
+pub struct TimelineState {
+    /// Leftmost visible date in the viewport
+    pub viewport_start: NaiveDate,
+    /// Number of days visible in the viewport
+    pub viewport_days: u32,
+    /// Index of the selected task in the timeline list
+    pub selected_task_index: usize,
+    /// Whether to show dependency lines between tasks
+    pub show_dependencies: bool,
+    /// Current zoom level
+    pub zoom_level: TimelineZoom,
+    /// Vertical scroll offset for task list
+    pub task_scroll_offset: usize,
+}
+
+impl Default for TimelineState {
+    fn default() -> Self {
+        let today = Utc::now().date_naive();
+        Self {
+            // Start viewport 7 days before today
+            viewport_start: today - Duration::days(7),
+            viewport_days: 21,
+            selected_task_index: 0,
+            show_dependencies: false,
+            zoom_level: TimelineZoom::default(),
+            task_scroll_offset: 0,
+        }
+    }
 }

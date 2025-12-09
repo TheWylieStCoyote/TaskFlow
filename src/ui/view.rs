@@ -13,10 +13,10 @@ use crate::app::ViewId;
 
 use super::components::{
     centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
-    DescriptionEditor, Eisenhower, FocusView, HabitsView, HelpPopup, InputDialog, InputMode,
-    InputTarget, Kanban, KeybindingsEditor, OverdueAlert, ReportsView, SavedFilterPicker, Sidebar,
-    StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor, WeeklyPlanner, WeeklyReview,
-    WorkLogEditor,
+    DescriptionEditor, Eisenhower, FocusView, HabitAnalyticsPopup, HabitsView, HelpPopup,
+    InputDialog, InputMode, InputTarget, Kanban, KeybindingsEditor, OverdueAlert, ReportsView,
+    SavedFilterPicker, Sidebar, StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor,
+    Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -277,6 +277,12 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             review_area,
         );
     }
+
+    // Render habit analytics popup
+    if model.show_habit_analytics {
+        let popup_area = centered_rect_fixed_height(50, 12, area);
+        frame.render_widget(HabitAnalyticsPopup::new(model, theme), popup_area);
+    }
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
@@ -354,6 +360,10 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
         ViewId::WeeklyPlanner => {
             let planner = WeeklyPlanner::new(model, theme);
             frame.render_widget(planner, area);
+        }
+        ViewId::Timeline => {
+            let timeline = Timeline::new(model, theme);
+            frame.render_widget(timeline, area);
         }
         _ => {
             let task_list = TaskList::new(model, theme);

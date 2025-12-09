@@ -105,7 +105,9 @@ impl Widget for Eisenhower<'_> {
             (ui, nui, uni, nuni)
         };
 
-        // Render quadrants
+        // Render quadrants (0=TL, 1=TR, 2=BL, 3=BR)
+        let selected = self.model.eisenhower_selected_quadrant;
+
         // Top-left: Urgent + Important (DO FIRST)
         self.render_quadrant(
             top_cols[0],
@@ -114,6 +116,7 @@ impl Widget for Eisenhower<'_> {
             "Urgent & Important",
             &urgent_important,
             theme.colors.danger.to_color(),
+            selected == 0,
         );
 
         // Top-right: Not Urgent + Important (SCHEDULE)
@@ -124,6 +127,7 @@ impl Widget for Eisenhower<'_> {
             "Important, Not Urgent",
             &not_urgent_important,
             theme.colors.accent.to_color(),
+            selected == 1,
         );
 
         // Bottom-left: Urgent + Not Important (DELEGATE)
@@ -134,6 +138,7 @@ impl Widget for Eisenhower<'_> {
             "Urgent, Not Important",
             &urgent_not_important,
             theme.colors.warning.to_color(),
+            selected == 2,
         );
 
         // Bottom-right: Not Urgent + Not Important (ELIMINATE)
@@ -144,6 +149,7 @@ impl Widget for Eisenhower<'_> {
             "Not Urgent or Important",
             &not_urgent_not_important,
             theme.colors.muted.to_color(),
+            selected == 3,
         );
     }
 }
@@ -157,8 +163,15 @@ impl Eisenhower<'_> {
         subtitle: &str,
         tasks: &[&Task],
         title_color: Color,
+        is_selected: bool,
     ) {
         let theme = self.theme;
+
+        let border_color = if is_selected {
+            theme.colors.accent.to_color()
+        } else {
+            theme.colors.border.to_color()
+        };
 
         let block = Block::default()
             .title(format!(" {} ({}) ", title, tasks.len()))
@@ -168,7 +181,7 @@ impl Eisenhower<'_> {
                     .add_modifier(Modifier::BOLD),
             )
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+            .border_style(Style::default().fg(border_color));
 
         let inner = block.inner(area);
         block.render(area, buf);

@@ -110,6 +110,8 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             model.current_view = view_id;
             model.selected_index = 0;
             model.selected_project = None;
+            model.focus_pane = FocusPane::TaskList;
+            model.show_habit_analytics = false; // Clear modal state when switching views
             model.refresh_visible_tasks();
         }
         NavigationMessage::FocusSidebar => {
@@ -187,6 +189,99 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.report_panel = model.report_panel.prev();
             }
         }
+        NavigationMessage::TimelineScrollLeft => {
+            if model.current_view == ViewId::Timeline {
+                model.timeline_state.viewport_start -= chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineScrollRight => {
+            if model.current_view == ViewId::Timeline {
+                model.timeline_state.viewport_start += chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineZoomIn => {
+            if model.current_view == ViewId::Timeline {
+                use crate::app::TimelineZoom;
+                if model.timeline_state.zoom_level == TimelineZoom::Week {
+                    model.timeline_state.zoom_level = TimelineZoom::Day;
+                }
+            }
+        }
+        NavigationMessage::TimelineZoomOut => {
+            if model.current_view == ViewId::Timeline {
+                use crate::app::TimelineZoom;
+                if model.timeline_state.zoom_level == TimelineZoom::Day {
+                    model.timeline_state.zoom_level = TimelineZoom::Week;
+                }
+            }
+        }
+        NavigationMessage::TimelineGoToday => {
+            if model.current_view == ViewId::Timeline {
+                let today = chrono::Utc::now().date_naive();
+                model.timeline_state.viewport_start = today - chrono::Duration::days(7);
+            }
+        }
+        NavigationMessage::TimelineUp => {
+            if model.current_view == ViewId::Timeline
+                && model.timeline_state.selected_task_index > 0
+            {
+                model.timeline_state.selected_task_index -= 1;
+            }
+        }
+        NavigationMessage::TimelineDown => {
+            if model.current_view == ViewId::Timeline {
+                let max_index = model.visible_tasks.len().saturating_sub(1);
+                if model.timeline_state.selected_task_index < max_index {
+                    model.timeline_state.selected_task_index += 1;
+                }
+            }
+        }
+        NavigationMessage::KanbanLeft => {
+            if model.current_view == ViewId::Kanban && model.kanban_selected_column > 0 {
+                model.kanban_selected_column -= 1;
+            }
+        }
+        NavigationMessage::KanbanRight => {
+            if model.current_view == ViewId::Kanban && model.kanban_selected_column < 3 {
+                model.kanban_selected_column += 1;
+            }
+        }
+        NavigationMessage::EisenhowerUp => {
+            if model.current_view == ViewId::Eisenhower && model.eisenhower_selected_quadrant >= 2 {
+                model.eisenhower_selected_quadrant -= 2;
+            }
+        }
+        NavigationMessage::EisenhowerDown => {
+            if model.current_view == ViewId::Eisenhower && model.eisenhower_selected_quadrant < 2 {
+                model.eisenhower_selected_quadrant += 2;
+            }
+        }
+        NavigationMessage::EisenhowerLeft => {
+            if model.current_view == ViewId::Eisenhower
+                && model.eisenhower_selected_quadrant % 2 == 1
+            {
+                model.eisenhower_selected_quadrant -= 1;
+            }
+        }
+        NavigationMessage::EisenhowerRight => {
+            if model.current_view == ViewId::Eisenhower
+                && model.eisenhower_selected_quadrant.is_multiple_of(2)
+            {
+                model.eisenhower_selected_quadrant += 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerLeft => {
+            if model.current_view == ViewId::WeeklyPlanner && model.weekly_planner_selected_day > 0
+            {
+                model.weekly_planner_selected_day -= 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerRight => {
+            if model.current_view == ViewId::WeeklyPlanner && model.weekly_planner_selected_day < 6
+            {
+                model.weekly_planner_selected_day += 1;
+            }
+        }
     }
 }
 
@@ -256,12 +351,12 @@ fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
     // Sidebar layout - see SIDEBAR_* constants in model.rs:
-    // 0-16: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
+    // 0-17: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
     //       Calendar, Dashboard, Reports, Habits, Blocked, Untagged, No Project,
-    //       Recent, Kanban, Eisenhower, Weekly Planner, Snoozed)
-    // SIDEBAR_SEPARATOR_INDEX (17): Separator (skip)
-    // SIDEBAR_PROJECTS_HEADER_INDEX (18): "Projects" header
-    // SIDEBAR_FIRST_PROJECT_INDEX+ (19+): Individual projects
+    //       Recent, Kanban, Eisenhower, Weekly Planner, Timeline, Snoozed)
+    // SIDEBAR_SEPARATOR_INDEX (18): Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX (19): "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+ (20+): Individual projects
 
     // Helper to activate a view
     let activate_view = |model: &mut Model, view: ViewId| {
@@ -289,7 +384,8 @@ fn handle_sidebar_selection(model: &mut Model) {
         13 => activate_view(model, ViewId::Kanban),
         14 => activate_view(model, ViewId::Eisenhower),
         15 => activate_view(model, ViewId::WeeklyPlanner),
-        16 => activate_view(model, ViewId::Snoozed),
+        16 => activate_view(model, ViewId::Timeline),
+        17 => activate_view(model, ViewId::Snoozed),
         n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks

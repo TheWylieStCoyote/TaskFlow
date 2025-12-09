@@ -488,7 +488,7 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
             frame.render_widget(forecast, area);
         }
         ViewId::Network => {
-            let network = Network::new(model, theme);
+            let network = Network::new(model, theme, model.view_selection.network_task_index);
             frame.render_widget(network, area);
         }
         ViewId::Burndown => {

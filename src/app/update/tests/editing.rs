@@ -596,3 +596,63 @@ fn test_cancel_edit_estimate() {
     assert_eq!(task.estimated_minutes, Some(60));
     assert_eq!(model.input_mode, InputMode::Normal);
 }
+
+// === Quick Reschedule ===
+
+#[test]
+fn test_reschedule_tomorrow() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+
+    // Set initial due date to today
+    let today = chrono::Local::now().date_naive();
+    model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
+
+    update(&mut model, Message::Ui(UiMessage::RescheduleTomorrow));
+
+    let task = model.tasks.get(&task_id).unwrap();
+    let tomorrow = today + chrono::Duration::days(1);
+    assert_eq!(task.due_date, Some(tomorrow));
+    assert!(model.status_message.is_some());
+}
+
+#[test]
+fn test_reschedule_next_week() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+
+    let today = chrono::Local::now().date_naive();
+    model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
+
+    update(&mut model, Message::Ui(UiMessage::RescheduleNextWeek));
+
+    let task = model.tasks.get(&task_id).unwrap();
+    let next_week = today + chrono::Duration::days(7);
+    assert_eq!(task.due_date, Some(next_week));
+}
+
+#[test]
+fn test_reschedule_next_monday() {
+    use chrono::Datelike;
+
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+
+    let today = chrono::Local::now().date_naive();
+    model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
+
+    update(&mut model, Message::Ui(UiMessage::RescheduleNextMonday));
+
+    let task = model.tasks.get(&task_id).unwrap();
+    // Verify it's a Monday
+    assert_eq!(
+        task.due_date.unwrap().weekday(),
+        chrono::Weekday::Mon,
+        "Should reschedule to a Monday"
+    );
+    // Verify it's in the future
+    assert!(
+        task.due_date.unwrap() > today,
+        "Should reschedule to a future date"
+    );
+}

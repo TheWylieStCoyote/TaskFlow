@@ -308,6 +308,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.weekly_planner_day > 0
             {
                 model.view_selection.weekly_planner_day -= 1;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::WeeklyPlannerRight => {
@@ -315,6 +316,37 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.weekly_planner_day < 6
             {
                 model.view_selection.weekly_planner_day += 1;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
+            }
+        }
+        NavigationMessage::WeeklyPlannerUp => {
+            if model.current_view == ViewId::WeeklyPlanner
+                && model.view_selection.weekly_planner_task_index > 0
+            {
+                model.view_selection.weekly_planner_task_index -= 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerDown => {
+            if model.current_view == ViewId::WeeklyPlanner {
+                let day_tasks =
+                    model.weekly_planner_day_tasks(model.view_selection.weekly_planner_day);
+                if model.view_selection.weekly_planner_task_index + 1 < day_tasks.len() {
+                    model.view_selection.weekly_planner_task_index += 1;
+                }
+            }
+        }
+        NavigationMessage::NetworkUp => {
+            if model.current_view == ViewId::Network && model.view_selection.network_task_index > 0
+            {
+                model.view_selection.network_task_index -= 1;
+            }
+        }
+        NavigationMessage::NetworkDown => {
+            if model.current_view == ViewId::Network {
+                let network_tasks = model.network_tasks();
+                if model.view_selection.network_task_index + 1 < network_tasks.len() {
+                    model.view_selection.network_task_index += 1;
+                }
             }
         }
         NavigationMessage::SidebarSelectIndex(index) => {
@@ -342,6 +374,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::WeeklyPlannerSelectDay(day) => {
             if model.current_view == ViewId::WeeklyPlanner && day < 7 {
                 model.view_selection.weekly_planner_day = day;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
                 model.selected_index = 0;
             }
         }

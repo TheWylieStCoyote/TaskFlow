@@ -169,6 +169,31 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             });
             model.refresh_visible_tasks();
         }
+        TaskMessage::Duplicate => {
+            if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
+                if let Some(original) = model.tasks.get(&id) {
+                    // Create duplicate with "Copy of" prefix
+                    let mut new_task = Task::new(format!("Copy of {}", original.title))
+                        .with_priority(original.priority)
+                        .with_tags(original.tags.clone())
+                        .with_project_opt(original.project_id)
+                        .with_description_opt(original.description.clone())
+                        .with_recurrence(original.recurrence.clone());
+
+                    // Copy optional fields
+                    new_task.due_date = original.due_date;
+                    new_task.scheduled_date = original.scheduled_date;
+                    new_task.estimated_minutes = original.estimated_minutes;
+
+                    model.sync_task(&new_task);
+                    model
+                        .undo_stack
+                        .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
+                    model.tasks.insert(new_task.id, new_task);
+                    model.refresh_visible_tasks();
+                }
+            }
+        }
     }
 }
 

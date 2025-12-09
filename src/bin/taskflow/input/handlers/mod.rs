@@ -9,5 +9,5 @@ pub use modals::{
 };
 pub use views::{
     handle_calendar_view, handle_eisenhower_view, handle_habits_view, handle_kanban_view,
-    handle_reports_view, handle_timeline_view, handle_weekly_planner_view,
+    handle_network_view, handle_reports_view, handle_timeline_view, handle_weekly_planner_view,
 };

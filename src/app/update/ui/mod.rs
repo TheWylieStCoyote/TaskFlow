@@ -636,6 +636,51 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
 
+        // Quick reschedule
+        UiMessage::RescheduleTomorrow => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+                let tomorrow = chrono::Local::now().date_naive() + chrono::Duration::days(1);
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.due_date = Some(tomorrow);
+                });
+                model.status_message = Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::RescheduleNextWeek => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+                let next_week = chrono::Local::now().date_naive() + chrono::Duration::days(7);
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.due_date = Some(next_week);
+                });
+                model.status_message =
+                    Some(format!("Rescheduled to {}", next_week.format("%b %d")));
+                model.refresh_visible_tasks();
+            }
+        }
+        UiMessage::RescheduleNextMonday => {
+            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+                use chrono::Datelike;
+                let today = chrono::Local::now().date_naive();
+                // num_days_from_monday: Mon=0, Tue=1, ..., Sun=6
+                // To get next Monday: (7 - current_weekday) % 7, but if 0 use 7
+                let days_from_monday = today.weekday().num_days_from_monday();
+                let days_until_monday = (7 - days_from_monday) % 7;
+                let days_until_monday = if days_until_monday == 0 {
+                    7
+                } else {
+                    days_until_monday
+                };
+                let next_monday = today + chrono::Duration::days(days_until_monday.into());
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.due_date = Some(next_monday);
+                });
+                model.status_message =
+                    Some(format!("Rescheduled to {}", next_monday.format("%b %d")));
+                model.refresh_visible_tasks();
+            }
+        }
+
         // Habit tracking UI
         UiMessage::StartCreateHabit => {
             model.input_mode = InputMode::Editing;
@@ -746,6 +791,63 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
                     model.selected_index = pos;
                     model.focus_mode = true;
+                }
+            }
+        }
+        UiMessage::WeeklyPlannerViewSelected => {
+            // Get tasks for the current day in Weekly Planner
+            let day_tasks = model.weekly_planner_day_tasks(model.view_selection.weekly_planner_day);
+
+            // Get the selected task from the day
+            if let Some(&task_id) = day_tasks.get(model.view_selection.weekly_planner_task_index) {
+                // Find this task's position in visible_tasks
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                    model.focus_mode = true;
+                }
+            }
+        }
+        UiMessage::NetworkViewSelected => {
+            // Get tasks in the network view
+            let network_tasks = model.network_tasks();
+
+            // Get the selected task
+            if let Some(&task_id) = network_tasks.get(model.view_selection.network_task_index) {
+                // Find this task's position in visible_tasks
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                    model.focus_mode = true;
+                }
+            }
+        }
+        UiMessage::ChainNext => {
+            // Navigate to next task in chain
+            if let Some(current_task) = model.selected_task() {
+                if let Some(next_id) = current_task.next_task_id {
+                    // Find this task's position in visible_tasks
+                    if let Some(pos) = model.visible_tasks.iter().position(|id| *id == next_id) {
+                        model.selected_index = pos;
+                        model.status_message = Some("→ Next in chain".to_string());
+                    }
+                }
+            }
+        }
+        UiMessage::ChainPrev => {
+            // Navigate to previous task in chain (the task that links to this one)
+            if let Some(current_task) = model.selected_task() {
+                let current_id = current_task.id;
+                // Find task that has next_task_id pointing to current task
+                if let Some(prev_task) = model
+                    .tasks
+                    .values()
+                    .find(|t| t.next_task_id == Some(current_id))
+                {
+                    let prev_id = prev_task.id;
+                    // Find this task's position in visible_tasks
+                    if let Some(pos) = model.visible_tasks.iter().position(|id| *id == prev_id) {
+                        model.selected_index = pos;
+                        model.status_message = Some("← Previous in chain".to_string());
+                    }
                 }
             }
         }

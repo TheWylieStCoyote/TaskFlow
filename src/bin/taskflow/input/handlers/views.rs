@@ -188,6 +188,13 @@ pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('l') | KeyCode::Right => {
             Some(Message::Navigation(NavigationMessage::WeeklyPlannerRight))
         }
+        KeyCode::Char('k') | KeyCode::Up => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerUp))
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::WeeklyPlannerViewSelected)),
         _ => None,
     }
 }
@@ -200,6 +207,21 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
         ))),
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
+        _ => None,
+    }
+}
+
+/// Handle network view input
+pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        KeyCode::Char('k') | KeyCode::Up => Some(Message::Navigation(NavigationMessage::NetworkUp)),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::NetworkDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::NetworkViewSelected)),
         _ => None,
     }
 }

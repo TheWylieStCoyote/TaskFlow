@@ -15,9 +15,9 @@ use taskflow::ui::InputMode;
 
 pub use handlers::{
     handle_calendar_view, handle_description_editor, handle_eisenhower_view, handle_habits_view,
-    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_reports_view,
-    handle_template_picker, handle_time_log, handle_timeline_view, handle_weekly_planner_view,
-    handle_work_log,
+    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_network_view,
+    handle_reports_view, handle_template_picker, handle_time_log, handle_timeline_view,
+    handle_weekly_planner_view, handle_work_log,
 };
 pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
@@ -79,9 +79,14 @@ pub fn handle_key_event(
         return Message::Ui(UiMessage::HideHelp);
     }
 
-    // If focus mode is active, Esc exits it
-    if model.focus_mode && key.code == KeyCode::Esc {
-        return Message::Ui(UiMessage::ToggleFocusMode);
+    // If focus mode is active, handle special keys
+    if model.focus_mode {
+        match key.code {
+            KeyCode::Esc => return Message::Ui(UiMessage::ToggleFocusMode),
+            KeyCode::Char(']') => return Message::Ui(UiMessage::ChainNext),
+            KeyCode::Char('[') => return Message::Ui(UiMessage::ChainPrev),
+            _ => {}
+        }
     }
 
     // If template picker is showing, handle navigation and selection
@@ -161,6 +166,13 @@ pub fn handle_key_event(
     // In Reports view, handle exit
     if model.current_view == taskflow::app::ViewId::Reports {
         if let Some(msg) = handle_reports_view(key) {
+            return msg;
+        }
+    }
+
+    // In Network view, handle task navigation
+    if model.current_view == taskflow::app::ViewId::Network {
+        if let Some(msg) = handle_network_view(key) {
             return msg;
         }
     }

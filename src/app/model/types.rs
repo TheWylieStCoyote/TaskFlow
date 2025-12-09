@@ -137,6 +137,10 @@ pub struct ViewSelectionState {
     pub eisenhower_task_index: usize,
     /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
     pub weekly_planner_day: usize,
+    /// Selected task index within the current WeeklyPlanner day
+    pub weekly_planner_task_index: usize,
+    /// Selected task index in Network view
+    pub network_task_index: usize,
 }
 
 /// State for daily review mode.

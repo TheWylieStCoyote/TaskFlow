@@ -80,25 +80,39 @@ impl Widget for FocusView<'_> {
         let inner = outer_block.inner(area);
         outer_block.render(area, buf);
 
-        // Layout: padding, content, timer, help
+        // Check if task is part of a chain
+        let has_chain = task.next_task_id.is_some()
+            || self
+                .model
+                .tasks
+                .values()
+                .any(|t| t.next_task_id == Some(task.id));
+
+        // Layout: padding, content, chain info, timer, help
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2), // Top padding
-                Constraint::Min(6),    // Main content
-                Constraint::Length(3), // Timer
-                Constraint::Length(2), // Help text
+                Constraint::Length(2),                             // Top padding
+                Constraint::Min(6),                                // Main content
+                Constraint::Length(if has_chain { 2 } else { 0 }), // Chain info (conditional)
+                Constraint::Length(3),                             // Timer
+                Constraint::Length(2),                             // Help text
             ])
             .split(inner);
 
         // Render task title with status
         self.render_task_title(task, chunks[1], buf, theme);
 
+        // Render chain info if applicable
+        if has_chain {
+            self.render_chain_info(task, chunks[2], buf, theme);
+        }
+
         // Render timer
-        self.render_timer(task, chunks[2], buf, theme);
+        self.render_timer(task, chunks[3], buf, theme);
 
         // Render help
-        self.render_help(chunks[3], buf, theme);
+        self.render_help(chunks[4], buf, theme, task);
     }
 }
 
@@ -240,14 +254,33 @@ impl FocusView<'_> {
         buf.set_line(area.x, y, &timer_line, area.width);
     }
 
-    fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+    fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme, task: &Task) {
         let is_tracking = self.model.active_time_entry.is_some();
 
-        let help_text = if is_tracking {
-            "[t] Stop Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
+        // Build help text with chain navigation hints if applicable
+        let has_chain =
+            task.next_task_id.is_some() || self.get_prev_task_in_chain(task.id).is_some();
+
+        let mut help_parts = Vec::new();
+        help_parts.push(if is_tracking {
+            "[t] Stop Timer"
         } else {
-            "[t] Start Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
-        };
+            "[t] Start Timer"
+        });
+        help_parts.push("[x] Toggle");
+
+        if has_chain {
+            if self.get_prev_task_in_chain(task.id).is_some() {
+                help_parts.push("[[] Prev");
+            }
+            if task.next_task_id.is_some() {
+                help_parts.push("[]] Next");
+            }
+        }
+
+        help_parts.push("[f/Esc] Exit");
+
+        let help_text = help_parts.join("  ");
 
         let help_line = Line::from(Span::styled(
             help_text,
@@ -256,6 +289,85 @@ impl FocusView<'_> {
         .alignment(Alignment::Center);
 
         buf.set_line(area.x, area.y, &help_line, area.width);
+    }
+
+    /// Get the previous task in a chain (the task that links to this one)
+    fn get_prev_task_in_chain(
+        &self,
+        task_id: crate::domain::TaskId,
+    ) -> Option<crate::domain::TaskId> {
+        self.model
+            .tasks
+            .values()
+            .find(|t| t.next_task_id == Some(task_id))
+            .map(|t| t.id)
+    }
+
+    /// Render chain navigation info
+    fn render_chain_info(&self, task: &Task, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let prev_in_chain = self.get_prev_task_in_chain(task.id);
+        let next_in_chain = task.next_task_id;
+
+        // Only render if task is part of a chain
+        if prev_in_chain.is_none() && next_in_chain.is_none() {
+            return;
+        }
+
+        let mut spans = vec![Span::styled(
+            "      Chain: ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        )];
+
+        // Show previous task in chain
+        if let Some(prev_id) = prev_in_chain {
+            if let Some(prev_task) = self.model.tasks.get(&prev_id) {
+                let prev_title: String = prev_task.title.chars().take(20).collect();
+                let prev_status = if prev_task.status.is_complete() {
+                    "✓"
+                } else {
+                    "○"
+                };
+                spans.push(Span::styled(
+                    format!("{prev_status} {prev_title}"),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ));
+                spans.push(Span::styled(
+                    " → ",
+                    Style::default().fg(theme.colors.accent.to_color()),
+                ));
+            }
+        }
+
+        // Current task indicator
+        spans.push(Span::styled(
+            "● CURRENT",
+            Style::default()
+                .fg(theme.colors.accent.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        // Show next task in chain
+        if let Some(next_id) = next_in_chain {
+            if let Some(next_task) = self.model.tasks.get(&next_id) {
+                let next_title: String = next_task.title.chars().take(20).collect();
+                let next_status = if next_task.status.is_complete() {
+                    "✓"
+                } else {
+                    "○"
+                };
+                spans.push(Span::styled(
+                    " → ",
+                    Style::default().fg(theme.colors.accent.to_color()),
+                ));
+                spans.push(Span::styled(
+                    format!("{next_status} {next_title}"),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ));
+            }
+        }
+
+        let chain_line = Line::from(spans);
+        buf.set_line(area.x, area.y, &chain_line, area.width);
     }
 }
 
@@ -346,7 +458,7 @@ mod tests {
         let content = buffer_content(&buffer);
 
         assert!(
-            content.contains("Exit Focus"),
+            content.contains("Exit") || content.contains("Esc"),
             "Help text should mention exiting focus mode"
         );
     }

@@ -122,3 +122,47 @@ fn test_cycle_priority() {
     update(&mut model, Message::Task(TaskMessage::CyclePriority));
     assert_eq!(model.tasks.get(&task_id).unwrap().priority, Priority::None);
 }
+
+#[test]
+fn test_task_duplicate() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+    let initial_count = model.tasks.len();
+
+    // Set up the original task with some properties
+    {
+        let task = model.tasks.get_mut(&task_id).unwrap();
+        task.priority = Priority::High;
+        task.tags = vec!["work".to_string(), "urgent".to_string()];
+        task.description = Some("Original description".to_string());
+    }
+    let original_title = model.tasks.get(&task_id).unwrap().title.clone();
+
+    // Duplicate the task
+    update(&mut model, Message::Task(TaskMessage::Duplicate));
+
+    // Should have one more task
+    assert_eq!(model.tasks.len(), initial_count + 1);
+
+    // Find the new task (the one with "Copy of" prefix)
+    let new_task = model
+        .tasks
+        .values()
+        .find(|t| t.title.starts_with("Copy of"))
+        .expect("Should find duplicated task");
+
+    // Verify properties were copied
+    assert_eq!(new_task.title, format!("Copy of {}", original_title));
+    assert_eq!(new_task.priority, Priority::High);
+    assert_eq!(
+        new_task.tags,
+        vec!["work".to_string(), "urgent".to_string()]
+    );
+    assert_eq!(
+        new_task.description,
+        Some("Original description".to_string())
+    );
+
+    // Verify it's a different task
+    assert_ne!(new_task.id, task_id);
+}

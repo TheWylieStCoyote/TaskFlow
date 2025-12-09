@@ -27,6 +27,7 @@ struct DayColumnParams<'a> {
     is_today: bool,
     is_past: bool,
     is_selected: bool,
+    selected_task_index: Option<usize>,
 }
 
 /// Weekly planner widget showing tasks organized by day.
@@ -116,7 +117,9 @@ impl Widget for WeeklyPlanner<'_> {
 
         // Render each day column
         let selected_day = self.model.view_selection.weekly_planner_day;
+        let selected_task_index = self.model.view_selection.weekly_planner_task_index;
         for (i, (date, day_name)) in days.iter().enumerate() {
+            let is_selected = i == selected_day;
             let params = DayColumnParams {
                 area: day_columns[i],
                 date: *date,
@@ -124,7 +127,12 @@ impl Widget for WeeklyPlanner<'_> {
                 tasks: self.tasks_for_date(*date),
                 is_today: *date == today,
                 is_past: *date < today,
-                is_selected: i == selected_day,
+                is_selected,
+                selected_task_index: if is_selected {
+                    Some(selected_task_index)
+                } else {
+                    None
+                },
             };
             self.render_day_column(buf, params);
         }
@@ -141,6 +149,7 @@ impl WeeklyPlanner<'_> {
             is_today,
             is_past,
             is_selected,
+            selected_task_index,
         } = params;
         let theme = self.theme;
 
@@ -190,8 +199,10 @@ impl WeeklyPlanner<'_> {
         // Create list items for tasks
         let items: Vec<ListItem<'_>> = tasks
             .iter()
+            .enumerate()
             .take(inner.height as usize)
-            .map(|task| {
+            .map(|(idx, task)| {
+                let is_selected_task = selected_task_index == Some(idx);
                 // Status indicator
                 let status_style = if task.status.is_complete() {
                     Style::default().fg(theme.colors.success.to_color())
@@ -256,7 +267,16 @@ impl WeeklyPlanner<'_> {
 
                 spans.push(Span::styled(title, status_style));
 
-                ListItem::new(Line::from(spans))
+                // Apply selection highlighting
+                let mut item = ListItem::new(Line::from(spans));
+                if is_selected_task {
+                    item = item.style(
+                        Style::default()
+                            .bg(theme.colors.accent_secondary.to_color())
+                            .add_modifier(Modifier::BOLD),
+                    );
+                }
+                item
             })
             .collect();
 

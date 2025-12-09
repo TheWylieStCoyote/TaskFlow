@@ -19,13 +19,24 @@ use crate::domain::TaskId;
 pub struct Network<'a> {
     model: &'a Model,
     theme: &'a Theme,
+    selected_task_index: usize,
 }
 
 impl<'a> Network<'a> {
     /// Create a new network widget
     #[must_use]
-    pub const fn new(model: &'a Model, theme: &'a Theme) -> Self {
-        Self { model, theme }
+    pub const fn new(model: &'a Model, theme: &'a Theme, selected_task_index: usize) -> Self {
+        Self {
+            model,
+            theme,
+            selected_task_index,
+        }
+    }
+
+    /// Get the selected task ID based on the current selection index
+    fn get_selected_task_id(&self) -> Option<TaskId> {
+        let network_tasks = self.model.network_tasks();
+        network_tasks.get(self.selected_task_index).copied()
     }
 
     /// Get tasks with no dependencies (roots)
@@ -126,7 +137,15 @@ impl<'a> Network<'a> {
             )
         };
 
-        let title_style = if task.status.is_complete() {
+        // Check if this task is selected
+        let is_selected = self.get_selected_task_id() == Some(task_id);
+
+        let title_style = if is_selected {
+            Style::default()
+                .fg(self.theme.colors.foreground.to_color())
+                .bg(self.theme.colors.accent_secondary.to_color())
+                .add_modifier(Modifier::BOLD)
+        } else if task.status.is_complete() {
             Style::default()
                 .fg(self.theme.colors.muted.to_color())
                 .add_modifier(Modifier::CROSSED_OUT)
@@ -134,7 +153,14 @@ impl<'a> Network<'a> {
             Style::default().fg(self.theme.colors.foreground.to_color())
         };
 
+        // Build the selection indicator
+        let selection_marker = if is_selected { "▶ " } else { "  " };
+
         lines.push(Line::from(vec![
+            Span::styled(
+                selection_marker,
+                Style::default().fg(self.theme.colors.accent.to_color()),
+            ),
             Span::raw(format!("{indent}{connector}")),
             status_icon,
             Span::styled(task.title.chars().take(40).collect::<String>(), title_style),
@@ -328,12 +354,26 @@ impl Widget for Network<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Theme;
 
     #[test]
     fn test_network_empty_model() {
         let model = Model::new();
         let theme = Theme::default();
-        let network = Network::new(&model, &theme);
+        let network = Network::new(&model, &theme, 0);
         assert!(network.get_root_tasks().is_empty());
+    }
+
+    #[test]
+    fn test_network_renders_without_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let network = Network::new(&model, &theme, 0);
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        network.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
     }
 }

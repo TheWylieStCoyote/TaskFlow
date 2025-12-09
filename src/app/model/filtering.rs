@@ -417,6 +417,70 @@ impl Model {
             .collect()
     }
 
+    /// Returns task IDs for a specific day in the Weekly Planner.
+    ///
+    /// Day indices: 0=Monday, 1=Tuesday, ..., 6=Sunday
+    /// Returns tasks that have due_date or scheduled_date on that day of the current week.
+    #[must_use]
+    pub fn weekly_planner_day_tasks(&self, day: usize) -> Vec<TaskId> {
+        if day > 6 {
+            return Vec::new();
+        }
+
+        // Get the start of the current week (Monday)
+        let today = Utc::now().date_naive();
+        let week_start =
+            today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+        let target_date = week_start + chrono::Duration::days(day as i64);
+
+        self.visible_tasks
+            .iter()
+            .filter_map(|id| self.tasks.get(id).map(|t| (*id, t)))
+            .filter(|(_, task)| {
+                task.due_date == Some(target_date) || task.scheduled_date == Some(target_date)
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// Get all tasks that are part of the dependency network (have dependencies or are depended upon).
+    #[must_use]
+    pub fn network_tasks(&self) -> Vec<TaskId> {
+        // Collect all task IDs that have dependencies or are depended upon or have chain links
+        let mut network_ids: std::collections::HashSet<TaskId> = std::collections::HashSet::new();
+
+        for task in self.tasks.values() {
+            // Include tasks that have dependencies
+            if !task.dependencies.is_empty() {
+                network_ids.insert(task.id);
+                for dep_id in &task.dependencies {
+                    network_ids.insert(*dep_id);
+                }
+            }
+            // Include tasks that are part of chains
+            if task.next_task_id.is_some() {
+                network_ids.insert(task.id);
+            }
+        }
+
+        // Also include tasks that are pointed to by next_task_id
+        for task in self.tasks.values() {
+            if let Some(next_id) = task.next_task_id {
+                network_ids.insert(next_id);
+            }
+        }
+
+        // Return as a sorted vector for consistent ordering
+        let mut result: Vec<TaskId> = network_ids.into_iter().collect();
+        result.sort_by_key(|id| {
+            self.tasks
+                .get(id)
+                .map(|t| t.title.clone())
+                .unwrap_or_default()
+        });
+        result
+    }
+
     /// Returns visible tasks grouped by project.
     ///
     /// Returns a `Vec` of (`Option<ProjectId>`, `project_name`, `Vec<TaskId>`).

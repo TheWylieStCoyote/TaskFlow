@@ -18,6 +18,9 @@ use crate::config::Theme;
 /// Number of weeks to forecast
 const FORECAST_WEEKS: usize = 8;
 
+/// Standard work day capacity in hours
+const DAILY_CAPACITY_HOURS: u32 = 8;
+
 /// Forecast view widget showing workload projection
 pub struct Forecast<'a> {
     model: &'a Model,
@@ -64,6 +67,104 @@ impl<'a> Forecast<'a> {
         }
 
         weeks
+    }
+
+    /// Calculate workload per day for the next 7 days (task count and estimated minutes)
+    fn get_daily_workload(&self) -> Vec<(NaiveDate, usize, u32)> {
+        let today = Local::now().date_naive();
+
+        let mut days: Vec<(NaiveDate, usize, u32)> = (0..7)
+            .map(|i| {
+                let date = today + Duration::days(i);
+                (date, 0, 0)
+            })
+            .collect();
+
+        for task in self.model.tasks.values() {
+            if task.status.is_complete() {
+                continue;
+            }
+
+            if let Some(due) = task.due_date {
+                if let Some(entry) = days.iter_mut().find(|(d, _, _)| *d == due) {
+                    entry.1 += 1;
+                    entry.2 += task.estimated_minutes.unwrap_or(30);
+                }
+            }
+        }
+
+        days
+    }
+
+    /// Render daily capacity breakdown for the week
+    fn render_daily_capacity(&self, area: Rect, buf: &mut Buffer) {
+        let daily_workload = self.get_daily_workload();
+
+        let lines: Vec<Line<'_>> = daily_workload
+            .iter()
+            .map(|(date, task_count, minutes)| {
+                let hours = *minutes / 60;
+                let mins = *minutes % 60;
+                let day_name = date.format("%a").to_string();
+                let date_str = date.format("%m/%d").to_string();
+
+                // Capacity warning colors based on hours
+                let (indicator, color) = if hours >= DAILY_CAPACITY_HOURS {
+                    ("●", Color::Red) // Overloaded
+                } else if hours >= DAILY_CAPACITY_HOURS / 2 {
+                    ("◐", Color::Yellow) // Half capacity or more
+                } else if *task_count > 0 {
+                    ("○", Color::Green) // Has work but not overloaded
+                } else {
+                    ("·", self.theme.colors.muted.to_color()) // No work
+                };
+
+                let hours_str = if hours > 0 || mins > 0 {
+                    format!("{hours}h{mins:02}m")
+                } else {
+                    "—".to_string()
+                };
+
+                Line::from(vec![
+                    Span::styled(format!("{indicator} "), Style::default().fg(color)),
+                    Span::styled(
+                        format!("{day_name} {date_str} "),
+                        Style::default().fg(self.theme.colors.muted.to_color()),
+                    ),
+                    Span::styled(format!("{hours_str:>7}"), Style::default().fg(color)),
+                    Span::styled(
+                        format!(" ({task_count} tasks)"),
+                        Style::default().fg(self.theme.colors.muted.to_color()),
+                    ),
+                ])
+            })
+            .collect();
+
+        let block = Block::default()
+            .title(" Daily Capacity (Next 7 Days) ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(self.theme.colors.border.to_color()));
+
+        // Check for overloaded days
+        let overloaded_days = daily_workload
+            .iter()
+            .filter(|(_, _, mins)| *mins / 60 >= DAILY_CAPACITY_HOURS)
+            .count();
+
+        let mut all_lines = lines;
+        if overloaded_days > 0 {
+            all_lines.push(Line::from(""));
+            all_lines.push(Line::from(vec![
+                Span::styled("⚠ ", Style::default().fg(Color::Red)),
+                Span::styled(
+                    format!("{overloaded_days} day(s) over {DAILY_CAPACITY_HOURS}h capacity"),
+                    Style::default().fg(Color::Red),
+                ),
+            ]));
+        }
+
+        let paragraph = Paragraph::new(all_lines).block(block);
+        paragraph.render(area, buf);
     }
 
     /// Render the weekly bar chart
@@ -282,26 +383,33 @@ impl Widget for Forecast<'_> {
 
         let workload = self.get_weekly_workload();
 
-        // Layout: chart on top, summary and deadlines below
+        // Layout: chart on top, three panels below (daily capacity, summary, deadlines)
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(12), Constraint::Min(8)])
+            .constraints([Constraint::Length(12), Constraint::Min(12)])
             .split(inner);
 
         let bottom = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .constraints([
+                Constraint::Percentage(35),
+                Constraint::Percentage(25),
+                Constraint::Percentage(40),
+            ])
             .split(chunks[1]);
 
         self.render_chart(chunks[0], buf, &workload);
-        self.render_summary(bottom[0], buf, &workload);
-        self.render_deadlines(bottom[1], buf);
+        self.render_daily_capacity(bottom[0], buf);
+        self.render_summary(bottom[1], buf, &workload);
+        self.render_deadlines(bottom[2], buf);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
     use chrono::Weekday;
 
     #[test]
@@ -311,5 +419,24 @@ mod tests {
         let monday = Forecast::week_start(wednesday);
         assert_eq!(monday.weekday(), Weekday::Mon);
         assert_eq!(monday, NaiveDate::from_ymd_opt(2024, 1, 8).unwrap());
+    }
+
+    #[test]
+    fn test_forecast_renders_without_panic() {
+        let model = Model::new().with_sample_data();
+        let theme = Theme::default();
+        let forecast = Forecast::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        forecast.render(area, &mut buffer);
+
+        assert!(buffer.area.width > 0);
+    }
+
+    #[test]
+    fn test_daily_capacity_constant() {
+        // Ensure daily capacity is 8 hours as documented
+        assert_eq!(DAILY_CAPACITY_HOURS, 8);
     }
 }

@@ -173,6 +173,10 @@ pub enum NavigationMessage {
     WeeklyPlannerLeft,
     /// Navigate right in WeeklyPlanner view (next day)
     WeeklyPlannerRight,
+    /// Navigate up in WeeklyPlanner view (previous task in day)
+    WeeklyPlannerUp,
+    /// Navigate down in WeeklyPlanner view (next task in day)
+    WeeklyPlannerDown,
     /// Select a specific sidebar item by index (for mouse click)
     SidebarSelectIndex(usize),
     /// Select a specific Kanban column by index (for mouse click)
@@ -183,6 +187,10 @@ pub enum NavigationMessage {
     WeeklyPlannerSelectDay(usize),
     /// Select a specific Reports panel by index (for mouse click)
     ReportsSelectPanel(usize),
+    /// Navigate up in Network view (previous task)
+    NetworkUp,
+    /// Navigate down in Network view (next task)
+    NetworkDown,
 }
 
 /// View identifiers for different application screens.
@@ -290,6 +298,8 @@ pub enum TaskMessage {
     Delete(TaskId),
     /// Move task to a project (or remove from project with None)
     MoveToProject(TaskId, Option<ProjectId>),
+    /// Duplicate the selected task with "Copy of" prefix
+    Duplicate,
 }
 
 /// Time tracking messages.
@@ -609,6 +619,14 @@ pub enum UiMessage {
     /// Dismiss the storage error alert
     DismissStorageErrorAlert,
 
+    // Quick reschedule
+    /// Reschedule selected task to tomorrow
+    RescheduleTomorrow,
+    /// Reschedule selected task to next week (7 days from today)
+    RescheduleNextWeek,
+    /// Reschedule selected task to next Monday
+    RescheduleNextMonday,
+
     // Saved filters
     /// Show saved filter picker
     ShowSavedFilters,
@@ -694,6 +712,14 @@ pub enum UiMessage {
     KanbanViewSelected,
     /// View selected task details from Eisenhower matrix (opens focus mode)
     EisenhowerViewSelected,
+    /// View selected task details from Weekly Planner (opens focus mode)
+    WeeklyPlannerViewSelected,
+    /// View selected task details from Network view (opens focus mode)
+    NetworkViewSelected,
+    /// Navigate to next task in chain (in focus mode)
+    ChainNext,
+    /// Navigate to previous task in chain (in focus mode)
+    ChainPrev,
 }
 
 /// System-level messages for application control.

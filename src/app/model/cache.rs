@@ -4,9 +4,259 @@
 //! O(n) or O(n²) operations during rendering. Caches are invalidated
 //! when the underlying data changes.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
+
+use ratatui::layout::Rect;
 
 use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId};
+
+/// Internal layout data for mouse hit-testing.
+#[derive(Debug, Clone, Default)]
+struct LayoutData {
+    /// Sidebar area (if visible)
+    sidebar_area: Option<Rect>,
+    /// Main content area (task list, calendar, etc.)
+    main_area: Option<Rect>,
+    /// Task list area within main area
+    task_list_area: Option<Rect>,
+    /// Calendar grid area (calendar view only)
+    calendar_area: Option<Rect>,
+    /// Individual kanban column areas
+    kanban_columns: [Option<Rect>; 4],
+    /// Eisenhower quadrant areas
+    eisenhower_quadrants: [Option<Rect>; 4],
+    /// Weekly planner day column areas
+    weekly_planner_days: [Option<Rect>; 7],
+    /// Reports tabs area (for clicking on tabs)
+    reports_tabs_area: Option<Rect>,
+    /// Individual report tab areas for precise click detection
+    reports_tab_rects: [Option<Rect>; 7],
+    /// Header height offset for task list (border + header row)
+    task_list_header_offset: u16,
+    /// Scroll offset for task list (how many rows scrolled)
+    scroll_offset: usize,
+    /// Last click position and time for double-click detection
+    last_click: Option<(u16, u16, Instant)>,
+}
+
+/// Cached layout rectangles for mouse hit-testing.
+///
+/// Uses interior mutability so layout can be updated during rendering
+/// even when the Model is borrowed immutably.
+#[derive(Debug, Default)]
+pub struct LayoutCache {
+    data: RefCell<LayoutData>,
+}
+
+impl Clone for LayoutCache {
+    fn clone(&self) -> Self {
+        Self {
+            data: RefCell::new(self.data.borrow().clone()),
+        }
+    }
+}
+
+impl LayoutCache {
+    /// Clear all cached layout areas.
+    pub fn clear(&self) {
+        let mut data = self.data.borrow_mut();
+        data.sidebar_area = None;
+        data.main_area = None;
+        data.task_list_area = None;
+        data.calendar_area = None;
+        data.kanban_columns = [None; 4];
+        data.eisenhower_quadrants = [None; 4];
+        data.weekly_planner_days = [None; 7];
+        data.reports_tabs_area = None;
+        data.reports_tab_rects = [None; 7];
+    }
+
+    /// Check if a point is within a rectangle.
+    #[must_use]
+    pub fn is_in_rect(x: u16, y: u16, rect: Rect) -> bool {
+        x >= rect.x
+            && x < rect.x.saturating_add(rect.width)
+            && y >= rect.y
+            && y < rect.y.saturating_add(rect.height)
+    }
+
+    /// Record a click for double-click detection.
+    pub fn record_click(&self, x: u16, y: u16) {
+        self.data.borrow_mut().last_click = Some((x, y, Instant::now()));
+    }
+
+    /// Check if the current click is a double-click.
+    #[must_use]
+    pub fn is_double_click(&self, x: u16, y: u16) -> bool {
+        let data = self.data.borrow();
+        if let Some((last_x, last_y, last_time)) = data.last_click {
+            let same_position =
+                (x as i16 - last_x as i16).abs() <= 1 && (y as i16 - last_y as i16).abs() <= 1;
+            let within_time = last_time.elapsed().as_millis() < 500;
+            same_position && within_time
+        } else {
+            false
+        }
+    }
+
+    // Layout setters (for use during rendering)
+
+    /// Set the sidebar area.
+    pub fn set_sidebar_area(&self, area: Rect) {
+        self.data.borrow_mut().sidebar_area = Some(area);
+    }
+
+    /// Set the main content area.
+    pub fn set_main_area(&self, area: Rect) {
+        self.data.borrow_mut().main_area = Some(area);
+    }
+
+    /// Set the task list area.
+    pub fn set_task_list_area(&self, area: Rect, header_offset: u16, scroll_offset: usize) {
+        let mut data = self.data.borrow_mut();
+        data.task_list_area = Some(area);
+        data.task_list_header_offset = header_offset;
+        data.scroll_offset = scroll_offset;
+    }
+
+    /// Set the calendar grid area.
+    pub fn set_calendar_area(&self, area: Rect) {
+        self.data.borrow_mut().calendar_area = Some(area);
+    }
+
+    /// Set a kanban column area.
+    pub fn set_kanban_column(&self, index: usize, area: Rect) {
+        if index < 4 {
+            self.data.borrow_mut().kanban_columns[index] = Some(area);
+        }
+    }
+
+    /// Set an eisenhower quadrant area.
+    pub fn set_eisenhower_quadrant(&self, index: usize, area: Rect) {
+        if index < 4 {
+            self.data.borrow_mut().eisenhower_quadrants[index] = Some(area);
+        }
+    }
+
+    /// Set a weekly planner day column area.
+    pub fn set_weekly_planner_day(&self, index: usize, area: Rect) {
+        if index < 7 {
+            self.data.borrow_mut().weekly_planner_days[index] = Some(area);
+        }
+    }
+
+    /// Set the reports tabs area.
+    pub fn set_reports_tabs_area(&self, area: Rect) {
+        self.data.borrow_mut().reports_tabs_area = Some(area);
+    }
+
+    /// Set an individual report tab area.
+    pub fn set_reports_tab_rect(&self, index: usize, area: Rect) {
+        if index < 7 {
+            self.data.borrow_mut().reports_tab_rects[index] = Some(area);
+        }
+    }
+
+    // Layout getters (for use in mouse handling)
+
+    /// Get the sidebar area.
+    #[must_use]
+    pub fn sidebar_area(&self) -> Option<Rect> {
+        self.data.borrow().sidebar_area
+    }
+
+    /// Get the main content area.
+    #[must_use]
+    pub fn main_area(&self) -> Option<Rect> {
+        self.data.borrow().main_area
+    }
+
+    /// Get the task list area.
+    #[must_use]
+    pub fn task_list_area(&self) -> Option<Rect> {
+        self.data.borrow().task_list_area
+    }
+
+    /// Get the task list header offset.
+    #[must_use]
+    pub fn task_list_header_offset(&self) -> u16 {
+        self.data.borrow().task_list_header_offset
+    }
+
+    /// Get the task list scroll offset.
+    #[must_use]
+    pub fn scroll_offset(&self) -> usize {
+        self.data.borrow().scroll_offset
+    }
+
+    /// Get the calendar grid area.
+    #[must_use]
+    pub fn calendar_area(&self) -> Option<Rect> {
+        self.data.borrow().calendar_area
+    }
+
+    /// Get a kanban column area.
+    #[must_use]
+    pub fn kanban_column(&self, index: usize) -> Option<Rect> {
+        if index < 4 {
+            self.data.borrow().kanban_columns[index]
+        } else {
+            None
+        }
+    }
+
+    /// Get all kanban column areas.
+    #[must_use]
+    pub fn kanban_columns(&self) -> [Option<Rect>; 4] {
+        self.data.borrow().kanban_columns
+    }
+
+    /// Get an eisenhower quadrant area.
+    #[must_use]
+    pub fn eisenhower_quadrant(&self, index: usize) -> Option<Rect> {
+        if index < 4 {
+            self.data.borrow().eisenhower_quadrants[index]
+        } else {
+            None
+        }
+    }
+
+    /// Get all eisenhower quadrant areas.
+    #[must_use]
+    pub fn eisenhower_quadrants(&self) -> [Option<Rect>; 4] {
+        self.data.borrow().eisenhower_quadrants
+    }
+
+    /// Get a weekly planner day column area.
+    #[must_use]
+    pub fn weekly_planner_day(&self, index: usize) -> Option<Rect> {
+        if index < 7 {
+            self.data.borrow().weekly_planner_days[index]
+        } else {
+            None
+        }
+    }
+
+    /// Get all weekly planner day column areas.
+    #[must_use]
+    pub fn weekly_planner_days(&self) -> [Option<Rect>; 7] {
+        self.data.borrow().weekly_planner_days
+    }
+
+    /// Get the reports tabs area.
+    #[must_use]
+    pub fn reports_tabs_area(&self) -> Option<Rect> {
+        self.data.borrow().reports_tabs_area
+    }
+
+    /// Get all report tab areas.
+    #[must_use]
+    pub fn reports_tab_rects(&self) -> [Option<Rect>; 7] {
+        self.data.borrow().reports_tab_rects
+    }
+}
 
 /// Cached statistics for the footer display.
 ///

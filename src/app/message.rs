@@ -169,6 +169,16 @@ pub enum NavigationMessage {
     WeeklyPlannerLeft,
     /// Navigate right in WeeklyPlanner view (next day)
     WeeklyPlannerRight,
+    /// Select a specific sidebar item by index (for mouse click)
+    SidebarSelectIndex(usize),
+    /// Select a specific Kanban column by index (for mouse click)
+    KanbanSelectColumn(usize),
+    /// Select a specific Eisenhower quadrant by index (for mouse click)
+    EisenhowerSelectQuadrant(usize),
+    /// Select a specific WeeklyPlanner day by index (for mouse click)
+    WeeklyPlannerSelectDay(usize),
+    /// Select a specific Reports panel by index (for mouse click)
+    ReportsSelectPanel(usize),
 }
 
 /// View identifiers for different application screens.

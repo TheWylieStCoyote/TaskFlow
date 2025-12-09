@@ -288,6 +288,47 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.view_selection.weekly_planner_day += 1;
             }
         }
+        NavigationMessage::SidebarSelectIndex(index) => {
+            // Direct sidebar selection by index (for mouse click)
+            let max_index = model.sidebar_item_count().saturating_sub(1);
+            if index <= max_index && index != SIDEBAR_SEPARATOR_INDEX {
+                model.sidebar_selected = index;
+                model.focus_pane = FocusPane::Sidebar;
+                handle_sidebar_selection(model);
+            }
+        }
+        NavigationMessage::KanbanSelectColumn(column) => {
+            if model.current_view == ViewId::Kanban && column < 4 {
+                model.view_selection.kanban_column = column;
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::EisenhowerSelectQuadrant(quadrant) => {
+            if model.current_view == ViewId::Eisenhower && quadrant < 4 {
+                model.view_selection.eisenhower_quadrant = quadrant;
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::WeeklyPlannerSelectDay(day) => {
+            if model.current_view == ViewId::WeeklyPlanner && day < 7 {
+                model.view_selection.weekly_planner_day = day;
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::ReportsSelectPanel(panel_idx) => {
+            if model.current_view == ViewId::Reports && panel_idx < 7 {
+                model.report_panel = match panel_idx {
+                    0 => crate::ui::ReportPanel::Overview,
+                    1 => crate::ui::ReportPanel::Velocity,
+                    2 => crate::ui::ReportPanel::Tags,
+                    3 => crate::ui::ReportPanel::Time,
+                    4 => crate::ui::ReportPanel::Focus,
+                    5 => crate::ui::ReportPanel::Insights,
+                    6 => crate::ui::ReportPanel::Estimation,
+                    _ => return,
+                };
+            }
+        }
     }
 }
 

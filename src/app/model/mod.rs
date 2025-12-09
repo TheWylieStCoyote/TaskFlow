@@ -53,7 +53,7 @@ mod storage;
 mod time_tracking;
 mod types;
 
-pub use cache::{FooterStats, TaskCache};
+pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
     AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
     KeybindingsEditorState, RunningState, SavedFilterPickerState, TemplatePickerState,
@@ -350,6 +350,8 @@ pub struct Model {
     pub footer_stats: FooterStats,
     /// Cached per-task metadata (time sums, depths, subtask progress)
     pub task_cache: TaskCache,
+    /// Cached layout rectangles for mouse hit-testing
+    pub layout_cache: LayoutCache,
 }
 
 impl Model {
@@ -435,6 +437,7 @@ impl Model {
             habit_view: HabitViewState::default(),
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
+            layout_cache: LayoutCache::default(),
         }
     }
 

@@ -1,8 +1,10 @@
-//! Key event handling.
+//! Input event handling.
 //!
-//! This module provides centralized input handling for the TaskFlow TUI.
+//! This module provides centralized input handling for the TaskFlow TUI,
+//! including keyboard and mouse events.
 
 mod handlers;
+mod mouse;
 mod util;
 
 use crossterm::event::{self, KeyCode};
@@ -17,6 +19,7 @@ pub use handlers::{
     handle_template_picker, handle_time_log, handle_timeline_view, handle_weekly_planner_view,
     handle_work_log,
 };
+pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
 
 /// Handle a key event and return the appropriate message.

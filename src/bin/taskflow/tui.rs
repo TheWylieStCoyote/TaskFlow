@@ -171,6 +171,7 @@ fn run_app(
         if event::poll(Duration::from_millis(100))? {
             let message = match event::read()? {
                 Event::Key(key) => handle_key_event(key, model, keybindings),
+                Event::Mouse(mouse) => crate::input::handle_mouse_event(mouse, model),
                 Event::Resize(width, height) => {
                     Message::System(SystemMessage::Resize { width, height })
                 }

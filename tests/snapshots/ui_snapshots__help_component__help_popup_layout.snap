@@ -1,0 +1,35 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 100
+expression: output
+---
+┌─────────────────────── Help (press ? or Esc to close) ───────────────────────┐
+│Navigation                                                                    │
+│G         Go to last                                                          │
+│Ctrl+d    Page down                                                           │
+│Ctrl+u    Page up                                                             │
+│↓         Move down                                                           │
+│g         Go to first                                                         │
+│j         Move down                                                           │
+│k         Move up                                                             │
+│pagedown  Page down                                                           │
+│pageup    Page up                                                             │
+│↑         Move up                                                             │
+│                                                                              │
+│Tasks                                                                         │
+│A         Create subtask                                                      │
+│D         Edit due date                                                       │
+│M         Reschedule to next Monday                                           │
+│N         Edit description (multi-line)                                       │
+│Q         Quick capture with hints                                            │
+│S         Edit scheduled date                                                 │
+│T         Edit tags                                                           │
+│Y         Duplicate task                                                      │
+│Z         Clear snooze                                                        │
+│[         Reschedule to next week                                             │
+│]         Reschedule to tomorrow                                              │
+│a         Create task                                                         │
+│Ctrl+↓    Move task down                                                      │
+│Ctrl+↑    Move task up                                                        │
+│d         Delete task                                                         │
+└──────────────────────────────────────────────────────────────────────────────┘

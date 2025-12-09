@@ -1,0 +1,29 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 212
+expression: output
+---
+┌ 🔥  DO FIRST (0) ─────────────────────┐┌ 📅  SCHEDULE (2) ─────────────────────┐
+│Urgent & Important                    ││Important, Not Urgent                 │
+│No tasks                              ││◇ Review PR                           │
+│                                      ││⊙ Fix critical bug                    │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+└──────────────────────────────────────┘└──────────────────────────────────────┘
+┌ 👋  DELEGATE (0) ─────────────────────┐┌ 🗑️   ELIMINATE (2) ───────────────────┐
+│Urgent, Not Important                 ││Not Urgent or Important               │
+│No tasks                              ││⊠ Blocked task                        │
+│                                      ││◇ Write documentation                 │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+│                                      ││                                      │
+└──────────────────────────────────────┘└──────────────────────────────────────┘

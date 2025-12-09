@@ -1,0 +1,25 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 146
+expression: output
+---
+┌ Navigation ───────────┐
+│📋  All Tasks           │
+│📅  Today               │
+│📆  Upcoming            │
+│⚠️   Overdue            │
+│📋  Scheduled           │
+│🗓️   Calendar           │
+│📊  Dashboard           │
+│📈  Reports             │
+│🔄  Habits              │
+│🔒  Blocked             │
+│🏷️   Untagged           │
+│📁  No Project          │
+│🕐  Recent              │
+│🎯  Kanban              │
+│⚡  Eisenhower          │
+│📅  Week                │
+│📊  Timeline            │
+│💤  Snoozed             │
+└───────────────────────┘

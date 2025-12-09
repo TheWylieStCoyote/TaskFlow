@@ -1,0 +1,6 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 328
+expression: output
+---
+                                No task selected

@@ -1,0 +1,29 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 389
+expression: output
+---
+┌ Network - Dependency Visualization ──────────────────────────────────────────┐
+│┌ Dependency Graph ───────────────────────────────────┐┌ Statistics ─────────┐│
+││No task dependencies found.                          ││Tasks with dependenci││
+││                                                     ││Currently blocked: 0 ││
+││Create dependencies with 'D' on a task,              ││Task chains: 0       ││
+││or link tasks in a chain with 'L'.                   ││                     ││
+││                                                     │└─────────────────────┘│
+││                                                     │┌ Legend ─────────────┐│
+││                                                     ││✓ Completed          ││
+││                                                     ││● Blocking others    ││
+││                                                     ││○ Pending            ││
+││                                                     ││↓ Chain link         ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+││                                                     ││                     ││
+│└─────────────────────────────────────────────────────┘└─────────────────────┘│
+└──────────────────────────────────────────────────────────────────────────────┘

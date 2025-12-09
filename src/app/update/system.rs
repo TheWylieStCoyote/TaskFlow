@@ -88,8 +88,29 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
     }
 }
 
+/// Get a human-readable description of an undo action
+fn action_description(action: &UndoAction) -> &'static str {
+    match action {
+        UndoAction::TaskCreated(_) => "task creation",
+        UndoAction::TaskDeleted { .. } => "task deletion",
+        UndoAction::TaskModified { .. } => "task change",
+        UndoAction::ProjectCreated(_) => "project creation",
+        UndoAction::ProjectDeleted(_) => "project deletion",
+        UndoAction::ProjectModified { .. } => "project change",
+        UndoAction::TimeEntryStarted(_) => "timer start",
+        UndoAction::TimeEntryStopped { .. } => "timer stop",
+        UndoAction::TimeEntryDeleted(_) => "time entry deletion",
+        UndoAction::TimeEntryModified { .. } => "time entry change",
+        UndoAction::TimerSwitched { .. } => "timer switch",
+        UndoAction::WorkLogCreated(_) => "work log creation",
+        UndoAction::WorkLogDeleted(_) => "work log deletion",
+        UndoAction::WorkLogModified { .. } => "work log change",
+    }
+}
+
 fn handle_undo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_undo() {
+        let description = action_description(&action);
         match action {
             UndoAction::TaskCreated(task) => {
                 // Undo create by deleting the task
@@ -167,11 +188,13 @@ fn handle_undo(model: &mut Model) {
             }
         }
         model.refresh_visible_tasks();
+        model.status_message = Some(format!("Undone: {description}"));
     }
 }
 
 fn handle_redo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_redo() {
+        let description = action_description(&action);
         match action {
             UndoAction::TaskCreated(task) => {
                 // Redo create by restoring the task
@@ -253,6 +276,7 @@ fn handle_redo(model: &mut Model) {
             }
         }
         model.refresh_visible_tasks();
+        model.status_message = Some(format!("Redone: {description}"));
     }
 }
 

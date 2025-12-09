@@ -90,10 +90,11 @@ mod help_component {
     #[test]
     fn test_help_popup_layout() {
         let keybindings = Keybindings::default();
+        let theme = Theme::default();
 
         let area = Rect::new(0, 0, 80, 30);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings);
+        let help = HelpPopup::new(&keybindings, &theme);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);
@@ -103,10 +104,11 @@ mod help_component {
     #[test]
     fn test_help_popup_small_area() {
         let keybindings = Keybindings::default();
+        let theme = Theme::default();
 
         let area = Rect::new(0, 0, 40, 15);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings);
+        let help = HelpPopup::new(&keybindings, &theme);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);

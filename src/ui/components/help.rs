@@ -14,12 +14,12 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
-use crate::config::Keybindings;
+use crate::config::{Keybindings, Theme};
 
 /// View-specific navigation hints (key, description)
 const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
@@ -36,17 +36,20 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
 /// Help popup widget that displays keybindings dynamically
 pub struct HelpPopup<'a> {
     keybindings: &'a Keybindings,
+    theme: &'a Theme,
 }
 
 impl<'a> HelpPopup<'a> {
     #[must_use]
-    pub const fn new(keybindings: &'a Keybindings) -> Self {
-        Self { keybindings }
+    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme) -> Self {
+        Self { keybindings, theme }
     }
 }
 
 impl Widget for HelpPopup<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = self.theme;
+
         // Clear the area first
         Clear.render(area, buf);
 
@@ -54,6 +57,7 @@ impl Widget for HelpPopup<'_> {
         let grouped = self.keybindings.bindings_by_category();
 
         let mut help_lines: Vec<Line<'_>> = Vec::new();
+        let key_color = theme.colors.accent.to_color();
 
         for (category, bindings) in grouped {
             // Add category header
@@ -71,7 +75,7 @@ impl Widget for HelpPopup<'_> {
                 let padded_key = format!("{display_key:<10}");
 
                 help_lines.push(Line::from(vec![
-                    Span::styled(padded_key, Style::default().fg(Color::Cyan)),
+                    Span::styled(padded_key, Style::default().fg(key_color)),
                     Span::raw(description),
                 ]));
             }
@@ -93,7 +97,7 @@ impl Widget for HelpPopup<'_> {
         )]));
         for (keys, desc) in SPECIALIZED_VIEW_HINTS {
             help_lines.push(Line::from(vec![
-                Span::styled(format!("{keys:<10}"), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{keys:<10}"), Style::default().fg(key_color)),
                 Span::raw(*desc),
             ]));
         }
@@ -104,7 +108,7 @@ impl Widget for HelpPopup<'_> {
                     .borders(Borders::ALL)
                     .title(" Help (press ? or Esc to close) ")
                     .title_alignment(Alignment::Center)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(theme.colors.warning.to_color())),
             )
             .wrap(Wrap { trim: false })
             .alignment(Alignment::Left);
@@ -243,10 +247,15 @@ mod tests {
         assert_eq!(popup.height, 20); // Should be clamped to screen height
     }
 
+    fn test_theme() -> Theme {
+        Theme::default()
+    }
+
     #[test]
     fn test_help_popup_renders_title() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 30);
         let content = buffer_content(&buffer);
 
@@ -256,7 +265,8 @@ mod tests {
     #[test]
     fn test_help_popup_renders_categories() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
@@ -274,7 +284,8 @@ mod tests {
     #[test]
     fn test_help_popup_renders_keybindings() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 

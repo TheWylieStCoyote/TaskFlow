@@ -16,12 +16,13 @@ mod tests;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Tabs, Widget},
 };
 
 use crate::app::Model;
+use crate::config::Theme;
 
 /// The currently selected report panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -98,31 +99,35 @@ impl ReportPanel {
 pub struct ReportsView<'a> {
     model: &'a Model,
     selected_panel: ReportPanel,
+    theme: &'a Theme,
 }
 
 impl<'a> ReportsView<'a> {
     /// Create a new reports view.
     #[must_use]
-    pub const fn new(model: &'a Model, selected_panel: ReportPanel) -> Self {
+    pub const fn new(model: &'a Model, selected_panel: ReportPanel, theme: &'a Theme) -> Self {
         Self {
             model,
             selected_panel,
+            theme,
         }
     }
 }
 
 impl Widget for ReportsView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = self.theme;
+
         // Render outer border
         let block = Block::default()
             .title(" Reports ")
             .title_style(
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.colors.accent.to_color())
                     .add_modifier(Modifier::BOLD),
             )
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(theme.colors.border.to_color()));
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -145,7 +150,7 @@ impl Widget for ReportsView<'_> {
             .select(self.selected_panel.index())
             .highlight_style(
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme.colors.accent.to_color())
                     .add_modifier(Modifier::BOLD),
             )
             .divider(" | ");

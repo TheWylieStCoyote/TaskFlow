@@ -66,7 +66,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     // Render popups
     if model.show_help {
         let popup_area = centered_rect(50, 70, area);
-        frame.render_widget(HelpPopup::new(&model.keybindings), popup_area);
+        frame.render_widget(HelpPopup::new(&model.keybindings, theme), popup_area);
     }
 
     // Render input dialog if in editing mode
@@ -434,7 +434,7 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
                 }
             }
 
-            let reports = ReportsView::new(model, model.report_panel);
+            let reports = ReportsView::new(model, model.report_panel, theme);
             frame.render_widget(reports, area);
         }
         ViewId::Habits => {
@@ -577,6 +577,21 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
             Style::default().fg(theme.colors.muted.to_color()),
         ),
     ];
+
+    // Add multi-select mode indicator
+    if model.multi_select_mode {
+        let selected_count = model.selected_tasks.len();
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+        spans.push(Span::styled(
+            format!("[MULTI-SELECT: {selected_count}]"),
+            Style::default()
+                .fg(theme.colors.accent.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
 
     // Add overdue indicator (red)
     if overdue > 0 {

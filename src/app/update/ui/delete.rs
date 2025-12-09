@@ -18,6 +18,9 @@ pub fn show_delete_confirm(model: &mut Model) {
 pub fn confirm_delete(model: &mut Model) {
     if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
         if let Some(task) = model.tasks.remove(&id) {
+            // Save the task title for feedback message
+            let task_title = task.title.clone();
+
             // Collect time entries for this task before deleting
             let task_entries: Vec<_> = model
                 .time_entries
@@ -47,6 +50,14 @@ pub fn confirm_delete(model: &mut Model) {
                 task: Box::new(task),
                 time_entries: task_entries,
             });
+
+            // Truncate long titles for display
+            let display_title = if task_title.len() > 40 {
+                format!("{}...", &task_title[..37])
+            } else {
+                task_title
+            };
+            model.status_message = Some(format!("Deleted: {display_title}"));
         }
         model.refresh_visible_tasks();
     }

@@ -1,13 +1,65 @@
-//! UI message handlers
+//! UI message dispatch handler.
 //!
-//! Handles all user interface messages including:
-//! - Input mode handling (create, edit, search)
-//! - View controls (toggle completed, sidebar)
-//! - Multi-select and bulk operations
-//! - Calendar navigation
-//! - Macro recording/playback
-//! - Template picker
-//! - Keybindings editor
+//! This module serves as the central dispatcher for all [`UiMessage`] variants.
+//! It routes incoming UI messages to specialized sub-handlers based on message type,
+//! following the TEA (The Elm Architecture) pattern used throughout TaskFlow.
+//!
+//! # Architecture
+//!
+//! The dispatcher pattern provides several benefits:
+//! - **Separation of concerns**: Each sub-module handles a specific feature domain
+//! - **Maintainability**: Related code is grouped together for easy navigation
+//! - **Testability**: Sub-handlers can be tested independently
+//!
+//! # Sub-modules
+//!
+//! The following sub-modules handle specific UI message categories:
+//!
+//! | Module | Responsibility |
+//! |--------|----------------|
+//! | [`calendar`] | Calendar navigation and day selection |
+//! | [`delete`] | Task and project deletion with confirmation |
+//! | [`editors`] | Description, time log, and work log editors |
+//! | [`filters`] | Search, tag filtering, and saved filter operations |
+//! | [`input`] | Text input handling and quick-add parsing |
+//! | [`keybindings`] | Keybinding editor with conflict detection |
+//! | [`macros`] | Macro recording and playback |
+//! | [`multi_select`] | Bulk selection and bulk operations |
+//! | [`reviews`] | Daily and weekly review mode handling |
+//! | [`task_ops`] | Task reordering and manipulation |
+//! | [`templates`] | Template picker for task creation |
+//! | [`time_tracking`] | Time entry management and Pomodoro timer |
+//! | [`view_state`] | View switching, sidebar toggle, focus mode |
+//!
+//! # Message Flow
+//!
+//! ```text
+//! UiMessage → handle_ui() → match msg {
+//!     View state toggles    → view_state::*
+//!     Delete operations     → delete::*
+//!     Multi-select          → multi_select::*
+//!     Calendar nav          → calendar::*
+//!     Macros                → macros::*
+//!     Templates             → templates::*
+//!     Keybindings           → keybindings::*
+//!     Time log              → time_tracking::*
+//!     Work log              → editors::*
+//!     Description editor    → editors::*
+//!     Saved filters         → filters::*
+//!     Reviews               → reviews::*
+//!     Input handling        → inline in handle_ui()
+//! }
+//! ```
+//!
+//! # Example
+//!
+//! ```ignore
+//! use taskflow::app::{Model, UiMessage};
+//! use taskflow::app::update::ui::handle_ui;
+//!
+//! let mut model = Model::new();
+//! handle_ui(&mut model, UiMessage::ToggleSidebar);
+//! ```
 
 mod calendar;
 mod delete;
@@ -103,7 +155,21 @@ fn parse_duration_input(input: &str) -> Option<u32> {
     None
 }
 
-/// Handle UI messages
+/// Handle a UI message by dispatching to the appropriate sub-handler.
+///
+/// This is the main entry point for UI message processing. It routes messages
+/// to specialized handlers based on the message variant, updating the model
+/// state accordingly.
+///
+/// # Arguments
+///
+/// * `model` - Mutable reference to the application model
+/// * `msg` - The UI message to process
+///
+/// # Panics
+///
+/// This function does not panic under normal operation. Invalid state
+/// transitions are handled gracefully with status messages.
 #[allow(clippy::too_many_lines)]
 pub fn handle_ui(model: &mut Model, msg: UiMessage) {
     match msg {

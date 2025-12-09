@@ -247,4 +247,170 @@ mod tests {
         // Basic assertion that something was rendered
         assert!(buffer.area.width > 0);
     }
+
+    #[test]
+    fn test_kanban_column_task_counts() {
+        let model = Model::new().with_sample_data();
+
+        // Count tasks by status from visible tasks
+        let mut todo_count = 0;
+        let mut in_progress_count = 0;
+        let mut _blocked_count = 0;
+        let mut _done_count = 0;
+
+        for id in &model.visible_tasks {
+            if let Some(task) = model.tasks.get(id) {
+                match task.status {
+                    TaskStatus::Todo => todo_count += 1,
+                    TaskStatus::InProgress => in_progress_count += 1,
+                    TaskStatus::Blocked => _blocked_count += 1,
+                    TaskStatus::Done | TaskStatus::Cancelled => _done_count += 1,
+                }
+            }
+        }
+
+        // Sample data should have tasks in multiple columns
+        assert!(todo_count > 0, "Should have Todo tasks");
+        assert!(in_progress_count > 0, "Should have InProgress tasks");
+        // Blocked tasks are optional, Done tasks are hidden by default
+    }
+
+    #[test]
+    fn test_kanban_empty_columns() {
+        // Create model with only Todo tasks
+        let mut model = Model::new();
+        let task = crate::domain::Task::new("Test task").with_status(TaskStatus::Todo);
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.visible_tasks = vec![id];
+
+        let theme = Theme::default();
+        let kanban = Kanban::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 100, 20);
+        let mut buffer = Buffer::empty(area);
+        kanban.render(area, &mut buffer);
+
+        // Convert buffer to string and check for "No tasks" message
+        let content: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+
+        // Should have "No tasks" in empty columns (InProgress, Blocked, Done)
+        assert!(
+            content.contains("No tasks"),
+            "Empty columns should show 'No tasks' message"
+        );
+    }
+
+    #[test]
+    fn test_kanban_task_selection() {
+        let mut model = Model::new().with_sample_data();
+        // Set selection to column 1 (InProgress), task 0
+        model.view_selection.kanban_column = 1;
+        model.view_selection.kanban_task_index = 0;
+
+        let theme = Theme::default();
+        let kanban = Kanban::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        kanban.render(area, &mut buffer);
+
+        // Verify render completes without panic with selection
+        assert!(buffer.area.width > 0);
+    }
+
+    #[test]
+    fn test_kanban_priority_indicators() {
+        use crate::domain::Priority;
+
+        let mut model = Model::new();
+
+        // Create tasks with different priorities
+        let urgent = crate::domain::Task::new("Urgent task")
+            .with_status(TaskStatus::Todo)
+            .with_priority(Priority::Urgent);
+        let high = crate::domain::Task::new("High task")
+            .with_status(TaskStatus::Todo)
+            .with_priority(Priority::High);
+        let medium = crate::domain::Task::new("Medium task")
+            .with_status(TaskStatus::Todo)
+            .with_priority(Priority::Medium);
+        let low = crate::domain::Task::new("Low task")
+            .with_status(TaskStatus::Todo)
+            .with_priority(Priority::Low);
+
+        let ids = vec![urgent.id, high.id, medium.id, low.id];
+        model.tasks.insert(urgent.id, urgent);
+        model.tasks.insert(high.id, high);
+        model.tasks.insert(medium.id, medium);
+        model.tasks.insert(low.id, low);
+        model.visible_tasks = ids;
+
+        let theme = Theme::default();
+        let kanban = Kanban::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        kanban.render(area, &mut buffer);
+
+        let content: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+
+        // Check priority indicators are rendered
+        assert!(
+            content.contains("!!!!"),
+            "Should show Urgent indicator (!!!!)"
+        );
+        assert!(content.contains("!!!"), "Should show High indicator (!!!)");
+        assert!(content.contains("!!"), "Should show Medium indicator (!!)");
+        // Low priority has single ! which is also part of !!!! etc, so just verify render works
+    }
+
+    #[test]
+    fn test_kanban_overdue_styling() {
+        use chrono::{Duration, Utc};
+
+        let mut model = Model::new();
+
+        // Create an overdue task
+        let overdue = crate::domain::Task::new("Overdue task")
+            .with_status(TaskStatus::Todo)
+            .with_due_date(Utc::now().date_naive() - Duration::days(2));
+
+        // Create a task due today
+        let due_today = crate::domain::Task::new("Due today task")
+            .with_status(TaskStatus::Todo)
+            .with_due_date(Utc::now().date_naive());
+
+        let ids = vec![overdue.id, due_today.id];
+        model.tasks.insert(overdue.id, overdue);
+        model.tasks.insert(due_today.id, due_today);
+        model.visible_tasks = ids;
+
+        let theme = Theme::default();
+        let kanban = Kanban::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        kanban.render(area, &mut buffer);
+
+        let content: String = buffer
+            .content
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+
+        // Overdue tasks should show warning indicator
+        assert!(
+            content.contains("⚠"),
+            "Overdue task should show ⚠ indicator"
+        );
+    }
 }

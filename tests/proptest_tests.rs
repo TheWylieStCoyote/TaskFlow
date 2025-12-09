@@ -448,3 +448,291 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// Property tests for combined filter operations
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Combining status and priority filters returns intersection
+    #[test]
+    fn prop_combined_status_priority_filter(
+        tasks in prop::collection::vec(task_strategy(), 1..20),
+        filter_status in status_strategy(),
+        filter_priority in priority_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create all tasks
+        for task in &tasks {
+            backend.create_task(task).unwrap();
+        }
+
+        // Filter by both status and priority
+        let filter = taskflow::domain::Filter {
+            status: Some(vec![filter_status]),
+            priority: Some(vec![filter_priority]),
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        // Count expected (intersection)
+        let expected_count = tasks
+            .iter()
+            .filter(|t| t.status == filter_status && t.priority == filter_priority)
+            .count();
+        prop_assert_eq!(filtered.len(), expected_count);
+
+        // All returned tasks should match both criteria
+        for task in &filtered {
+            prop_assert_eq!(task.status, filter_status);
+            prop_assert_eq!(task.priority, filter_priority);
+        }
+    }
+
+    /// Property: Tag filter combined with status filter returns intersection
+    #[test]
+    fn prop_combined_tag_status_filter(
+        tag_to_filter in "[a-z]{3,10}",
+        filter_status in status_strategy(),
+        base_tasks in prop::collection::vec(task_strategy(), 1..15),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create tasks with varied tags and statuses
+        let mut tasks_with_tag_and_status = 0;
+        for mut task in base_tasks {
+            // Randomly add the target tag to some tasks
+            if task.title.len() % 2 == 0 && !task.tags.contains(&tag_to_filter) {
+                task.tags.push(tag_to_filter.clone());
+            }
+            if task.tags.contains(&tag_to_filter) && task.status == filter_status {
+                tasks_with_tag_and_status += 1;
+            }
+            backend.create_task(&task).unwrap();
+        }
+
+        // Filter by tag and status
+        let filter = taskflow::domain::Filter {
+            tags: Some(vec![tag_to_filter.clone()]),
+            status: Some(vec![filter_status]),
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        prop_assert_eq!(filtered.len(), tasks_with_tag_and_status);
+
+        // All returned tasks should match both criteria
+        for task in &filtered {
+            prop_assert!(task.tags.contains(&tag_to_filter));
+            prop_assert_eq!(task.status, filter_status);
+        }
+    }
+
+    /// Property: Empty filter returns all tasks (respecting include_completed)
+    #[test]
+    fn prop_empty_filter_returns_all(
+        tasks in prop::collection::vec(task_strategy(), 1..20),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        for task in &tasks {
+            backend.create_task(task).unwrap();
+        }
+
+        // Empty filter with include_completed = true should return all
+        let filter = taskflow::domain::Filter {
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        prop_assert_eq!(filtered.len(), tasks.len());
+    }
+
+    /// Property: Filter excluding completed removes done/cancelled tasks
+    #[test]
+    fn prop_exclude_completed_filter(
+        tasks in prop::collection::vec(task_strategy(), 1..20),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        for task in &tasks {
+            backend.create_task(task).unwrap();
+        }
+
+        // Filter excluding completed
+        let filter = taskflow::domain::Filter {
+            include_completed: false,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        // Count incomplete tasks
+        let incomplete_count = tasks.iter().filter(|t| !t.status.is_complete()).count();
+        prop_assert_eq!(filtered.len(), incomplete_count);
+
+        // All returned tasks should be incomplete
+        for task in &filtered {
+            prop_assert!(!task.status.is_complete());
+        }
+    }
+}
+
+// ============================================================================
+// Property tests for recurrence patterns
+// ============================================================================
+
+use taskflow::domain::Recurrence;
+
+/// Strategy for generating recurrence patterns
+fn recurrence_strategy() -> impl Strategy<Value = Recurrence> {
+    prop_oneof![
+        Just(Recurrence::Daily),
+        prop::collection::vec(weekday_strategy(), 1..7).prop_map(|days| Recurrence::Weekly {
+            days: days
+                .into_iter()
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect()
+        }),
+        (1u32..29).prop_map(|day| Recurrence::Monthly { day }),
+        (1u32..13, 1u32..29).prop_map(|(month, day)| Recurrence::Yearly { month, day }),
+    ]
+}
+
+/// Strategy for generating weekdays
+fn weekday_strategy() -> impl Strategy<Value = chrono::Weekday> {
+    prop_oneof![
+        Just(chrono::Weekday::Mon),
+        Just(chrono::Weekday::Tue),
+        Just(chrono::Weekday::Wed),
+        Just(chrono::Weekday::Thu),
+        Just(chrono::Weekday::Fri),
+        Just(chrono::Weekday::Sat),
+        Just(chrono::Weekday::Sun),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(50))]
+
+    /// Property: Recurrence Display is non-empty and consistent
+    #[test]
+    fn prop_recurrence_display_non_empty(recurrence in recurrence_strategy()) {
+        let display = format!("{}", recurrence);
+        prop_assert!(!display.is_empty());
+        // Display should contain recognizable pattern name
+        prop_assert!(
+            display.contains("Daily")
+                || display.contains("Weekly")
+                || display.contains("Monthly")
+                || display.contains("Yearly")
+        );
+    }
+
+    /// Property: Monthly recurrence day is always valid (1-31)
+    #[test]
+    fn prop_monthly_recurrence_valid_day(day in 1u32..32) {
+        let recurrence = Recurrence::Monthly { day };
+        let display = format!("{}", recurrence);
+        prop_assert!(display.contains(&day.to_string()));
+    }
+
+    /// Property: Yearly recurrence serialization roundtrip
+    #[test]
+    fn prop_recurrence_serde_roundtrip(recurrence in recurrence_strategy()) {
+        let json = serde_json::to_string(&recurrence).unwrap();
+        let parsed: Recurrence = serde_json::from_str(&json).unwrap();
+        prop_assert_eq!(recurrence, parsed);
+    }
+
+    /// Property: Task with recurrence preserves pattern through storage
+    #[test]
+    fn prop_task_recurrence_storage_roundtrip(
+        task in task_strategy(),
+        recurrence in recurrence_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        let mut task_with_recurrence = task;
+        task_with_recurrence.recurrence = Some(recurrence.clone());
+
+        backend.create_task(&task_with_recurrence).unwrap();
+        let retrieved = backend.get_task(&task_with_recurrence.id).unwrap().unwrap();
+
+        prop_assert_eq!(retrieved.recurrence, Some(recurrence));
+    }
+}
+
+// ============================================================================
+// Property tests for task chains (dependencies)
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Task chain links are preserved through storage
+    #[test]
+    fn prop_task_chain_storage_roundtrip(
+        task1 in task_strategy(),
+        task2 in task_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create task2 first (the next task)
+        backend.create_task(&task2).unwrap();
+
+        // Create task1 with next_task_id pointing to task2
+        let mut linked_task = task1;
+        linked_task.next_task_id = Some(task2.id);
+        backend.create_task(&linked_task).unwrap();
+
+        // Retrieve and verify link is preserved
+        let retrieved = backend.get_task(&linked_task.id).unwrap().unwrap();
+        prop_assert_eq!(retrieved.next_task_id, Some(task2.id));
+    }
+
+    /// Property: Task dependencies are preserved through storage
+    #[test]
+    fn prop_task_dependencies_storage_roundtrip(
+        tasks in prop::collection::vec(task_strategy(), 2..5),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create all tasks first
+        for task in &tasks {
+            backend.create_task(task).unwrap();
+        }
+
+        // Make first task depend on all others
+        let mut dependent_task = tasks[0].clone();
+        dependent_task.dependencies = tasks[1..].iter().map(|t| t.id).collect();
+        backend.update_task(&dependent_task).unwrap();
+
+        // Retrieve and verify dependencies
+        let retrieved = backend.get_task(&dependent_task.id).unwrap().unwrap();
+        prop_assert_eq!(retrieved.dependencies.len(), tasks.len() - 1);
+        for dep_id in &dependent_task.dependencies {
+            prop_assert!(retrieved.dependencies.contains(dep_id));
+        }
+    }
+}

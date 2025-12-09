@@ -66,7 +66,7 @@ pub fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message
         KeyCode::Char('n') => Some(Message::Ui(UiMessage::StartCreateHabit)),
         // Edit selected habit
         KeyCode::Char('e') => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
                 Some(Message::Ui(UiMessage::StartEditHabit(habit_id)))
             } else {
                 None

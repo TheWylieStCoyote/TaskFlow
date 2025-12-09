@@ -26,6 +26,39 @@ macro_rules! action_desc {
             truncate($name, DESC_MAX_LEN)
         )
     };
+    // WorkLog uses different verbs
+    (add $entity:literal, $name:expr) => {
+        format!(
+            concat!("Add ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (edit $entity:literal, $name:expr) => {
+        format!(
+            concat!("Edit ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+}
+
+/// Generate inverse for self-inverse actions (create/delete pairs that clone as-is)
+macro_rules! inverse_clone {
+    ($self:expr, $variant:ident) => {
+        Self::$variant($self.clone())
+    };
+    ($self:expr, $variant:ident { $($field:ident),+ }) => {
+        Self::$variant { $($field: $field.clone()),+ }
+    };
+}
+
+/// Generate inverse for before/after actions (swap and clone)
+macro_rules! inverse_swap {
+    ($variant:ident, $before:expr, $after:expr) => {
+        Self::$variant {
+            before: $after.clone(),
+            after: $before.clone(),
+        }
+    };
 }
 
 /// Represents an action that can be undone/redone
@@ -85,30 +118,27 @@ impl UndoAction {
     #[must_use]
     pub fn description(&self) -> String {
         match self {
+            // Task actions
             Self::TaskCreated(task) => action_desc!(create "task", &task.title),
             Self::TaskDeleted { task, .. } => action_desc!(delete "task", &task.title),
             Self::TaskModified { before, .. } => action_desc!(modify "task", &before.title),
+
+            // Project actions
             Self::ProjectCreated(project) => action_desc!(create "project", &project.name),
             Self::ProjectDeleted(project) => action_desc!(delete "project", &project.name),
             Self::ProjectModified { before, .. } => action_desc!(modify "project", &before.name),
+
+            // Time entry actions (no entity name - actions are self-explanatory)
             Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
             Self::TimerSwitched { .. } => "Switch timer".to_string(),
-            Self::WorkLogCreated(entry) => {
-                format!(
-                    "Add work log \"{}\"",
-                    truncate(entry.summary(), DESC_MAX_LEN)
-                )
-            }
+
+            // Work log actions (use add/edit verbs for consistency with UI)
+            Self::WorkLogCreated(entry) => action_desc!(add "work log", entry.summary()),
             Self::WorkLogDeleted(entry) => action_desc!(delete "work log", entry.summary()),
-            Self::WorkLogModified { before, .. } => {
-                format!(
-                    "Edit work log \"{}\"",
-                    truncate(before.summary(), DESC_MAX_LEN)
-                )
-            }
+            Self::WorkLogModified { before, .. } => action_desc!(edit "work log", before.summary()),
         }
     }
 
@@ -116,42 +146,34 @@ impl UndoAction {
     #[must_use]
     pub fn inverse(&self) -> Self {
         match self {
-            // Undo create = delete, so redo = create again
-            Self::TaskCreated(task) => Self::TaskCreated(task.clone()),
-            // Undo delete = restore, so redo = delete again
-            Self::TaskDeleted { task, time_entries } => Self::TaskDeleted {
-                task: task.clone(),
-                time_entries: time_entries.clone(),
-            },
-            // Undo modify swaps before/after, so redo swaps them back
-            Self::TaskModified { before, after } => Self::TaskModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo project create = delete, so redo = create again
-            Self::ProjectCreated(project) => Self::ProjectCreated(project.clone()),
-            // Undo project delete = restore, so redo = delete again
-            Self::ProjectDeleted(project) => Self::ProjectDeleted(project.clone()),
-            // Undo project modify swaps before/after, so redo swaps them back
-            Self::ProjectModified { before, after } => Self::ProjectModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo time entry start = delete, so redo = start again
-            Self::TimeEntryStarted(entry) => Self::TimeEntryStarted(entry.clone()),
-            // Undo time entry stop swaps before/after, so redo swaps them back
-            Self::TimeEntryStopped { before, after } => Self::TimeEntryStopped {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Undo time entry delete = restore, so redo = delete again
-            Self::TimeEntryDeleted(entry) => Self::TimeEntryDeleted(entry.clone()),
-            // Undo time entry modify swaps before/after, so redo swaps them back
-            Self::TimeEntryModified { before, after } => Self::TimeEntryModified {
-                before: after.clone(),
-                after: before.clone(),
-            },
-            // Timer switch inverse keeps the same data (undo/redo logic handles it)
+            // Self-inverse actions: clone as-is (create/delete pairs)
+            Self::TaskCreated(task) => inverse_clone!(task, TaskCreated),
+            Self::TaskDeleted { task, time_entries } => {
+                inverse_clone!(self, TaskDeleted { task, time_entries })
+            }
+            Self::ProjectCreated(project) => inverse_clone!(project, ProjectCreated),
+            Self::ProjectDeleted(project) => inverse_clone!(project, ProjectDeleted),
+            Self::TimeEntryStarted(entry) => inverse_clone!(entry, TimeEntryStarted),
+            Self::TimeEntryDeleted(entry) => inverse_clone!(entry, TimeEntryDeleted),
+            Self::WorkLogCreated(entry) => inverse_clone!(entry, WorkLogCreated),
+            Self::WorkLogDeleted(entry) => inverse_clone!(entry, WorkLogDeleted),
+
+            // Swap-inverse actions: swap before/after (modify actions)
+            Self::TaskModified { before, after } => inverse_swap!(TaskModified, before, after),
+            Self::ProjectModified { before, after } => {
+                inverse_swap!(ProjectModified, before, after)
+            }
+            Self::TimeEntryStopped { before, after } => {
+                inverse_swap!(TimeEntryStopped, before, after)
+            }
+            Self::TimeEntryModified { before, after } => {
+                inverse_swap!(TimeEntryModified, before, after)
+            }
+            Self::WorkLogModified { before, after } => {
+                inverse_swap!(WorkLogModified, before, after)
+            }
+
+            // Special case: TimerSwitched has 3 fields, clone all as-is
             Self::TimerSwitched {
                 stopped_entry_before,
                 stopped_entry_after,
@@ -160,15 +182,6 @@ impl UndoAction {
                 stopped_entry_before: stopped_entry_before.clone(),
                 stopped_entry_after: stopped_entry_after.clone(),
                 started_entry: started_entry.clone(),
-            },
-            // Undo work log create = delete, so redo = create again
-            Self::WorkLogCreated(entry) => Self::WorkLogCreated(entry.clone()),
-            // Undo work log delete = restore, so redo = delete again
-            Self::WorkLogDeleted(entry) => Self::WorkLogDeleted(entry.clone()),
-            // Undo work log modify swaps before/after, so redo swaps them back
-            Self::WorkLogModified { before, after } => Self::WorkLogModified {
-                before: after.clone(),
-                after: before.clone(),
             },
         }
     }

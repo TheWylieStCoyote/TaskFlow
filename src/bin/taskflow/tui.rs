@@ -62,8 +62,8 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
                 warn!(error = %e, path = %data_path.display(), "Failed to load data");
                 let error_msg = format!("{}: {e}", data_path.display());
                 let mut m = Model::new().with_sample_data();
-                m.storage_load_error = Some(error_msg);
-                m.show_storage_error_alert = true;
+                m.alerts.storage_error = Some(error_msg);
+                m.alerts.show_storage_error = true;
                 m
             }
         }
@@ -151,7 +151,7 @@ fn run_app(
         if let Some(interval) = auto_save_interval {
             if model.dirty && model.has_storage() && last_save.elapsed() >= interval {
                 if let Err(e) = model.save() {
-                    model.error_message = Some(format!("Auto-save failed: {e}"));
+                    model.alerts.error_message = Some(format!("Auto-save failed: {e}"));
                 }
                 last_save = Instant::now();
             }

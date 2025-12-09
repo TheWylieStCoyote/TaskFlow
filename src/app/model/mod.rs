@@ -55,7 +55,10 @@ mod types;
 
 pub use cache::{FooterStats, TaskCache};
 pub use types::{
-    AlertState, CalendarState, RunningState, TimelineState, TimelineZoom, ViewSelectionState,
+    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
+    KeybindingsEditorState, RunningState, SavedFilterPickerState, TemplatePickerState,
+    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
+    WorkLogEditorState,
 };
 
 use std::collections::HashMap;
@@ -265,10 +268,8 @@ pub struct Model {
     // Task templates
     /// Task template manager
     pub template_manager: TemplateManager,
-    /// Whether template picker is visible
-    pub show_templates: bool,
-    /// Index of selected template in picker
-    pub template_selected: usize,
+    /// Template picker state
+    pub template_picker: TemplatePickerState,
 
     // Pomodoro timer
     /// Active Pomodoro session (if any)
@@ -279,12 +280,8 @@ pub struct Model {
     pub pomodoro_stats: crate::domain::PomodoroStats,
 
     // Keybindings editor
-    /// Whether keybindings editor is visible
-    pub show_keybindings_editor: bool,
-    /// Selected keybinding index in editor
-    pub keybinding_selected: usize,
-    /// Whether currently capturing a new key
-    pub keybinding_capturing: bool,
+    /// Keybindings editor state
+    pub keybindings_editor: KeybindingsEditorState,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
 
@@ -298,105 +295,55 @@ pub struct Model {
     /// Whether import preview dialog is showing
     pub show_import_preview: bool,
 
-    // Overdue alert state
-    /// Whether overdue tasks alert is visible (shown at startup)
-    pub show_overdue_alert: bool,
-
-    // Storage error alert state
-    /// Storage load error message (if any)
-    pub storage_load_error: Option<String>,
-    /// Whether storage error alert is visible
-    pub show_storage_error_alert: bool,
-    /// Error message to display in footer (shown in red)
-    pub error_message: Option<String>,
+    // Alert state
+    /// Consolidated alert and error state
+    pub alerts: AlertState,
 
     // Time log editor state
-    /// Whether time log editor is visible
-    pub show_time_log: bool,
-    /// Selected time entry index in log
-    pub time_log_selected: usize,
-    /// Current mode in time log editor
-    pub time_log_mode: crate::ui::TimeLogMode,
-    /// Text buffer for editing time entries
-    pub time_log_buffer: String,
+    /// Time log editor state
+    pub time_log: TimeLogEditorState,
 
     // Work log state
     /// All work log entries indexed by ID
     pub work_logs: HashMap<WorkLogEntryId, WorkLogEntry>,
-    /// Whether work log editor is visible
-    pub show_work_log: bool,
-    /// Selected work log entry index
-    pub work_log_selected: usize,
-    /// Current mode in work log editor
-    pub work_log_mode: crate::ui::WorkLogMode,
-    /// Text buffer for editing work log entries (multi-line)
-    pub work_log_buffer: Vec<String>,
-    /// Cursor line position in work log buffer
-    pub work_log_cursor_line: usize,
-    /// Cursor column position in work log buffer
-    pub work_log_cursor_col: usize,
-    /// Search query for filtering work log entries
-    pub work_log_search_query: String,
+    /// Work log editor state
+    pub work_log_editor: WorkLogEditorState,
 
     // Description editor state (multi-line)
-    /// Whether description editor is visible
-    pub show_description_editor: bool,
-    /// Text buffer for editing description (multi-line)
-    pub description_buffer: Vec<String>,
-    /// Cursor line position in description buffer
-    pub description_cursor_line: usize,
-    /// Cursor column position in description buffer
-    pub description_cursor_col: usize,
+    /// Description editor state
+    pub description_editor: DescriptionEditorState,
 
     // Saved filters
     /// User-defined saved filters (smart lists)
     pub saved_filters: HashMap<SavedFilterId, SavedFilter>,
     /// Currently active saved filter (if any)
     pub active_saved_filter: Option<SavedFilterId>,
-    /// Whether saved filter picker is visible
-    pub show_saved_filter_picker: bool,
-    /// Selected index in saved filter picker
-    pub saved_filter_selected: usize,
+    /// Saved filter picker state
+    pub saved_filter_picker: SavedFilterPickerState,
 
     // Daily review mode
-    /// Whether daily review mode is active
-    pub show_daily_review: bool,
-    /// Current phase of the daily review
-    pub daily_review_phase: crate::ui::DailyReviewPhase,
-    /// Selected index within current review phase
-    pub daily_review_selected: usize,
+    /// Daily review state
+    pub daily_review: DailyReviewState,
 
     // Weekly review mode
-    /// Whether weekly review mode is active
-    pub show_weekly_review: bool,
-    /// Current phase of the weekly review
-    pub weekly_review_phase: crate::ui::WeeklyReviewPhase,
-    /// Selected index within current review phase
-    pub weekly_review_selected: usize,
+    /// Weekly review state
+    pub weekly_review: WeeklyReviewState,
 
     // Timeline state
     /// State for the timeline/Gantt view
     pub timeline_state: TimelineState,
 
     // View-specific selection state
-    /// Selected column in Kanban view (0-3: Todo, InProgress, Blocked, Done)
-    pub kanban_selected_column: usize,
-    /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
-    pub eisenhower_selected_quadrant: usize,
-    /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
-    pub weekly_planner_selected_day: usize,
+    /// Selection state for specialized views (Kanban, Eisenhower, WeeklyPlanner)
+    pub view_selection: ViewSelectionState,
 
     // Habit tracking
     /// All habits indexed by ID
     pub habits: HashMap<HabitId, Habit>,
     /// Visible habit IDs (filtered by archived status)
     pub visible_habits: Vec<HabitId>,
-    /// Index of selected habit in list
-    pub habit_selected: usize,
-    /// Whether habit analytics popup is visible
-    pub show_habit_analytics: bool,
-    /// Whether to show archived habits
-    pub show_archived_habits: bool,
+    /// Habit view state (selection, analytics, archive filter)
+    pub habit_view: HabitViewState,
 
     // Performance caches
     /// Cached footer statistics (completed, overdue, due today counts)
@@ -462,57 +409,30 @@ impl Model {
             macro_state: MacroState::new(),
             pending_macro_slot: None,
             template_manager: TemplateManager::new(),
-            show_templates: false,
-            template_selected: 0,
+            template_picker: TemplatePickerState::default(),
             pomodoro_session: None,
             pomodoro_config: crate::domain::PomodoroConfig::default(),
             pomodoro_stats: crate::domain::PomodoroStats::default(),
-            show_keybindings_editor: false,
-            keybinding_selected: 0,
-            keybinding_capturing: false,
+            keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
             pending_import: None,
             show_import_preview: false,
-            show_overdue_alert: false,
-            storage_load_error: None,
-            show_storage_error_alert: false,
-            error_message: None,
-            show_time_log: false,
-            time_log_selected: 0,
-            time_log_mode: crate::ui::TimeLogMode::default(),
-            time_log_buffer: String::new(),
+            alerts: AlertState::default(),
+            time_log: TimeLogEditorState::default(),
             work_logs: HashMap::new(),
-            show_work_log: false,
-            work_log_selected: 0,
-            work_log_mode: crate::ui::WorkLogMode::default(),
-            work_log_buffer: vec![String::new()],
-            work_log_cursor_line: 0,
-            work_log_cursor_col: 0,
-            work_log_search_query: String::new(),
-            show_description_editor: false,
-            description_buffer: vec![String::new()],
-            description_cursor_line: 0,
-            description_cursor_col: 0,
+            work_log_editor: WorkLogEditorState::default(),
+            description_editor: DescriptionEditorState::default(),
             saved_filters: HashMap::new(),
             active_saved_filter: None,
-            show_saved_filter_picker: false,
-            saved_filter_selected: 0,
-            show_daily_review: false,
-            daily_review_phase: crate::ui::DailyReviewPhase::default(),
-            daily_review_selected: 0,
-            show_weekly_review: false,
-            weekly_review_phase: crate::ui::WeeklyReviewPhase::default(),
-            weekly_review_selected: 0,
+            saved_filter_picker: SavedFilterPickerState::default(),
+            daily_review: DailyReviewState::default(),
+            weekly_review: WeeklyReviewState::default(),
             timeline_state: TimelineState::default(),
-            kanban_selected_column: 0,
-            eisenhower_selected_quadrant: 0,
-            weekly_planner_selected_day: 0,
+            view_selection: ViewSelectionState::default(),
             habits: HashMap::new(),
             visible_habits: Vec::new(),
-            habit_selected: 0,
-            show_habit_analytics: false,
-            show_archived_habits: false,
+            habit_view: HabitViewState::default(),
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
         }
@@ -612,7 +532,7 @@ impl Model {
         self.visible_habits = self
             .habits
             .values()
-            .filter(|h| self.show_archived_habits || !h.archived)
+            .filter(|h| self.habit_view.show_archived || !h.archived)
             .map(|h| h.id)
             .collect();
         // Sort by name
@@ -626,9 +546,9 @@ impl Model {
         });
         // Clamp selection
         if !self.visible_habits.is_empty() {
-            self.habit_selected = self.habit_selected.min(self.visible_habits.len() - 1);
+            self.habit_view.selected = self.habit_view.selected.min(self.visible_habits.len() - 1);
         } else {
-            self.habit_selected = 0;
+            self.habit_view.selected = 0;
         }
     }
 
@@ -636,7 +556,7 @@ impl Model {
     #[must_use]
     pub fn selected_habit(&self) -> Option<&Habit> {
         self.visible_habits
-            .get(self.habit_selected)
+            .get(self.habit_view.selected)
             .and_then(|id| self.habits.get(id))
     }
 

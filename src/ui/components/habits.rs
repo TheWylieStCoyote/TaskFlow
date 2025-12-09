@@ -45,7 +45,7 @@ impl HabitsView<'_> {
         let theme = self.theme;
         let today = Utc::now().date_naive();
 
-        let title = if self.model.show_archived_habits {
+        let title = if self.model.habit_view.show_archived {
             " Habits (showing archived) "
         } else {
             " Habits "
@@ -79,7 +79,7 @@ impl HabitsView<'_> {
             .enumerate()
             .filter_map(|(idx, id)| {
                 let habit = self.model.habits.get(id)?;
-                let is_selected = idx == self.model.habit_selected;
+                let is_selected = idx == self.model.habit_view.selected;
 
                 // Check-in status for today
                 let completed_today = habit.is_completed_on(today);

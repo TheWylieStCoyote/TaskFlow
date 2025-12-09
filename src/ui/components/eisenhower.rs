@@ -106,7 +106,7 @@ impl Widget for Eisenhower<'_> {
         };
 
         // Render quadrants (0=TL, 1=TR, 2=BL, 3=BR)
-        let selected = self.model.eisenhower_selected_quadrant;
+        let selected = self.model.view_selection.eisenhower_quadrant;
 
         // Top-left: Urgent + Important (DO FIRST)
         self.render_quadrant(

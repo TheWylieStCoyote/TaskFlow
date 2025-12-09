@@ -63,7 +63,7 @@ impl Widget for Kanban<'_> {
             .split(area);
 
         // Render each column
-        let selected_column = self.model.kanban_selected_column;
+        let selected_column = self.model.view_selection.kanban_column;
         for (i, (status, title, color)) in columns.iter().enumerate() {
             self.render_column(chunks[i], buf, *status, title, *color, i == selected_column);
         }

@@ -134,3 +134,135 @@ pub struct ViewSelectionState {
     /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
     pub weekly_planner_day: usize,
 }
+
+/// State for daily review mode.
+#[derive(Debug, Clone, Default)]
+pub struct DailyReviewState {
+    /// Whether daily review mode is active
+    pub visible: bool,
+    /// Current phase of the daily review
+    pub phase: crate::ui::DailyReviewPhase,
+    /// Selected index within current review phase
+    pub selected: usize,
+}
+
+/// State for weekly review mode.
+#[derive(Debug, Clone, Default)]
+pub struct WeeklyReviewState {
+    /// Whether weekly review mode is active
+    pub visible: bool,
+    /// Current phase of the weekly review
+    pub phase: crate::ui::WeeklyReviewPhase,
+    /// Selected index within current review phase
+    pub selected: usize,
+}
+
+/// State for template picker modal.
+#[derive(Debug, Clone, Default)]
+pub struct TemplatePickerState {
+    /// Whether template picker is visible
+    pub visible: bool,
+    /// Index of selected template in picker
+    pub selected: usize,
+}
+
+/// State for saved filter picker modal.
+#[derive(Debug, Clone, Default)]
+pub struct SavedFilterPickerState {
+    /// Whether saved filter picker is visible
+    pub visible: bool,
+    /// Selected index in saved filter picker
+    pub selected: usize,
+}
+
+/// State for keybindings editor modal.
+#[derive(Debug, Clone, Default)]
+pub struct KeybindingsEditorState {
+    /// Whether keybindings editor is visible
+    pub visible: bool,
+    /// Selected keybinding index in editor
+    pub selected: usize,
+    /// Whether currently capturing a new key
+    pub capturing: bool,
+}
+
+/// State for time log editor modal.
+#[derive(Debug, Clone, Default)]
+pub struct TimeLogEditorState {
+    /// Whether time log editor is visible
+    pub visible: bool,
+    /// Selected time entry index in log
+    pub selected: usize,
+    /// Current mode in time log editor
+    pub mode: crate::ui::TimeLogMode,
+    /// Text buffer for editing time entries
+    pub buffer: String,
+}
+
+/// State for multi-line description editor.
+#[derive(Debug, Clone)]
+pub struct DescriptionEditorState {
+    /// Whether description editor is visible
+    pub visible: bool,
+    /// Text buffer for editing description (multi-line)
+    pub buffer: Vec<String>,
+    /// Cursor line position in description buffer
+    pub cursor_line: usize,
+    /// Cursor column position in description buffer
+    pub cursor_col: usize,
+}
+
+impl Default for DescriptionEditorState {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            buffer: vec![String::new()],
+            cursor_line: 0,
+            cursor_col: 0,
+        }
+    }
+}
+
+/// State for work log editor modal.
+#[derive(Debug, Clone)]
+pub struct WorkLogEditorState {
+    /// Whether work log editor is visible
+    pub visible: bool,
+    /// Selected work log entry index
+    pub selected: usize,
+    /// Current mode in work log editor
+    pub mode: crate::ui::WorkLogMode,
+    /// Text buffer for editing work log entries (multi-line)
+    pub buffer: Vec<String>,
+    /// Cursor line position in work log buffer
+    pub cursor_line: usize,
+    /// Cursor column position in work log buffer
+    pub cursor_col: usize,
+    /// Search query for filtering work log entries
+    pub search_query: String,
+}
+
+impl Default for WorkLogEditorState {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            selected: 0,
+            mode: crate::ui::WorkLogMode::default(),
+            buffer: vec![String::new()],
+            cursor_line: 0,
+            cursor_col: 0,
+            search_query: String::new(),
+        }
+    }
+}
+
+/// State for habit tracking view.
+#[derive(Debug, Clone, Default)]
+pub struct HabitViewState {
+    /// Index of selected habit in list
+    pub selected: usize,
+    /// Whether habit analytics popup is visible
+    pub show_analytics: bool,
+    /// Whether to show archived habits
+    pub show_archived: bool,
+}

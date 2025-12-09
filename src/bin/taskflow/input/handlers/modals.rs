@@ -11,17 +11,17 @@ use crate::input::util::key_event_to_string;
 pub fn handle_template_picker(key: event::KeyEvent, model: &mut Model) -> Message {
     match key.code {
         KeyCode::Esc => Message::Ui(UiMessage::HideTemplates),
-        KeyCode::Enter => Message::Ui(UiMessage::SelectTemplate(model.template_selected)),
+        KeyCode::Enter => Message::Ui(UiMessage::SelectTemplate(model.template_picker.selected)),
         KeyCode::Up | KeyCode::Char('k') => {
-            if model.template_selected > 0 {
-                model.template_selected -= 1;
+            if model.template_picker.selected > 0 {
+                model.template_picker.selected -= 1;
             }
             Message::None
         }
         KeyCode::Down | KeyCode::Char('j') => {
             let max = model.template_manager.len().saturating_sub(1);
-            if model.template_selected < max {
-                model.template_selected += 1;
+            if model.template_picker.selected < max {
+                model.template_picker.selected += 1;
             }
             Message::None
         }
@@ -44,7 +44,7 @@ pub fn handle_template_picker(key: event::KeyEvent, model: &mut Model) -> Messag
 /// Handle keybindings editor input
 pub fn handle_keybindings_editor(key: event::KeyEvent, model: &Model) -> Message {
     // If capturing a key, any key except Esc sets the keybinding
-    if model.keybinding_capturing {
+    if model.keybindings_editor.capturing {
         return match key.code {
             KeyCode::Esc => Message::Ui(UiMessage::CancelEditKeybinding),
             _ => {
@@ -69,7 +69,7 @@ pub fn handle_keybindings_editor(key: event::KeyEvent, model: &Model) -> Message
 
 /// Handle time log editor input
 pub fn handle_time_log(key: event::KeyEvent, model: &Model) -> Message {
-    match model.time_log_mode {
+    match model.time_log.mode {
         TimeLogMode::EditStart | TimeLogMode::EditEnd => {
             // Editing time - handle character input
             match key.code {
@@ -108,7 +108,7 @@ pub fn handle_time_log(key: event::KeyEvent, model: &Model) -> Message {
 
 /// Handle work log editor input
 pub fn handle_work_log(key: event::KeyEvent, model: &Model) -> Message {
-    match model.work_log_mode {
+    match model.work_log_editor.mode {
         WorkLogMode::Add | WorkLogMode::Edit => {
             // Multi-line editing mode - handle character input
             // Check for Ctrl+S to save first
@@ -154,7 +154,7 @@ pub fn handle_work_log(key: event::KeyEvent, model: &Model) -> Message {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => {
                     // If search is active, clear it; otherwise close
-                    if model.work_log_search_query.is_empty() {
+                    if model.work_log_editor.search_query.is_empty() {
                         Message::Ui(UiMessage::HideWorkLog)
                     } else {
                         Message::Ui(UiMessage::WorkLogSearchClear)

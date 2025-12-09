@@ -6,70 +6,70 @@ use crate::config::Action;
 #[test]
 fn test_show_keybindings_editor() {
     let mut model = Model::new();
-    assert!(!model.show_keybindings_editor);
+    assert!(!model.keybindings_editor.visible);
 
     update(&mut model, Message::Ui(UiMessage::ShowKeybindingsEditor));
-    assert!(model.show_keybindings_editor);
-    assert_eq!(model.keybinding_selected, 0);
-    assert!(!model.keybinding_capturing);
+    assert!(model.keybindings_editor.visible);
+    assert_eq!(model.keybindings_editor.selected, 0);
+    assert!(!model.keybindings_editor.capturing);
 }
 
 #[test]
 fn test_hide_keybindings_editor() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
-    model.keybinding_capturing = true;
+    model.keybindings_editor.visible = true;
+    model.keybindings_editor.capturing = true;
 
     update(&mut model, Message::Ui(UiMessage::HideKeybindingsEditor));
-    assert!(!model.show_keybindings_editor);
-    assert!(!model.keybinding_capturing);
+    assert!(!model.keybindings_editor.visible);
+    assert!(!model.keybindings_editor.capturing);
 }
 
 #[test]
 fn test_keybindings_navigation() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
-    model.keybinding_selected = 5;
+    model.keybindings_editor.visible = true;
+    model.keybindings_editor.selected = 5;
 
     update(&mut model, Message::Ui(UiMessage::KeybindingsUp));
-    assert_eq!(model.keybinding_selected, 4);
+    assert_eq!(model.keybindings_editor.selected, 4);
 
     update(&mut model, Message::Ui(UiMessage::KeybindingsDown));
-    assert_eq!(model.keybinding_selected, 5);
+    assert_eq!(model.keybindings_editor.selected, 5);
 
     // Navigate up at 0 should stay at 0
-    model.keybinding_selected = 0;
+    model.keybindings_editor.selected = 0;
     update(&mut model, Message::Ui(UiMessage::KeybindingsUp));
-    assert_eq!(model.keybinding_selected, 0);
+    assert_eq!(model.keybindings_editor.selected, 0);
 }
 
 #[test]
 fn test_start_edit_keybinding() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
+    model.keybindings_editor.visible = true;
 
     update(&mut model, Message::Ui(UiMessage::StartEditKeybinding));
-    assert!(model.keybinding_capturing);
+    assert!(model.keybindings_editor.capturing);
     assert!(model.status_message.is_some());
 }
 
 #[test]
 fn test_cancel_edit_keybinding() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
-    model.keybinding_capturing = true;
+    model.keybindings_editor.visible = true;
+    model.keybindings_editor.capturing = true;
     model.status_message = Some("Press a key...".to_string());
 
     update(&mut model, Message::Ui(UiMessage::CancelEditKeybinding));
-    assert!(!model.keybinding_capturing);
+    assert!(!model.keybindings_editor.capturing);
     assert!(model.status_message.is_none());
 }
 
 #[test]
 fn test_apply_keybinding() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
-    model.keybinding_capturing = true;
+    model.keybindings_editor.visible = true;
+    model.keybindings_editor.capturing = true;
 
     // Get the first binding's action
     let bindings = model.keybindings.sorted_bindings();
@@ -82,7 +82,7 @@ fn test_apply_keybinding() {
         Message::Ui(UiMessage::ApplyKeybinding("1".to_string())),
     );
 
-    assert!(!model.keybinding_capturing);
+    assert!(!model.keybindings_editor.capturing);
     // The action should now be bound to '1'
     assert_eq!(model.keybindings.get_action("1"), Some(&original_action));
 }
@@ -90,7 +90,7 @@ fn test_apply_keybinding() {
 #[test]
 fn test_reset_all_keybindings() {
     let mut model = Model::new();
-    model.show_keybindings_editor = true;
+    model.keybindings_editor.visible = true;
 
     // Modify a keybinding (use "1" which is not a default binding)
     model.keybindings.set_binding("1".to_string(), Action::Quit);

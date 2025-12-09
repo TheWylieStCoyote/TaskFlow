@@ -117,18 +117,22 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render template picker
-    if model.show_templates {
+    if model.template_picker.visible {
         // Height depends on number of templates, min 4, max 15
         let height = (model.template_manager.len() as u16 + 2).clamp(4, 15);
         let picker_area = centered_rect_fixed_height(60, height, area);
         frame.render_widget(
-            TemplatePicker::new(&model.template_manager, model.template_selected, theme),
+            TemplatePicker::new(
+                &model.template_manager,
+                model.template_picker.selected,
+                theme,
+            ),
             picker_area,
         );
     }
 
     // Render saved filter picker
-    if model.show_saved_filter_picker {
+    if model.saved_filter_picker.visible {
         // Get sorted filter list for display
         let mut filter_list: Vec<_> = model.saved_filters.values().collect();
         filter_list.sort_by(|a, b| a.name.cmp(&b.name));
@@ -144,13 +148,18 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
         let height = (filter_list.len() as u16 + 2).clamp(4, 15);
         let picker_area = centered_rect_fixed_height(60, height, area);
         frame.render_widget(
-            SavedFilterPicker::new(filter_list, model.saved_filter_selected, active_name, theme),
+            SavedFilterPicker::new(
+                filter_list,
+                model.saved_filter_picker.selected,
+                active_name,
+                theme,
+            ),
             picker_area,
         );
     }
 
     // Render keybindings editor
-    if model.show_keybindings_editor {
+    if model.keybindings_editor.visible {
         // Height depends on number of bindings, min 10, max 30
         let bindings_count = model.keybindings.sorted_bindings().len() as u16;
         let height = (bindings_count + 2).clamp(10, 30);
@@ -158,8 +167,8 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
         frame.render_widget(
             KeybindingsEditor::new(
                 &model.keybindings,
-                model.keybinding_selected,
-                model.keybinding_capturing,
+                model.keybindings_editor.selected,
+                model.keybindings_editor.capturing,
                 theme,
             ),
             editor_area,
@@ -167,7 +176,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render time log editor
-    if model.show_time_log {
+    if model.time_log.visible {
         if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
             let entries = model.time_entries_for_task(task_id);
             // Height: min 5, max 15 depending on entries
@@ -176,9 +185,9 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             frame.render_widget(
                 TimeLogEditor::new(
                     entries,
-                    model.time_log_selected,
-                    model.time_log_mode,
-                    &model.time_log_buffer,
+                    model.time_log.selected,
+                    model.time_log.mode,
+                    &model.time_log.buffer,
                     theme,
                 ),
                 editor_area,
@@ -187,15 +196,15 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render work log editor
-    if model.show_work_log {
+    if model.work_log_editor.visible {
         if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
             let all_entries = model.work_logs_for_task(task_id);
 
             // Filter entries based on search query
-            let entries: Vec<_> = if model.work_log_search_query.is_empty() {
+            let entries: Vec<_> = if model.work_log_editor.search_query.is_empty() {
                 all_entries
             } else {
-                let query = model.work_log_search_query.to_lowercase();
+                let query = model.work_log_editor.search_query.to_lowercase();
                 all_entries
                     .into_iter()
                     .filter(|e| e.content.to_lowercase().contains(&query))
@@ -203,11 +212,11 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             };
 
             // Height: min 6, max 20 depending on entries and mode
-            let height = match model.work_log_mode {
+            let height = match model.work_log_editor.mode {
                 crate::ui::WorkLogMode::Browse => (entries.len() as u16 + 4).clamp(6, 15),
                 crate::ui::WorkLogMode::View | crate::ui::WorkLogMode::ConfirmDelete => 15,
                 crate::ui::WorkLogMode::Add | crate::ui::WorkLogMode::Edit => {
-                    (model.work_log_buffer.len() as u16 + 4).clamp(10, 20)
+                    (model.work_log_editor.buffer.len() as u16 + 4).clamp(10, 20)
                 }
                 crate::ui::WorkLogMode::Search => 15,
             };
@@ -215,12 +224,12 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
             frame.render_widget(
                 WorkLogEditor::new(
                     entries,
-                    model.work_log_selected,
-                    model.work_log_mode,
-                    &model.work_log_buffer,
-                    model.work_log_cursor_line,
-                    model.work_log_cursor_col,
-                    &model.work_log_search_query,
+                    model.work_log_editor.selected,
+                    model.work_log_editor.mode,
+                    &model.work_log_editor.buffer,
+                    model.work_log_editor.cursor_line,
+                    model.work_log_editor.cursor_col,
+                    &model.work_log_editor.search_query,
                     theme,
                 ),
                 editor_area,
@@ -229,15 +238,15 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render description editor (multi-line)
-    if model.show_description_editor {
+    if model.description_editor.visible {
         // Height: min 10, max 20 depending on buffer lines
-        let height = (model.description_buffer.len() as u16 + 4).clamp(10, 20);
+        let height = (model.description_editor.buffer.len() as u16 + 4).clamp(10, 20);
         let editor_area = centered_rect_fixed_height(70, height, area);
         frame.render_widget(
             DescriptionEditor::new(
-                &model.description_buffer,
-                model.description_cursor_line,
-                model.description_cursor_col,
+                &model.description_editor.buffer,
+                model.description_editor.cursor_line,
+                model.description_editor.cursor_col,
                 theme,
             ),
             editor_area,
@@ -245,7 +254,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render overdue alert popup (shown at startup if there are overdue tasks)
-    if model.show_overdue_alert {
+    if model.alerts.show_overdue {
         let (count, overdue_tasks) = model.overdue_summary();
         let task_titles: Vec<String> = overdue_tasks.iter().map(|t| t.title.clone()).collect();
         // Height: 4 + min(5, count) + 2 for header/footer
@@ -255,45 +264,45 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render storage error alert popup (shown at startup if data couldn't be loaded)
-    if model.show_storage_error_alert {
-        if let Some(ref error) = model.storage_load_error {
+    if model.alerts.show_storage_error {
+        if let Some(ref error) = model.alerts.storage_error {
             let alert_area = centered_rect_fixed_height(60, 10, area);
             frame.render_widget(StorageErrorAlert::new(error), alert_area);
         }
     }
 
     // Render daily review mode (full screen overlay)
-    if model.show_daily_review {
+    if model.daily_review.visible {
         // Use centered area for the review dialog
         let review_area = centered_rect(70, 70, area);
         frame.render_widget(
             DailyReview::new(
                 model,
                 theme,
-                model.daily_review_phase,
-                model.daily_review_selected,
+                model.daily_review.phase,
+                model.daily_review.selected,
             ),
             review_area,
         );
     }
 
     // Render weekly review mode (full screen overlay)
-    if model.show_weekly_review {
+    if model.weekly_review.visible {
         // Use centered area for the review dialog
         let review_area = centered_rect(75, 75, area);
         frame.render_widget(
             WeeklyReview::new(
                 model,
                 theme,
-                model.weekly_review_phase,
-                model.weekly_review_selected,
+                model.weekly_review.phase,
+                model.weekly_review.selected,
             ),
             review_area,
         );
     }
 
     // Render habit analytics popup
-    if model.show_habit_analytics {
+    if model.habit_view.show_analytics {
         let popup_area = centered_rect_fixed_height(50, 12, area);
         frame.render_widget(HabitAnalyticsPopup::new(model, theme), popup_area);
     }
@@ -388,7 +397,7 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
 
 fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Show error message if available (in red, higher priority than status)
-    if let Some(ref msg) = model.error_message {
+    if let Some(ref msg) = model.alerts.error_message {
         let footer =
             Paragraph::new(msg.clone()).style(Style::default().fg(theme.colors.danger.to_color()));
         frame.render_widget(footer, area);

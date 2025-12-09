@@ -7,30 +7,30 @@ use crate::ui::{DailyReviewPhase, WeeklyReviewPhase};
 pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ShowDailyReview => {
-            model.show_daily_review = true;
-            model.daily_review_phase = DailyReviewPhase::Welcome;
-            model.daily_review_selected = 0;
+            model.daily_review.visible = true;
+            model.daily_review.phase = DailyReviewPhase::Welcome;
+            model.daily_review.selected = 0;
         }
         UiMessage::HideDailyReview => {
-            model.show_daily_review = false;
+            model.daily_review.visible = false;
         }
         UiMessage::DailyReviewNext => {
-            model.daily_review_phase = model.daily_review_phase.next();
-            model.daily_review_selected = 0;
+            model.daily_review.phase = model.daily_review.phase.next();
+            model.daily_review.selected = 0;
         }
         UiMessage::DailyReviewPrev => {
-            model.daily_review_phase = model.daily_review_phase.prev();
-            model.daily_review_selected = 0;
+            model.daily_review.phase = model.daily_review.phase.prev();
+            model.daily_review.selected = 0;
         }
         UiMessage::DailyReviewUp => {
-            if model.daily_review_selected > 0 {
-                model.daily_review_selected -= 1;
+            if model.daily_review.selected > 0 {
+                model.daily_review.selected -= 1;
             }
         }
         UiMessage::DailyReviewDown => {
             // Get the task count for current phase
             let today = chrono::Utc::now().date_naive();
-            let count = match model.daily_review_phase {
+            let count = match model.daily_review.phase {
                 DailyReviewPhase::OverdueTasks => model
                     .tasks
                     .values()
@@ -52,14 +52,14 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                     .count(),
                 _ => 0,
             };
-            if count > 0 && model.daily_review_selected < count - 1 {
-                model.daily_review_selected += 1;
+            if count > 0 && model.daily_review.selected < count - 1 {
+                model.daily_review.selected += 1;
             }
         }
         UiMessage::DailyReviewComplete => {
             // Get the task at the current selection and toggle its completion
             let today = chrono::Utc::now().date_naive();
-            let task_ids: Vec<_> = match model.daily_review_phase {
+            let task_ids: Vec<_> = match model.daily_review.phase {
                 DailyReviewPhase::OverdueTasks => model
                     .tasks
                     .values()
@@ -85,7 +85,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                 _ => vec![],
             };
 
-            if let Some(task_id) = task_ids.get(model.daily_review_selected).cloned() {
+            if let Some(task_id) = task_ids.get(model.daily_review.selected).cloned() {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.toggle_complete();
                 });
@@ -93,8 +93,8 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
 
                 // Adjust selection if we just removed an item
                 let new_count = task_ids.len().saturating_sub(1);
-                if model.daily_review_selected >= new_count && new_count > 0 {
-                    model.daily_review_selected = new_count - 1;
+                if model.daily_review.selected >= new_count && new_count > 0 {
+                    model.daily_review.selected = new_count - 1;
                 }
             }
         }
@@ -106,24 +106,24 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
 pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ShowWeeklyReview => {
-            model.show_weekly_review = true;
-            model.weekly_review_phase = WeeklyReviewPhase::Welcome;
-            model.weekly_review_selected = 0;
+            model.weekly_review.visible = true;
+            model.weekly_review.phase = WeeklyReviewPhase::Welcome;
+            model.weekly_review.selected = 0;
         }
         UiMessage::HideWeeklyReview => {
-            model.show_weekly_review = false;
+            model.weekly_review.visible = false;
         }
         UiMessage::WeeklyReviewNext => {
-            model.weekly_review_phase = model.weekly_review_phase.next();
-            model.weekly_review_selected = 0;
+            model.weekly_review.phase = model.weekly_review.phase.next();
+            model.weekly_review.selected = 0;
         }
         UiMessage::WeeklyReviewPrev => {
-            model.weekly_review_phase = model.weekly_review_phase.prev();
-            model.weekly_review_selected = 0;
+            model.weekly_review.phase = model.weekly_review.phase.prev();
+            model.weekly_review.selected = 0;
         }
         UiMessage::WeeklyReviewUp => {
-            if model.weekly_review_selected > 0 {
-                model.weekly_review_selected -= 1;
+            if model.weekly_review.selected > 0 {
+                model.weekly_review.selected -= 1;
             }
         }
         UiMessage::WeeklyReviewDown => {
@@ -132,7 +132,7 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
             let week_ago = today - chrono::Duration::days(7);
             let week_ahead = today + chrono::Duration::days(7);
 
-            let count = match model.weekly_review_phase {
+            let count = match model.weekly_review.phase {
                 WeeklyReviewPhase::CompletedTasks => model
                     .tasks
                     .values()
@@ -178,8 +178,8 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
                 _ => 0,
             };
 
-            if count > 0 && model.weekly_review_selected < count - 1 {
-                model.weekly_review_selected += 1;
+            if count > 0 && model.weekly_review.selected < count - 1 {
+                model.weekly_review.selected += 1;
             }
         }
         _ => {}

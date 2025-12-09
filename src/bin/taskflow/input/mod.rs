@@ -62,12 +62,12 @@ pub fn handle_key_event(
     }
 
     // If storage error alert is showing, any key dismisses it
-    if model.show_storage_error_alert {
+    if model.alerts.show_storage_error {
         return Message::Ui(UiMessage::DismissStorageErrorAlert);
     }
 
     // If overdue alert is showing, any key dismisses it
-    if model.show_overdue_alert {
+    if model.alerts.show_overdue {
         return Message::Ui(UiMessage::DismissOverdueAlert);
     }
 
@@ -82,27 +82,27 @@ pub fn handle_key_event(
     }
 
     // If template picker is showing, handle navigation and selection
-    if model.show_templates {
+    if model.template_picker.visible {
         return handle_template_picker(key, model);
     }
 
     // If keybindings editor is showing, handle navigation and editing
-    if model.show_keybindings_editor {
+    if model.keybindings_editor.visible {
         return handle_keybindings_editor(key, model);
     }
 
     // If time log editor is showing, handle navigation and editing
-    if model.show_time_log {
+    if model.time_log.visible {
         return handle_time_log(key, model);
     }
 
     // If work log editor is showing, handle navigation and editing
-    if model.show_work_log {
+    if model.work_log_editor.visible {
         return handle_work_log(key, model);
     }
 
     // If description editor is showing, handle multi-line input
-    if model.show_description_editor {
+    if model.description_editor.visible {
         return handle_description_editor(key);
     }
 
@@ -163,7 +163,7 @@ pub fn handle_key_event(
     }
 
     // If habit analytics is showing, handle it
-    if model.show_habit_analytics {
+    if model.habit_view.show_analytics {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('a') => {
                 Message::Ui(UiMessage::HideHabitAnalytics)

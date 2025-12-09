@@ -6,36 +6,36 @@ use crate::app::{Model, UiMessage};
 pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ShowKeybindingsEditor => {
-            model.show_keybindings_editor = true;
-            model.keybinding_selected = 0;
-            model.keybinding_capturing = false;
+            model.keybindings_editor.visible = true;
+            model.keybindings_editor.selected = 0;
+            model.keybindings_editor.capturing = false;
         }
         UiMessage::HideKeybindingsEditor => {
-            model.show_keybindings_editor = false;
-            model.keybinding_capturing = false;
+            model.keybindings_editor.visible = false;
+            model.keybindings_editor.capturing = false;
         }
         UiMessage::KeybindingsUp => {
-            if model.keybinding_selected > 0 {
-                model.keybinding_selected -= 1;
+            if model.keybindings_editor.selected > 0 {
+                model.keybindings_editor.selected -= 1;
             }
         }
         UiMessage::KeybindingsDown => {
             let bindings = model.keybindings.sorted_bindings();
-            if model.keybinding_selected < bindings.len().saturating_sub(1) {
-                model.keybinding_selected += 1;
+            if model.keybindings_editor.selected < bindings.len().saturating_sub(1) {
+                model.keybindings_editor.selected += 1;
             }
         }
         UiMessage::StartEditKeybinding => {
-            model.keybinding_capturing = true;
+            model.keybindings_editor.capturing = true;
             model.status_message = Some("Press a key combination...".to_string());
         }
         UiMessage::CancelEditKeybinding => {
-            model.keybinding_capturing = false;
+            model.keybindings_editor.capturing = false;
             model.status_message = None;
         }
         UiMessage::ApplyKeybinding(new_key) => {
             let bindings = model.keybindings.sorted_bindings();
-            if let Some((_, action)) = bindings.get(model.keybinding_selected) {
+            if let Some((_, action)) = bindings.get(model.keybindings_editor.selected) {
                 // Check for conflicts and provide detailed feedback
                 let conflicts = model.keybindings.find_all_conflicts(&new_key, action);
                 model
@@ -52,11 +52,11 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                     ));
                 }
             }
-            model.keybinding_capturing = false;
+            model.keybindings_editor.capturing = false;
         }
         UiMessage::ResetKeybinding => {
             let bindings = model.keybindings.sorted_bindings();
-            if let Some((_, action)) = bindings.get(model.keybinding_selected) {
+            if let Some((_, action)) = bindings.get(model.keybindings_editor.selected) {
                 // Find the default key for this action
                 let defaults = crate::config::Keybindings::default();
                 if let Some(default_key) = defaults.key_for_action(action) {
@@ -97,11 +97,11 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
             }
         },
         UiMessage::DismissOverdueAlert => {
-            model.show_overdue_alert = false;
+            model.alerts.show_overdue = false;
         }
         UiMessage::DismissStorageErrorAlert => {
-            model.show_storage_error_alert = false;
-            model.storage_load_error = None;
+            model.alerts.show_storage_error = false;
+            model.alerts.storage_error = None;
         }
         _ => {}
     }

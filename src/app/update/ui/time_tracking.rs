@@ -11,44 +11,44 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
         UiMessage::ShowTimeLog => {
             // Only show if a task is selected
             if model.selected_index < model.visible_tasks.len() {
-                model.show_time_log = true;
-                model.time_log_selected = 0;
-                model.time_log_mode = TimeLogMode::Browse;
-                model.time_log_buffer.clear();
+                model.time_log.visible = true;
+                model.time_log.selected = 0;
+                model.time_log.mode = TimeLogMode::Browse;
+                model.time_log.buffer.clear();
             }
         }
         UiMessage::HideTimeLog => {
-            model.show_time_log = false;
-            model.time_log_mode = TimeLogMode::Browse;
-            model.time_log_buffer.clear();
+            model.time_log.visible = false;
+            model.time_log.mode = TimeLogMode::Browse;
+            model.time_log.buffer.clear();
         }
         UiMessage::TimeLogUp => {
-            if model.time_log_selected > 0 {
-                model.time_log_selected -= 1;
+            if model.time_log.selected > 0 {
+                model.time_log.selected -= 1;
             }
         }
         UiMessage::TimeLogDown => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
                 let entries = model.time_entries_for_task(task_id);
-                if model.time_log_selected < entries.len().saturating_sub(1) {
-                    model.time_log_selected += 1;
+                if model.time_log.selected < entries.len().saturating_sub(1) {
+                    model.time_log.selected += 1;
                 }
             }
         }
         UiMessage::TimeLogEditStart => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 let entries = model.time_entries_for_task(&task_id);
-                if let Some(entry) = entries.get(model.time_log_selected) {
+                if let Some(entry) = entries.get(model.time_log.selected) {
                     let start_time = entry.started_at.format("%H:%M").to_string();
-                    model.time_log_mode = TimeLogMode::EditStart;
-                    model.time_log_buffer = start_time;
+                    model.time_log.mode = TimeLogMode::EditStart;
+                    model.time_log.buffer = start_time;
                 }
             }
         }
         UiMessage::TimeLogEditEnd => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 let entries = model.time_entries_for_task(&task_id);
-                if let Some(entry) = entries.get(model.time_log_selected) {
+                if let Some(entry) = entries.get(model.time_log.selected) {
                     // Can't edit end time of running entry
                     if entry.is_running() {
                         model.status_message =
@@ -59,30 +59,30 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                         .ended_at
                         .map(|t| t.format("%H:%M").to_string())
                         .unwrap_or_default();
-                    model.time_log_mode = TimeLogMode::EditEnd;
-                    model.time_log_buffer = end_time;
+                    model.time_log.mode = TimeLogMode::EditEnd;
+                    model.time_log.buffer = end_time;
                 }
             }
         }
         UiMessage::TimeLogConfirmDelete => {
-            model.time_log_mode = TimeLogMode::ConfirmDelete;
+            model.time_log.mode = TimeLogMode::ConfirmDelete;
         }
         UiMessage::TimeLogCancel => {
-            model.time_log_mode = TimeLogMode::Browse;
-            model.time_log_buffer.clear();
+            model.time_log.mode = TimeLogMode::Browse;
+            model.time_log.buffer.clear();
         }
         UiMessage::TimeLogSubmit => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                 let entries = model.time_entries_for_task(&task_id);
-                if let Some(entry) = entries.get(model.time_log_selected) {
+                if let Some(entry) = entries.get(model.time_log.selected) {
                     let entry_id = entry.id;
 
                     // Parse the time from buffer (HH:MM format)
-                    if let Ok(time) = NaiveTime::parse_from_str(&model.time_log_buffer, "%H:%M") {
+                    if let Ok(time) = NaiveTime::parse_from_str(&model.time_log.buffer, "%H:%M") {
                         if let Some(entry) = model.time_entries.get_mut(&entry_id) {
                             let before = entry.clone();
 
-                            match model.time_log_mode {
+                            match model.time_log.mode {
                                 TimeLogMode::EditStart => {
                                     // Update start time, keeping the same date
                                     let date = entry.started_at.date_naive();
@@ -129,8 +129,8 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                     }
                 }
             }
-            model.time_log_mode = TimeLogMode::Browse;
-            model.time_log_buffer.clear();
+            model.time_log.mode = TimeLogMode::Browse;
+            model.time_log.buffer.clear();
         }
         UiMessage::TimeLogAddEntry => {
             if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
@@ -148,22 +148,22 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                     .push(UndoAction::TimeEntryStarted(Box::new(entry.clone())));
                 model.sync_time_entry(&entry);
                 model.time_entries.insert(entry.id, entry);
-                model.time_log_selected = 0; // New entry will be at top (sorted by date)
+                model.time_log.selected = 0; // New entry will be at top (sorted by date)
                 model.status_message = Some("Added 30-minute time entry".to_string());
             }
         }
         UiMessage::TimeLogDelete => {
-            if model.time_log_mode == TimeLogMode::ConfirmDelete {
+            if model.time_log.mode == TimeLogMode::ConfirmDelete {
                 if let Some(task_id) = model.visible_tasks.get(model.selected_index).cloned() {
                     let entries = model.time_entries_for_task(&task_id);
-                    if let Some(entry) = entries.get(model.time_log_selected) {
+                    if let Some(entry) = entries.get(model.time_log.selected) {
                         let entry_id = entry.id;
 
                         // Can't delete if it's the active entry
                         if model.active_time_entry.as_ref() == Some(&entry_id) {
                             model.status_message =
                                 Some("Cannot delete running time entry".to_string());
-                            model.time_log_mode = TimeLogMode::Browse;
+                            model.time_log.mode = TimeLogMode::Browse;
                             return;
                         }
 
@@ -175,14 +175,14 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
 
                             // Adjust selection
                             let remaining = model.time_entries_for_task(&task_id);
-                            if model.time_log_selected >= remaining.len() && !remaining.is_empty() {
-                                model.time_log_selected = remaining.len() - 1;
+                            if model.time_log.selected >= remaining.len() && !remaining.is_empty() {
+                                model.time_log.selected = remaining.len() - 1;
                             }
                             model.status_message = Some("Time entry deleted".to_string());
                         }
                     }
                 }
-                model.time_log_mode = TimeLogMode::Browse;
+                model.time_log.mode = TimeLogMode::Browse;
             }
         }
         _ => {}

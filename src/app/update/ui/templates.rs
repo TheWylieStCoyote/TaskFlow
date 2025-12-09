@@ -7,11 +7,11 @@ use crate::ui::{InputMode, InputTarget};
 pub fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::ShowTemplates => {
-            model.show_templates = true;
-            model.template_selected = 0;
+            model.template_picker.visible = true;
+            model.template_picker.selected = 0;
         }
         UiMessage::HideTemplates => {
-            model.show_templates = false;
+            model.template_picker.visible = false;
         }
         UiMessage::SelectTemplate(index) => {
             if let Some(template) = model.template_manager.get(index) {
@@ -38,7 +38,7 @@ pub fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
                 model.input_buffer = task.title;
                 model.cursor_position = model.input_buffer.len();
 
-                model.show_templates = false;
+                model.template_picker.visible = false;
                 model.refresh_visible_tasks();
             }
         }

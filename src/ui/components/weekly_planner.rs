@@ -115,7 +115,7 @@ impl Widget for WeeklyPlanner<'_> {
             .split(main_chunks[1]);
 
         // Render each day column
-        let selected_day = self.model.weekly_planner_selected_day;
+        let selected_day = self.model.view_selection.weekly_planner_day;
         for (i, (date, day_name)) in days.iter().enumerate() {
             let params = DayColumnParams {
                 area: day_columns[i],

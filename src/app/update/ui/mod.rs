@@ -350,13 +350,13 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::InputChar(c) => {
             // Check if we're editing time log
-            if model.show_time_log
+            if model.time_log.visible
                 && matches!(
-                    model.time_log_mode,
+                    model.time_log.mode,
                     crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
                 )
             {
-                model.time_log_buffer.push(c);
+                model.time_log.buffer.push(c);
             } else {
                 model.input_buffer.insert(model.cursor_position, c);
                 model.cursor_position += 1;
@@ -364,13 +364,13 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::InputBackspace => {
             // Check if we're editing time log
-            if model.show_time_log
+            if model.time_log.visible
                 && matches!(
-                    model.time_log_mode,
+                    model.time_log.mode,
                     crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
                 )
             {
-                model.time_log_buffer.pop();
+                model.time_log.buffer.pop();
             } else if model.cursor_position > 0 {
                 model.cursor_position -= 1;
                 model.input_buffer.remove(model.cursor_position);
@@ -647,19 +647,19 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::HabitUp => {
-            if model.habit_selected > 0 {
-                model.habit_selected -= 1;
+            if model.habit_view.selected > 0 {
+                model.habit_view.selected -= 1;
             }
         }
         UiMessage::HabitDown => {
             if !model.visible_habits.is_empty()
-                && model.habit_selected < model.visible_habits.len() - 1
+                && model.habit_view.selected < model.visible_habits.len() - 1
             {
-                model.habit_selected += 1;
+                model.habit_view.selected += 1;
             }
         }
         UiMessage::HabitToggleToday => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
                 let today = chrono::Utc::now().date_naive();
                 if let Some(habit) = model.habits.get_mut(&habit_id) {
                     let currently_completed = habit.is_completed_on(today);
@@ -669,13 +669,13 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::ShowHabitAnalytics => {
-            model.show_habit_analytics = true;
+            model.habit_view.show_analytics = true;
         }
         UiMessage::HideHabitAnalytics => {
-            model.show_habit_analytics = false;
+            model.habit_view.show_analytics = false;
         }
         UiMessage::HabitArchive => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
                 if let Some(habit) = model.habits.get_mut(&habit_id) {
                     habit.archived = true;
                     habit.updated_at = chrono::Utc::now();
@@ -685,14 +685,14 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::HabitDelete => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_selected) {
+            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
                 model.habits.remove(&habit_id);
                 model.delete_habit_from_storage(&habit_id);
                 model.refresh_visible_habits();
             }
         }
         UiMessage::HabitToggleShowArchived => {
-            model.show_archived_habits = !model.show_archived_habits;
+            model.habit_view.show_archived = !model.habit_view.show_archived;
             model.refresh_visible_habits();
         }
         UiMessage::TimelineToggleDependencies => {

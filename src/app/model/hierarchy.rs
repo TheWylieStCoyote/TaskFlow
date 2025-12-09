@@ -80,7 +80,7 @@ impl Model {
     /// Call this after loading tasks from storage.
     pub fn check_overdue_alert(&mut self) {
         let (count, _) = self.overdue_summary();
-        self.show_overdue_alert = count > 0;
+        self.alerts.show_overdue = count > 0;
     }
 
     /// Returns all descendant task IDs (children, grandchildren, etc.)

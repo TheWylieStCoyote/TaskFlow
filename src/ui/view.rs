@@ -189,7 +189,19 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     // Render work log editor
     if model.show_work_log {
         if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
-            let entries = model.work_logs_for_task(task_id);
+            let all_entries = model.work_logs_for_task(task_id);
+
+            // Filter entries based on search query
+            let entries: Vec<_> = if model.work_log_search_query.is_empty() {
+                all_entries
+            } else {
+                let query = model.work_log_search_query.to_lowercase();
+                all_entries
+                    .into_iter()
+                    .filter(|e| e.content.to_lowercase().contains(&query))
+                    .collect()
+            };
+
             // Height: min 6, max 20 depending on entries and mode
             let height = match model.work_log_mode {
                 crate::ui::WorkLogMode::Browse => (entries.len() as u16 + 4).clamp(6, 15),
@@ -197,6 +209,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
                 crate::ui::WorkLogMode::Add | crate::ui::WorkLogMode::Edit => {
                     (model.work_log_buffer.len() as u16 + 4).clamp(10, 20)
                 }
+                crate::ui::WorkLogMode::Search => 15,
             };
             let editor_area = centered_rect_fixed_height(70, height, area);
             frame.render_widget(
@@ -207,6 +220,7 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
                     &model.work_log_buffer,
                     model.work_log_cursor_line,
                     model.work_log_cursor_col,
+                    &model.work_log_search_query,
                     theme,
                 ),
                 editor_area,

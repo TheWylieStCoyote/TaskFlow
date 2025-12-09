@@ -16,7 +16,7 @@ use taskflow::app::Model;
 use taskflow::config::Settings;
 use taskflow::storage::BackendType;
 
-use cli::{parse_priorities, parse_statuses, Cli, Commands, ListFilters};
+use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, ListFilters};
 use commands::{list_tasks, mark_task_done, quick_add_task};
 use tui::run_tui;
 
@@ -112,6 +112,10 @@ fn main() -> anyhow::Result<()> {
             search,
             sort,
             reverse,
+            due_before,
+            due_after,
+            estimate_min,
+            estimate_max,
         }) => {
             let filters = ListFilters {
                 project: project.clone(),
@@ -122,6 +126,10 @@ fn main() -> anyhow::Result<()> {
                 search: search.clone(),
                 sort: sort.clone(),
                 reverse: *reverse,
+                due_before: due_before.as_ref().and_then(|s| parse_date(s)),
+                due_after: due_after.as_ref().and_then(|s| parse_date(s)),
+                estimate_min: *estimate_min,
+                estimate_max: *estimate_max,
             };
             return list_tasks(&cli, view, *completed, *limit, &filters);
         }

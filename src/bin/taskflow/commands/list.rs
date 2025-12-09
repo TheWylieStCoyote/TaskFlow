@@ -129,6 +129,34 @@ pub fn list_tasks(
                 }
             }
 
+            // Filter by due date range
+            if let Some(before) = filters.due_before {
+                match t.due_date {
+                    Some(due) if due <= before => {}
+                    _ => return false,
+                }
+            }
+            if let Some(after) = filters.due_after {
+                match t.due_date {
+                    Some(due) if due >= after => {}
+                    _ => return false,
+                }
+            }
+
+            // Filter by time estimate
+            if let Some(min) = filters.estimate_min {
+                match t.estimated_minutes {
+                    Some(est) if est >= min => {}
+                    _ => return false,
+                }
+            }
+            if let Some(max) = filters.estimate_max {
+                match t.estimated_minutes {
+                    Some(est) if est <= max => {}
+                    _ => return false,
+                }
+            }
+
             true
         })
         .collect();

@@ -320,13 +320,31 @@ fn handle_work_log(key: event::KeyEvent, model: &Model) -> Message {
         WorkLogMode::Browse => {
             // Normal work log navigation
             match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideWorkLog),
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    // If search is active, clear it; otherwise close
+                    if model.work_log_search_query.is_empty() {
+                        Message::Ui(UiMessage::HideWorkLog)
+                    } else {
+                        Message::Ui(UiMessage::WorkLogSearchClear)
+                    }
+                }
                 KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::WorkLogUp),
                 KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::WorkLogDown),
                 KeyCode::Enter => Message::Ui(UiMessage::WorkLogView),
                 KeyCode::Char('a') => Message::Ui(UiMessage::WorkLogAdd),
                 KeyCode::Char('e') => Message::Ui(UiMessage::WorkLogEdit),
                 KeyCode::Char('d') => Message::Ui(UiMessage::WorkLogConfirmDelete),
+                KeyCode::Char('/') => Message::Ui(UiMessage::WorkLogSearchStart),
+                _ => Message::None,
+            }
+        }
+        WorkLogMode::Search => {
+            // Search input mode
+            match key.code {
+                KeyCode::Esc => Message::Ui(UiMessage::WorkLogSearchCancel),
+                KeyCode::Enter => Message::Ui(UiMessage::WorkLogSearchApply),
+                KeyCode::Backspace => Message::Ui(UiMessage::WorkLogSearchBackspace),
+                KeyCode::Char(c) => Message::Ui(UiMessage::WorkLogSearchChar(c)),
                 _ => Message::None,
             }
         }

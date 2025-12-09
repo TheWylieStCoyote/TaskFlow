@@ -27,6 +27,8 @@ pub enum WorkLogMode {
     Edit,
     /// Confirming deletion
     ConfirmDelete,
+    /// Searching/filtering entries
+    Search,
 }
 
 /// Work log editor popup widget
@@ -37,6 +39,7 @@ pub struct WorkLogEditor<'a> {
     edit_buffer: &'a [String],
     cursor_line: usize,
     cursor_col: usize,
+    search_query: &'a str,
     theme: &'a Theme,
 }
 
@@ -49,6 +52,7 @@ impl<'a> WorkLogEditor<'a> {
         edit_buffer: &'a [String],
         cursor_line: usize,
         cursor_col: usize,
+        search_query: &'a str,
         theme: &'a Theme,
     ) -> Self {
         Self {
@@ -58,6 +62,7 @@ impl<'a> WorkLogEditor<'a> {
             edit_buffer,
             cursor_line,
             cursor_col,
+            search_query,
             theme,
         }
     }
@@ -79,6 +84,7 @@ impl Widget for WorkLogEditor<'_> {
             WorkLogMode::View => self.render_view(area, buf),
             WorkLogMode::Add | WorkLogMode::Edit => self.render_edit(area, buf),
             WorkLogMode::ConfirmDelete => self.render_confirm_delete(area, buf),
+            WorkLogMode::Search => self.render_search(area, buf),
         }
     }
 }
@@ -132,7 +138,15 @@ impl WorkLogEditor<'_> {
             })
             .collect();
 
-        let title = " Work Log (a=add, Enter=view, e=edit, d=delete, Esc=close) ";
+        // Show filter indicator if search is active
+        let title = if self.search_query.is_empty() {
+            " Work Log (a=add, /=search, Enter=view, e=edit, d=delete, Esc=close) ".to_string()
+        } else {
+            format!(
+                " Work Log [filter: \"{}\"] (a=add, /=search, Esc=clear) ",
+                truncate_string(self.search_query, 20)
+            )
+        };
 
         let block = Block::default()
             .title(title)
@@ -286,6 +300,93 @@ impl WorkLogEditor<'_> {
 
         paragraph.render(area, buf);
     }
+
+    fn render_search(&self, area: Rect, buf: &mut Buffer) {
+        use ratatui::layout::{Constraint, Direction, Layout};
+
+        let theme = self.theme;
+
+        // Split into search input (top) and results (bottom)
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(3)])
+            .split(area);
+
+        // Render search input
+        let search_block = Block::default()
+            .title(" Search Work Log (Enter=apply, Esc=cancel) ")
+            .title_style(
+                Style::default()
+                    .fg(theme.colors.accent.to_color())
+                    .add_modifier(Modifier::BOLD),
+            )
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.colors.accent.to_color()));
+
+        let search_inner = search_block.inner(chunks[0]);
+        search_block.render(chunks[0], buf);
+
+        // Show search query with cursor
+        let query = self.search_query;
+        let cursor_char = if query.is_empty() { '_' } else { ' ' };
+        let search_line = Line::from(vec![
+            Span::styled("/ ", Style::default().fg(theme.colors.muted.to_color())),
+            Span::raw(query),
+            Span::styled(
+                cursor_char.to_string(),
+                Style::default()
+                    .bg(theme.colors.accent.to_color())
+                    .fg(theme.colors.background.to_color()),
+            ),
+        ]);
+
+        buf.set_line(
+            search_inner.x,
+            search_inner.y,
+            &search_line,
+            search_inner.width,
+        );
+
+        // Render filtered results preview
+        let results_block = Block::default()
+            .title(format!(" {} matches ", self.entries.len()))
+            .title_style(Style::default().fg(theme.colors.muted.to_color()))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme.colors.border.to_color()));
+
+        let results_inner = results_block.inner(chunks[1]);
+        results_block.render(chunks[1], buf);
+
+        // Show preview of matching entries
+        let items: Vec<ListItem<'_>> = self
+            .entries
+            .iter()
+            .take(results_inner.height as usize)
+            .map(|entry| {
+                let timestamp = entry.relative_time();
+                let summary = entry.summary();
+                ListItem::new(Line::from(vec![
+                    Span::styled(
+                        format!("{:<15}", timestamp),
+                        Style::default().fg(theme.colors.muted.to_color()),
+                    ),
+                    Span::styled(
+                        truncate_string(summary, 40),
+                        Style::default().fg(theme.colors.foreground.to_color()),
+                    ),
+                ]))
+            })
+            .collect();
+
+        if items.is_empty() {
+            let no_results = Paragraph::new("No matching entries")
+                .style(Style::default().fg(theme.colors.muted.to_color()));
+            no_results.render(results_inner, buf);
+        } else {
+            let list = List::new(items);
+            list.render(results_inner, buf);
+        }
+    }
 }
 
 /// Truncate a string to a maximum length, adding ellipsis if needed.
@@ -330,8 +431,16 @@ mod tests {
     fn test_work_log_editor_empty() {
         let theme = Theme::default();
         let empty_buffer = vec![String::new()];
-        let editor =
-            WorkLogEditor::new(vec![], 0, WorkLogMode::Browse, &empty_buffer, 0, 0, &theme);
+        let editor = WorkLogEditor::new(
+            vec![],
+            0,
+            WorkLogMode::Browse,
+            &empty_buffer,
+            0,
+            0,
+            "",
+            &theme,
+        );
         let buffer = render_widget(editor, 70, 10);
         let content = buffer_content(&buffer);
 
@@ -353,6 +462,7 @@ mod tests {
             &empty_buffer,
             0,
             0,
+            "",
             &theme,
         );
         let buffer = render_widget(editor, 80, 10);
@@ -376,6 +486,7 @@ mod tests {
             &empty_buffer,
             0,
             0,
+            "",
             &theme,
         );
         let buffer = render_widget(editor, 80, 15);
@@ -397,6 +508,7 @@ mod tests {
             &buffer_content_vec,
             0,
             5,
+            "",
             &theme,
         );
         let buffer = render_widget(editor, 80, 15);
@@ -420,6 +532,7 @@ mod tests {
             &empty_buffer,
             0,
             0,
+            "",
             &theme,
         );
         let buffer = render_widget(editor, 80, 10);
@@ -427,6 +540,31 @@ mod tests {
 
         assert!(content.contains("Confirm Delete"));
         assert!(content.contains("Entry to delete"));
+    }
+
+    #[test]
+    fn test_work_log_search_mode() {
+        let theme = Theme::default();
+        let task_id = TaskId::new();
+        let entry1 = WorkLogEntry::new(task_id, "Meeting notes from Monday");
+        let entry2 = WorkLogEntry::new(task_id, "Bug fix details");
+        let empty_buffer = vec![String::new()];
+
+        let editor = WorkLogEditor::new(
+            vec![&entry1, &entry2],
+            0,
+            WorkLogMode::Search,
+            &empty_buffer,
+            0,
+            0,
+            "meeting",
+            &theme,
+        );
+        let buffer = render_widget(editor, 80, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Search Work Log"));
+        assert!(content.contains("2 matches")); // Shows count of filtered entries passed in
     }
 
     #[test]

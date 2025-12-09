@@ -294,6 +294,35 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        // Work log search messages
+        UiMessage::WorkLogSearchStart => {
+            model.work_log_mode = WorkLogMode::Search;
+        }
+        UiMessage::WorkLogSearchCancel => {
+            // Return to browse without applying search
+            model.work_log_mode = WorkLogMode::Browse;
+            model.work_log_search_query.clear();
+        }
+        UiMessage::WorkLogSearchApply => {
+            // Return to browse with search filter active
+            model.work_log_mode = WorkLogMode::Browse;
+            model.work_log_selected = 0; // Reset selection after filtering
+        }
+        UiMessage::WorkLogSearchClear => {
+            // Clear the search filter
+            model.work_log_search_query.clear();
+            model.work_log_selected = 0;
+        }
+        UiMessage::WorkLogSearchChar(c) => {
+            if matches!(model.work_log_mode, WorkLogMode::Search) {
+                model.work_log_search_query.push(c);
+            }
+        }
+        UiMessage::WorkLogSearchBackspace => {
+            if matches!(model.work_log_mode, WorkLogMode::Search) {
+                model.work_log_search_query.pop();
+            }
+        }
         _ => {}
     }
 }

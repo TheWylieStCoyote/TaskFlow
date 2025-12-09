@@ -555,7 +555,13 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::WorkLogCursorDown
         | UiMessage::WorkLogNewline
         | UiMessage::WorkLogCursorHome
-        | UiMessage::WorkLogCursorEnd => {
+        | UiMessage::WorkLogCursorEnd
+        | UiMessage::WorkLogSearchStart
+        | UiMessage::WorkLogSearchCancel
+        | UiMessage::WorkLogSearchApply
+        | UiMessage::WorkLogSearchClear
+        | UiMessage::WorkLogSearchChar(_)
+        | UiMessage::WorkLogSearchBackspace => {
             handle_ui_work_log(model, msg);
         }
         // Description editor - delegated to helper

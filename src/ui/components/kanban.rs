@@ -125,6 +125,10 @@ impl Kanban<'_> {
         let items: Vec<ListItem<'_>> = tasks
             .iter()
             .map(|task| {
+                // Check if task is blocked by incomplete dependencies
+                let is_blocked = self.model.is_task_blocked(&task.id);
+                let has_deps = self.model.has_dependencies(&task.id);
+
                 let priority_indicator = match task.priority {
                     crate::domain::Priority::Urgent => {
                         Span::styled("!!!! ", Style::default().fg(theme.colors.danger.to_color()))
@@ -142,18 +146,36 @@ impl Kanban<'_> {
                 };
 
                 // Truncate title if needed
-                let max_len = inner.width.saturating_sub(6) as usize;
+                let max_len = inner.width.saturating_sub(8) as usize; // Extra space for icons
                 let title = if task.title.len() > max_len {
                     format!("{}…", &task.title[..max_len.saturating_sub(1)])
                 } else {
                     task.title.clone()
                 };
 
+                // Dim blocked tasks
+                let title_color = if is_blocked {
+                    theme.colors.muted.to_color()
+                } else {
+                    theme.colors.foreground.to_color()
+                };
+
                 let mut spans = vec![priority_indicator];
-                spans.push(Span::styled(
-                    title,
-                    Style::default().fg(theme.colors.foreground.to_color()),
-                ));
+
+                // Show dependency indicator
+                if has_deps {
+                    let dep_icon = if is_blocked { "🔒" } else { "🔗" };
+                    spans.push(Span::styled(
+                        format!("{} ", dep_icon),
+                        Style::default().fg(if is_blocked {
+                            theme.colors.warning.to_color()
+                        } else {
+                            theme.colors.muted.to_color()
+                        }),
+                    ));
+                }
+
+                spans.push(Span::styled(title, Style::default().fg(title_color)));
 
                 // Add due date indicator if overdue or due today
                 if task.is_overdue() {

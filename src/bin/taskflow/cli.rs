@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 
@@ -19,6 +20,10 @@ pub struct ListFilters {
     pub search: Option<String>,
     pub sort: String,
     pub reverse: bool,
+    pub due_before: Option<NaiveDate>,
+    pub due_after: Option<NaiveDate>,
+    pub estimate_min: Option<u32>,
+    pub estimate_max: Option<u32>,
 }
 
 /// `TaskFlow` - A TUI project management application
@@ -104,6 +109,18 @@ pub enum Commands {
         /// Reverse sort order
         #[arg(long)]
         reverse: bool,
+        /// Only show tasks due before this date (YYYY-MM-DD, or: today, tomorrow, +Nd)
+        #[arg(long)]
+        due_before: Option<String>,
+        /// Only show tasks due after this date (YYYY-MM-DD, or: today, tomorrow, -Nd)
+        #[arg(long)]
+        due_after: Option<String>,
+        /// Only show tasks with estimate >= this many minutes
+        #[arg(long)]
+        estimate_min: Option<u32>,
+        /// Only show tasks with estimate <= this many minutes
+        #[arg(long)]
+        estimate_max: Option<u32>,
     },
     /// Mark a task as done by searching for it
     #[command(alias = "d")]
@@ -148,4 +165,42 @@ pub fn parse_statuses(strings: &[String]) -> Vec<TaskStatus> {
             _ => None,
         })
         .collect()
+}
+
+/// Parse a date string into a NaiveDate.
+///
+/// Supports formats:
+/// - `YYYY-MM-DD` - ISO date format
+/// - `today` - Current date
+/// - `tomorrow` - Tomorrow's date
+/// - `yesterday` - Yesterday's date
+/// - `+Nd` or `+N` - N days from today (e.g., `+7d`, `+7`)
+/// - `-Nd` or `-N` - N days ago (e.g., `-3d`, `-3`)
+pub fn parse_date(s: &str) -> Option<NaiveDate> {
+    use chrono::{Duration, Utc};
+
+    let s = s.trim().to_lowercase();
+    let today = Utc::now().date_naive();
+
+    match s.as_str() {
+        "today" => Some(today),
+        "tomorrow" => Some(today + Duration::days(1)),
+        "yesterday" => Some(today - Duration::days(1)),
+        _ => {
+            // Try +Nd or -Nd format
+            if s.starts_with('+') || s.starts_with('-') {
+                let sign = if s.starts_with('+') { 1 } else { -1 };
+                let num_str = s
+                    .trim_start_matches('+')
+                    .trim_start_matches('-')
+                    .trim_end_matches('d');
+                if let Ok(days) = num_str.parse::<i64>() {
+                    return Some(today + Duration::days(days * sign));
+                }
+            }
+
+            // Try ISO format YYYY-MM-DD
+            NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()
+        }
+    }
 }

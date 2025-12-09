@@ -162,4 +162,46 @@ impl Model {
             Some(((completed * 100) / total) as u8)
         }
     }
+
+    /// Returns true if the task has any incomplete dependencies (is blocked).
+    ///
+    /// A task is blocked if any of its dependencies (tasks it depends on)
+    /// are not yet completed.
+    #[must_use]
+    pub fn is_task_blocked(&self, task_id: &TaskId) -> bool {
+        if let Some(task) = self.tasks.get(task_id) {
+            task.dependencies.iter().any(|dep_id| {
+                self.tasks
+                    .get(dep_id)
+                    .is_some_and(|dep| !dep.status.is_complete())
+            })
+        } else {
+            false
+        }
+    }
+
+    /// Returns the count of incomplete dependencies for a task.
+    #[must_use]
+    pub fn incomplete_dependency_count(&self, task_id: &TaskId) -> usize {
+        if let Some(task) = self.tasks.get(task_id) {
+            task.dependencies
+                .iter()
+                .filter(|dep_id| {
+                    self.tasks
+                        .get(dep_id)
+                        .is_some_and(|dep| !dep.status.is_complete())
+                })
+                .count()
+        } else {
+            0
+        }
+    }
+
+    /// Returns true if this task has any dependencies (regardless of completion).
+    #[must_use]
+    pub fn has_dependencies(&self, task_id: &TaskId) -> bool {
+        self.tasks
+            .get(task_id)
+            .is_some_and(|task| !task.dependencies.is_empty())
+    }
 }

@@ -420,8 +420,30 @@ impl Widget for HabitAnalyticsPopup<'_> {
         lines.push(Line::from(vec![
             Span::raw("📊 Completion: "),
             Span::styled(
-                format!("{:.1}%", completion_rate * 100.0),
+                format!("{:.1}%", completion_rate),
                 Style::default().fg(theme.colors.foreground.to_color()),
+            ),
+        ]));
+
+        // Trend analysis
+        let trend_symbol = habit.trend_symbol();
+        let trend_color = match habit.trend() {
+            Some(crate::domain::HabitTrend::Improving) => theme.colors.success.to_color(),
+            Some(crate::domain::HabitTrend::Declining) => theme.colors.danger.to_color(),
+            Some(crate::domain::HabitTrend::Stable) => theme.colors.muted.to_color(),
+            None => theme.colors.muted.to_color(),
+        };
+        let trend_text = match habit.trend() {
+            Some(crate::domain::HabitTrend::Improving) => "Improving",
+            Some(crate::domain::HabitTrend::Declining) => "Declining",
+            Some(crate::domain::HabitTrend::Stable) => "Stable",
+            None => "Not enough data",
+        };
+        lines.push(Line::from(vec![
+            Span::raw("📈 Trend: "),
+            Span::styled(
+                format!("{} {}", trend_symbol, trend_text),
+                Style::default().fg(trend_color),
             ),
         ]));
 

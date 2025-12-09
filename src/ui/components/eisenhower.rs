@@ -216,6 +216,10 @@ impl Eisenhower<'_> {
             .iter()
             .take(tasks_area.height as usize) // Limit to visible area
             .map(|task| {
+                // Check if task is blocked by incomplete dependencies
+                let is_blocked = self.model.is_task_blocked(&task.id);
+                let has_deps = self.model.has_dependencies(&task.id);
+
                 let status_icon = match task.status {
                     crate::domain::TaskStatus::Todo => "◇",
                     crate::domain::TaskStatus::InProgress => "⊙",
@@ -225,23 +229,39 @@ impl Eisenhower<'_> {
                 };
 
                 // Truncate title if needed
-                let max_len = tasks_area.width.saturating_sub(4) as usize;
+                let max_len = tasks_area.width.saturating_sub(6) as usize;
                 let title = if task.title.len() > max_len {
                     format!("{}…", &task.title[..max_len.saturating_sub(1)])
                 } else {
                     task.title.clone()
                 };
 
-                let mut spans = vec![
-                    Span::styled(
-                        format!("{} ", status_icon),
-                        Style::default().fg(theme.colors.muted.to_color()),
-                    ),
-                    Span::styled(
-                        title,
-                        Style::default().fg(theme.colors.foreground.to_color()),
-                    ),
-                ];
+                // Dim blocked tasks
+                let title_color = if is_blocked {
+                    theme.colors.muted.to_color()
+                } else {
+                    theme.colors.foreground.to_color()
+                };
+
+                let mut spans = vec![Span::styled(
+                    format!("{} ", status_icon),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                )];
+
+                // Show dependency indicator
+                if has_deps {
+                    let dep_icon = if is_blocked { "🔒" } else { "🔗" };
+                    spans.push(Span::styled(
+                        format!("{} ", dep_icon),
+                        Style::default().fg(if is_blocked {
+                            theme.colors.warning.to_color()
+                        } else {
+                            theme.colors.muted.to_color()
+                        }),
+                    ));
+                }
+
+                spans.push(Span::styled(title, Style::default().fg(title_color)));
 
                 // Add overdue indicator
                 if task.is_overdue() {

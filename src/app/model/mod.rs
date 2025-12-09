@@ -90,24 +90,24 @@ use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 /// 2. Add it to this array in the desired position
 /// 3. Add rendering in sidebar.rs (must match this order!)
 pub const SIDEBAR_VIEWS: &[ViewId] = &[
-    ViewId::TaskList,       // 0: All Tasks
-    ViewId::Today,          // 1: Today
-    ViewId::Upcoming,       // 2: Upcoming
-    ViewId::Overdue,        // 3: Overdue
-    ViewId::Scheduled,      // 4: Scheduled
-    ViewId::Calendar,       // 5: Calendar
-    ViewId::Dashboard,      // 6: Dashboard
-    ViewId::Reports,        // 7: Reports
-    ViewId::Habits,         // 8: Habits
-    ViewId::Blocked,        // 9: Blocked
-    ViewId::Untagged,       // 10: Untagged
-    ViewId::NoProject,      // 11: No Project
+    ViewId::TaskList,         // 0: All Tasks
+    ViewId::Today,            // 1: Today
+    ViewId::Upcoming,         // 2: Upcoming
+    ViewId::Overdue,          // 3: Overdue
+    ViewId::Scheduled,        // 4: Scheduled
+    ViewId::Calendar,         // 5: Calendar
+    ViewId::Dashboard,        // 6: Dashboard
+    ViewId::Reports,          // 7: Reports
+    ViewId::Habits,           // 8: Habits
+    ViewId::Blocked,          // 9: Blocked
+    ViewId::Untagged,         // 10: Untagged
+    ViewId::NoProject,        // 11: No Project
     ViewId::RecentlyModified, // 12: Recent
-    ViewId::Kanban,         // 13: Kanban
-    ViewId::Eisenhower,     // 14: Eisenhower
-    ViewId::WeeklyPlanner,  // 15: Weekly Planner
-    ViewId::Timeline,       // 16: Timeline
-    ViewId::Snoozed,        // 17: Snoozed
+    ViewId::Kanban,           // 13: Kanban
+    ViewId::Eisenhower,       // 14: Eisenhower
+    ViewId::WeeklyPlanner,    // 15: Weekly Planner
+    ViewId::Timeline,         // 16: Timeline
+    ViewId::Snoozed,          // 17: Snoozed
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -333,6 +333,8 @@ pub struct Model {
     pub work_log_cursor_line: usize,
     /// Cursor column position in work log buffer
     pub work_log_cursor_col: usize,
+    /// Search query for filtering work log entries
+    pub work_log_search_query: String,
 
     // Description editor state (multi-line)
     /// Whether description editor is visible
@@ -485,6 +487,7 @@ impl Model {
             work_log_buffer: vec![String::new()],
             work_log_cursor_line: 0,
             work_log_cursor_col: 0,
+            work_log_search_query: String::new(),
             show_description_editor: false,
             description_buffer: vec![String::new()],
             description_cursor_line: 0,

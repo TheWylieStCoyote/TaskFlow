@@ -536,6 +536,18 @@ pub enum UiMessage {
     WorkLogCursorHome,
     /// Move cursor to end of line
     WorkLogCursorEnd,
+    /// Start work log search mode
+    WorkLogSearchStart,
+    /// Cancel work log search (return to browse without applying)
+    WorkLogSearchCancel,
+    /// Apply work log search filter (return to browse with filter active)
+    WorkLogSearchApply,
+    /// Clear work log search filter
+    WorkLogSearchClear,
+    /// Input character in work log search
+    WorkLogSearchChar(char),
+    /// Backspace in work log search
+    WorkLogSearchBackspace,
 
     // Description editor (multi-line)
     /// Start editing description in multi-line mode

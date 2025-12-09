@@ -472,6 +472,86 @@ impl Habit {
     pub fn total_completions(&self) -> usize {
         self.check_ins.values().filter(|c| c.completed).count()
     }
+
+    /// Calculate completion rate for a specific period.
+    ///
+    /// Returns the percentage of due days that were completed in the given range.
+    #[must_use]
+    pub fn completion_rate_for_period(&self, start: NaiveDate, end: NaiveDate) -> Option<f64> {
+        let mut due_days = 0;
+        let mut completed_days = 0;
+
+        let mut date = start;
+        while date <= end {
+            if self.frequency.is_due_on(date, self.start_date) {
+                due_days += 1;
+                if self.is_completed_on(date) {
+                    completed_days += 1;
+                }
+            }
+            date += TimeDelta::days(1);
+        }
+
+        if due_days == 0 {
+            None
+        } else {
+            Some(completed_days as f64 / due_days as f64 * 100.0)
+        }
+    }
+
+    /// Analyze trend by comparing recent performance to historical.
+    ///
+    /// Compares the last 7 days to the previous 21 days.
+    /// Returns:
+    /// - `Some(HabitTrend::Improving)` if recent rate is >10% higher
+    /// - `Some(HabitTrend::Declining)` if recent rate is >10% lower
+    /// - `Some(HabitTrend::Stable)` if within 10%
+    /// - `None` if not enough data
+    #[must_use]
+    pub fn trend(&self) -> Option<HabitTrend> {
+        let today = Utc::now().date_naive();
+
+        // Recent period: last 7 days
+        let recent_start = today - TimeDelta::days(6);
+        let recent_rate = self.completion_rate_for_period(recent_start, today)?;
+
+        // Historical period: 21 days before recent
+        let hist_end = recent_start - TimeDelta::days(1);
+        let hist_start = hist_end - TimeDelta::days(20);
+        let hist_rate = self.completion_rate_for_period(hist_start, hist_end)?;
+
+        // Compare rates
+        let diff = recent_rate - hist_rate;
+        Some(if diff > 10.0 {
+            HabitTrend::Improving
+        } else if diff < -10.0 {
+            HabitTrend::Declining
+        } else {
+            HabitTrend::Stable
+        })
+    }
+
+    /// Get a trend indicator symbol.
+    #[must_use]
+    pub fn trend_symbol(&self) -> &'static str {
+        match self.trend() {
+            Some(HabitTrend::Improving) => "↑",
+            Some(HabitTrend::Declining) => "↓",
+            Some(HabitTrend::Stable) => "→",
+            None => " ",
+        }
+    }
+}
+
+/// Trend direction for habit performance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HabitTrend {
+    /// Performance is improving (recent > historical)
+    Improving,
+    /// Performance is declining (recent < historical)
+    Declining,
+    /// Performance is stable (within 10%)
+    Stable,
 }
 
 #[cfg(test)]

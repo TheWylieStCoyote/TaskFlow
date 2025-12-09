@@ -54,7 +54,9 @@ mod time_tracking;
 mod types;
 
 pub use cache::{FooterStats, TaskCache};
-pub use types::{CalendarState, RunningState, TimelineState, TimelineZoom};
+pub use types::{
+    AlertState, CalendarState, RunningState, TimelineState, TimelineZoom, ViewSelectionState,
+};
 
 use std::collections::HashMap;
 use std::path::PathBuf;

@@ -106,3 +106,31 @@ impl Default for TimelineState {
         }
     }
 }
+
+/// State for alert dialogs and error messages.
+///
+/// Groups related fields for managing alert visibility and messages.
+#[derive(Debug, Clone, Default)]
+pub struct AlertState {
+    /// Whether overdue tasks alert is visible (shown at startup)
+    pub show_overdue: bool,
+    /// Storage load error message (if any)
+    pub storage_error: Option<String>,
+    /// Whether storage error alert is visible
+    pub show_storage_error: bool,
+    /// Error message to display in footer (shown in red)
+    pub error_message: Option<String>,
+}
+
+/// State for view-specific selections.
+///
+/// Tracks selection state in specialized views (Kanban, Eisenhower, etc.).
+#[derive(Debug, Clone, Default)]
+pub struct ViewSelectionState {
+    /// Selected column in Kanban view (0-3: Todo, InProgress, Blocked, Done)
+    pub kanban_column: usize,
+    /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
+    pub eisenhower_quadrant: usize,
+    /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
+    pub weekly_planner_day: usize,
+}

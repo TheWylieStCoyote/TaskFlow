@@ -1,251 +1,19 @@
-//! Weekly review mode component.
-//!
-//! Provides a GTD-style weekly review workflow:
-//! 1. Review completed tasks from the past week
-//! 2. Review and process overdue tasks
-//! 3. Review upcoming week tasks
-//! 4. Check projects for stalled work
-//! 5. Weekly summary and stats
+//! Rendering methods for weekly review.
 
-use chrono::{NaiveDate, Utc};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Clear, List, ListItem, ListState, Paragraph, StatefulWidget, Widget,
-    },
+    widgets::{List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::app::Model;
-use crate::config::Theme;
 use crate::domain::Task;
 
-/// Phases of the weekly review
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WeeklyReviewPhase {
-    #[default]
-    Welcome,
-    CompletedTasks,
-    OverdueTasks,
-    UpcomingWeek,
-    StaleProjects,
-    Summary,
-}
-
-impl WeeklyReviewPhase {
-    /// Get the next phase in the review
-    #[must_use]
-    pub const fn next(self) -> Self {
-        match self {
-            Self::Welcome => Self::CompletedTasks,
-            Self::CompletedTasks => Self::OverdueTasks,
-            Self::OverdueTasks => Self::UpcomingWeek,
-            Self::UpcomingWeek => Self::StaleProjects,
-            Self::StaleProjects => Self::Summary,
-            Self::Summary => Self::Summary, // Stay at end
-        }
-    }
-
-    /// Get the previous phase
-    #[must_use]
-    pub const fn prev(self) -> Self {
-        match self {
-            Self::Welcome => Self::Welcome, // Stay at start
-            Self::CompletedTasks => Self::Welcome,
-            Self::OverdueTasks => Self::CompletedTasks,
-            Self::UpcomingWeek => Self::OverdueTasks,
-            Self::StaleProjects => Self::UpcomingWeek,
-            Self::Summary => Self::StaleProjects,
-        }
-    }
-
-    /// Get phase number (1-6)
-    #[must_use]
-    pub const fn number(self) -> u8 {
-        match self {
-            Self::Welcome => 1,
-            Self::CompletedTasks => 2,
-            Self::OverdueTasks => 3,
-            Self::UpcomingWeek => 4,
-            Self::StaleProjects => 5,
-            Self::Summary => 6,
-        }
-    }
-
-    /// Get phase title
-    #[must_use]
-    pub const fn title(self) -> &'static str {
-        match self {
-            Self::Welcome => "Weekly Review",
-            Self::CompletedTasks => "Completed This Week",
-            Self::OverdueTasks => "Overdue Tasks",
-            Self::UpcomingWeek => "Next 7 Days",
-            Self::StaleProjects => "Project Check",
-            Self::Summary => "Weekly Summary",
-        }
-    }
-}
-
-/// Weekly review view widget
-pub struct WeeklyReview<'a> {
-    model: &'a Model,
-    theme: &'a Theme,
-    phase: WeeklyReviewPhase,
-    selected: usize,
-}
-
-impl<'a> WeeklyReview<'a> {
-    #[must_use]
-    pub const fn new(
-        model: &'a Model,
-        theme: &'a Theme,
-        phase: WeeklyReviewPhase,
-        selected: usize,
-    ) -> Self {
-        Self {
-            model,
-            theme,
-            phase,
-            selected,
-        }
-    }
-
-    fn today() -> NaiveDate {
-        Utc::now().date_naive()
-    }
-
-    fn week_ago() -> NaiveDate {
-        Self::today() - chrono::Duration::days(7)
-    }
-
-    fn week_ahead() -> NaiveDate {
-        Self::today() + chrono::Duration::days(7)
-    }
-
-    /// Get tasks completed in the past week
-    fn completed_this_week(&self) -> Vec<&Task> {
-        let week_ago = Self::week_ago();
-        self.model
-            .tasks
-            .values()
-            .filter(|t| {
-                t.status.is_complete() && t.completed_at.is_some_and(|d| d.date_naive() >= week_ago)
-            })
-            .collect()
-    }
-
-    /// Get overdue tasks
-    fn overdue_tasks(&self) -> Vec<&Task> {
-        let today = Self::today();
-        self.model
-            .tasks
-            .values()
-            .filter(|t| !t.status.is_complete() && t.due_date.is_some_and(|d| d < today))
-            .collect()
-    }
-
-    /// Get tasks due in the next 7 days
-    fn upcoming_week_tasks(&self) -> Vec<&Task> {
-        let today = Self::today();
-        let week_ahead = Self::week_ahead();
-        self.model
-            .tasks
-            .values()
-            .filter(|t| {
-                !t.status.is_complete() && t.due_date.is_some_and(|d| d >= today && d <= week_ahead)
-            })
-            .collect()
-    }
-
-    /// Get projects with no recent activity (stale)
-    fn stale_projects(&self) -> Vec<(&crate::domain::ProjectId, &crate::domain::Project, usize)> {
-        let week_ago = Self::week_ago();
-
-        self.model
-            .projects
-            .iter()
-            .filter_map(|(id, project)| {
-                // Count incomplete tasks in this project
-                let task_count = self
-                    .model
-                    .tasks
-                    .values()
-                    .filter(|t| t.project_id.as_ref() == Some(id) && !t.status.is_complete())
-                    .count();
-
-                // Check if any task was modified in the past week
-                let has_recent_activity = self.model.tasks.values().any(|t| {
-                    t.project_id.as_ref() == Some(id) && t.updated_at.date_naive() >= week_ago
-                });
-
-                // Stale if has tasks but no recent activity
-                if task_count > 0 && !has_recent_activity {
-                    Some((id, project, task_count))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-}
-
-impl Widget for WeeklyReview<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        Clear.render(area, buf);
-
-        let theme = self.theme;
-
-        // Main container
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(format!(
-                " Weekly Review ({}/6) - {} ",
-                self.phase.number(),
-                self.phase.title()
-            ))
-            .title_alignment(Alignment::Center)
-            .border_style(Style::default().fg(theme.colors.accent.to_color()));
-
-        let inner = block.inner(area);
-        block.render(area, buf);
-
-        // Layout: content area + progress/help
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(3),    // Content
-                Constraint::Length(3), // Progress bar + help
-            ])
-            .split(inner);
-
-        // Render phase-specific content
-        match self.phase {
-            WeeklyReviewPhase::Welcome => self.render_welcome(chunks[0], buf),
-            WeeklyReviewPhase::CompletedTasks => {
-                let tasks = self.completed_this_week();
-                self.render_task_list(chunks[0], buf, &tasks, "No completed tasks this week", true)
-            }
-            WeeklyReviewPhase::OverdueTasks => {
-                let tasks = self.overdue_tasks();
-                self.render_task_list(chunks[0], buf, &tasks, "No overdue tasks! 🎉", false)
-            }
-            WeeklyReviewPhase::UpcomingWeek => {
-                let tasks = self.upcoming_week_tasks();
-                self.render_task_list(chunks[0], buf, &tasks, "No tasks due this week", false)
-            }
-            WeeklyReviewPhase::StaleProjects => self.render_stale_projects(chunks[0], buf),
-            WeeklyReviewPhase::Summary => self.render_summary(chunks[0], buf),
-        }
-
-        // Render progress and help
-        self.render_footer(chunks[1], buf);
-    }
-}
+use super::{WeeklyReview, WeeklyReviewPhase};
 
 impl WeeklyReview<'_> {
-    fn render_welcome(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_welcome(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
         let today = Self::today();
 
@@ -351,7 +119,7 @@ impl WeeklyReview<'_> {
         para.render(area, buf);
     }
 
-    fn render_task_list(
+    pub(crate) fn render_task_list(
         &self,
         area: Rect,
         buf: &mut Buffer,
@@ -438,7 +206,7 @@ impl WeeklyReview<'_> {
         StatefulWidget::render(list, area, buf, &mut state);
     }
 
-    fn render_stale_projects(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_stale_projects(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
         let stale = self.stale_projects();
 
@@ -483,7 +251,7 @@ impl WeeklyReview<'_> {
         StatefulWidget::render(list, area, buf, &mut state);
     }
 
-    fn render_summary(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_summary(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         let completed_count = self.completed_this_week().len();
@@ -597,7 +365,7 @@ impl WeeklyReview<'_> {
         para.render(area, buf);
     }
 
-    fn render_footer(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_footer(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         // Help text varies by phase
@@ -640,44 +408,5 @@ impl WeeklyReview<'_> {
         .alignment(Alignment::Center);
 
         buf.set_line(chunks[1].x, chunks[1].y, &help_line, chunks[1].width);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_phase_navigation() {
-        let phase = WeeklyReviewPhase::Welcome;
-        assert_eq!(phase.next(), WeeklyReviewPhase::CompletedTasks);
-        assert_eq!(phase.prev(), WeeklyReviewPhase::Welcome);
-
-        let phase = WeeklyReviewPhase::Summary;
-        assert_eq!(phase.next(), WeeklyReviewPhase::Summary);
-        assert_eq!(phase.prev(), WeeklyReviewPhase::StaleProjects);
-    }
-
-    #[test]
-    fn test_phase_numbers() {
-        assert_eq!(WeeklyReviewPhase::Welcome.number(), 1);
-        assert_eq!(WeeklyReviewPhase::CompletedTasks.number(), 2);
-        assert_eq!(WeeklyReviewPhase::OverdueTasks.number(), 3);
-        assert_eq!(WeeklyReviewPhase::UpcomingWeek.number(), 4);
-        assert_eq!(WeeklyReviewPhase::StaleProjects.number(), 5);
-        assert_eq!(WeeklyReviewPhase::Summary.number(), 6);
-    }
-
-    #[test]
-    fn test_weekly_review_renders() {
-        let model = Model::new().with_sample_data();
-        let theme = Theme::default();
-        let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::Welcome, 0);
-
-        let area = Rect::new(0, 0, 80, 24);
-        let mut buffer = Buffer::empty(area);
-        review.render(area, &mut buffer);
-
-        assert!(buffer.area.width > 0);
     }
 }

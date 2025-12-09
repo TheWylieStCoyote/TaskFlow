@@ -3,6 +3,31 @@ use crate::domain::{Project, Task, TimeEntry, WorkLogEntry};
 /// Maximum number of undo/redo actions to keep in history
 pub const MAX_UNDO_HISTORY: usize = 50;
 
+/// Maximum length for names/titles in descriptions
+const DESC_MAX_LEN: usize = 20;
+
+/// Generate a description for create/delete/modify actions with entity name
+macro_rules! action_desc {
+    (create $entity:literal, $name:expr) => {
+        format!(
+            concat!("Create ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (delete $entity:literal, $name:expr) => {
+        format!(
+            concat!("Delete ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+    (modify $entity:literal, $name:expr) => {
+        format!(
+            concat!("Modify ", $entity, " \"{}\""),
+            truncate($name, DESC_MAX_LEN)
+        )
+    };
+}
+
 /// Represents an action that can be undone/redone
 #[derive(Debug, Clone)]
 pub enum UndoAction {
@@ -60,37 +85,29 @@ impl UndoAction {
     #[must_use]
     pub fn description(&self) -> String {
         match self {
-            Self::TaskCreated(task) => {
-                format!("Create task \"{}\"", truncate(&task.title, 20))
-            }
-            Self::TaskDeleted { task, .. } => {
-                format!("Delete task \"{}\"", truncate(&task.title, 20))
-            }
-            Self::TaskModified { before, .. } => {
-                format!("Modify task \"{}\"", truncate(&before.title, 20))
-            }
-            Self::ProjectCreated(project) => {
-                format!("Create project \"{}\"", truncate(&project.name, 20))
-            }
-            Self::ProjectDeleted(project) => {
-                format!("Delete project \"{}\"", truncate(&project.name, 20))
-            }
-            Self::ProjectModified { before, .. } => {
-                format!("Modify project \"{}\"", truncate(&before.name, 20))
-            }
+            Self::TaskCreated(task) => action_desc!(create "task", &task.title),
+            Self::TaskDeleted { task, .. } => action_desc!(delete "task", &task.title),
+            Self::TaskModified { before, .. } => action_desc!(modify "task", &before.title),
+            Self::ProjectCreated(project) => action_desc!(create "project", &project.name),
+            Self::ProjectDeleted(project) => action_desc!(delete "project", &project.name),
+            Self::ProjectModified { before, .. } => action_desc!(modify "project", &before.name),
             Self::TimeEntryStarted(_) => "Start time tracking".to_string(),
             Self::TimeEntryStopped { .. } => "Stop time tracking".to_string(),
             Self::TimeEntryDeleted(_) => "Delete time entry".to_string(),
             Self::TimeEntryModified { .. } => "Modify time entry".to_string(),
             Self::TimerSwitched { .. } => "Switch timer".to_string(),
             Self::WorkLogCreated(entry) => {
-                format!("Add work log \"{}\"", truncate(entry.summary(), 20))
+                format!(
+                    "Add work log \"{}\"",
+                    truncate(entry.summary(), DESC_MAX_LEN)
+                )
             }
-            Self::WorkLogDeleted(entry) => {
-                format!("Delete work log \"{}\"", truncate(entry.summary(), 20))
-            }
+            Self::WorkLogDeleted(entry) => action_desc!(delete "work log", entry.summary()),
             Self::WorkLogModified { before, .. } => {
-                format!("Edit work log \"{}\"", truncate(before.summary(), 20))
+                format!(
+                    "Edit work log \"{}\"",
+                    truncate(before.summary(), DESC_MAX_LEN)
+                )
             }
         }
     }

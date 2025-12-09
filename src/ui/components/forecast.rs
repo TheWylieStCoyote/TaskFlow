@@ -318,8 +318,8 @@ impl<'a> Forecast<'a> {
 
         let lines: Vec<Line<'_>> = upcoming
             .iter()
-            .map(|task| {
-                let due = task.due_date.unwrap();
+            .filter_map(|task| task.due_date.map(|due| (task, due)))
+            .map(|(task, due)| {
                 let days_until = (due - today).num_days();
                 let date_str = if days_until == 0 {
                     "Today".to_string()

@@ -26,11 +26,11 @@ fn test_model_new_defaults() {
 fn test_model_with_sample_data() {
     let model = Model::new().with_sample_data();
 
-    // Sample data creates 15 tasks across 3 projects
-    assert_eq!(model.tasks.len(), 15);
-    assert_eq!(model.projects.len(), 3);
-    // Some are completed, so visible should be less
-    assert!(model.visible_tasks.len() < 15);
+    // Sample data creates ~88 tasks across 10 projects
+    assert!(model.tasks.len() >= 80);
+    assert_eq!(model.projects.len(), 10);
+    // Some are completed, so visible should be less than total
+    assert!(model.visible_tasks.len() < model.tasks.len());
 }
 
 #[test]

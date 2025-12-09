@@ -79,6 +79,8 @@ pub enum Message {
     Ui(UiMessage),
     /// System-level operations
     System(SystemMessage),
+    /// Git synchronization operations
+    Sync(SyncMessage),
     /// No operation (useful for conditional message handling)
     None,
 }
@@ -868,4 +870,54 @@ pub enum HabitMessage {
         /// The new name
         name: String,
     },
+}
+
+/// Git synchronization messages.
+///
+/// These messages handle syncing data with a Git remote repository.
+/// Only works when using the Markdown storage backend.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::app::{Model, Message, SyncMessage, update};
+///
+/// let mut model = Model::new();
+///
+/// // Check sync status
+/// update(&mut model, SyncMessage::Status.into());
+///
+/// // Pull changes from remote
+/// update(&mut model, SyncMessage::Pull.into());
+///
+/// // Push local changes to remote
+/// update(&mut model, SyncMessage::Push.into());
+/// ```
+#[derive(Debug, Clone)]
+pub enum SyncMessage {
+    /// Refresh the sync status (checks for uncommitted changes, ahead/behind counts)
+    Status,
+    /// Commit all current changes
+    Commit,
+    /// Pull changes from remote
+    Pull,
+    /// Push changes to remote
+    Push,
+    /// Sync (pull then push)
+    Sync,
+    /// Resolve a merge conflict
+    ResolveConflict {
+        /// Path to the conflicted file
+        path: std::path::PathBuf,
+        /// Which version to keep
+        resolution: crate::storage::sync::ConflictResolution,
+    },
+    /// Abort an in-progress merge
+    AbortMerge,
+}
+
+impl From<SyncMessage> for Message {
+    fn from(msg: SyncMessage) -> Self {
+        Self::Sync(msg)
+    }
 }

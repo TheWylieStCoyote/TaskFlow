@@ -71,6 +71,7 @@ use crate::domain::{
     Filter, Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec,
     Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
+use crate::storage::sync::{GitStatus, GitSync};
 use crate::storage::StorageBackend;
 use crate::ui::{InputMode, InputTarget};
 
@@ -241,6 +242,12 @@ pub struct Model {
     /// Whether there are unsaved changes
     pub dirty: bool,
 
+    // Git sync
+    /// Git sync manager (only for Markdown backend)
+    pub git_sync: Option<GitSync>,
+    /// Current git repository status
+    pub git_status: Option<GitStatus>,
+
     // Configuration
     /// Default priority for new tasks
     pub default_priority: Priority,
@@ -401,6 +408,8 @@ impl Model {
             storage: None,
             data_path: None,
             dirty: false,
+            git_sync: None,
+            git_status: None,
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),

@@ -465,6 +465,44 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
         ));
     }
 
+    // Add Git sync status if available
+    if let Some(ref status) = model.git_status {
+        if status.is_repo {
+            spans.push(Span::styled(
+                " | ",
+                Style::default().fg(theme.colors.muted.to_color()),
+            ));
+
+            // Choose color and icon based on status
+            let (icon, text, color) = if status.has_conflicts() {
+                (
+                    "!",
+                    format!("{} conflicts", status.conflicts.len()),
+                    theme.colors.danger.to_color(),
+                )
+            } else if status.ahead > 0 || status.behind > 0 || status.modified > 0 {
+                let mut parts = Vec::new();
+                if status.ahead > 0 {
+                    parts.push(format!("^{}", status.ahead));
+                }
+                if status.behind > 0 {
+                    parts.push(format!("v{}", status.behind));
+                }
+                if status.modified > 0 || status.staged > 0 {
+                    parts.push(format!("~{}", status.modified + status.staged));
+                }
+                ("G", parts.join(" "), theme.colors.warning.to_color())
+            } else {
+                ("G", "synced".to_string(), theme.colors.success.to_color())
+            };
+
+            spans.push(Span::styled(
+                format!("{icon} {text}"),
+                Style::default().fg(color),
+            ));
+        }
+    }
+
     // Add Pomodoro timer display if active
     if let Some(ref session) = model.pomodoro_session {
         spans.push(Span::styled(

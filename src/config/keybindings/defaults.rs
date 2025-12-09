@@ -146,5 +146,12 @@ pub fn default_bindings() -> HashMap<String, Action> {
     // In Habits view: n=create, e=edit, d=delete, space/x=toggle, a=analytics
     // The habit-specific actions are mapped contextually in the key handler
 
+    // Git sync (requires Markdown backend)
+    bindings.insert("gs".to_string(), Action::GitStatus);
+    bindings.insert("gc".to_string(), Action::GitCommit);
+    bindings.insert("gp".to_string(), Action::GitPull);
+    bindings.insert("gP".to_string(), Action::GitPush);
+    bindings.insert("gS".to_string(), Action::GitSync);
+
     bindings
 }

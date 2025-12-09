@@ -10,6 +10,7 @@
 
 mod habit;
 mod navigation;
+mod sync;
 pub mod system;
 mod task;
 mod time;
@@ -20,6 +21,7 @@ use tracing::{debug, trace};
 use crate::app::{Message, Model};
 
 pub use navigation::days_in_month;
+pub use sync::init_git_sync;
 pub use task::create_next_recurring_task;
 pub use ui::create_task_from_quick_add;
 
@@ -64,6 +66,10 @@ pub fn update(model: &mut Model, message: Message) {
         Message::System(msg) => {
             debug!(?msg, "System operation");
             system::handle_system(model, msg);
+        }
+        Message::Sync(msg) => {
+            debug!(?msg, "Git sync operation");
+            sync::handle_sync(model, msg);
         }
         Message::None => {}
     }

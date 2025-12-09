@@ -100,6 +100,7 @@ mod error;
 pub mod export;
 pub mod import;
 mod repository;
+pub mod sync;
 
 pub use error::*;
 pub use export::{
@@ -112,6 +113,9 @@ pub use import::{
     ImportFormat, ImportOptions, ImportResult, ImportSkipReason, MergeStrategy,
 };
 pub use repository::*;
+pub use sync::{
+    ConflictResolution, GitStatus, GitSync, PullResult, PushResult, SyncError, SyncResult,
+};
 
 use std::path::Path;
 

@@ -31,6 +31,9 @@ directories = "5.0"
 # SQLite
 rusqlite = { version = "0.32", features = ["bundled"] }
 
+# Git integration
+git2 = "0.19"
+
 # Error Handling
 thiserror = "2.0"
 anyhow = "1.0"

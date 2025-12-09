@@ -144,6 +144,13 @@ pub enum Action {
     ShowHabitAnalytics,
     HabitToggleShowArchived,
     HabitArchive,
+
+    // Git sync
+    GitStatus,
+    GitCommit,
+    GitPull,
+    GitPush,
+    GitSync,
 }
 
 /// Category for grouping actions in help display
@@ -166,6 +173,7 @@ pub enum ActionCategory {
     Macros,
     Templates,
     Pomodoro,
+    GitSync,
     System,
 }
 
@@ -191,6 +199,7 @@ impl ActionCategory {
             Self::Macros => "Macros",
             Self::Templates => "Templates",
             Self::Pomodoro => "Pomodoro Timer",
+            Self::GitSync => "Git Sync",
             Self::System => "System",
         }
     }
@@ -216,7 +225,8 @@ impl ActionCategory {
             Self::Macros => 14,
             Self::Templates => 15,
             Self::Pomodoro => 16,
-            Self::System => 17,
+            Self::GitSync => 17,
+            Self::System => 18,
         }
     }
 }
@@ -347,6 +357,12 @@ impl Action {
             Self::ShowHabitAnalytics => "Show habit analytics",
             Self::HabitToggleShowArchived => "Toggle show archived",
             Self::HabitArchive => "Archive habit",
+            // Git sync
+            Self::GitStatus => "Git status",
+            Self::GitCommit => "Git commit",
+            Self::GitPull => "Git pull",
+            Self::GitPush => "Git push",
+            Self::GitSync => "Git sync (pull + push)",
         }
     }
 
@@ -463,6 +479,10 @@ impl Action {
             | Self::ShowHabitAnalytics
             | Self::HabitToggleShowArchived
             | Self::HabitArchive => ActionCategory::Habits,
+
+            Self::GitStatus | Self::GitCommit | Self::GitPull | Self::GitPush | Self::GitSync => {
+                ActionCategory::GitSync
+            }
         }
     }
 }

@@ -239,6 +239,14 @@ pub enum ViewId {
     Snoozed,
     /// Habit tracking view
     Habits,
+    /// Heatmap view (GitHub-style contribution graph)
+    Heatmap,
+    /// Forecast view (workload projection into future)
+    Forecast,
+    /// Network graph view (dependency visualization)
+    Network,
+    /// Burndown chart view (progress toward completion)
+    Burndown,
 }
 
 /// Task operation messages.

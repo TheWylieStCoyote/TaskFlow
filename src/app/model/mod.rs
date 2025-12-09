@@ -113,6 +113,10 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::WeeklyPlanner,    // 15: Weekly Planner
     ViewId::Timeline,         // 16: Timeline
     ViewId::Snoozed,          // 17: Snoozed
+    ViewId::Heatmap,          // 18: Heatmap
+    ViewId::Forecast,         // 19: Forecast
+    ViewId::Network,          // 20: Network
+    ViewId::Burndown,         // 21: Burndown
 ];
 
 /// Number of view items in the sidebar (before the separator).

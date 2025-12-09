@@ -324,6 +324,10 @@ impl Model {
                 // Timeline shows tasks with at least one date (scheduled or due)
                 task.scheduled_date.is_some() || task.due_date.is_some()
             }
+            ViewId::Heatmap | ViewId::Forecast | ViewId::Network | ViewId::Burndown => {
+                // Analytics views show all tasks
+                true
+            }
         }
     }
 

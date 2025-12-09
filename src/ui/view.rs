@@ -12,11 +12,11 @@ use crate::config::Theme;
 use crate::app::ViewId;
 
 use super::components::{
-    centered_rect, centered_rect_fixed_height, Calendar, ConfirmDialog, DailyReview, Dashboard,
-    DescriptionEditor, Eisenhower, FocusView, HabitAnalyticsPopup, HabitsView, HelpPopup,
-    InputDialog, InputMode, InputTarget, Kanban, KeybindingsEditor, OverdueAlert, ReportsView,
-    SavedFilterPicker, Sidebar, StorageErrorAlert, TaskList, TemplatePicker, TimeLogEditor,
-    Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
+    centered_rect, centered_rect_fixed_height, Burndown, Calendar, ConfirmDialog, DailyReview,
+    Dashboard, DescriptionEditor, Eisenhower, FocusView, Forecast, HabitAnalyticsPopup, HabitsView,
+    Heatmap, HelpPopup, InputDialog, InputMode, InputTarget, Kanban, KeybindingsEditor, Network,
+    OverdueAlert, ReportsView, SavedFilterPicker, Sidebar, StorageErrorAlert, TaskList,
+    TemplatePicker, TimeLogEditor, Timeline, WeeklyPlanner, WeeklyReview, WorkLogEditor,
 };
 
 /// Main view function - renders the entire UI based on model state
@@ -466,6 +466,22 @@ fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: 
         ViewId::Timeline => {
             let timeline = Timeline::new(model, theme);
             frame.render_widget(timeline, area);
+        }
+        ViewId::Heatmap => {
+            let heatmap = Heatmap::new(model, theme);
+            frame.render_widget(heatmap, area);
+        }
+        ViewId::Forecast => {
+            let forecast = Forecast::new(model, theme);
+            frame.render_widget(forecast, area);
+        }
+        ViewId::Network => {
+            let network = Network::new(model, theme);
+            frame.render_widget(network, area);
+        }
+        ViewId::Burndown => {
+            let burndown = Burndown::new(model, theme);
+            frame.render_widget(burndown, area);
         }
         _ => {
             // Cache task list area with header offset (border + title row = 2)

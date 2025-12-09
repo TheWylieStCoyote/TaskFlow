@@ -209,6 +209,46 @@ impl Widget for Sidebar<'_> {
                     theme,
                 ),
             ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🟩 ", Style::default()),
+                styled_view_name(
+                    "Heatmap",
+                    ViewId::Heatmap,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📈 ", Style::default()),
+                styled_view_name(
+                    "Forecast",
+                    ViewId::Forecast,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🔗 ", Style::default()),
+                styled_view_name(
+                    "Network",
+                    ViewId::Network,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📉 ", Style::default()),
+                styled_view_name(
+                    "Burndown",
+                    ViewId::Burndown,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
             // Separator
             ListItem::new(Line::from("───────────")),
             // Projects section
@@ -434,8 +474,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        // Height 25 to accommodate all views including Habits
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 30 to accommodate all views including Heatmap, Forecast, Network, Burndown
+        let buffer = render_widget(sidebar, 30, 30);
         let content = buffer_content(&buffer);
 
         assert!(
@@ -449,7 +489,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 30 to accommodate all views including analytics views
+        let buffer = render_widget(sidebar, 30, 30);
         let content = buffer_content(&buffer);
 
         assert!(
@@ -463,7 +504,8 @@ mod tests {
         let model = Model::new().with_sample_data();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 30 to accommodate all views including analytics views
+        let buffer = render_widget(sidebar, 30, 30);
         let content = buffer_content(&buffer);
 
         // Sample data has "Backend API", "Frontend UI", "Documentation" projects

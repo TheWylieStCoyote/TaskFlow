@@ -736,3 +736,474 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// Property tests for YAML backend
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: YAML backend CRUD operations are consistent
+    #[test]
+    fn prop_yaml_backend_crud_consistent(task in task_strategy()) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.yaml");
+        let mut backend = create_backend(BackendType::Yaml, &path).unwrap();
+
+        // Create
+        backend.create_task(&task).unwrap();
+
+        // Read
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+
+        // Core fields should match
+        prop_assert_eq!(&retrieved.title, &task.title);
+        prop_assert_eq!(retrieved.priority, task.priority);
+        prop_assert_eq!(retrieved.status, task.status);
+        prop_assert_eq!(&retrieved.tags, &task.tags);
+
+        // Delete
+        backend.delete_task(&task.id).unwrap();
+        prop_assert!(backend.get_task(&task.id).unwrap().is_none());
+    }
+
+    /// Property: YAML backend handles special characters in titles
+    #[test]
+    fn prop_yaml_special_chars(title in "[a-zA-Z0-9 :'\"-]{1,100}") {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.yaml");
+        let mut backend = create_backend(BackendType::Yaml, &path).unwrap();
+
+        let task = Task::new(&title);
+        backend.create_task(&task).unwrap();
+
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+        prop_assert_eq!(&retrieved.title, &title);
+    }
+}
+
+// ============================================================================
+// Property tests for Markdown backend
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(20))]
+
+    /// Property: Markdown backend CRUD operations are consistent
+    #[test]
+    fn prop_markdown_backend_crud_consistent(task in task_strategy()) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("tasks");
+        let mut backend = create_backend(BackendType::Markdown, &path).unwrap();
+
+        // Create
+        backend.create_task(&task).unwrap();
+
+        // Read
+        let retrieved = backend.get_task(&task.id).unwrap().unwrap();
+
+        // Core fields should match
+        prop_assert_eq!(&retrieved.title, &task.title);
+        prop_assert_eq!(retrieved.priority, task.priority);
+        prop_assert_eq!(retrieved.status, task.status);
+
+        // Delete
+        backend.delete_task(&task.id).unwrap();
+        prop_assert!(backend.get_task(&task.id).unwrap().is_none());
+    }
+}
+
+// ============================================================================
+// Property tests for search text filtering
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Search filter returns tasks containing search text
+    #[test]
+    fn prop_search_text_filter(
+        search_term in "[a-z]{3,8}",
+        tasks_with_term in prop::collection::vec(task_strategy(), 1..10),
+        tasks_without_term in prop::collection::vec(task_strategy(), 0..10),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create tasks with search term in title
+        for mut task in tasks_with_term.clone() {
+            task.title = format!("{} {}", task.title, search_term);
+            backend.create_task(&task).unwrap();
+        }
+
+        // Create tasks without search term
+        for mut task in tasks_without_term.clone() {
+            task.title = task.title.replace(&search_term, "");
+            if !task.title.to_lowercase().contains(&search_term.to_lowercase()) {
+                backend.create_task(&task).unwrap();
+            }
+        }
+
+        // Filter by search text
+        let filter = taskflow::domain::Filter {
+            search_text: Some(search_term.clone()),
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        // All returned tasks should contain search term
+        for task in &filtered {
+            prop_assert!(
+                task.title.to_lowercase().contains(&search_term.to_lowercase())
+                    || task.description.as_ref().is_some_and(|d| d.to_lowercase().contains(&search_term.to_lowercase()))
+            );
+        }
+    }
+
+    /// Property: Search is case-insensitive
+    #[test]
+    fn prop_search_case_insensitive(
+        search_term in "[a-z]{3,8}",
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create task with uppercase version of search term
+        let task = Task::new(search_term.to_uppercase());
+        backend.create_task(&task).unwrap();
+
+        // Search with lowercase should find it
+        let filter = taskflow::domain::Filter {
+            search_text: Some(search_term.to_lowercase()),
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        prop_assert_eq!(filtered.len(), 1);
+    }
+}
+
+// ============================================================================
+// Property tests for due date handling
+// ============================================================================
+
+use chrono::NaiveDate;
+
+/// Strategy for generating dates within a reasonable range
+fn date_strategy() -> impl Strategy<Value = NaiveDate> {
+    (2020i32..2030, 1u32..13, 1u32..29).prop_map(|(year, month, day)| {
+        NaiveDate::from_ymd_opt(year, month, day)
+            .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap())
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Due date is preserved through storage
+    #[test]
+    fn prop_due_date_storage_roundtrip(
+        task in task_strategy(),
+        due_date in date_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        let mut task_with_due = task;
+        task_with_due.due_date = Some(due_date);
+        backend.create_task(&task_with_due).unwrap();
+
+        let retrieved = backend.get_task(&task_with_due.id).unwrap().unwrap();
+        prop_assert_eq!(retrieved.due_date, Some(due_date));
+    }
+
+    /// Property: Scheduled date is preserved through storage
+    #[test]
+    fn prop_scheduled_date_storage_roundtrip(
+        task in task_strategy(),
+        scheduled_date in date_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        let mut task_with_scheduled = task;
+        task_with_scheduled.scheduled_date = Some(scheduled_date);
+        backend.create_task(&task_with_scheduled).unwrap();
+
+        let retrieved = backend.get_task(&task_with_scheduled.id).unwrap().unwrap();
+        prop_assert_eq!(retrieved.scheduled_date, Some(scheduled_date));
+    }
+
+    /// Property: Filter by due_before only returns tasks with due dates on or before cutoff
+    #[test]
+    fn prop_filter_due_before(
+        tasks in prop::collection::vec(task_strategy(), 1..10),
+        cutoff_date in date_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Assign due dates to tasks
+        for (i, mut task) in tasks.into_iter().enumerate() {
+            // Set due dates: some before, some after cutoff
+            let days_offset = if i % 2 == 0 { -10i64 } else { 10i64 };
+            if let Some(due) = cutoff_date.checked_add_signed(chrono::Duration::days(days_offset)) {
+                task.due_date = Some(due);
+                backend.create_task(&task).unwrap();
+            }
+        }
+
+        let filter = taskflow::domain::Filter {
+            due_before: Some(cutoff_date),
+            include_completed: true,
+            ..Default::default()
+        };
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+
+        // All returned tasks should have due dates on or before cutoff
+        for task in &filtered {
+            if let Some(due) = task.due_date {
+                prop_assert!(due <= cutoff_date, "Task due date {} should be <= cutoff {}", due, cutoff_date);
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Property tests for time entries
+// ============================================================================
+
+use taskflow::domain::TimeEntry;
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Time entry can be created and has correct task_id
+    #[test]
+    fn prop_time_entry_creation(task in task_strategy()) {
+        let entry = TimeEntry::start(task.id);
+        prop_assert_eq!(entry.task_id, task.id);
+        prop_assert!(entry.ended_at.is_none());
+    }
+
+    /// Property: Time entries are preserved through storage
+    #[test]
+    fn prop_time_entry_storage_roundtrip(task in task_strategy()) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create task
+        backend.create_task(&task).unwrap();
+
+        // Create time entry for task
+        let mut entry = TimeEntry::start(task.id);
+        entry.stop(); // End it so it has a duration
+        backend.create_time_entry(&entry).unwrap();
+
+        // Retrieve time entries
+        let entries = backend.get_entries_for_task(&task.id).unwrap();
+        prop_assert_eq!(entries.len(), 1);
+        prop_assert_eq!(entries[0].task_id, task.id);
+    }
+}
+
+// ============================================================================
+// Property tests for subtask relationships
+// ============================================================================
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(20))]
+
+    /// Property: Subtask parent_task_id is preserved through storage
+    #[test]
+    fn prop_subtask_parent_storage_roundtrip(
+        parent_task in task_strategy(),
+        child_task in task_strategy(),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create parent
+        backend.create_task(&parent_task).unwrap();
+
+        // Create child with parent_task_id
+        let mut child = child_task;
+        child.parent_task_id = Some(parent_task.id);
+        backend.create_task(&child).unwrap();
+
+        // Verify parent_task_id is preserved
+        let retrieved = backend.get_task(&child.id).unwrap().unwrap();
+        prop_assert_eq!(retrieved.parent_task_id, Some(parent_task.id));
+    }
+
+    /// Property: Multiple subtasks can share same parent
+    #[test]
+    fn prop_multiple_subtasks_same_parent(
+        parent_task in task_strategy(),
+        child_tasks in prop::collection::vec(task_strategy(), 2..5),
+    ) {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create parent
+        backend.create_task(&parent_task).unwrap();
+
+        // Create children
+        for mut child in child_tasks.clone() {
+            child.parent_task_id = Some(parent_task.id);
+            backend.create_task(&child).unwrap();
+        }
+
+        // Verify all children have correct parent
+        for child in &child_tasks {
+            let retrieved = backend.get_task(&child.id).unwrap().unwrap();
+            prop_assert_eq!(retrieved.parent_task_id, Some(parent_task.id));
+        }
+    }
+}
+
+// ============================================================================
+// Property tests for Model operations
+// ============================================================================
+
+use taskflow::app::{update, Message, Model, NavigationMessage, SystemMessage, TaskMessage};
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(30))]
+
+    /// Property: Creating tasks maintains model consistency
+    #[test]
+    fn prop_model_create_task_consistent(
+        titles in prop::collection::vec(task_title_strategy(), 1..20),
+    ) {
+        let mut model = Model::new();
+
+        for title in &titles {
+            let msg = Message::Task(TaskMessage::Create(title.clone()));
+            update(&mut model, msg);
+        }
+
+        // Task count should match
+        prop_assert_eq!(model.tasks.len(), titles.len());
+
+        // visible_tasks should be updated
+        model.refresh_visible_tasks();
+        prop_assert_eq!(model.visible_tasks.len(), titles.len());
+    }
+
+    /// Property: Undo after create removes the task
+    #[test]
+    fn prop_undo_create_removes_task(title in task_title_strategy()) {
+        let mut model = Model::new();
+
+        // Create a task
+        let msg = Message::Task(TaskMessage::Create(title));
+        update(&mut model, msg);
+        prop_assert_eq!(model.tasks.len(), 1);
+
+        // Undo should remove it
+        let msg = Message::System(SystemMessage::Undo);
+        update(&mut model, msg);
+        prop_assert_eq!(model.tasks.len(), 0);
+    }
+
+    /// Property: Redo after undo restores the task
+    #[test]
+    fn prop_redo_restores_task(title in task_title_strategy()) {
+        let mut model = Model::new();
+
+        // Create a task
+        let msg = Message::Task(TaskMessage::Create(title.clone()));
+        update(&mut model, msg);
+        let task_id = *model.tasks.keys().next().unwrap();
+
+        // Undo
+        update(&mut model, Message::System(SystemMessage::Undo));
+        prop_assert_eq!(model.tasks.len(), 0);
+
+        // Redo should restore it
+        update(&mut model, Message::System(SystemMessage::Redo));
+        prop_assert_eq!(model.tasks.len(), 1);
+        prop_assert!(model.tasks.contains_key(&task_id));
+    }
+
+    /// Property: Navigation stays within bounds
+    #[test]
+    fn prop_navigation_within_bounds(
+        task_count in 1usize..50,
+        nav_count in 1usize..100,
+    ) {
+        let mut model = Model::new();
+
+        // Create tasks
+        for i in 0..task_count {
+            let msg = Message::Task(TaskMessage::Create(format!("Task {}", i)));
+            update(&mut model, msg);
+        }
+        model.refresh_visible_tasks();
+
+        // Navigate many times
+        for _ in 0..nav_count {
+            let msg = Message::Navigation(NavigationMessage::Down);
+            update(&mut model, msg);
+        }
+
+        // selected_index should never exceed visible_tasks length
+        prop_assert!(model.selected_index < model.visible_tasks.len() || model.visible_tasks.is_empty());
+    }
+
+    /// Property: Toggle complete changes status between Todo and Done
+    #[test]
+    fn prop_toggle_complete_changes_status(title in task_title_strategy()) {
+        let mut model = Model::new();
+        model.show_completed = true; // Ensure we can see completed tasks
+
+        // Create a task
+        update(&mut model, Message::Task(TaskMessage::Create(title)));
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        let task_id = model.visible_tasks[0];
+        prop_assert_eq!(model.tasks[&task_id].status, TaskStatus::Todo);
+
+        // Toggle once - should become Done
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+        prop_assert_eq!(model.tasks[&task_id].status, TaskStatus::Done);
+
+        // Refresh visible tasks (completed task might be hidden)
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        // Toggle again - should go back to Todo
+        update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+        prop_assert_eq!(model.tasks[&task_id].status, TaskStatus::Todo);
+    }
+
+    /// Property: Multiple undos don't crash with empty history
+    #[test]
+    fn prop_multiple_undos_safe(undo_count in 1usize..20) {
+        let mut model = Model::new();
+
+        // Create one task
+        update(&mut model, Message::Task(TaskMessage::Create("Test".to_string())));
+
+        // Try many undos (more than history)
+        for _ in 0..undo_count {
+            update(&mut model, Message::System(SystemMessage::Undo));
+        }
+
+        // Should not crash, task count should be 0 or 1
+        prop_assert!(model.tasks.len() <= 1);
+    }
+}

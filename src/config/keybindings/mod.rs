@@ -194,4 +194,57 @@ impl Keybindings {
     pub fn remove_binding(&mut self, key: &str) -> Option<Action> {
         self.bindings.remove(key)
     }
+
+    /// Validate keybindings for issues
+    ///
+    /// Returns a list of warnings (not errors, since the app can still work).
+    /// Currently checks for:
+    /// - Actions without any key binding
+    #[must_use]
+    pub fn validate(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        // Check if any standard actions are missing bindings
+        let defaults = defaults::default_bindings();
+        for (default_key, action) in &defaults {
+            if self.key_for_action(action).is_none() {
+                warnings.push(format!(
+                    "Action {:?} has no keybinding (default was '{}')",
+                    action, default_key
+                ));
+            }
+        }
+
+        warnings
+    }
+
+    /// Find all conflicts (keys that would be displaced) if a new binding is added
+    ///
+    /// Returns (conflicting_action, the_action_that_would_lose_its_binding)
+    #[must_use]
+    pub fn find_all_conflicts(&self, new_key: &str, new_action: &Action) -> Vec<String> {
+        let mut conflicts = Vec::new();
+
+        // Check if the key is already bound to another action
+        if let Some(existing) = self.bindings.get(new_key) {
+            if existing != new_action {
+                conflicts.push(format!(
+                    "Key '{}' is currently bound to {:?}",
+                    new_key, existing
+                ));
+            }
+        }
+
+        // Check if the action already has a different key
+        if let Some(current_key) = self.key_for_action(new_action) {
+            if current_key != new_key {
+                conflicts.push(format!(
+                    "Action {:?} will be unbound from '{}'",
+                    new_action, current_key
+                ));
+            }
+        }
+
+        conflicts
+    }
 }

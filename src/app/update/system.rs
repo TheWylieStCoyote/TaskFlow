@@ -30,8 +30,19 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::Tick => {
             // Handle periodic updates (e.g., timer display)
-            // Clear status message after a tick
-            model.status_message = None;
+
+            // Clear status message after timeout (3 seconds)
+            if model.status_message.is_some() {
+                if let Some(set_at) = model.status_message_set_at {
+                    if set_at.elapsed().as_secs() >= 3 {
+                        model.status_message = None;
+                        model.status_message_set_at = None;
+                    }
+                } else {
+                    // Message exists but no timestamp - set it now
+                    model.status_message_set_at = Some(std::time::Instant::now());
+                }
+            }
         }
         SystemMessage::ExportCsv => {
             handle_export_csv(model);

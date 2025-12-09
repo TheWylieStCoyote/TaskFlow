@@ -8,7 +8,7 @@
 
 use crate::app::{
     FocusPane, Model, NavigationMessage, ViewId, SIDEBAR_FIRST_PROJECT_INDEX,
-    SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX,
+    SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX, SIDEBAR_VIEWS,
 };
 
 /// Handle navigation messages
@@ -350,13 +350,11 @@ fn handle_calendar_down(model: &mut Model) {
 fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
 
-    // Sidebar layout - see SIDEBAR_* constants in model.rs:
-    // 0-17: View items (All Tasks, Today, Upcoming, Overdue, Scheduled,
-    //       Calendar, Dashboard, Reports, Habits, Blocked, Untagged, No Project,
-    //       Recent, Kanban, Eisenhower, Weekly Planner, Timeline, Snoozed)
-    // SIDEBAR_SEPARATOR_INDEX (18): Separator (skip)
-    // SIDEBAR_PROJECTS_HEADER_INDEX (19): "Projects" header
-    // SIDEBAR_FIRST_PROJECT_INDEX+ (20+): Individual projects
+    // Sidebar layout uses SIDEBAR_VIEWS array from model.rs:
+    // [0..SIDEBAR_VIEW_COUNT-1]: View items from SIDEBAR_VIEWS
+    // SIDEBAR_SEPARATOR_INDEX: Separator (skip)
+    // SIDEBAR_PROJECTS_HEADER_INDEX: "Projects" header
+    // SIDEBAR_FIRST_PROJECT_INDEX+: Individual projects
 
     // Helper to activate a view
     let activate_view = |model: &mut Model, view: ViewId| {
@@ -367,25 +365,14 @@ fn handle_sidebar_selection(model: &mut Model) {
         model.refresh_visible_tasks();
     };
 
+    // Check if it's a view from SIDEBAR_VIEWS array
+    if let Some(&view_id) = SIDEBAR_VIEWS.get(selected) {
+        activate_view(model, view_id);
+        return;
+    }
+
+    // Handle special items after the views
     match selected {
-        0 => activate_view(model, ViewId::TaskList),
-        1 => activate_view(model, ViewId::Today),
-        2 => activate_view(model, ViewId::Upcoming),
-        3 => activate_view(model, ViewId::Overdue),
-        4 => activate_view(model, ViewId::Scheduled),
-        5 => activate_view(model, ViewId::Calendar),
-        6 => activate_view(model, ViewId::Dashboard),
-        7 => activate_view(model, ViewId::Reports),
-        8 => activate_view(model, ViewId::Habits),
-        9 => activate_view(model, ViewId::Blocked),
-        10 => activate_view(model, ViewId::Untagged),
-        11 => activate_view(model, ViewId::NoProject),
-        12 => activate_view(model, ViewId::RecentlyModified),
-        13 => activate_view(model, ViewId::Kanban),
-        14 => activate_view(model, ViewId::Eisenhower),
-        15 => activate_view(model, ViewId::WeeklyPlanner),
-        16 => activate_view(model, ViewId::Timeline),
-        17 => activate_view(model, ViewId::Snoozed),
         n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks

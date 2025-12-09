@@ -58,6 +58,7 @@ pub use types::{CalendarState, RunningState, TimelineState, TimelineZoom};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use chrono::{NaiveDate, Utc};
 
@@ -71,31 +72,56 @@ use crate::ui::{InputMode, InputTarget};
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
 // ============================================================================
-// Sidebar Layout Constants
+// Sidebar Layout
 // ============================================================================
-// These constants define the sidebar structure. When adding/removing views,
-// update SIDEBAR_VIEW_COUNT and the indices will adjust automatically.
+// The sidebar layout is defined by SIDEBAR_VIEWS array. When adding/removing
+// views, update the array and all indices will adjust automatically.
 //
 // Layout:
-//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (All Tasks, Today, etc.)
+//   [0..SIDEBAR_VIEW_COUNT-1]     = View items (from SIDEBAR_VIEWS array)
 //   SIDEBAR_SEPARATOR_INDEX       = Separator line
 //   SIDEBAR_PROJECTS_HEADER_INDEX = "Projects" header
 //   SIDEBAR_FIRST_PROJECT_INDEX+  = Individual projects
 
+/// Ordered list of views shown in the sidebar.
+/// This is the single source of truth for sidebar view order.
+/// When adding a new view:
+/// 1. Add the ViewId variant to message.rs
+/// 2. Add it to this array in the desired position
+/// 3. Add rendering in sidebar.rs (must match this order!)
+pub const SIDEBAR_VIEWS: &[ViewId] = &[
+    ViewId::TaskList,       // 0: All Tasks
+    ViewId::Today,          // 1: Today
+    ViewId::Upcoming,       // 2: Upcoming
+    ViewId::Overdue,        // 3: Overdue
+    ViewId::Scheduled,      // 4: Scheduled
+    ViewId::Calendar,       // 5: Calendar
+    ViewId::Dashboard,      // 6: Dashboard
+    ViewId::Reports,        // 7: Reports
+    ViewId::Habits,         // 8: Habits
+    ViewId::Blocked,        // 9: Blocked
+    ViewId::Untagged,       // 10: Untagged
+    ViewId::NoProject,      // 11: No Project
+    ViewId::RecentlyModified, // 12: Recent
+    ViewId::Kanban,         // 13: Kanban
+    ViewId::Eisenhower,     // 14: Eisenhower
+    ViewId::WeeklyPlanner,  // 15: Weekly Planner
+    ViewId::Timeline,       // 16: Timeline
+    ViewId::Snoozed,        // 17: Snoozed
+];
+
 /// Number of view items in the sidebar (before the separator).
-/// Views: All Tasks, Today, Upcoming, Overdue, Scheduled, Calendar,
-///        Dashboard, Reports, Habits, Blocked, Untagged, No Project, Recent,
-///        Kanban, Eisenhower, Weekly Planner, Timeline, Snoozed
-pub const SIDEBAR_VIEW_COUNT: usize = 18;
+/// Derived from SIDEBAR_VIEWS array length.
+pub const SIDEBAR_VIEW_COUNT: usize = SIDEBAR_VIEWS.len();
 
 /// Index of the separator line in the sidebar.
-pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT; // 12
+pub const SIDEBAR_SEPARATOR_INDEX: usize = SIDEBAR_VIEW_COUNT;
 
 /// Index of the "Projects" header in the sidebar.
-pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1; // 13
+pub const SIDEBAR_PROJECTS_HEADER_INDEX: usize = SIDEBAR_SEPARATOR_INDEX + 1;
 
 /// Index where individual projects start in the sidebar.
-pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1; // 14
+pub const SIDEBAR_FIRST_PROJECT_INDEX: usize = SIDEBAR_PROJECTS_HEADER_INDEX + 1;
 
 /// The complete application state (Model in TEA).
 ///
@@ -225,6 +251,8 @@ pub struct Model {
     // Status message for user feedback
     /// Temporary status message to display to user
     pub status_message: Option<String>,
+    /// When the status message was set (for auto-clear after timeout)
+    pub status_message_set_at: Option<Instant>,
 
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
@@ -426,6 +454,7 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             status_message: None,
+            status_message_set_at: None,
             macro_state: MacroState::new(),
             pending_macro_slot: None,
             template_manager: TemplateManager::new(),

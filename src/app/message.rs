@@ -188,7 +188,7 @@ pub enum NavigationMessage {
 /// let upcoming = ViewId::Upcoming;
 /// assert_ne!(today, upcoming);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ViewId {
     /// All tasks view (default)
     #[default]

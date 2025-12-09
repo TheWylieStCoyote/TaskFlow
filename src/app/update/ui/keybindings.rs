@@ -36,19 +36,21 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
         UiMessage::ApplyKeybinding(new_key) => {
             let bindings = model.keybindings.sorted_bindings();
             if let Some((_, action)) = bindings.get(model.keybinding_selected) {
-                // Check for conflict
-                if let Some(existing_action) = model.keybindings.get_action(&new_key) {
-                    if existing_action != action {
-                        model.status_message = Some(format!(
-                            "Key '{new_key}' already bound to {:?}. Overwriting...",
-                            existing_action
-                        ));
-                    }
-                }
+                // Check for conflicts and provide detailed feedback
+                let conflicts = model.keybindings.find_all_conflicts(&new_key, action);
                 model
                     .keybindings
                     .set_binding(new_key.clone(), action.clone());
-                model.status_message = Some(format!("Bound '{new_key}' to {:?}", action));
+
+                if conflicts.is_empty() {
+                    model.status_message = Some(format!("Bound '{new_key}' to {:?}", action));
+                } else {
+                    model.status_message = Some(format!(
+                        "Bound '{new_key}' to {:?}. {}",
+                        action,
+                        conflicts.join("; ")
+                    ));
+                }
             }
             model.keybinding_capturing = false;
         }
@@ -58,13 +60,25 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                 // Find the default key for this action
                 let defaults = crate::config::Keybindings::default();
                 if let Some(default_key) = defaults.key_for_action(action) {
+                    // Check for conflicts
+                    let conflicts = model.keybindings.find_all_conflicts(default_key, action);
                     model
                         .keybindings
                         .set_binding(default_key.clone(), action.clone());
-                    model.status_message = Some(format!(
-                        "Reset {:?} to default key '{}'",
-                        action, default_key
-                    ));
+
+                    if conflicts.is_empty() {
+                        model.status_message = Some(format!(
+                            "Reset {:?} to default key '{}'",
+                            action, default_key
+                        ));
+                    } else {
+                        model.status_message = Some(format!(
+                            "Reset {:?} to '{}'. {}",
+                            action,
+                            default_key,
+                            conflicts.join("; ")
+                        ));
+                    }
                 } else {
                     model.status_message = Some("No default binding for this action".to_string());
                 }

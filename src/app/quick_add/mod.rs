@@ -1,12 +1,64 @@
 //! Quick add parsing for task creation.
 //!
-//! Parses task titles for embedded metadata using a simple syntax:
+//! Parses task titles for embedded metadata using a simple syntax.
 //!
-//! - `#tag` - Add a tag
-//! - `!priority` - Set priority (urgent/high/med/medium/low)
-//! - `due:date` - Set due date
-//! - `sched:date` - Set scheduled date
-//! - `@project` - Assign to project
+//! # Syntax Reference
+//!
+//! | Syntax | Description | Examples |
+//! |--------|-------------|----------|
+//! | `#tag` | Add a tag | `#work`, `#urgent`, `#home` |
+//! | `!priority` | Set priority | `!urgent`, `!high`, `!med`, `!low` |
+//! | `due:date` | Set due date | `due:tomorrow`, `due:friday`, `due:2024-12-25` |
+//! | `sched:date` | Set scheduled date | `sched:monday`, `sched:next week` |
+//! | `@project` | Assign to project | `@work`, `@personal` |
+//!
+//! # Priority Values
+//!
+//! | Input | Priority |
+//! |-------|----------|
+//! | `urgent`, `u`, `!!!!` | Urgent |
+//! | `high`, `h`, `!!!` | High |
+//! | `med`, `medium`, `m`, `!!` | Medium |
+//! | `low`, `l`, `!` | Low |
+//! | `none`, `n`, `0` | None |
+//!
+//! # Date Formats
+//!
+//! Dates can be specified in many formats:
+//!
+//! ## Keywords
+//! - `today`, `tod` - Today's date
+//! - `tomorrow`, `tom` - Tomorrow's date
+//! - `yesterday` - Yesterday's date
+//!
+//! ## Weekdays
+//! - Short: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`
+//! - Full: `monday`, `tuesday`, etc.
+//! - Extended: `next monday`, `this friday`
+//!
+//! ## Relative Dates
+//! - `in 3 days`, `in 2 weeks`, `in 1 month`
+//! - `next week` - Monday of next week
+//! - `next month` - 1st of next month
+//! - `next year` - January 1st of next year
+//!
+//! ## End of Period
+//! - `eow`, `end of week` - Next Sunday
+//! - `eom`, `end of month` - Last day of current month
+//! - `eoy`, `end of year` - December 31st
+//!
+//! ## Specific Days
+//! - Ordinal: `1st`, `15th`, `22nd`, `3rd`
+//! - `last day` - Last day of current month
+//! - ISO format: `2024-12-25` (YYYY-MM-DD)
+//! - Month/Day: `12/25`, `12-25` (current year assumed)
+//!
+//! # Edge Cases
+//!
+//! - **Weekday same as today**: Returns next week's occurrence (e.g., "monday" on a Monday returns next Monday)
+//! - **Ordinal day passed**: If the day has passed this month, returns next month's occurrence
+//! - **Month overflow**: `in 1 month` on Jan 31 returns Feb 28/29 (clamped to valid day)
+//! - **Unknown format**: Returns `None`, task created without date
 //!
 //! # Example
 //!

@@ -381,3 +381,203 @@ impl Timeline<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+
+    fn create_test_timeline<'a>(model: &'a Model, theme: &'a Theme) -> Timeline<'a> {
+        Timeline::new(model, theme)
+    }
+
+    #[test]
+    fn test_build_bar_string_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        assert_eq!(timeline.build_bar_string(0, false, false), "");
+    }
+
+    #[test]
+    fn test_build_bar_string_single_char() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Single char without extensions = block
+        assert_eq!(timeline.build_bar_string(1, false, false), "█");
+
+        // Single char with left extension
+        assert_eq!(timeline.build_bar_string(1, true, false), "╡");
+
+        // Single char with right extension
+        assert_eq!(timeline.build_bar_string(1, false, true), "╞");
+
+        // Single char with both extensions
+        assert_eq!(timeline.build_bar_string(1, true, true), "═");
+    }
+
+    #[test]
+    fn test_build_bar_string_short_bar() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // 2 chars = brackets with no fill
+        assert_eq!(timeline.build_bar_string(2, false, false), "[]");
+
+        // 3 chars = brackets with 1 fill
+        assert_eq!(timeline.build_bar_string(3, false, false), "[=]");
+    }
+
+    #[test]
+    fn test_build_bar_string_extends_left() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Extends left = < start
+        assert_eq!(timeline.build_bar_string(3, true, false), "<=]");
+        assert_eq!(timeline.build_bar_string(5, true, false), "<===]");
+    }
+
+    #[test]
+    fn test_build_bar_string_extends_right() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Extends right = > end
+        assert_eq!(timeline.build_bar_string(3, false, true), "[=>");
+        assert_eq!(timeline.build_bar_string(5, false, true), "[===>");
+    }
+
+    #[test]
+    fn test_build_bar_string_extends_both() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Both extensions
+        assert_eq!(timeline.build_bar_string(3, true, true), "<=>");
+        assert_eq!(timeline.build_bar_string(5, true, true), "<===>");
+    }
+
+    #[test]
+    fn test_build_bar_string_long_bar() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Longer bar
+        assert_eq!(timeline.build_bar_string(10, false, false), "[========]");
+        assert_eq!(timeline.build_bar_string(10, true, true), "<========>");
+    }
+
+    #[test]
+    fn test_zoom_params_day_zoom() {
+        let mut model = Model::new();
+        model.timeline_state.zoom_level = TimelineZoom::Day;
+        model.timeline_state.viewport_days = 14;
+
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        let (num_cols, days_per_col) = timeline.zoom_params();
+        assert_eq!(num_cols, 14);
+        assert_eq!(days_per_col, 1);
+    }
+
+    #[test]
+    fn test_zoom_params_week_zoom() {
+        let mut model = Model::new();
+        model.timeline_state.zoom_level = TimelineZoom::Week;
+        model.timeline_state.viewport_days = 28;
+
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        let (num_cols, days_per_col) = timeline.zoom_params();
+        assert_eq!(num_cols, 28);
+        assert_eq!(days_per_col, 7);
+    }
+
+    #[test]
+    fn test_date_to_column_in_viewport() {
+        use chrono::NaiveDate;
+
+        let mut model = Model::new();
+        let start = NaiveDate::from_ymd_opt(2024, 12, 1).unwrap();
+        model.timeline_state.viewport_start = start;
+        model.timeline_state.viewport_days = 14;
+        model.timeline_state.zoom_level = TimelineZoom::Day;
+
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // First day = column 0
+        assert_eq!(timeline.date_to_column(start), Some(0));
+
+        // Day 7 = column 6 (0-indexed)
+        let day7 = NaiveDate::from_ymd_opt(2024, 12, 7).unwrap();
+        assert_eq!(timeline.date_to_column(day7), Some(6));
+
+        // Day 14 = column 13 (last column)
+        let day14 = NaiveDate::from_ymd_opt(2024, 12, 14).unwrap();
+        assert_eq!(timeline.date_to_column(day14), Some(13));
+    }
+
+    #[test]
+    fn test_date_to_column_out_of_viewport() {
+        use chrono::NaiveDate;
+
+        let mut model = Model::new();
+        let start = NaiveDate::from_ymd_opt(2024, 12, 1).unwrap();
+        model.timeline_state.viewport_start = start;
+        model.timeline_state.viewport_days = 14;
+        model.timeline_state.zoom_level = TimelineZoom::Day;
+
+        let theme = Theme::default();
+        let timeline = create_test_timeline(&model, &theme);
+
+        // Before viewport
+        let before = NaiveDate::from_ymd_opt(2024, 11, 30).unwrap();
+        assert_eq!(timeline.date_to_column(before), None);
+
+        // After viewport
+        let after = NaiveDate::from_ymd_opt(2024, 12, 20).unwrap();
+        assert_eq!(timeline.date_to_column(after), None);
+    }
+
+    #[test]
+    fn test_task_span_with_due_date_only() {
+        use chrono::NaiveDate;
+
+        let due = NaiveDate::from_ymd_opt(2024, 12, 15).unwrap();
+        let mut task = Task::new("Test");
+        task.due_date = Some(due);
+
+        let (start, end) = Timeline::task_span(&task);
+        assert_eq!(start, due);
+        assert_eq!(end, due);
+    }
+
+    #[test]
+    fn test_task_span_with_scheduled_and_due() {
+        use chrono::NaiveDate;
+
+        let scheduled = NaiveDate::from_ymd_opt(2024, 12, 10).unwrap();
+        let due_date = NaiveDate::from_ymd_opt(2024, 12, 15).unwrap();
+
+        let mut task = Task::new("Test");
+        task.scheduled_date = Some(scheduled);
+        task.due_date = Some(due_date);
+
+        let (start, end) = Timeline::task_span(&task);
+        assert_eq!(start, scheduled);
+        assert_eq!(end, due_date);
+    }
+}

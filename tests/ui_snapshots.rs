@@ -545,3 +545,252 @@ mod regression_tests {
         insta::assert_snapshot!("sidebar_long_names", output);
     }
 }
+
+mod reports_component {
+    use super::*;
+    use taskflow::ui::{ReportPanel, ReportsView};
+
+    fn create_model_with_estimates() -> Model {
+        let mut model = Model::new().with_sample_data();
+
+        // Add tasks with estimates for better reports
+        for (i, task) in model.tasks.values_mut().enumerate() {
+            task.estimated_minutes = Some((30 + i * 15) as u32);
+            task.actual_minutes = ((30 + i * 10) as u32).min(task.estimated_minutes.unwrap() + 20);
+        }
+
+        model
+    }
+
+    #[test]
+    fn test_reports_overview_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Overview, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Verify key overview elements
+        assert!(
+            output.contains("Total") || output.contains("Done"),
+            "should have stats"
+        );
+        assert!(
+            output.contains("Progress") || output.contains("Complete"),
+            "should show progress"
+        );
+    }
+
+    #[test]
+    fn test_reports_overview_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Overview, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_overview_empty", output);
+    }
+
+    #[test]
+    fn test_reports_velocity_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Velocity, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Velocity panel should show trend information
+        assert!(
+            output.contains("Velocity") || output.contains("Week") || output.contains("Tasks"),
+            "should have velocity info"
+        );
+    }
+
+    #[test]
+    fn test_reports_velocity_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Velocity, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_velocity_empty", output);
+    }
+
+    #[test]
+    fn test_reports_tags_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Tags, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Tags panel should show tag distribution
+        assert!(
+            output.contains("Tags") || output.contains("No tags") || output.contains('#'),
+            "should have tags section"
+        );
+    }
+
+    #[test]
+    fn test_reports_tags_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Tags, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_tags_empty", output);
+    }
+
+    #[test]
+    fn test_reports_time_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Time, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Time panel should show time tracking info
+        assert!(
+            output.contains("Time") || output.contains("Hours") || output.contains("Day"),
+            "should have time info"
+        );
+    }
+
+    #[test]
+    fn test_reports_time_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Time, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_time_empty", output);
+    }
+
+    #[test]
+    fn test_reports_focus_panel() {
+        let mut model = create_model_with_estimates();
+        // Add some pomodoro stats
+        model.pomodoro_stats.record_cycle(25);
+        model.pomodoro_stats.record_cycle(25);
+
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Focus, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Focus panel should show pomodoro/focus info
+        assert!(
+            output.contains("Focus") || output.contains("Pomodoro") || output.contains("cycle"),
+            "should have focus info"
+        );
+    }
+
+    #[test]
+    fn test_reports_focus_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Focus, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_focus_empty", output);
+    }
+
+    #[test]
+    fn test_reports_insights_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Insights, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Insights panel should show recommendations/insights
+        assert!(
+            output.contains("Insight") || output.contains("Tip") || output.contains("Streak"),
+            "should have insights"
+        );
+    }
+
+    #[test]
+    fn test_reports_insights_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Insights, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_insights_empty", output);
+    }
+
+    #[test]
+    fn test_reports_estimation_panel() {
+        let model = create_model_with_estimates();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Estimation, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        // Estimation panel should show accuracy info
+        assert!(
+            output.contains("Estimation") || output.contains("Accuracy") || output.contains('%'),
+            "should have estimation info"
+        );
+    }
+
+    #[test]
+    fn test_reports_estimation_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let reports = ReportsView::new(&model, ReportPanel::Estimation, &theme);
+        reports.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        insta::assert_snapshot!("reports_estimation_empty", output);
+    }
+}

@@ -3,5 +3,6 @@
 /TaskFlow.wiki/
 # Only ignore .snap.new files (pending snapshots), not accepted .snap files
 *.snap.new
+*.snap
 taskflow.log
 

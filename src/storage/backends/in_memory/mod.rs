@@ -21,13 +21,27 @@ use crate::storage::ExportData;
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```
+/// use taskflow::storage::{ExportData, TaskRepository};
+/// use taskflow::storage::backends::InMemoryBackend;
+/// use taskflow::domain::Task;
+///
+/// struct MyBackend {
+///     data: ExportData,
+///     dirty: bool,
+/// }
+///
 /// impl InMemoryBackend for MyBackend {
 ///     fn data(&self) -> &ExportData { &self.data }
 ///     fn data_mut(&mut self) -> &mut ExportData { &mut self.data }
 ///     fn mark_dirty(&mut self) { self.dirty = true; }
 /// }
-/// // MyBackend now automatically implements TaskRepository, ProjectRepository, etc.
+///
+/// // MyBackend now automatically implements TaskRepository
+/// let mut backend = MyBackend { data: ExportData::default(), dirty: false };
+/// let task = Task::new("Test task");
+/// backend.create_task(&task).unwrap();
+/// assert_eq!(backend.list_tasks().unwrap().len(), 1);
 /// ```
 pub trait InMemoryBackend {
     /// Returns a reference to the in-memory data.

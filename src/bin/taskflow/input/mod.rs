@@ -49,7 +49,7 @@ pub fn handle_key_event(
     }
 
     // Handle input mode
-    if model.input_mode == InputMode::Editing {
+    if model.input.mode == InputMode::Editing {
         return match key.code {
             KeyCode::Enter => Message::Ui(UiMessage::SubmitInput),
             KeyCode::Esc => Message::Ui(UiMessage::CancelInput),

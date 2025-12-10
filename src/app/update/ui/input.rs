@@ -9,8 +9,8 @@ use crate::app::update::system::handle_execute_import;
 /// Handle input submission
 #[allow(clippy::too_many_lines)]
 pub fn handle_submit_input(model: &mut Model) {
-    let input = model.input_buffer.trim().to_string();
-    match &model.input_target {
+    let input = model.input.buffer.trim().to_string();
+    match &model.input.target {
         InputTarget::Task => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
@@ -38,8 +38,8 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.refresh_visible_tasks();
                 // Show confirmation and stay ready for another capture
                 model.status_message = Some(format!("Task created: {title}"));
-                model.input_buffer.clear();
-                model.cursor_position = 0;
+                model.input.buffer.clear();
+                model.input.cursor = 0;
                 // Don't reset input_mode - stay in QuickCapture mode
                 return;
             }
@@ -411,10 +411,10 @@ pub fn handle_submit_input(model: &mut Model) {
             }
         }
     }
-    model.input_mode = InputMode::Normal;
-    model.input_target = InputTarget::default();
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.mode = InputMode::Normal;
+    model.input.target = InputTarget::default();
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 }
 
 /// Create a task from quick add input, applying parsed metadata

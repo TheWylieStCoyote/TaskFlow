@@ -81,8 +81,8 @@ fn test_undo_task_edit_title() {
 
     // Edit the title
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
-    model.input_buffer = "Changed Title".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "Changed Title".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert_eq!(model.tasks.get(&task_id).unwrap().title, "Changed Title");
@@ -181,8 +181,8 @@ fn test_undo_edit_due_date() {
 
     // Edit due date
     update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
-    model.input_buffer = "2025-12-25".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "2025-12-25".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert_eq!(
@@ -209,8 +209,8 @@ fn test_undo_edit_tags() {
 
     // Edit tags
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
-    model.input_buffer = "new, tags".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "new, tags".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert_eq!(model.tasks.get(&task_id).unwrap().tags, vec!["new", "tags"]);
@@ -280,8 +280,8 @@ fn test_redo_task_modify() {
 
     // Edit the title
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
-    model.input_buffer = "New Title".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "New Title".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
     assert_eq!(model.tasks.get(&task_id).unwrap().title, "New Title");
 

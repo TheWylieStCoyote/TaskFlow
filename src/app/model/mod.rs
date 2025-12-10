@@ -56,7 +56,7 @@ mod types;
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
     AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
-    KeybindingsEditorState, PomodoroState, RunningState, SavedFilterPickerState,
+    InputState, KeybindingsEditorState, PomodoroState, RunningState, SavedFilterPickerState,
     TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState,
     WeeklyReviewState, WorkLogEditorState,
 };
@@ -72,7 +72,6 @@ use crate::domain::{
     Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::StorageBackend;
-use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
@@ -220,14 +219,8 @@ pub struct Model {
     pub selected_project: Option<ProjectId>,
 
     // Input state
-    /// Current input mode (Normal or Editing)
-    pub input_mode: InputMode,
-    /// What the input is targeting (new task, edit, search, etc.)
-    pub input_target: InputTarget,
-    /// Current text in the input field
-    pub input_buffer: String,
-    /// Cursor position within input buffer
-    pub cursor_position: usize,
+    /// Text input state (mode, target, buffer, cursor)
+    pub input: InputState,
     /// Whether delete confirmation dialog is showing
     pub show_confirm_delete: bool,
 
@@ -393,10 +386,7 @@ impl Model {
             focus_pane: FocusPane::default(),
             sidebar_selected: 0,
             selected_project: None,
-            input_mode: InputMode::Normal,
-            input_target: InputTarget::default(),
-            input_buffer: String::new(),
-            cursor_position: 0,
+            input: InputState::default(),
             show_confirm_delete: false,
             selected_tasks: std::collections::HashSet::new(),
             multi_select_mode: false,

@@ -433,10 +433,10 @@ fn handle_export_report_html(model: &mut Model) {
 }
 
 fn handle_start_import(model: &mut Model, format: crate::storage::ImportFormat) {
-    model.input_mode = InputMode::Editing;
-    model.input_target = InputTarget::ImportFilePath(format);
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.mode = InputMode::Editing;
+    model.input.target = InputTarget::ImportFilePath(format);
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 }
 
 pub fn handle_execute_import(model: &mut Model) {
@@ -447,16 +447,16 @@ pub fn handle_execute_import(model: &mut Model) {
     use std::fs::File;
     use std::io::BufReader;
 
-    let format = match &model.input_target {
+    let format = match &model.input.target {
         InputTarget::ImportFilePath(fmt) => *fmt,
         _ => return,
     };
 
-    let file_path = model.input_buffer.trim();
+    let file_path = model.input.buffer.trim();
     if file_path.is_empty() {
         model.status_message = Some("No file path provided".to_string());
-        model.input_mode = InputMode::Normal;
-        model.input_target = InputTarget::Task;
+        model.input.mode = InputMode::Normal;
+        model.input.target = InputTarget::Task;
         return;
     }
 
@@ -465,8 +465,8 @@ pub fn handle_execute_import(model: &mut Model) {
         Ok(f) => f,
         Err(e) => {
             model.status_message = Some(format!("Failed to open file: {e}"));
-            model.input_mode = InputMode::Normal;
-            model.input_target = InputTarget::Task;
+            model.input.mode = InputMode::Normal;
+            model.input.target = InputTarget::Task;
             return;
         }
     };
@@ -484,8 +484,8 @@ pub fn handle_execute_import(model: &mut Model) {
             Ok(r) => r,
             Err(e) => {
                 model.status_message = Some(format!("Import failed: {e}"));
-                model.input_mode = InputMode::Normal;
-                model.input_target = InputTarget::Task;
+                model.input.mode = InputMode::Normal;
+                model.input.target = InputTarget::Task;
                 return;
             }
         },
@@ -493,8 +493,8 @@ pub fn handle_execute_import(model: &mut Model) {
             Ok(r) => r,
             Err(e) => {
                 model.status_message = Some(format!("Import failed: {e}"));
-                model.input_mode = InputMode::Normal;
-                model.input_target = InputTarget::Task;
+                model.input.mode = InputMode::Normal;
+                model.input.target = InputTarget::Task;
                 return;
             }
         },
@@ -504,9 +504,9 @@ pub fn handle_execute_import(model: &mut Model) {
     apply_merge_strategy(&mut result, &model.tasks, options.merge_strategy);
 
     // Reset input mode
-    model.input_mode = InputMode::Normal;
-    model.input_target = InputTarget::Task;
-    model.input_buffer.clear();
+    model.input.mode = InputMode::Normal;
+    model.input.target = InputTarget::Task;
+    model.input.buffer.clear();
 
     // If there are tasks to import, show preview
     if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {

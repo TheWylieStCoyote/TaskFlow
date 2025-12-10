@@ -2,6 +2,8 @@
 
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 
+use crate::ui::{InputMode, InputTarget};
+
 /// State for the calendar view.
 ///
 /// Tracks the currently displayed month and selected day.
@@ -333,6 +335,39 @@ pub struct PomodoroState {
     pub config: crate::domain::PomodoroConfig,
     /// Pomodoro statistics (completed sessions, total time)
     pub stats: crate::domain::PomodoroStats,
+}
+
+/// State for text input (task creation, editing, search).
+///
+/// Groups all input-related fields including the current mode,
+/// target entity, text buffer, and cursor position.
+#[derive(Debug, Clone, Default)]
+pub struct InputState {
+    /// Current input mode (Normal or Editing)
+    pub mode: InputMode,
+    /// What the input is targeting (new task, edit, search, etc.)
+    pub target: InputTarget,
+    /// Current text in the input field
+    pub buffer: String,
+    /// Cursor position within input buffer (character index)
+    pub cursor: usize,
+}
+
+impl InputState {
+    /// Returns true if the input is in editing mode.
+    #[inline]
+    #[must_use]
+    pub fn is_editing(&self) -> bool {
+        self.mode == InputMode::Editing
+    }
+
+    /// Clears the input buffer and resets to normal mode.
+    pub fn clear(&mut self) {
+        self.mode = InputMode::Normal;
+        self.target = InputTarget::default();
+        self.buffer.clear();
+        self.cursor = 0;
+    }
 }
 
 #[cfg(test)]

@@ -20,10 +20,10 @@ fn test_start_move_to_project() {
     // Start move to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::MoveToProject(_)));
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::MoveToProject(_)));
     // Input buffer should contain project list
-    assert!(model.input_buffer.contains("0: (none)"));
+    assert!(model.input.buffer.contains("0: (none)"));
 }
 
 #[test]
@@ -43,8 +43,8 @@ fn test_move_to_project_assign() {
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
 
     // Type "1" to select the first project
-    model.input_buffer = "1".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "1".to_string();
+    model.input.cursor = 1;
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -52,7 +52,7 @@ fn test_move_to_project_assign() {
     // Task should now belong to the project
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.project_id, Some(project_id));
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -70,8 +70,8 @@ fn test_move_to_project_remove() {
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
 
     // Type "0" to remove from project
-    model.input_buffer = "0".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "0".to_string();
+    model.input.cursor = 1;
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -93,8 +93,8 @@ fn test_move_to_project_undo() {
 
     // Move task to project
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
-    model.input_buffer = "1".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "1".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Verify task is in project
@@ -123,8 +123,8 @@ fn test_move_to_project_invalid_input_ignored() {
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
 
     // Type invalid input
-    model.input_buffer = "abc".to_string();
-    model.cursor_position = 3;
+    model.input.buffer = "abc".to_string();
+    model.input.cursor = 3;
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -147,8 +147,8 @@ fn test_move_to_project_out_of_range_ignored() {
     update(&mut model, Message::Ui(UiMessage::StartMoveToProject));
 
     // Type index out of range (99)
-    model.input_buffer = "99".to_string();
-    model.cursor_position = 2;
+    model.input.buffer = "99".to_string();
+    model.input.cursor = 2;
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));

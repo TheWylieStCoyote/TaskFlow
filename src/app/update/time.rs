@@ -228,7 +228,8 @@ fn transition_pomodoro_phase(model: &mut Model) {
         // Record stats when completing a work phase
         if session.phase == PomodoroPhase::Work {
             model
-                .pomodoro.stats
+                .pomodoro
+                .stats
                 .record_cycle(model.pomodoro.config.work_duration_mins);
         }
 

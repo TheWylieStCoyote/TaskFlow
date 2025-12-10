@@ -1,7 +1,8 @@
 //! Basic Model tests (construction, defaults, selection).
 
-use crate::app::model::{InputMode, Model, RunningState};
+use crate::app::model::{Model, RunningState};
 use crate::domain::Task;
+use crate::ui::InputMode;
 
 #[test]
 fn test_model_new_defaults() {
@@ -17,8 +18,8 @@ fn test_model_new_defaults() {
     assert!(!model.show_completed);
     assert!(model.show_sidebar);
     assert!(!model.show_help);
-    assert_eq!(model.input_mode, InputMode::Normal);
-    assert!(model.input_buffer.is_empty());
+    assert_eq!(model.input.mode, InputMode::Normal);
+    assert!(model.input.buffer.is_empty());
     assert!(!model.dirty);
 }
 

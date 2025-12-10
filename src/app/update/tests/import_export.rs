@@ -13,12 +13,12 @@ fn test_start_import_csv_sets_input_mode() {
 
     update(&mut model, Message::System(SystemMessage::StartImportCsv));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
     assert!(matches!(
-        model.input_target,
+        model.input.target,
         InputTarget::ImportFilePath(ImportFormat::Csv)
     ));
-    assert!(model.input_buffer.is_empty());
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -27,9 +27,9 @@ fn test_start_import_ics_sets_input_mode() {
 
     update(&mut model, Message::System(SystemMessage::StartImportIcs));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
     assert!(matches!(
-        model.input_target,
+        model.input.target,
         InputTarget::ImportFilePath(ImportFormat::Ics)
     ));
 }
@@ -113,9 +113,9 @@ fn test_import_empty_path_shows_error() {
     let mut model = Model::new();
 
     // Set up for file path input
-    model.input_mode = InputMode::Editing;
-    model.input_target = InputTarget::ImportFilePath(ImportFormat::Csv);
-    model.input_buffer = "   ".to_string(); // Whitespace only
+    model.input.mode = InputMode::Editing;
+    model.input.target = InputTarget::ImportFilePath(ImportFormat::Csv);
+    model.input.buffer = "   ".to_string(); // Whitespace only
 
     // Submit the input
     update(&mut model, Message::Ui(UiMessage::SubmitInput));

@@ -9,12 +9,12 @@ use super::create_test_model_with_tasks;
 #[test]
 fn test_start_link_task_enters_editing_mode() {
     let mut model = create_test_model_with_tasks();
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::LinkTask(_)));
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::LinkTask(_)));
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_start_link_task_shows_current_link() {
 
     // Should show the linked task title
     assert_eq!(
-        model.input_buffer,
+        model.input.buffer,
         format!("Currently linked to: {target_title}")
     );
 }
@@ -45,8 +45,8 @@ fn test_link_task_by_number() {
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
     // Enter task number "3" (1-indexed)
-    model.input_buffer = "3".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "3".to_string();
+    model.input.cursor = 1;
 
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
@@ -84,8 +84,8 @@ fn test_link_task_by_title_search() {
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
     // Enter part of target title
-    model.input_buffer = "Target unique".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "Target unique".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
@@ -104,8 +104,8 @@ fn test_link_task_prevents_self_linking() {
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
 
     // Try to link task 1 to itself
-    model.input_buffer = "1".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "1".to_string();
+    model.input.cursor = 1;
 
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
@@ -121,8 +121,8 @@ fn test_link_task_undo() {
 
     // Link task
     update(&mut model, Message::Ui(UiMessage::StartLinkTask));
-    model.input_buffer = "2".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "2".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert_eq!(

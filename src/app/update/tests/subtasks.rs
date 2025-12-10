@@ -13,9 +13,9 @@ fn test_start_create_subtask() {
 
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::Subtask(_)));
-    assert!(model.input_buffer.is_empty());
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::Subtask(_)));
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -26,7 +26,7 @@ fn test_start_create_subtask_no_selection() {
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
     // Should remain in normal mode since there's no parent task
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -39,8 +39,8 @@ fn test_submit_subtask_creates_with_parent() {
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
     // Type subtask name
-    model.input_buffer = "My subtask".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "My subtask".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -66,8 +66,8 @@ fn test_subtask_inherits_default_priority() {
 
     // Start creating subtask
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
-    model.input_buffer = "Priority subtask".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "Priority subtask".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let subtask = model
@@ -88,14 +88,14 @@ fn test_cancel_subtask_creation() {
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
     // Type something
-    model.input_buffer = "Will be cancelled".to_string();
+    model.input.buffer = "Will be cancelled".to_string();
 
     // Cancel
     update(&mut model, Message::Ui(UiMessage::CancelInput));
 
     // No new task should be created
     assert_eq!(model.tasks.len(), initial_count);
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -107,13 +107,13 @@ fn test_subtask_empty_name_not_created() {
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
 
     // Submit with empty name
-    model.input_buffer = "   ".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "   ".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // No new task should be created
     assert_eq!(model.tasks.len(), initial_count);
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -123,8 +123,8 @@ fn test_subtask_undo() {
 
     // Create subtask
     update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
-    model.input_buffer = "Subtask to undo".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "Subtask to undo".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert_eq!(model.tasks.len(), initial_count + 1);

@@ -70,10 +70,10 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render input dialog if in editing mode
-    if model.input_mode == InputMode::Editing {
+    if model.input.mode == InputMode::Editing {
         // Height: 3 rows (top border, text line, bottom border)
         let input_area = centered_rect_fixed_height(60, 3, area);
-        let title = match &model.input_target {
+        let title = match &model.input.target {
             InputTarget::Task => "New Task",
             InputTarget::Subtask(_) => "New Subtask",
             InputTarget::EditTask(_) => "Edit Task",
@@ -106,16 +106,16 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
         };
 
         // QuickCapture gets a special larger dialog with syntax hints
-        if model.input_target == InputTarget::QuickCapture {
+        if model.input.target == InputTarget::QuickCapture {
             // Height: 9 rows (input + hints area)
             let quick_area = centered_rect_fixed_height(70, 9, area);
             frame.render_widget(
-                QuickCaptureDialog::new(&model.input_buffer, model.cursor_position, theme),
+                QuickCaptureDialog::new(&model.input.buffer, model.input.cursor, theme),
                 quick_area,
             );
         } else {
             frame.render_widget(
-                InputDialog::new(title, &model.input_buffer, model.cursor_position, theme),
+                InputDialog::new(title, &model.input.buffer, model.input.cursor, theme),
                 input_area,
             );
         }

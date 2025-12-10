@@ -17,10 +17,10 @@ fn test_start_edit_task() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert_eq!(model.input_target, InputTarget::EditTask(task_id));
-    assert_eq!(model.input_buffer, original_title);
-    assert_eq!(model.cursor_position, original_title.len());
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert_eq!(model.input.target, InputTarget::EditTask(task_id));
+    assert_eq!(model.input.buffer, original_title);
+    assert_eq!(model.input.cursor, original_title.len());
 }
 
 #[test]
@@ -32,8 +32,8 @@ fn test_edit_task_title() {
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
 
     // Clear and type new title
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.buffer.clear();
+    model.input.cursor = 0;
     for c in "Updated Title".chars() {
         update(&mut model, Message::Ui(UiMessage::InputChar(c)));
     }
@@ -44,7 +44,7 @@ fn test_edit_task_title() {
     // Title should be updated
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.title, "Updated Title");
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn test_cancel_edit_task() {
     update(&mut model, Message::Ui(UiMessage::StartEditTask));
 
     // Type something
-    model.input_buffer = "Changed".to_string();
+    model.input.buffer = "Changed".to_string();
 
     // Cancel
     update(&mut model, Message::Ui(UiMessage::CancelInput));
@@ -65,7 +65,7 @@ fn test_cancel_edit_task() {
     // Title should NOT be changed
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.title, original_title);
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 // === Due Date Editing ===
@@ -78,12 +78,12 @@ fn test_edit_due_date() {
     // Start editing due date
     update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::EditDueDate(_)));
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::EditDueDate(_)));
 
     // Type a date
-    model.input_buffer = "2025-12-25".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "2025-12-25".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -109,8 +109,8 @@ fn test_clear_due_date() {
     update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
 
     // Clear the buffer
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 
     // Submit empty
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -133,8 +133,8 @@ fn test_invalid_due_date_keeps_old() {
     update(&mut model, Message::Ui(UiMessage::StartEditDueDate));
 
     // Type invalid date
-    model.input_buffer = "not-a-date".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "not-a-date".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -156,9 +156,9 @@ fn test_start_edit_tags() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::EditTags(_)));
-    assert_eq!(model.input_buffer, "work, urgent");
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::EditTags(_)));
+    assert_eq!(model.input.buffer, "work, urgent");
 }
 
 #[test]
@@ -173,8 +173,8 @@ fn test_edit_tags_add_new() {
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
     // Type new tags
-    model.input_buffer = "feature, bug, priority".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "feature, bug, priority".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -196,8 +196,8 @@ fn test_edit_tags_clear() {
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
     // Clear input
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 
     // Submit empty
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -216,8 +216,8 @@ fn test_edit_tags_trims_whitespace() {
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
     // Type tags with extra whitespace
-    model.input_buffer = "  work  ,  play  , rest ".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "  work  ,  play  , rest ".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -236,8 +236,8 @@ fn test_edit_tags_filters_empty() {
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
     // Type tags with empty entries
-    model.input_buffer = "work,,, ,play".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "work,,, ,play".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -260,7 +260,7 @@ fn test_cancel_edit_tags() {
     update(&mut model, Message::Ui(UiMessage::StartEditTags));
 
     // Type something different
-    model.input_buffer = "new, tags, here".to_string();
+    model.input.buffer = "new, tags, here".to_string();
 
     // Cancel
     update(&mut model, Message::Ui(UiMessage::CancelInput));
@@ -268,7 +268,7 @@ fn test_cancel_edit_tags() {
     // Tags should NOT be changed
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.tags, original_tags);
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 // === Description Editing ===
@@ -283,12 +283,12 @@ fn test_start_edit_description_enters_edit_mode() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
     assert!(matches!(
-        model.input_target,
+        model.input.target,
         InputTarget::EditDescription(_)
     ));
-    assert!(model.input_buffer.is_empty());
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn test_start_edit_description_prefills_existing() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
 
-    assert_eq!(model.input_buffer, "Existing notes here");
+    assert_eq!(model.input.buffer, "Existing notes here");
 }
 
 #[test]
@@ -313,8 +313,8 @@ fn test_edit_description_add_new() {
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
 
     // Type new description
-    model.input_buffer = "This is a detailed task description".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "This is a detailed task description".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -339,8 +339,8 @@ fn test_edit_description_clear() {
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
 
     // Clear input
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 
     // Submit empty
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -360,8 +360,8 @@ fn test_edit_description_undo() {
 
     // Add a description
     update(&mut model, Message::Ui(UiMessage::StartEditDescription));
-    model.input_buffer = "New description".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "New description".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Verify description was set
@@ -394,10 +394,10 @@ fn test_start_edit_estimate() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::EditEstimate(_)));
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::EditEstimate(_)));
     // Empty buffer for task with no estimate
-    assert_eq!(model.input_buffer, "");
+    assert_eq!(model.input.buffer, "");
 }
 
 #[test]
@@ -409,8 +409,8 @@ fn test_edit_estimate_set_minutes() {
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
     // Type a duration
-    model.input_buffer = "30m".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "30m".to_string();
+    model.input.cursor = model.input.buffer.len();
 
     // Submit
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
@@ -418,7 +418,7 @@ fn test_edit_estimate_set_minutes() {
     // Estimate should be set
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.estimated_minutes, Some(30));
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -427,8 +427,8 @@ fn test_edit_estimate_set_hours() {
     let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
-    model.input_buffer = "2h".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "2h".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let task = model.tasks.get(&task_id).unwrap();
@@ -441,8 +441,8 @@ fn test_edit_estimate_set_hours_and_minutes() {
     let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
-    model.input_buffer = "1h30m".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "1h30m".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let task = model.tasks.get(&task_id).unwrap();
@@ -461,11 +461,11 @@ fn test_edit_estimate_clear() {
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
     // Input buffer should be pre-filled with existing estimate
-    assert_eq!(model.input_buffer, "1h");
+    assert_eq!(model.input.buffer, "1h");
 
     // Clear it
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.buffer.clear();
+    model.input.cursor = 0;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Estimate should be cleared
@@ -483,8 +483,8 @@ fn test_edit_estimate_invalid_keeps_old() {
 
     // Try to set invalid input
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
-    model.input_buffer = "invalid".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "invalid".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Estimate should remain unchanged
@@ -513,8 +513,8 @@ fn test_edit_estimate_undo() {
 
     // Add an estimate
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
-    model.input_buffer = "45m".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "45m".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Verify estimate was set
@@ -564,10 +564,10 @@ fn test_edit_estimate_prefill_existing() {
         update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
         assert_eq!(
-            model.input_buffer, expected_display,
+            model.input.buffer, expected_display,
             "Failed for {minutes} minutes"
         );
-        assert_eq!(model.cursor_position, expected_display.len());
+        assert_eq!(model.input.cursor, expected_display.len());
 
         // Cancel to reset
         update(&mut model, Message::Ui(UiMessage::CancelInput));
@@ -586,7 +586,7 @@ fn test_cancel_edit_estimate() {
     update(&mut model, Message::Ui(UiMessage::StartEditEstimate));
 
     // Type something different
-    model.input_buffer = "999m".to_string();
+    model.input.buffer = "999m".to_string();
 
     // Cancel
     update(&mut model, Message::Ui(UiMessage::CancelInput));
@@ -594,7 +594,7 @@ fn test_cancel_edit_estimate() {
     // Estimate should NOT be changed
     let task = model.tasks.get(&task_id).unwrap();
     assert_eq!(task.estimated_minutes, Some(60));
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 // === Quick Reschedule ===

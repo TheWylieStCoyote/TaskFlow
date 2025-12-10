@@ -47,10 +47,10 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::SaveCurrentFilter => {
             // Start input mode to name the filter
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::SavedFilterName;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::SavedFilterName;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
             model.saved_filter_picker.visible = false;
         }
         UiMessage::DeleteSavedFilter => {

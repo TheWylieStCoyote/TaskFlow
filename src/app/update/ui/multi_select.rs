@@ -83,25 +83,25 @@ pub fn bulk_delete(model: &mut Model) {
 /// Start bulk move to project input.
 pub fn start_bulk_move_to_project(model: &mut Model) {
     if model.multi_select_mode && !model.selected_tasks.is_empty() {
-        model.input_mode = InputMode::Editing;
-        model.input_target = InputTarget::BulkMoveToProject;
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkMoveToProject;
         // Build project list string
         let mut options = vec!["0: (none)".to_string()];
         for (i, project) in model.projects.values().enumerate() {
             options.push(format!("{}: {}", i + 1, project.name));
         }
-        model.input_buffer = options.join(", ");
-        model.cursor_position = model.input_buffer.len();
+        model.input.buffer = options.join(", ");
+        model.input.cursor = model.input.buffer.len();
     }
 }
 
 /// Start bulk set status input.
 pub fn start_bulk_set_status(model: &mut Model) {
     if model.multi_select_mode && !model.selected_tasks.is_empty() {
-        model.input_mode = InputMode::Editing;
-        model.input_target = InputTarget::BulkSetStatus;
-        model.input_buffer =
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkSetStatus;
+        model.input.buffer =
             "1: Todo, 2: In Progress, 3: Blocked, 4: Done, 5: Cancelled".to_string();
-        model.cursor_position = model.input_buffer.len();
+        model.input.cursor = model.input.buffer.len();
     }
 }

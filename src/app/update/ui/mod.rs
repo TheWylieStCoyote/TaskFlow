@@ -182,42 +182,42 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ToggleFocusMode => view_state::toggle_focus_mode(model),
         // Input mode handling
         UiMessage::StartCreateTask => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::Task;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::Task;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
         }
         UiMessage::StartQuickCapture => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::QuickCapture;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::QuickCapture;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
         }
         UiMessage::StartCreateSubtask => {
             // Create a subtask under the currently selected task
             if let Some(parent_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&parent_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::Subtask(parent_id);
-                    model.input_buffer.clear();
-                    model.cursor_position = 0;
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::Subtask(parent_id);
+                    model.input.buffer.clear();
+                    model.input.cursor = 0;
                 }
             }
         }
         UiMessage::StartCreateProject => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::Project;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::Project;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
         }
         UiMessage::StartEditProject => {
             // Edit the currently selected project (from sidebar)
             if let Some(ref project_id) = model.selected_project {
                 if let Some(project) = model.projects.get(project_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditProject(*project_id);
-                    model.input_buffer.clone_from(&project.name);
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditProject(*project_id);
+                    model.input.buffer.clone_from(&project.name);
+                    model.input.cursor = model.input.buffer.len();
                 }
             } else {
                 model.status_message = Some("Select a project from the sidebar first".to_string());
@@ -264,107 +264,107 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::StartEditTask => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditTask(task_id);
-                    model.input_buffer = task.title.clone();
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditTask(task_id);
+                    model.input.buffer = task.title.clone();
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditDueDate => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditDueDate(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditDueDate(task_id);
                     // Pre-fill with existing due date or empty
-                    model.input_buffer = task
+                    model.input.buffer = task
                         .due_date
                         .map(|d| d.format("%Y-%m-%d").to_string())
                         .unwrap_or_default();
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditScheduledDate => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditScheduledDate(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditScheduledDate(task_id);
                     // Pre-fill with existing scheduled date or empty
-                    model.input_buffer = task
+                    model.input.buffer = task
                         .scheduled_date
                         .map(|d| d.format("%Y-%m-%d").to_string())
                         .unwrap_or_default();
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditTags => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditTags(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditTags(task_id);
                     // Pre-fill with existing tags as comma-separated
-                    model.input_buffer = task.tags.join(", ");
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.buffer = task.tags.join(", ");
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditDescription => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditDescription(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditDescription(task_id);
                     // Pre-fill with existing description
-                    model.input_buffer = task.description.clone().unwrap_or_default();
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.buffer = task.description.clone().unwrap_or_default();
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditEstimate => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditEstimate(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditEstimate(task_id);
                     // Pre-fill with existing estimate in human-readable format
-                    model.input_buffer = task
+                    model.input.buffer = task
                         .estimated_minutes
                         .map(format_duration_input)
                         .unwrap_or_default();
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartMoveToProject => {
             if let Some(task_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::MoveToProject(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::MoveToProject(task_id);
                     // Build project list string for display in input buffer
                     // Format: "0: None, 1: ProjectA, 2: ProjectB, ..."
                     let mut options = vec!["0: (none)".to_string()];
                     for (i, project) in model.projects.values().enumerate() {
                         options.push(format!("{}: {}", i + 1, project.name));
                     }
-                    model.input_buffer = options.join(", ");
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.buffer = options.join(", ");
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartSearch => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::Search;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::Search;
             // Pre-fill with existing search text if any
-            model.input_buffer = model.filter.search_text.clone().unwrap_or_default();
-            model.cursor_position = model.input_buffer.len();
+            model.input.buffer = model.filter.search_text.clone().unwrap_or_default();
+            model.input.cursor = model.input.buffer.len();
         }
         UiMessage::ClearSearch => {
             model.filter.search_text = None;
             model.refresh_visible_tasks();
         }
         UiMessage::StartFilterByTag => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::FilterByTag;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::FilterByTag;
             // Collect all unique tags from tasks
             let mut all_tags: Vec<String> = model
                 .tasks
@@ -375,14 +375,14 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             all_tags.dedup();
             // Pre-fill with existing filter or show available tags as hint
             if let Some(ref tags) = model.filter.tags {
-                model.input_buffer = tags.join(", ");
+                model.input.buffer = tags.join(", ");
             } else if !all_tags.is_empty() {
-                model.input_buffer = format!("Available: {}", all_tags.join(", "));
+                model.input.buffer = format!("Available: {}", all_tags.join(", "));
             } else {
-                model.input_buffer.clear();
+                model.input.buffer.clear();
             }
-            model.cursor_position = if model.filter.tags.is_some() {
-                model.input_buffer.len()
+            model.input.cursor = if model.filter.tags.is_some() {
+                model.input.buffer.len()
             } else {
                 0
             };
@@ -412,10 +412,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.refresh_visible_tasks();
         }
         UiMessage::CancelInput => {
-            model.input_mode = InputMode::Normal;
-            model.input_target = InputTarget::default();
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Normal;
+            model.input.target = InputTarget::default();
+            model.input.buffer.clear();
+            model.input.cursor = 0;
         }
         UiMessage::SubmitInput => {
             handle_submit_input(model);
@@ -430,8 +430,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             {
                 model.time_log.buffer.push(c);
             } else {
-                model.input_buffer.insert(model.cursor_position, c);
-                model.cursor_position += 1;
+                model.input.buffer.insert(model.input.cursor, c);
+                model.input.cursor += 1;
             }
         }
         UiMessage::InputBackspace => {
@@ -443,29 +443,29 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 )
             {
                 model.time_log.buffer.pop();
-            } else if model.cursor_position > 0 {
-                model.cursor_position -= 1;
-                model.input_buffer.remove(model.cursor_position);
+            } else if model.input.cursor > 0 {
+                model.input.cursor -= 1;
+                model.input.buffer.remove(model.input.cursor);
             }
         }
         UiMessage::InputDelete => {
-            if model.cursor_position < model.input_buffer.len() {
-                model.input_buffer.remove(model.cursor_position);
+            if model.input.cursor < model.input.buffer.len() {
+                model.input.buffer.remove(model.input.cursor);
             }
         }
         UiMessage::InputCursorLeft => {
-            model.cursor_position = model.cursor_position.saturating_sub(1);
+            model.input.cursor = model.input.cursor.saturating_sub(1);
         }
         UiMessage::InputCursorRight => {
-            if model.cursor_position < model.input_buffer.len() {
-                model.cursor_position += 1;
+            if model.input.cursor < model.input.buffer.len() {
+                model.input.cursor += 1;
             }
         }
         UiMessage::InputCursorStart => {
-            model.cursor_position = 0;
+            model.input.cursor = 0;
         }
         UiMessage::InputCursorEnd => {
-            model.cursor_position = model.input_buffer.len();
+            model.input.cursor = model.input.buffer.len();
         }
         // Delete confirmation - delegated to helper
         UiMessage::ShowDeleteConfirm => delete::show_delete_confirm(model),
@@ -482,8 +482,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::StartEditDependencies => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditDependencies(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditDependencies(task_id);
                     // Build list of available tasks with numbers
                     let mut buffer = String::new();
                     for (i, id) in model.visible_tasks.iter().enumerate() {
@@ -498,16 +498,16 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     if buffer.ends_with(", ") {
                         buffer.truncate(buffer.len() - 2);
                     }
-                    model.input_buffer = buffer;
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.buffer = buffer;
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
         UiMessage::StartEditRecurrence => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
-                    model.input_mode = InputMode::Editing;
-                    model.input_target = InputTarget::EditRecurrence(task_id);
+                    model.input.mode = InputMode::Editing;
+                    model.input.target = InputTarget::EditRecurrence(task_id);
                     // Show current recurrence setting
                     let current = match &task.recurrence {
                         Some(crate::domain::Recurrence::Daily) => "d (daily)",
@@ -516,8 +516,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                         Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
                         None => "0 (none)",
                     };
-                    model.input_buffer = format!("Current: {current}");
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.buffer = format!("Current: {current}");
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
@@ -532,22 +532,22 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::StartLinkTask => {
             if let Some(task_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&task_id) {
-                    model.input_mode = InputMode::Editing;
+                    model.input.mode = InputMode::Editing;
                     // Show current link if any
                     if let Some(task) = model.tasks.get(&task_id) {
                         if let Some(next_id) = &task.next_task_id {
                             if let Some(next_task) = model.tasks.get(next_id) {
-                                model.input_buffer =
+                                model.input.buffer =
                                     format!("Currently linked to: {}", next_task.title);
                             } else {
-                                model.input_buffer = String::new();
+                                model.input.buffer = String::new();
                             }
                         } else {
-                            model.input_buffer = String::new();
+                            model.input.buffer = String::new();
                         }
                     }
-                    model.input_target = InputTarget::LinkTask(task_id);
-                    model.cursor_position = model.input_buffer.len();
+                    model.input.target = InputTarget::LinkTask(task_id);
+                    model.input.cursor = model.input.buffer.len();
                 }
             }
         }
@@ -686,10 +686,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         // Task snooze
         UiMessage::StartSnoozeTask => {
             if let Some(task_id) = model.selected_task_id() {
-                model.input_mode = InputMode::Editing;
-                model.input_target = InputTarget::SnoozeTask(task_id);
-                model.input_buffer.clear();
-                model.cursor_position = 0;
+                model.input.mode = InputMode::Editing;
+                model.input.target = InputTarget::SnoozeTask(task_id);
+                model.input.buffer.clear();
+                model.input.cursor = 0;
             }
         }
         UiMessage::ClearSnooze => {
@@ -750,17 +750,17 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
 
         // Habit tracking UI
         UiMessage::StartCreateHabit => {
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::NewHabit;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::NewHabit;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
         }
         UiMessage::StartEditHabit(habit_id) => {
             if let Some(habit) = model.habits.get(&habit_id) {
-                model.input_mode = InputMode::Editing;
-                model.input_target = InputTarget::EditHabit(habit_id);
-                model.input_buffer.clone_from(&habit.name);
-                model.cursor_position = habit.name.len();
+                model.input.mode = InputMode::Editing;
+                model.input.target = InputTarget::EditHabit(habit_id);
+                model.input.buffer.clone_from(&habit.name);
+                model.input.cursor = habit.name.len();
             }
         }
         UiMessage::HabitUp => {

@@ -630,7 +630,7 @@ mod tests {
 
         // Create a chain of tasks
         let mut task1 = Task::new("First in chain");
-        let mut task2 = Task::new("Second in chain");
+        let task2 = Task::new("Second in chain");
 
         task1.next_task_id = Some(task2.id);
         let task2_id = task2.id;

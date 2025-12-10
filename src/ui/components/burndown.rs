@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn test_burndown_with_project_filter() {
-        use crate::domain::{Project, ProjectId};
+        use crate::domain::Project;
 
         let mut model = Model::new();
         let theme = Theme::default();

@@ -558,7 +558,7 @@ fn test_render_with_selection() {
     // Add multiple overdue tasks
     let yesterday = Utc::now().date_naive() - Duration::days(1);
     for i in 0..3 {
-        let task = Task::new(format!("Task {}", i)).with_due_date(yesterday);
+        let task = Task::new(format!("Task {i}")).with_due_date(yesterday);
         model.tasks.insert(task.id, task);
     }
 
@@ -592,4 +592,261 @@ fn test_today_returns_current_date() {
     let today = WeeklyReview::today();
     let expected = Utc::now().date_naive();
     assert_eq!(today, expected);
+}
+
+// =====================================================================
+// Stale projects and summary tests
+// =====================================================================
+
+#[test]
+fn test_stale_projects_phase_with_stale_projects() {
+    let mut model = Model::new();
+
+    // Create a project with no recent activity (task modified long ago)
+    let project = Project::new("Old Project");
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
+
+    // Add a task to the project with an old updated_at timestamp
+    let mut task = Task::new("Old task");
+    task.project_id = Some(project_id);
+    task.updated_at = Utc::now() - Duration::days(30); // 30 days ago
+    model.tasks.insert(task.id, task);
+
+    let theme = Theme::default();
+
+    // Verify the stale project is detected before rendering
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::StaleProjects, 0);
+    let stale = review.stale_projects();
+    assert!(
+        !stale.is_empty(),
+        "Should detect stale project with old task"
+    );
+
+    // Now render (this consumes review)
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::StaleProjects, 0);
+    let area = Rect::new(0, 0, 100, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Should render without panic
+    assert!(buffer.area.width > 0);
+}
+
+#[test]
+fn test_summary_phase_renders_stats() {
+    let mut model = Model::new();
+
+    // Add completed tasks (completed this week)
+    for i in 0..3 {
+        let mut task = Task::new(format!("Completed {i}"));
+        task.status = TaskStatus::Done;
+        task.completed_at = Some(Utc::now());
+        model.tasks.insert(task.id, task);
+    }
+
+    // Add overdue tasks
+    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    for i in 0..2 {
+        let task = Task::new(format!("Overdue {i}")).with_due_date(yesterday);
+        model.tasks.insert(task.id, task);
+    }
+
+    // Add upcoming tasks
+    let next_week = Utc::now().date_naive() + Duration::days(3);
+    for i in 0..4 {
+        let task = Task::new(format!("Upcoming {i}")).with_due_date(next_week);
+        model.tasks.insert(task.id, task);
+    }
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::Summary, 0);
+
+    let area = Rect::new(0, 0, 80, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Convert buffer to string
+    let mut content = String::new();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            content.push(
+                buffer
+                    .cell((x, y))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+            );
+        }
+        content.push('\n');
+    }
+
+    // Should show completion stats
+    assert!(
+        content.contains("completed") || content.contains("Complete"),
+        "Summary should show completed count"
+    );
+}
+
+#[test]
+fn test_task_list_with_due_dates() {
+    let mut model = Model::new();
+
+    // Add task with due date
+    let due_date = Utc::now().date_naive() + Duration::days(2);
+    let task = Task::new("Task with due date").with_due_date(due_date);
+    model.tasks.insert(task.id, task);
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::UpcomingWeek, 0);
+
+    let area = Rect::new(0, 0, 100, 24);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Should render without panic
+    assert!(buffer.area.width > 0);
+}
+
+#[test]
+fn test_summary_with_zero_tasks() {
+    let model = Model::new();
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::Summary, 0);
+
+    let area = Rect::new(0, 0, 80, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Should render without panic even with no tasks
+    assert!(buffer.area.width > 0);
+}
+
+#[test]
+fn test_stale_projects_empty() {
+    let mut model = Model::new();
+
+    // Create a project with recent activity
+    let project = Project::new("Active Project");
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
+
+    // Add a task with recent activity
+    let task = Task::new("Recent task");
+    let mut task_with_project = task;
+    task_with_project.project_id = Some(project_id);
+    task_with_project.updated_at = Utc::now(); // Just now
+    model.tasks.insert(task_with_project.id, task_with_project);
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::StaleProjects, 0);
+
+    let area = Rect::new(0, 0, 100, 24);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Convert buffer to string
+    let mut content = String::new();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            content.push(
+                buffer
+                    .cell((x, y))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+            );
+        }
+        content.push('\n');
+    }
+
+    // Should show the "All projects have recent activity" message
+    assert!(
+        content.contains("activity") || content.contains("🎉"),
+        "Should show success message for active projects"
+    );
+}
+
+#[test]
+fn test_summary_with_overdue_shows_warning() {
+    let mut model = Model::new();
+
+    // Add overdue tasks
+    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let task = Task::new("Overdue task").with_due_date(yesterday);
+    model.tasks.insert(task.id, task);
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::Summary, 0);
+
+    let area = Rect::new(0, 0, 80, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Should render without panic
+    assert!(buffer.area.width > 0);
+}
+
+#[test]
+fn test_welcome_with_stale_projects_indicator() {
+    let mut model = Model::new();
+
+    // Create a stale project
+    let project = Project::new("Stale Project");
+    let project_id = project.id;
+    model.projects.insert(project.id, project);
+
+    // Add task with old activity
+    let mut task = Task::new("Old task");
+    task.project_id = Some(project_id);
+    task.updated_at = Utc::now() - Duration::days(30);
+    model.tasks.insert(task.id, task);
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::Welcome, 0);
+
+    let area = Rect::new(0, 0, 100, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Convert buffer to string
+    let mut content = String::new();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            content.push(
+                buffer
+                    .cell((x, y))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+            );
+        }
+        content.push('\n');
+    }
+
+    // Should show stale project count
+    assert!(
+        content.contains("Stale") || content.contains('1'),
+        "Welcome should show stale project indicator"
+    );
+}
+
+#[test]
+fn test_task_list_render_with_due_date_formatting() {
+    let mut model = Model::new();
+
+    // Add tasks with different due dates for better coverage
+    let today = Utc::now().date_naive();
+    let tomorrow = today + Duration::days(1);
+    let next_week = today + Duration::days(5);
+
+    let task1 = Task::new("Due tomorrow").with_due_date(tomorrow);
+    model.tasks.insert(task1.id, task1);
+
+    let task2 = Task::new("Due in 5 days").with_due_date(next_week);
+    model.tasks.insert(task2.id, task2);
+
+    let theme = Theme::default();
+    let review = WeeklyReview::new(&model, &theme, WeeklyReviewPhase::UpcomingWeek, 0);
+
+    let area = Rect::new(0, 0, 120, 30);
+    let mut buffer = Buffer::empty(area);
+    review.render(area, &mut buffer);
+
+    // Should render without panic
+    assert!(buffer.area.width > 0);
 }

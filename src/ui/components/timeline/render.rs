@@ -817,7 +817,6 @@ mod tests {
         // Add two tasks with chain relationship
         let mut task1 = Task::new("Task 1");
         task1.due_date = Some(start_date);
-        let task1_id = task1.id;
 
         let mut task2 = Task::new("Task 2");
         task2.due_date = Some(start_date + Duration::days(3));
@@ -889,7 +888,6 @@ mod tests {
     #[test]
     fn test_task_color_priority_high() {
         use crate::domain::Priority;
-        use chrono::NaiveDate;
 
         let model = Model::new();
         let theme = Theme::default();
@@ -905,7 +903,6 @@ mod tests {
     #[test]
     fn test_task_color_completed() {
         use crate::domain::TaskStatus;
-        use chrono::NaiveDate;
 
         let model = Model::new();
         let theme = Theme::default();

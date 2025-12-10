@@ -730,7 +730,7 @@ mod tests {
             Priority::Low,
             Priority::None,
         ] {
-            let mut task = Task::new(format!("{:?} priority", priority));
+            let mut task = Task::new(format!("{priority:?} priority"));
             task.due_date = Some(today - Duration::days(1)); // Make overdue
             task.priority = priority;
             model.tasks.insert(task.id, task);

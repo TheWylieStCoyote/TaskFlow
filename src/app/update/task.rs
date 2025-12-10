@@ -337,8 +337,7 @@ mod tests {
         let next_day = next.due_date.unwrap().weekday();
         assert!(
             next_day == Weekday::Mon || next_day == Weekday::Wed || next_day == Weekday::Fri,
-            "Expected Mon/Wed/Fri but got {:?}",
-            next_day
+            "Expected Mon/Wed/Fri but got {next_day:?}"
         );
     }
 

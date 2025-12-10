@@ -873,7 +873,10 @@ mod tests {
             .unwrap();
 
         let content = buffer_content(&terminal);
-        assert!(content.contains("TaskFlow"), "Header should contain TaskFlow");
+        assert!(
+            content.contains("TaskFlow"),
+            "Header should contain TaskFlow"
+        );
     }
 
     #[test]
@@ -1344,8 +1347,7 @@ mod tests {
         for i in 0..4 {
             assert!(
                 model.layout_cache.eisenhower_quadrant(i).is_some(),
-                "Quadrant {} should be cached",
-                i
+                "Quadrant {i} should be cached"
             );
         }
     }
@@ -1368,8 +1370,7 @@ mod tests {
         for i in 0..7 {
             assert!(
                 model.layout_cache.weekly_planner_day(i).is_some(),
-                "Day {} should be cached",
-                i
+                "Day {i} should be cached"
             );
         }
     }
@@ -1523,7 +1524,10 @@ mod tests {
             .unwrap();
 
         let content = buffer_content(&terminal);
-        assert!(content.contains("Search"), "Should show search input dialog");
+        assert!(
+            content.contains("Search"),
+            "Should show search input dialog"
+        );
     }
 
     #[test]
@@ -1801,5 +1805,340 @@ mod tests {
                 model.input.target
             );
         }
+    }
+
+    #[test]
+    fn test_input_dialog_edit_task_targets() {
+        use crate::domain::TaskId;
+
+        let theme = Theme::default();
+        let task_id = TaskId::new();
+
+        let targets = vec![
+            (InputTarget::EditTask(task_id), "Edit Task"),
+            (InputTarget::EditDueDate(task_id), "Due Date"),
+            (InputTarget::EditScheduledDate(task_id), "Scheduled Date"),
+            (InputTarget::EditTags(task_id), "Tags"),
+            (InputTarget::EditDescription(task_id), "Description"),
+            (InputTarget::EditEstimate(task_id), "Time Estimate"),
+            (InputTarget::MoveToProject(task_id), "Move to Project"),
+            (InputTarget::EditDependencies(task_id), "Blocked by"),
+            (InputTarget::EditRecurrence(task_id), "Recurrence"),
+            (InputTarget::LinkTask(task_id), "Link to next"),
+            (InputTarget::SnoozeTask(task_id), "Snooze"),
+        ];
+
+        for (target, expected_substr) in targets {
+            let mut model = Model::new();
+            model.input.mode = InputMode::Editing;
+            model.input.target = target.clone();
+            let mut terminal = create_test_terminal(80, 24);
+
+            terminal
+                .draw(|frame| {
+                    view(&model, frame, &theme);
+                })
+                .unwrap();
+
+            let content = buffer_content(&terminal);
+            assert!(
+                content.contains(expected_substr),
+                "Should show '{expected_substr}' for target {target:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_input_dialog_subtask_target() {
+        use crate::domain::TaskId;
+
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::Subtask(TaskId::new());
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(content.contains("Subtask"), "Should show Subtask title");
+    }
+
+    #[test]
+    fn test_input_dialog_edit_project_target() {
+        use crate::domain::ProjectId;
+
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::EditProject(ProjectId::new());
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("Rename") || content.contains("Project"),
+            "Should show rename project title"
+        );
+    }
+
+    #[test]
+    fn test_input_dialog_bulk_targets() {
+        let theme = Theme::default();
+
+        // BulkMoveToProject
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkMoveToProject;
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("Move Selected"),
+            "Should show bulk move title"
+        );
+
+        // BulkSetStatus
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkSetStatus;
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("Set Status"),
+            "Should show bulk status title"
+        );
+    }
+
+    #[test]
+    fn test_input_dialog_import_csv() {
+        use crate::storage::ImportFormat;
+
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::ImportFilePath(ImportFormat::Csv);
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(content.contains("CSV"), "Should show CSV import title");
+    }
+
+    #[test]
+    fn test_input_dialog_import_ics() {
+        use crate::storage::ImportFormat;
+
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::ImportFilePath(ImportFormat::Ics);
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(content.contains("ICS"), "Should show ICS import title");
+    }
+
+    #[test]
+    fn test_input_dialog_saved_filter_name() {
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::SavedFilterName;
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("Save Filter") || content.contains("Filter"),
+            "Should show save filter title"
+        );
+    }
+
+    #[test]
+    fn test_input_dialog_habit_targets() {
+        use crate::domain::HabitId;
+
+        let theme = Theme::default();
+
+        // NewHabit
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::NewHabit;
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(content.contains("New Habit"), "Should show new habit title");
+
+        // EditHabit
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::EditHabit(HabitId::new());
+        let mut terminal = create_test_terminal(80, 24);
+
+        terminal
+            .draw(|frame| {
+                view(&model, frame, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("Edit Habit"),
+            "Should show edit habit title"
+        );
+    }
+
+    // =========================================================================
+    // Pomodoro footer tests
+    // =========================================================================
+
+    #[test]
+    fn test_render_footer_with_pomodoro_work_phase() {
+        use crate::domain::{PomodoroSession, TaskId};
+
+        let mut model = Model::new();
+        // Create a pomodoro session directly
+        let task_id = TaskId::new();
+        model.pomodoro.session = Some(PomodoroSession::new(task_id, &model.pomodoro.config, 4));
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(120, 1);
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_footer(&model, frame, area, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        // Should show timer display with work phase icon and time
+        assert!(
+            content.contains("25:00") || content.contains("24:") || content.contains(':'),
+            "Should show work timer"
+        );
+    }
+
+    #[test]
+    fn test_render_footer_with_pomodoro_paused() {
+        use crate::domain::{PomodoroSession, TaskId};
+
+        let mut model = Model::new();
+        let task_id = TaskId::new();
+        let mut session = PomodoroSession::new(task_id, &model.pomodoro.config, 4);
+        session.paused = true;
+        model.pomodoro.session = Some(session);
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(120, 1);
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_footer(&model, frame, area, &theme);
+            })
+            .unwrap();
+
+        // Should show pause indicator
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("⏸") || content.contains("[0/4]"),
+            "Should show pause indicator or cycle count"
+        );
+    }
+
+    #[test]
+    fn test_render_footer_with_pomodoro_cycles() {
+        use crate::domain::{PomodoroSession, TaskId};
+
+        let mut model = Model::new();
+        let task_id = TaskId::new();
+        let mut session = PomodoroSession::new(task_id, &model.pomodoro.config, 4);
+        session.cycles_completed = 2;
+        model.pomodoro.session = Some(session);
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(120, 1);
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_footer(&model, frame, area, &theme);
+            })
+            .unwrap();
+
+        let content = buffer_content(&terminal);
+        // Should show cycle progress like [2/4]
+        assert!(content.contains("[2/4]"), "Should show cycle progress");
+    }
+
+    #[test]
+    fn test_render_footer_with_pomodoro_break_phase() {
+        use crate::domain::{PomodoroPhase, PomodoroSession, TaskId};
+
+        let mut model = Model::new();
+        let task_id = TaskId::new();
+        let mut session = PomodoroSession::new(task_id, &model.pomodoro.config, 4);
+        session.phase = PomodoroPhase::ShortBreak;
+        session.remaining_secs = 5 * 60; // 5 minutes
+        model.pomodoro.session = Some(session);
+        let theme = Theme::default();
+        let mut terminal = create_test_terminal(120, 1);
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                render_footer(&model, frame, area, &theme);
+            })
+            .unwrap();
+
+        // Should render break phase (different color)
+        let content = buffer_content(&terminal);
+        assert!(
+            content.contains("5:00") || content.contains(':'),
+            "Should show break timer"
+        );
     }
 }

@@ -71,7 +71,7 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
 
     // Apply settings to model
     model.show_sidebar = settings.show_sidebar;
-    model.show_completed = settings.show_completed;
+    model.filtering.show_completed = settings.show_completed;
     model.default_priority = settings.default_priority();
     model.refresh_visible_tasks();
 
@@ -93,7 +93,7 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     let result = run_app(&mut terminal, &mut model, &keybindings, &settings, &theme);
 
     // Save before exit if storage is configured
-    if model.has_storage() && model.dirty {
+    if model.has_storage() && model.storage.dirty {
         debug!("Saving data before exit");
         if let Err(e) = model.save() {
             warn!(error = %e, "Could not save data on exit");
@@ -150,7 +150,7 @@ fn run_app(
 
         // Auto-save if interval has passed and there are unsaved changes
         if let Some(interval) = auto_save_interval {
-            if model.dirty && model.has_storage() && last_save.elapsed() >= interval {
+            if model.storage.dirty && model.has_storage() && last_save.elapsed() >= interval {
                 if let Err(e) = model.save() {
                     model.alerts.error_message = Some(format!("Auto-save failed: {e}"));
                 }

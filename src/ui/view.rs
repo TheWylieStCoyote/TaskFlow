@@ -135,8 +135,8 @@ pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     }
 
     // Render import preview dialog
-    if model.show_import_preview {
-        if let Some(ref result) = model.pending_import {
+    if model.import.show_preview {
+        if let Some(ref result) = model.import.pending {
             let confirm_area = centered_rect_fixed_height(60, 7, area);
             let message = format!(
                 "Tasks to import: {}\nSkipped: {}\nErrors: {}",
@@ -579,8 +579,8 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
     ];
 
     // Add multi-select mode indicator
-    if model.multi_select_mode {
-        let selected_count = model.selected_tasks.len();
+    if model.multi_select.mode {
+        let selected_count = model.multi_select.selected.len();
         spans.push(Span::styled(
             " | ",
             Style::default().fg(theme.colors.muted.to_color()),
@@ -673,7 +673,7 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
         Style::default().fg(theme.colors.muted.to_color()),
     ));
     spans.push(Span::styled(
-        if model.show_completed {
+        if model.filtering.show_completed {
             "showing all"
         } else {
             "hiding completed"

@@ -4,7 +4,7 @@ use crate::app::Model;
 
 /// Toggle showing completed tasks.
 pub fn toggle_show_completed(model: &mut Model) {
-    model.show_completed = !model.show_completed;
+    model.filtering.show_completed = !model.filtering.show_completed;
     model.refresh_visible_tasks();
 }
 

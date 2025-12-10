@@ -26,7 +26,7 @@ impl Model {
         self.time_entries.insert(entry_id, entry.clone());
         self.active_time_entry = Some(entry_id);
         self.sync_time_entry(&entry);
-        self.dirty = true;
+        self.storage.dirty = true;
 
         (entry, stopped_entry)
     }
@@ -71,7 +71,7 @@ impl Model {
             }
 
             self.active_time_entry = None;
-            self.dirty = true;
+            self.storage.dirty = true;
 
             // Return before/after if we had an entry
             if let (Some(before), Some(after)) = (before, after) {
@@ -128,10 +128,10 @@ impl Model {
         }
         self.time_entries.remove(entry_id);
         // Also delete from storage
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             let _ = backend.delete_time_entry(entry_id);
         }
-        self.dirty = true;
+        self.storage.dirty = true;
     }
 
     /// Restores a time entry (used for undo).
@@ -154,6 +154,6 @@ impl Model {
         }
 
         self.sync_time_entry(&entry);
-        self.dirty = true;
+        self.storage.dirty = true;
     }
 }

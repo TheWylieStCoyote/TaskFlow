@@ -85,7 +85,8 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
                 ));
                 // Automatically enter focus mode
                 model.focus_mode = true;
-                model.alerts.status_message = Some(format!("Pomodoro started: {goal_cycles} cycle goal"));
+                model.alerts.status_message =
+                    Some(format!("Pomodoro started: {goal_cycles} cycle goal"));
             } else {
                 model.alerts.status_message = Some("Select a task to start Pomodoro".to_string());
             }

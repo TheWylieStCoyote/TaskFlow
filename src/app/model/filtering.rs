@@ -72,8 +72,8 @@ impl Model {
         }
 
         // Sort parent tasks based on SortSpec
-        let sort_field = self.sort.field;
-        let sort_order = self.sort.order;
+        let sort_field = self.filtering.sort.field;
+        let sort_order = self.filtering.sort.order;
 
         let sort_fn = |a: &&Task, b: &&Task| {
             let primary_cmp = match sort_field {
@@ -176,7 +176,7 @@ impl Model {
 
     fn task_matches_filter(&self, task: &Task) -> bool {
         // Filter out completed tasks unless show_completed is true
-        if !self.show_completed && task.status.is_complete() {
+        if !self.filtering.show_completed && task.status.is_complete() {
             return false;
         }
 
@@ -186,7 +186,7 @@ impl Model {
         }
 
         // Filter by search text (case-insensitive, matches title or tags)
-        if let Some(ref search) = self.filter.search_text {
+        if let Some(ref search) = self.filtering.filter.search_text {
             let search_lower = search.to_lowercase();
             let title_matches = task.title.to_lowercase().contains(&search_lower);
             let tags_match = task
@@ -199,8 +199,8 @@ impl Model {
         }
 
         // Filter by tags (if set)
-        if let Some(ref filter_tags) = self.filter.tags {
-            let has_tags = match self.filter.tags_mode {
+        if let Some(ref filter_tags) = self.filtering.filter.tags {
+            let has_tags = match self.filtering.filter.tags_mode {
                 TagFilterMode::Any => {
                     // Task must have at least one of the filter tags
                     filter_tags.iter().any(|ft| {
@@ -224,7 +224,7 @@ impl Model {
         }
 
         // Filter by priority (if set)
-        if let Some(ref priorities) = self.filter.priority {
+        if let Some(ref priorities) = self.filtering.filter.priority {
             if !priorities.contains(&task.priority) {
                 return false;
             }

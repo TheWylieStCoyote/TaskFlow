@@ -120,7 +120,7 @@ impl std::fmt::Display for ImportError {
 }
 
 /// Result of an import operation
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ImportResult {
     /// Successfully parsed tasks
     pub imported: Vec<Task>,

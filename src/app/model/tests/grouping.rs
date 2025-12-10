@@ -1,6 +1,7 @@
 //! Project grouping tests.
 
-use crate::app::model::{Model, SortSpec, ViewId};
+use crate::app::model::{Model, ViewId};
+use crate::domain::SortSpec;
 use crate::domain::{Project, SortField, SortOrder, Task};
 
 #[test]
@@ -127,7 +128,7 @@ fn test_get_tasks_grouped_preserves_task_order_within_group() {
     model.current_view = ViewId::Projects;
 
     // Sort by title ascending
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Title,
         order: SortOrder::Ascending,
     };

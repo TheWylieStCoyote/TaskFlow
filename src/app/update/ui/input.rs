@@ -178,9 +178,9 @@ pub fn handle_submit_input(model: &mut Model) {
         }
         InputTarget::Search => {
             if input.is_empty() {
-                model.filter.search_text = None;
+                model.filtering.filter.search_text = None;
             } else {
-                model.filter.search_text = Some(input);
+                model.filtering.filter.search_text = Some(input);
             }
             model.refresh_visible_tasks();
         }
@@ -205,7 +205,7 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::FilterByTag => {
             if input.is_empty() || input.starts_with("Available:") {
                 // Clear the tag filter
-                model.filter.tags = None;
+                model.filtering.filter.tags = None;
             } else {
                 // Parse comma-separated tags, trim whitespace, filter empty
                 let tags: Vec<String> = input
@@ -214,9 +214,9 @@ pub fn handle_submit_input(model: &mut Model) {
                     .filter(|s| !s.is_empty())
                     .collect();
                 if tags.is_empty() {
-                    model.filter.tags = None;
+                    model.filtering.filter.tags = None;
                 } else {
-                    model.filter.tags = Some(tags);
+                    model.filtering.filter.tags = Some(tags);
                 }
             }
             model.refresh_visible_tasks();
@@ -231,15 +231,15 @@ pub fn handle_submit_input(model: &mut Model) {
                 };
 
                 // Move all selected tasks
-                let tasks_to_move: Vec<_> = model.selected_tasks.iter().copied().collect();
+                let tasks_to_move: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 for task_id in tasks_to_move {
                     let proj = target_project;
                     model.modify_task_with_undo(&task_id, |task| {
                         task.project_id = proj;
                     });
                 }
-                model.selected_tasks.clear();
-                model.multi_select_mode = false;
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
                 model.refresh_visible_tasks();
             }
         }
@@ -255,7 +255,7 @@ pub fn handle_submit_input(model: &mut Model) {
             };
 
             if let Some(new_status) = status {
-                let tasks_to_update: Vec<_> = model.selected_tasks.iter().copied().collect();
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 for task_id in tasks_to_update {
                     model.modify_task_with_undo(&task_id, |task| {
                         task.status = new_status;
@@ -266,8 +266,8 @@ pub fn handle_submit_input(model: &mut Model) {
                         }
                     });
                 }
-                model.selected_tasks.clear();
-                model.multi_select_mode = false;
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
                 model.refresh_visible_tasks();
             }
         }
@@ -357,13 +357,13 @@ pub fn handle_submit_input(model: &mut Model) {
                 // Create a new saved filter from current filter settings
                 let saved_filter = crate::domain::SavedFilter::new(
                     input.clone(),
-                    model.filter.clone(),
-                    model.sort.clone(),
+                    model.filtering.filter.clone(),
+                    model.filtering.sort.clone(),
                 );
                 let filter_id = saved_filter.id.clone();
                 model.saved_filters.insert(filter_id.clone(), saved_filter);
                 model.active_saved_filter = Some(filter_id);
-                model.dirty = true;
+                model.storage.dirty = true;
                 model.alerts.status_message = Some(format!("Saved filter: {input}"));
             }
         }
@@ -382,7 +382,8 @@ pub fn handle_submit_input(model: &mut Model) {
                     task.snooze_until_date(date);
                 }
                 model.sync_task_by_id(&task_id);
-                model.alerts.status_message = Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
+                model.alerts.status_message =
+                    Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
             } else {
                 model.alerts.status_message = Some("Invalid date format".to_string());
             }

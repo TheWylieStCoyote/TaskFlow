@@ -124,7 +124,8 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                             model.alerts.status_message = Some("Time entry updated".to_string());
                         }
                     } else {
-                        model.alerts.status_message = Some("Invalid time format. Use HH:MM".to_string());
+                        model.alerts.status_message =
+                            Some("Invalid time format. Use HH:MM".to_string());
                         return;
                     }
                 }

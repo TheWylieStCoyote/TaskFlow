@@ -37,8 +37,8 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 let filter_name = saved_filter.name.clone();
 
                 // Apply the filter and sort
-                model.filter = filter;
-                model.sort = sort;
+                model.filtering.filter = filter;
+                model.filtering.sort = sort;
                 model.active_saved_filter = Some(filter_id);
                 model.saved_filter_picker.visible = false;
                 model.refresh_visible_tasks();
@@ -68,7 +68,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 }
 
                 model.saved_filters.remove(&id_to_remove);
-                model.dirty = true;
+                model.storage.dirty = true;
 
                 // Adjust selection
                 if model.saved_filter_picker.selected > 0
@@ -83,8 +83,8 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::ClearSavedFilter => {
             model.active_saved_filter = None;
-            model.filter = crate::domain::Filter::default();
-            model.sort = crate::domain::SortSpec::default();
+            model.filtering.filter = crate::domain::Filter::default();
+            model.filtering.sort = crate::domain::SortSpec::default();
             model.refresh_visible_tasks();
             model.alerts.status_message = Some("Filter cleared".to_string());
         }

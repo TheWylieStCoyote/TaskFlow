@@ -1,6 +1,7 @@
 //! Sorting tests.
 
-use crate::app::model::{Model, SortSpec};
+use crate::app::model::Model;
+use crate::domain::SortSpec;
 use crate::domain::{Priority, SortField, SortOrder, Task, TaskStatus};
 
 #[test]
@@ -15,7 +16,7 @@ fn test_sort_by_title() {
     model.tasks.insert(task_a.id, task_a.clone());
     model.tasks.insert(task_c.id, task_c.clone());
 
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Title,
         order: SortOrder::Ascending,
     };
@@ -38,7 +39,7 @@ fn test_sort_by_title_descending() {
     model.tasks.insert(task_a.id, task_a.clone());
     model.tasks.insert(task_c.id, task_c.clone());
 
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Title,
         order: SortOrder::Descending,
     };
@@ -65,7 +66,7 @@ fn test_sort_by_due_date() {
     model.tasks.insert(task_soon.id, task_soon.clone());
     model.tasks.insert(task_no_date.id, task_no_date.clone());
 
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::DueDate,
         order: SortOrder::Ascending,
     };
@@ -80,7 +81,7 @@ fn test_sort_by_due_date() {
 #[test]
 fn test_sort_by_status() {
     let mut model = Model::new();
-    model.show_completed = true; // Show completed for this test
+    model.filtering.show_completed = true; // Show completed for this test
 
     let task_todo = Task::new("Todo").with_status(TaskStatus::Todo);
     let task_in_progress = Task::new("In Progress").with_status(TaskStatus::InProgress);
@@ -92,7 +93,7 @@ fn test_sort_by_status() {
         .tasks
         .insert(task_in_progress.id, task_in_progress.clone());
 
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Status,
         order: SortOrder::Ascending,
     };
@@ -115,7 +116,7 @@ fn test_sort_order_toggle() {
     model.tasks.insert(task_low.id, task_low.clone());
 
     // Ascending: High first (lower priority number)
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Priority,
         order: SortOrder::Ascending,
     };
@@ -124,7 +125,7 @@ fn test_sort_order_toggle() {
     assert_eq!(model.visible_tasks[1], task_low.id);
 
     // Descending: Low first
-    model.sort.order = SortOrder::Descending;
+    model.filtering.sort.order = SortOrder::Descending;
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks[0], task_low.id);
     assert_eq!(model.visible_tasks[1], task_high.id);

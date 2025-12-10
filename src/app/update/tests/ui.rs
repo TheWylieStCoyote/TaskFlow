@@ -7,15 +7,15 @@ use crate::ui::InputMode;
 #[test]
 fn test_ui_toggle_show_completed() {
     let mut model = Model::new();
-    assert!(!model.show_completed);
+    assert!(!model.filtering.show_completed);
 
     update(&mut model, Message::Ui(UiMessage::ToggleShowCompleted));
 
-    assert!(model.show_completed);
+    assert!(model.filtering.show_completed);
 
     update(&mut model, Message::Ui(UiMessage::ToggleShowCompleted));
 
-    assert!(!model.show_completed);
+    assert!(!model.filtering.show_completed);
 }
 
 #[test]

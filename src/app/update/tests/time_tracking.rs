@@ -108,9 +108,9 @@ fn test_bulk_delete_removes_time_entries() {
     assert_eq!(model.time_entries.len(), 2);
 
     // Set up multi-select
-    model.multi_select_mode = true;
-    model.selected_tasks.insert(task1_id);
-    model.selected_tasks.insert(task2_id);
+    model.multi_select.mode = true;
+    model.multi_select.selected.insert(task1_id);
+    model.multi_select.selected.insert(task2_id);
 
     // Bulk delete
     update(&mut model, Message::Ui(UiMessage::BulkDelete));
@@ -129,8 +129,8 @@ fn test_bulk_delete_clears_active_time_entry() {
     assert!(model.active_time_entry.is_some());
 
     // Set up multi-select and delete
-    model.multi_select_mode = true;
-    model.selected_tasks.insert(task_id);
+    model.multi_select.mode = true;
+    model.multi_select.selected.insert(task_id);
     update(&mut model, Message::Ui(UiMessage::BulkDelete));
 
     // Active entry should be cleared
@@ -152,9 +152,9 @@ fn test_undo_bulk_delete_restores_time_entries() {
     model.time_entries.insert(entry2.id, entry2);
 
     // Bulk delete
-    model.multi_select_mode = true;
-    model.selected_tasks.insert(task1_id);
-    model.selected_tasks.insert(task2_id);
+    model.multi_select.mode = true;
+    model.multi_select.selected.insert(task1_id);
+    model.multi_select.selected.insert(task2_id);
     update(&mut model, Message::Ui(UiMessage::BulkDelete));
     assert!(model.time_entries.is_empty());
 

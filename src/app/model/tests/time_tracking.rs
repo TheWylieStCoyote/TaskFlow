@@ -14,7 +14,7 @@ fn test_model_start_time_tracking() {
 
     assert!(model.active_time_entry.is_some());
     assert!(model.time_entries.len() == 1);
-    assert!(model.dirty);
+    assert!(model.storage.dirty);
 
     let entry = model.active_time_entry().unwrap();
     assert!(entry.is_running());

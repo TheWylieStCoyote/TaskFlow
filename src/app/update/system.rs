@@ -80,7 +80,8 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::RefreshStorage => {
             let changes = model.refresh_storage();
             if changes > 0 {
-                model.alerts.status_message = Some(format!("Refreshed: {changes} change(s) detected"));
+                model.alerts.status_message =
+                    Some(format!("Refreshed: {changes} change(s) detected"));
             } else {
                 model.alerts.status_message = Some("No external changes detected".to_string());
             }
@@ -156,7 +157,7 @@ fn apply_undo_action(model: &mut Model, action: UndoAction, dir: UndoDirection) 
         (UndoAction::ProjectCreated(project), Undo)
         | (UndoAction::ProjectDeleted(project), Redo) => {
             model.projects.remove(&project.id);
-            model.dirty = true;
+            model.storage.dirty = true;
         }
         (UndoAction::ProjectCreated(project), Redo)
         | (UndoAction::ProjectDeleted(project), Undo) => {
@@ -251,7 +252,7 @@ fn handle_export_csv(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Csv) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("tasks.csv"),
                 |p| p.with_extension("csv"),
             );
@@ -282,7 +283,7 @@ fn handle_export_ics(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Ics) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("tasks.ics"),
                 |p| p.with_extension("ics"),
             );
@@ -312,7 +313,7 @@ fn handle_export_chains_dot(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Dot) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("task_chains.dot"),
                 |p| p.with_extension("dot"),
             );
@@ -341,7 +342,7 @@ fn handle_export_chains_mermaid(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Mermaid) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("task_chains.md"),
                 |p| p.with_extension("md"),
             );
@@ -375,7 +376,7 @@ fn handle_export_report_markdown(model: &mut Model) {
 
     match export_report_to_markdown_string(&report) {
         Ok(content) => {
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("taskflow_report.md"),
                 |p| p.with_extension("report.md"),
             );
@@ -409,7 +410,7 @@ fn handle_export_report_html(model: &mut Model) {
 
     match export_report_to_html_string(&report) {
         Ok(content) => {
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("taskflow_report.html"),
                 |p| p.with_extension("report.html"),
             );
@@ -519,15 +520,15 @@ pub fn handle_execute_import(model: &mut Model) {
     let skip_count = result.skipped.len();
     let error_count = result.errors.len();
 
-    model.pending_import = Some(result);
-    model.show_import_preview = true;
+    model.import.pending = Some(result);
+    model.import.show_preview = true;
     model.alerts.status_message = Some(format!(
         "Preview: {import_count} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
     ));
 }
 
 fn handle_confirm_import(model: &mut Model) {
-    if let Some(result) = model.pending_import.take() {
+    if let Some(result) = model.import.pending.take() {
         let count = result.imported.len();
 
         // Add all imported tasks
@@ -536,15 +537,15 @@ fn handle_confirm_import(model: &mut Model) {
             model.tasks.insert(task.id, task);
         }
 
-        model.dirty = true;
-        model.show_import_preview = false;
+        model.storage.dirty = true;
+        model.import.show_preview = false;
         model.refresh_visible_tasks();
         model.alerts.status_message = Some(format!("Imported {count} tasks"));
     }
 }
 
 fn handle_cancel_import(model: &mut Model) {
-    model.pending_import = None;
-    model.show_import_preview = false;
+    model.import.pending = None;
+    model.import.show_preview = false;
     model.alerts.status_message = Some("Import cancelled".to_string());
 }

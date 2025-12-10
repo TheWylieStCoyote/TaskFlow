@@ -18,7 +18,8 @@ pub fn handle_ui_macros(model: &mut Model, msg: UiMessage) {
             } else {
                 // First press - prompt for slot
                 model.pending_macro_slot = Some(0);
-                model.alerts.status_message = Some("Press 0-9 to start recording macro".to_string());
+                model.alerts.status_message =
+                    Some("Press 0-9 to start recording macro".to_string());
             }
         }
         UiMessage::StopRecordMacro => {
@@ -27,7 +28,8 @@ pub fn handle_ui_macros(model: &mut Model, msg: UiMessage) {
                     if model.macro_state.stop_recording(slot) {
                         model.alerts.status_message = Some(format!("Macro {slot} saved"));
                     } else {
-                        model.alerts.status_message = Some("Macro was empty, not saved".to_string());
+                        model.alerts.status_message =
+                            Some("Macro was empty, not saved".to_string());
                     }
                 }
             } else if model.macro_state.is_recording() {

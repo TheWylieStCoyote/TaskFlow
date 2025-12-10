@@ -493,7 +493,8 @@ fn test_edit_estimate_invalid_keeps_old() {
 
     // Should show error message
     assert!(model
-        .alerts.status_message
+        .alerts
+        .status_message
         .as_ref()
         .is_some_and(|m| m.contains("Invalid")));
 }

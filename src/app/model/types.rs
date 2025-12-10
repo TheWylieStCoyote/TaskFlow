@@ -1,7 +1,12 @@
 //! Core types for the application model.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
+
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 
+use crate::domain::{Filter, SortSpec, TaskId};
+use crate::storage::{ImportResult, StorageBackend};
 use crate::ui::{InputMode, InputTarget};
 
 /// State for the calendar view.
@@ -372,6 +377,115 @@ impl InputState {
         self.target = InputTarget::default();
         self.buffer.clear();
         self.cursor = 0;
+    }
+}
+
+/// State for multi-select mode (bulk operations).
+///
+/// Groups fields for selecting multiple tasks for bulk operations.
+#[derive(Debug, Clone, Default)]
+pub struct MultiSelectState {
+    /// Whether multi-select mode is active
+    pub mode: bool,
+    /// Set of selected task IDs for bulk operations
+    pub selected: HashSet<TaskId>,
+}
+
+impl MultiSelectState {
+    /// Returns true if multi-select mode is active.
+    #[inline]
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.mode
+    }
+
+    /// Returns true if there are any selected tasks.
+    #[inline]
+    #[must_use]
+    pub fn has_selection(&self) -> bool {
+        !self.selected.is_empty()
+    }
+
+    /// Clears all selections and exits multi-select mode.
+    pub fn clear(&mut self) {
+        self.mode = false;
+        self.selected.clear();
+    }
+}
+
+/// State for filtering and sorting tasks.
+///
+/// Groups fields related to task filtering and display options.
+#[derive(Debug, Clone, Default)]
+pub struct FilterState {
+    /// Current filter settings
+    pub filter: Filter,
+    /// Current sort settings
+    pub sort: SortSpec,
+    /// Whether to show completed tasks
+    pub show_completed: bool,
+}
+
+/// State for storage backend and persistence.
+///
+/// Groups fields related to data persistence and storage backend.
+#[derive(Default)]
+pub struct StorageState {
+    /// Active storage backend (if configured)
+    pub(crate) backend: Option<Box<dyn StorageBackend>>,
+    /// Path to data file/directory
+    pub data_path: Option<PathBuf>,
+    /// Whether there are unsaved changes
+    pub dirty: bool,
+}
+
+impl std::fmt::Debug for StorageState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StorageState")
+            .field(
+                "backend",
+                &self.backend.as_ref().map(|_| "<StorageBackend>"),
+            )
+            .field("data_path", &self.data_path)
+            .field("dirty", &self.dirty)
+            .finish()
+    }
+}
+
+impl Clone for StorageState {
+    fn clone(&self) -> Self {
+        // Storage backend cannot be cloned, so we create without backend
+        Self {
+            backend: None,
+            data_path: self.data_path.clone(),
+            dirty: self.dirty,
+        }
+    }
+}
+
+/// State for import operations.
+///
+/// Groups fields related to importing data from external sources.
+#[derive(Debug, Clone, Default)]
+pub struct ImportState {
+    /// Pending import result awaiting confirmation
+    pub pending: Option<ImportResult>,
+    /// Whether import preview dialog is showing
+    pub show_preview: bool,
+}
+
+impl ImportState {
+    /// Returns true if there's a pending import.
+    #[inline]
+    #[must_use]
+    pub fn has_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// Clears the import state.
+    pub fn clear(&mut self) {
+        self.pending = None;
+        self.show_preview = false;
     }
 }
 

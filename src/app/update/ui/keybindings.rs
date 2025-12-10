@@ -78,7 +78,8 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                         ));
                     }
                 } else {
-                    model.alerts.status_message = Some("No default binding for this action".to_string());
+                    model.alerts.status_message =
+                        Some("No default binding for this action".to_string());
                 }
             }
         }

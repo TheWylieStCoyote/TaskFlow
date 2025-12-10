@@ -102,7 +102,7 @@ fn test_task_list_renders_completed_task() {
     let task_id = task.id;
     model.tasks.insert(task_id, task);
     model.visible_tasks.push(task_id);
-    model.show_completed = true;
+    model.filtering.show_completed = true;
 
     let theme = Theme::default();
     let task_list = TaskList::new(&model, &theme);

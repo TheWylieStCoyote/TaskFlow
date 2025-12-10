@@ -94,8 +94,8 @@ impl Model {
             self.pomodoro.stats = stats;
         }
 
-        self.storage = Some(backend);
-        self.data_path = Some(path);
+        self.storage.backend = Some(backend);
+        self.storage.data_path = Some(path);
         self.refresh_visible_tasks();
 
         Ok(self)
@@ -110,14 +110,14 @@ impl Model {
     ///
     /// Returns an error if the storage backend fails to flush data.
     pub fn save(&mut self) -> anyhow::Result<()> {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Sync Pomodoro state before flushing
             backend.set_pomodoro_session(self.pomodoro.session.as_ref())?;
             backend.set_pomodoro_config(&self.pomodoro.config)?;
             backend.set_pomodoro_stats(&self.pomodoro.stats)?;
 
             backend.flush()?;
-            self.dirty = false;
+            self.storage.dirty = false;
         }
         Ok(())
     }
@@ -127,7 +127,7 @@ impl Model {
     /// Creates or updates the task in the storage backend.
     /// Sets the dirty flag to indicate unsaved changes.
     pub fn sync_task(&mut self, task: &Task) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_task(task) {
                 if let Err(e2) = backend.create_task(task) {
@@ -137,7 +137,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -146,7 +146,9 @@ impl Model {
     /// Looks up the task in the model and syncs it to the storage backend.
     /// This avoids the need to clone the task when you have a mutable borrow.
     pub fn sync_task_by_id(&mut self, task_id: &TaskId) {
-        if let (Some(ref mut backend), Some(task)) = (&mut self.storage, self.tasks.get(task_id)) {
+        if let (Some(ref mut backend), Some(task)) =
+            (&mut self.storage.backend, self.tasks.get(task_id))
+        {
             // Try update first, if not found, create
             if let Err(e) = backend.update_task(task) {
                 if let Err(e2) = backend.create_task(task) {
@@ -156,7 +158,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -164,11 +166,11 @@ impl Model {
     ///
     /// Removes the task from the storage backend.
     pub fn delete_task_from_storage(&mut self, id: &TaskId) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = backend.delete_task(id) {
                 warn!("Failed to delete task {} from storage: {}", id, e);
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -176,7 +178,7 @@ impl Model {
     ///
     /// Creates or updates the project in the storage backend.
     pub fn sync_project(&mut self, project: &Project) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_project(project) {
                 if let Err(e2) = backend.create_project(project) {
@@ -186,7 +188,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -196,7 +198,7 @@ impl Model {
     /// This avoids the need to clone the project when you have a mutable borrow.
     pub fn sync_project_by_id(&mut self, project_id: &ProjectId) {
         if let (Some(ref mut backend), Some(project)) =
-            (&mut self.storage, self.projects.get(project_id))
+            (&mut self.storage.backend, self.projects.get(project_id))
         {
             // Try update first, if not found, create
             if let Err(e) = backend.update_project(project) {
@@ -207,7 +209,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -215,7 +217,7 @@ impl Model {
     ///
     /// Creates or updates the habit in the storage backend.
     pub fn sync_habit(&mut self, habit: &Habit) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = HabitRepository::update_habit(backend.as_mut(), habit) {
                 if let Err(e2) = HabitRepository::create_habit(backend.as_mut(), habit) {
@@ -225,7 +227,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -233,7 +235,8 @@ impl Model {
     ///
     /// Looks up the habit in the model and syncs it to the storage backend.
     pub fn sync_habit_by_id(&mut self, habit_id: &HabitId) {
-        if let (Some(ref mut backend), Some(habit)) = (&mut self.storage, self.habits.get(habit_id))
+        if let (Some(ref mut backend), Some(habit)) =
+            (&mut self.storage.backend, self.habits.get(habit_id))
         {
             // Try update first, if not found, create
             if let Err(e) = HabitRepository::update_habit(backend.as_mut(), habit) {
@@ -244,7 +247,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -252,11 +255,11 @@ impl Model {
     ///
     /// Removes the habit from the storage backend.
     pub fn delete_habit_from_storage(&mut self, id: &HabitId) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = HabitRepository::delete_habit(backend.as_mut(), id) {
                 warn!("Failed to delete habit {} from storage: {}", id, e);
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -264,7 +267,7 @@ impl Model {
     ///
     /// Creates or updates the time entry in the storage backend.
     pub fn sync_time_entry(&mut self, entry: &TimeEntry) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_time_entry(entry) {
                 if let Err(e2) = backend.create_time_entry(entry) {
@@ -274,7 +277,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -286,7 +289,7 @@ impl Model {
     /// This is primarily useful for the markdown backend when files are edited
     /// externally (e.g., by a text editor or git operations).
     pub fn refresh_storage(&mut self) -> usize {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             let changes = backend.refresh();
             if changes > 0 {
                 // Reload all data from storage
@@ -320,7 +323,7 @@ impl Model {
     /// Returns true if a storage backend is configured.
     #[must_use]
     pub fn has_storage(&self) -> bool {
-        self.storage.is_some()
+        self.storage.backend.is_some()
     }
 
     /// Modifies a task with undo support.
@@ -387,7 +390,7 @@ impl Model {
     ///
     /// Creates or updates the work log entry in the storage backend.
     pub fn sync_work_log(&mut self, entry: &WorkLogEntry) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = WorkLogRepository::update_work_log(backend.as_mut(), entry) {
                 if let Err(e2) = WorkLogRepository::create_work_log(backend.as_mut(), entry) {
@@ -397,7 +400,7 @@ impl Model {
                     );
                 }
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 
@@ -405,11 +408,11 @@ impl Model {
     ///
     /// Removes the work log entry from the storage backend.
     pub fn delete_work_log_from_storage(&mut self, id: &WorkLogEntryId) {
-        if let Some(ref mut backend) = self.storage {
+        if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = WorkLogRepository::delete_work_log(backend.as_mut(), id) {
                 warn!("Failed to delete work log {} from storage: {}", id, e);
             }
-            self.dirty = true;
+            self.storage.dirty = true;
         }
     }
 }

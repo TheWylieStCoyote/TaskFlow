@@ -15,12 +15,12 @@ fn test_model_new_defaults() {
     assert!(model.active_time_entry.is_none());
     assert_eq!(model.selected_index, 0);
     assert!(model.visible_tasks.is_empty());
-    assert!(!model.show_completed);
+    assert!(!model.filtering.show_completed);
     assert!(model.show_sidebar);
     assert!(!model.show_help);
     assert_eq!(model.input.mode, InputMode::Normal);
     assert!(model.input.buffer.is_empty());
-    assert!(!model.dirty);
+    assert!(!model.storage.dirty);
 }
 
 #[test]
@@ -92,13 +92,13 @@ fn test_model_selected_index_adjustment() {
 #[test]
 fn test_model_dirty_flag() {
     let mut model = Model::new();
-    assert!(!model.dirty);
+    assert!(!model.storage.dirty);
 
     let task = Task::new("Task");
     model.tasks.insert(task.id, task);
 
     model.start_time_tracking(model.tasks.keys().next().copied().unwrap());
-    assert!(model.dirty);
+    assert!(model.storage.dirty);
 }
 
 #[test]

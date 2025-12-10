@@ -48,7 +48,7 @@ fn test_filter_by_tag_submit() {
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Only tagged task should be visible
-    assert_eq!(model.filter.tags, Some(vec!["work".to_string()]));
+    assert_eq!(model.filtering.filter.tags, Some(vec!["work".to_string()]));
     assert_eq!(model.visible_tasks.len(), 1);
     assert!(model.visible_tasks.contains(&task_tagged.id));
 }
@@ -99,14 +99,14 @@ fn test_clear_tag_filter() {
     model.refresh_visible_tasks();
 
     // Set tag filter
-    model.filter.tags = Some(vec!["work".to_string()]);
+    model.filtering.filter.tags = Some(vec!["work".to_string()]);
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 1);
 
     // Clear filter
     update(&mut model, Message::Ui(UiMessage::ClearTagFilter));
 
-    assert!(model.filter.tags.is_none());
+    assert!(model.filtering.filter.tags.is_none());
     assert_eq!(model.visible_tasks.len(), 2);
 }
 
@@ -115,7 +115,7 @@ fn test_filter_by_tag_empty_clears() {
     let mut model = create_test_model_with_tasks();
 
     // Set initial tag filter
-    model.filter.tags = Some(vec!["work".to_string()]);
+    model.filtering.filter.tags = Some(vec!["work".to_string()]);
 
     // Start filter
     update(&mut model, Message::Ui(UiMessage::StartFilterByTag));
@@ -128,7 +128,7 @@ fn test_filter_by_tag_empty_clears() {
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Filter should be cleared
-    assert!(model.filter.tags.is_none());
+    assert!(model.filtering.filter.tags.is_none());
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn test_filter_by_tag_preserves_existing() {
     let mut model = create_test_model_with_tasks();
 
     // Set initial tag filter
-    model.filter.tags = Some(vec!["work".to_string()]);
+    model.filtering.filter.tags = Some(vec!["work".to_string()]);
 
     // Start filter - should pre-fill with existing
     update(&mut model, Message::Ui(UiMessage::StartFilterByTag));

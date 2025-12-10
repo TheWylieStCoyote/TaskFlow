@@ -55,22 +55,21 @@ mod types;
 
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
-    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
-    InputState, KeybindingsEditorState, PomodoroState, RunningState, SavedFilterPickerState,
-    TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState,
-    WeeklyReviewState, WorkLogEditorState,
+    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, FilterState,
+    HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
+    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TemplatePickerState,
+    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
+    WorkLogEditorState,
 };
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Filter, Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec,
-    Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, Task, TaskId,
+    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
-use crate::storage::StorageBackend;
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
@@ -194,12 +193,8 @@ pub struct Model {
     pub visible_tasks: Vec<TaskId>,
 
     // Filter/Sort
-    /// Current filter settings
-    pub filter: Filter,
-    /// Current sort settings
-    pub sort: SortSpec,
-    /// Whether to show completed tasks
-    pub show_completed: bool,
+    /// Filter and sort state (filter, sort, show_completed)
+    pub filtering: FilterState,
 
     // UI state
     /// Whether sidebar is visible
@@ -224,18 +219,12 @@ pub struct Model {
     pub show_confirm_delete: bool,
 
     // Multi-select state for bulk operations
-    /// Set of selected task IDs for bulk operations
-    pub selected_tasks: std::collections::HashSet<TaskId>,
-    /// Whether multi-select mode is active
-    pub multi_select_mode: bool,
+    /// Multi-select state (mode, selected tasks)
+    pub multi_select: MultiSelectState,
 
     // Storage
-    /// Active storage backend (if configured)
-    pub(crate) storage: Option<Box<dyn StorageBackend>>,
-    /// Path to data file/directory
-    pub data_path: Option<PathBuf>,
-    /// Whether there are unsaved changes
-    pub dirty: bool,
+    /// Storage state (backend, data_path, dirty)
+    pub storage: StorageState,
 
     // Configuration
     /// Default priority for new tasks
@@ -276,10 +265,8 @@ pub struct Model {
     pub report_panel: crate::ui::ReportPanel,
 
     // Import state
-    /// Pending import result awaiting confirmation
-    pub pending_import: Option<crate::storage::ImportResult>,
-    /// Whether import preview dialog is showing
-    pub show_import_preview: bool,
+    /// Import state (pending, show_preview)
+    pub import: ImportState,
 
     // Alert state
     /// Consolidated alert and error state
@@ -369,9 +356,7 @@ impl Model {
             current_view: ViewId::default(),
             selected_index: 0,
             visible_tasks: Vec::new(),
-            filter: Filter::default(),
-            sort: SortSpec::default(),
-            show_completed: false,
+            filtering: FilterState::default(),
             show_sidebar: true,
             show_help: false,
             focus_mode: false,
@@ -381,11 +366,8 @@ impl Model {
             selected_project: None,
             input: InputState::default(),
             show_confirm_delete: false,
-            selected_tasks: std::collections::HashSet::new(),
-            multi_select_mode: false,
-            storage: None,
-            data_path: None,
-            dirty: false,
+            multi_select: MultiSelectState::default(),
+            storage: StorageState::default(),
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
@@ -397,8 +379,7 @@ impl Model {
             keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
-            pending_import: None,
-            show_import_preview: false,
+            import: ImportState::default(),
             alerts: AlertState::default(),
             time_log: TimeLogEditorState::default(),
             work_logs: HashMap::new(),
@@ -472,7 +453,8 @@ impl Model {
         self.tasks
             .values()
             .filter(|t| {
-                t.due_date == Some(date) && (self.show_completed || !t.status.is_complete())
+                t.due_date == Some(date)
+                    && (self.filtering.show_completed || !t.status.is_complete())
             })
             .count()
     }

@@ -1176,7 +1176,7 @@ proptest! {
     #[test]
     fn prop_toggle_complete_changes_status(title in task_title_strategy()) {
         let mut model = Model::new();
-        model.show_completed = true; // Ensure we can see completed tasks
+        model.filtering.show_completed = true; // Ensure we can see completed tasks
 
         // Create a task
         update(&mut model, Message::Task(TaskMessage::Create(title)));

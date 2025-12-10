@@ -39,8 +39,8 @@ fn test_cancel_import_resets_state() {
     let mut model = Model::new();
 
     // Set up pending import state
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![],
         skipped: vec![],
         errors: vec![],
@@ -48,10 +48,15 @@ fn test_cancel_import_resets_state() {
 
     update(&mut model, Message::System(SystemMessage::CancelImport));
 
-    assert!(!model.show_import_preview);
-    assert!(model.pending_import.is_none());
+    assert!(!model.import.show_preview);
+    assert!(model.import.pending.is_none());
     assert!(model.alerts.status_message.is_some());
-    assert!(model.alerts.status_message.as_ref().unwrap().contains("cancelled"));
+    assert!(model
+        .alerts
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("cancelled"));
 }
 
 #[test]
@@ -61,8 +66,8 @@ fn test_confirm_import_adds_tasks() {
     // Create a task to import
     let task = Task::new("Imported Task");
 
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![task.clone()],
         skipped: vec![],
         errors: vec![],
@@ -70,13 +75,14 @@ fn test_confirm_import_adds_tasks() {
 
     update(&mut model, Message::System(SystemMessage::ConfirmImport));
 
-    assert!(!model.show_import_preview);
-    assert!(model.pending_import.is_none());
+    assert!(!model.import.show_preview);
+    assert!(model.import.pending.is_none());
     assert_eq!(model.tasks.len(), 1);
     assert!(model.tasks.values().any(|t| t.title == "Imported Task"));
     assert!(model.alerts.status_message.is_some());
     assert!(model
-        .alerts.status_message
+        .alerts
+        .status_message
         .as_ref()
         .unwrap()
         .contains("Imported 1"));
@@ -91,8 +97,8 @@ fn test_confirm_import_multiple_tasks() {
     let task2 = Task::new("Task 2");
     let task3 = Task::new("Task 3");
 
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![task1, task2, task3],
         skipped: vec![],
         errors: vec![],
@@ -102,7 +108,8 @@ fn test_confirm_import_multiple_tasks() {
 
     assert_eq!(model.tasks.len(), 3);
     assert!(model
-        .alerts.status_message
+        .alerts
+        .status_message
         .as_ref()
         .unwrap()
         .contains("Imported 3"));
@@ -123,7 +130,8 @@ fn test_import_empty_path_shows_error() {
     // Should show error, not crash
     assert!(model.alerts.status_message.is_some());
     assert!(model
-        .alerts.status_message
+        .alerts
+        .status_message
         .as_ref()
         .unwrap()
         .contains("No file path"));

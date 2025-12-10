@@ -153,7 +153,7 @@ fn bench_search(c: &mut Criterion) {
             |b, &size| {
                 let mut model = create_model_with_tasks(size);
                 b.iter(|| {
-                    model.filter.search_text = Some("Task 5".to_string());
+                    model.filtering.filter.search_text = Some("Task 5".to_string());
                     model.refresh_visible_tasks();
                     black_box(model.visible_tasks.len())
                 });

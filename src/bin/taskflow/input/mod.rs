@@ -38,7 +38,7 @@ pub fn handle_key_event(
     }
 
     // Handle import preview dialog
-    if model.show_import_preview {
+    if model.import.show_preview {
         return match key.code {
             KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
                 Message::System(SystemMessage::ConfirmImport)
@@ -115,7 +115,7 @@ pub fn handle_key_event(
     }
 
     // In multi-select mode, Space toggles task selection
-    if model.multi_select_mode && key.code == KeyCode::Char(' ') {
+    if model.multi_select.mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
     }
 

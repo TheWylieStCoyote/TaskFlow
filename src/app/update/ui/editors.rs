@@ -96,7 +96,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
 
                 // Don't save empty entries
                 if content.trim().is_empty() {
-                    model.alerts.status_message = Some("Cannot save empty work log entry".to_string());
+                    model.alerts.status_message =
+                        Some("Cannot save empty work log entry".to_string());
                     return;
                 }
 
@@ -124,7 +125,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                                     after: Box::new(after.clone()),
                                 });
                                 model.sync_work_log(&after);
-                                model.alerts.status_message = Some("Work log entry updated".to_string());
+                                model.alerts.status_message =
+                                    Some("Work log entry updated".to_string());
                             }
                         }
                     }
@@ -156,7 +158,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                             {
                                 model.work_log_editor.selected = remaining.len() - 1;
                             }
-                            model.alerts.status_message = Some("Work log entry deleted".to_string());
+                            model.alerts.status_message =
+                                Some("Work log entry deleted".to_string());
                         }
                     }
                 }

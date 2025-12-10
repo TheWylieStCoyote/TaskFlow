@@ -10,7 +10,7 @@ use tempfile::tempdir;
 fn test_model_refresh_storage_without_backend() {
     let mut model = Model::new();
     // No storage backend attached
-    assert!(model.storage.is_none());
+    assert!(model.storage.backend.is_none());
 
     // refresh_storage should return 0 when no backend
     let changes = model.refresh_storage();

@@ -220,7 +220,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.input.cursor = model.input.buffer.len();
                 }
             } else {
-                model.alerts.status_message = Some("Select a project from the sidebar first".to_string());
+                model.alerts.status_message =
+                    Some("Select a project from the sidebar first".to_string());
             }
         }
         UiMessage::DeleteProject => {
@@ -251,14 +252,15 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                         .push(UndoAction::ProjectDeleted(Box::new(project)));
                     // Clear selected project
                     model.selected_project = None;
-                    model.dirty = true;
+                    model.storage.dirty = true;
                     model.refresh_visible_tasks();
                     model.alerts.status_message = Some(format!(
                         "Deleted project '{project_name}' (tasks unassigned)"
                     ));
                 }
             } else {
-                model.alerts.status_message = Some("Select a project from the sidebar first".to_string());
+                model.alerts.status_message =
+                    Some("Select a project from the sidebar first".to_string());
             }
         }
         UiMessage::StartEditTask => {
@@ -355,11 +357,16 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.input.mode = InputMode::Editing;
             model.input.target = InputTarget::Search;
             // Pre-fill with existing search text if any
-            model.input.buffer = model.filter.search_text.clone().unwrap_or_default();
+            model.input.buffer = model
+                .filtering
+                .filter
+                .search_text
+                .clone()
+                .unwrap_or_default();
             model.input.cursor = model.input.buffer.len();
         }
         UiMessage::ClearSearch => {
-            model.filter.search_text = None;
+            model.filtering.filter.search_text = None;
             model.refresh_visible_tasks();
         }
         UiMessage::StartFilterByTag => {
@@ -374,26 +381,26 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             all_tags.sort();
             all_tags.dedup();
             // Pre-fill with existing filter or show available tags as hint
-            if let Some(ref tags) = model.filter.tags {
+            if let Some(ref tags) = model.filtering.filter.tags {
                 model.input.buffer = tags.join(", ");
             } else if !all_tags.is_empty() {
                 model.input.buffer = format!("Available: {}", all_tags.join(", "));
             } else {
                 model.input.buffer.clear();
             }
-            model.input.cursor = if model.filter.tags.is_some() {
+            model.input.cursor = if model.filtering.filter.tags.is_some() {
                 model.input.buffer.len()
             } else {
                 0
             };
         }
         UiMessage::ClearTagFilter => {
-            model.filter.tags = None;
+            model.filtering.filter.tags = None;
             model.refresh_visible_tasks();
         }
         UiMessage::CycleSortField => {
             use crate::domain::SortField;
-            model.sort.field = match model.sort.field {
+            model.filtering.sort.field = match model.filtering.sort.field {
                 SortField::CreatedAt => SortField::Priority,
                 SortField::Priority => SortField::DueDate,
                 SortField::DueDate => SortField::Title,
@@ -405,7 +412,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::ToggleSortOrder => {
             use crate::domain::SortOrder;
-            model.sort.order = match model.sort.order {
+            model.filtering.sort.order = match model.filtering.sort.order {
                 SortOrder::Ascending => SortOrder::Descending,
                 SortOrder::Descending => SortOrder::Ascending,
             };
@@ -710,7 +717,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(tomorrow);
                 });
-                model.alerts.status_message = Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
+                model.alerts.status_message =
+                    Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
                 model.refresh_visible_tasks();
             }
         }

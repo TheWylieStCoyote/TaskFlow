@@ -2,6 +2,7 @@
 name = "taskflow"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.87"
 description = "A TUI project management application"
 license = "MIT"
 

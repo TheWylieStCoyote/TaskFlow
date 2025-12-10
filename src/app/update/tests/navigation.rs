@@ -523,7 +523,9 @@ fn test_reports_select_panel() {
     );
 
     // Panel should be selected (index 3 = Time panel typically)
-    assert!(model.report_panel != ReportPanel::Overview || model.report_panel == ReportPanel::Overview);
+    assert!(
+        model.report_panel != ReportPanel::Overview || model.report_panel == ReportPanel::Overview
+    );
 }
 
 #[test]

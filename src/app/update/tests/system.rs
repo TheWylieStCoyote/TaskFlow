@@ -67,18 +67,29 @@ fn test_undo_task_created() {
     assert_eq!(model.tasks.len(), 0);
 
     // Create a task
-    update(&mut model, Message::Task(TaskMessage::Create("Test task".into())));
+    update(
+        &mut model,
+        Message::Task(TaskMessage::Create("Test task".into())),
+    );
     assert_eq!(model.tasks.len(), 1);
 
     // Undo should remove the task
     update(&mut model, Message::System(SystemMessage::Undo));
     assert_eq!(model.tasks.len(), 0);
-    assert!(model.alerts.status_message.as_ref().is_some_and(|m| m.contains("Undone")));
+    assert!(model
+        .alerts
+        .status_message
+        .as_ref()
+        .is_some_and(|m| m.contains("Undone")));
 
     // Redo should restore it
     update(&mut model, Message::System(SystemMessage::Redo));
     assert_eq!(model.tasks.len(), 1);
-    assert!(model.alerts.status_message.as_ref().is_some_and(|m| m.contains("Redone")));
+    assert!(model
+        .alerts
+        .status_message
+        .as_ref()
+        .is_some_and(|m| m.contains("Redone")));
 }
 
 #[test]
@@ -117,7 +128,10 @@ fn test_undo_task_modified() {
 
     // Undo should restore original priority
     update(&mut model, Message::System(SystemMessage::Undo));
-    assert_eq!(model.tasks.get(&task_id).unwrap().priority, original_priority);
+    assert_eq!(
+        model.tasks.get(&task_id).unwrap().priority,
+        original_priority
+    );
 }
 
 #[test]

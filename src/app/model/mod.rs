@@ -46,12 +46,15 @@
 //! ```
 
 mod cache;
+mod editor;
 mod filtering;
 mod hierarchy;
 mod sample_data;
 mod storage;
 mod time_tracking;
 mod types;
+
+pub use editor::MultilineEditor;
 
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{

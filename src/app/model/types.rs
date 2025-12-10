@@ -289,6 +289,29 @@ impl Default for DescriptionEditorState {
     }
 }
 
+impl super::MultilineEditor for DescriptionEditorState {
+    fn buffer(&self) -> &[String] {
+        &self.buffer
+    }
+
+    fn buffer_mut(&mut self) -> &mut Vec<String> {
+        &mut self.buffer
+    }
+
+    fn cursor_line(&self) -> usize {
+        self.cursor_line
+    }
+
+    fn cursor_col(&self) -> usize {
+        self.cursor_col
+    }
+
+    fn set_cursor(&mut self, line: usize, col: usize) {
+        self.cursor_line = line;
+        self.cursor_col = col;
+    }
+}
+
 /// State for work log editor modal.
 #[derive(Debug, Clone)]
 pub struct WorkLogEditorState {
@@ -319,6 +342,29 @@ impl Default for WorkLogEditorState {
             cursor_col: 0,
             search_query: String::new(),
         }
+    }
+}
+
+impl super::MultilineEditor for WorkLogEditorState {
+    fn buffer(&self) -> &[String] {
+        &self.buffer
+    }
+
+    fn buffer_mut(&mut self) -> &mut Vec<String> {
+        &mut self.buffer
+    }
+
+    fn cursor_line(&self) -> usize {
+        self.cursor_line
+    }
+
+    fn cursor_col(&self) -> usize {
+        self.cursor_col
+    }
+
+    fn set_cursor(&mut self, line: usize, col: usize) {
+        self.cursor_line = line;
+        self.cursor_col = col;
     }
 }
 

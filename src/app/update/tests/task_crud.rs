@@ -166,3 +166,73 @@ fn test_task_duplicate() {
     // Verify it's a different task
     assert_ne!(new_task.id, task_id);
 }
+
+// ============================================================================
+// Task Move/Reorder Tests
+// ============================================================================
+
+#[test]
+fn test_move_task_up() {
+    use crate::app::UiMessage;
+
+    let mut model = create_test_model_with_tasks();
+    model.selected_index = 2;
+
+    update(&mut model, Message::Ui(UiMessage::MoveTaskUp));
+
+    // Selection should move up with the task
+    assert_eq!(model.selected_index, 1);
+}
+
+#[test]
+fn test_move_task_up_at_top() {
+    use crate::app::UiMessage;
+
+    let mut model = create_test_model_with_tasks();
+    model.selected_index = 0;
+
+    update(&mut model, Message::Ui(UiMessage::MoveTaskUp));
+
+    // Should stay at 0
+    assert_eq!(model.selected_index, 0);
+}
+
+#[test]
+fn test_move_task_down() {
+    use crate::app::UiMessage;
+
+    let mut model = create_test_model_with_tasks();
+    model.selected_index = 1;
+
+    update(&mut model, Message::Ui(UiMessage::MoveTaskDown));
+
+    // Selection should move down with the task
+    assert_eq!(model.selected_index, 2);
+}
+
+#[test]
+fn test_move_task_down_at_bottom() {
+    use crate::app::UiMessage;
+
+    let mut model = create_test_model_with_tasks();
+    let last_index = model.visible_tasks.len() - 1;
+    model.selected_index = last_index;
+
+    update(&mut model, Message::Ui(UiMessage::MoveTaskDown));
+
+    // Should stay at last index
+    assert_eq!(model.selected_index, last_index);
+}
+
+#[test]
+fn test_move_task_invalid_selection() {
+    use crate::app::UiMessage;
+
+    let mut model = create_test_model_with_tasks();
+    // Set selection out of bounds
+    model.selected_index = 100;
+
+    // Should not panic
+    update(&mut model, Message::Ui(UiMessage::MoveTaskUp));
+    update(&mut model, Message::Ui(UiMessage::MoveTaskDown));
+}

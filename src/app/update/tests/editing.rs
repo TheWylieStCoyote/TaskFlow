@@ -657,3 +657,229 @@ fn test_reschedule_next_monday() {
         "Should reschedule to a future date"
     );
 }
+
+// === Search Filter ===
+
+#[test]
+fn test_search_filter_set() {
+    let mut model = create_test_model_with_tasks();
+
+    // Start search mode
+    update(&mut model, Message::Ui(UiMessage::StartSearch));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert_eq!(model.input.target, InputTarget::Search);
+
+    // Type search query
+    model.input.buffer = "test query".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Search filter should be set
+    assert_eq!(
+        model.filtering.filter.search_text,
+        Some("test query".to_string())
+    );
+}
+
+#[test]
+fn test_search_filter_clear() {
+    let mut model = create_test_model_with_tasks();
+    model.filtering.filter.search_text = Some("existing search".to_string());
+
+    // Start search mode
+    update(&mut model, Message::Ui(UiMessage::StartSearch));
+
+    // Clear buffer
+    model.input.buffer.clear();
+    model.input.cursor = 0;
+
+    // Submit empty
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Search filter should be cleared
+    assert!(model.filtering.filter.search_text.is_none());
+}
+
+// === Project Operations ===
+
+#[test]
+fn test_create_project() {
+    use crate::app::Model;
+
+    let mut model = Model::new();
+    assert!(model.projects.is_empty());
+
+    // Start creating project
+    update(&mut model, Message::Ui(UiMessage::StartCreateProject));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert_eq!(model.input.target, InputTarget::Project);
+
+    // Type project name
+    model.input.buffer = "New Project".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Project should be created
+    assert_eq!(model.projects.len(), 1);
+    let project = model.projects.values().next().unwrap();
+    assert_eq!(project.name, "New Project");
+}
+
+#[test]
+fn test_edit_project_rename() {
+    use crate::domain::Project;
+
+    let mut model = create_test_model_with_tasks();
+
+    // Create a project
+    let project = Project::new("Original Name".to_string());
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
+
+    // Set sidebar selection so StartEditProject knows which project
+    model.selected_project = Some(project_id);
+
+    // Start editing project
+    update(&mut model, Message::Ui(UiMessage::StartEditProject));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::EditProject(_)));
+
+    // Type new name
+    model.input.buffer = "Renamed Project".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Project should be renamed
+    let renamed = model.projects.get(&project_id).unwrap();
+    assert_eq!(renamed.name, "Renamed Project");
+}
+
+// === Subtask Operations ===
+
+#[test]
+fn test_create_subtask() {
+    let mut model = create_test_model_with_tasks();
+    let parent_id = model.visible_tasks[0];
+    let initial_task_count = model.tasks.len();
+
+    // Start creating subtask
+    update(&mut model, Message::Ui(UiMessage::StartCreateSubtask));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::Subtask(_)));
+
+    // Type subtask name
+    model.input.buffer = "New Subtask".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Subtask should be created
+    assert_eq!(model.tasks.len(), initial_task_count + 1);
+
+    // Find the new subtask (it should have parent_task_id set)
+    let subtask = model
+        .tasks
+        .values()
+        .find(|t| t.parent_task_id == Some(parent_id));
+    assert!(subtask.is_some());
+    assert_eq!(subtask.unwrap().title, "New Subtask");
+}
+
+// === Scheduled Date Editing ===
+
+#[test]
+fn test_edit_scheduled_date() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+
+    // Start editing scheduled date
+    update(&mut model, Message::Ui(UiMessage::StartEditScheduledDate));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(
+        model.input.target,
+        InputTarget::EditScheduledDate(_)
+    ));
+
+    // Type a date
+    model.input.buffer = "2025-12-31".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Scheduled date should be set
+    let task = model.tasks.get(&task_id).unwrap();
+    assert_eq!(
+        task.scheduled_date,
+        Some(NaiveDate::from_ymd_opt(2025, 12, 31).unwrap())
+    );
+}
+
+#[test]
+fn test_clear_scheduled_date() {
+    let mut model = create_test_model_with_tasks();
+    let task_id = model.visible_tasks[0];
+
+    // Set initial scheduled date
+    model.tasks.get_mut(&task_id).unwrap().scheduled_date =
+        Some(NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+
+    // Start editing
+    update(&mut model, Message::Ui(UiMessage::StartEditScheduledDate));
+
+    // Clear
+    model.input.buffer.clear();
+    model.input.cursor = 0;
+
+    // Submit empty
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Scheduled date should be cleared
+    let task = model.tasks.get(&task_id).unwrap();
+    assert!(task.scheduled_date.is_none());
+}
+
+// === Quick Capture Mode ===
+
+#[test]
+fn test_quick_capture_creates_task_and_stays_in_mode() {
+    use crate::app::Model;
+
+    let mut model = Model::new();
+
+    // Enter quick capture mode
+    update(&mut model, Message::Ui(UiMessage::StartQuickCapture));
+
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert_eq!(model.input.target, InputTarget::QuickCapture);
+
+    // Type task
+    model.input.buffer = "Quick captured task".to_string();
+    model.input.cursor = model.input.buffer.len();
+
+    // Submit
+    update(&mut model, Message::Ui(UiMessage::SubmitInput));
+
+    // Task should be created
+    assert_eq!(model.tasks.len(), 1);
+    let task = model.tasks.values().next().unwrap();
+    assert_eq!(task.title, "Quick captured task");
+
+    // Should show confirmation message
+    assert!(model.alerts.status_message.is_some());
+
+    // Buffer should be cleared but still in quick capture mode
+    assert!(model.input.buffer.is_empty());
+}

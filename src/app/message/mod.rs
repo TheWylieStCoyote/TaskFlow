@@ -137,3 +137,79 @@ impl From<HabitMessage> for Message {
         Self::Habit(msg)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_focus_pane_default() {
+        let pane = FocusPane::default();
+        assert_eq!(pane, FocusPane::TaskList);
+    }
+
+    #[test]
+    fn test_focus_pane_equality() {
+        assert_eq!(FocusPane::TaskList, FocusPane::TaskList);
+        assert_eq!(FocusPane::Sidebar, FocusPane::Sidebar);
+        assert_ne!(FocusPane::TaskList, FocusPane::Sidebar);
+    }
+
+    #[test]
+    fn test_message_from_navigation() {
+        let nav_msg = NavigationMessage::Down;
+        let msg: Message = nav_msg.into();
+        assert!(matches!(msg, Message::Navigation(NavigationMessage::Down)));
+    }
+
+    #[test]
+    fn test_message_from_task() {
+        let task_msg = TaskMessage::Create("Test".to_string());
+        let msg: Message = task_msg.into();
+        assert!(matches!(msg, Message::Task(TaskMessage::Create(_))));
+    }
+
+    #[test]
+    fn test_message_from_ui() {
+        let ui_msg = UiMessage::ShowHelp;
+        let msg: Message = ui_msg.into();
+        assert!(matches!(msg, Message::Ui(UiMessage::ShowHelp)));
+    }
+
+    #[test]
+    fn test_message_from_system() {
+        let sys_msg = SystemMessage::Quit;
+        let msg: Message = sys_msg.into();
+        assert!(matches!(msg, Message::System(SystemMessage::Quit)));
+    }
+
+    #[test]
+    fn test_message_from_time() {
+        let time_msg = TimeMessage::StartTracking;
+        let msg: Message = time_msg.into();
+        assert!(matches!(msg, Message::Time(TimeMessage::StartTracking)));
+    }
+
+    #[test]
+    fn test_message_from_pomodoro() {
+        let pom_msg = PomodoroMessage::Start { goal_cycles: 4 };
+        let msg: Message = pom_msg.into();
+        assert!(matches!(
+            msg,
+            Message::Pomodoro(PomodoroMessage::Start { .. })
+        ));
+    }
+
+    #[test]
+    fn test_message_from_habit() {
+        let habit_msg = HabitMessage::Create("Exercise".to_string());
+        let msg: Message = habit_msg.into();
+        assert!(matches!(msg, Message::Habit(HabitMessage::Create(_))));
+    }
+
+    #[test]
+    fn test_message_none_variant() {
+        let msg = Message::None;
+        assert!(matches!(msg, Message::None));
+    }
+}

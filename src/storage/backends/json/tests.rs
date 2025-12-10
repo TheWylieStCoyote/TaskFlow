@@ -649,3 +649,233 @@ fn test_very_long_task_title() {
     let retrieved = backend.get_task(&task.id).unwrap().unwrap();
     assert_eq!(retrieved.title, long_title);
 }
+
+// ==================== Habit Repository Tests ====================
+
+#[test]
+fn test_habit_crud() {
+    use crate::domain::Habit;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    // Create
+    let habit = Habit::new("Exercise daily");
+    backend.create_habit(&habit).unwrap();
+
+    // Read
+    let retrieved = backend.get_habit(&habit.id).unwrap();
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().name, "Exercise daily");
+
+    // Update
+    let mut updated = habit.clone();
+    updated.name = "Exercise 30 min".to_string();
+    backend.update_habit(&updated).unwrap();
+
+    let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
+    assert_eq!(retrieved.name, "Exercise 30 min");
+
+    // Delete
+    backend.delete_habit(&habit.id).unwrap();
+    let retrieved = backend.get_habit(&habit.id).unwrap();
+    assert!(retrieved.is_none());
+}
+
+#[test]
+fn test_habit_list() {
+    use crate::domain::Habit;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit1 = Habit::new("Exercise");
+    let habit2 = Habit::new("Meditate");
+    backend.create_habit(&habit1).unwrap();
+    backend.create_habit(&habit2).unwrap();
+
+    let habits = backend.list_habits().unwrap();
+    assert_eq!(habits.len(), 2);
+}
+
+#[test]
+fn test_habit_list_active() {
+    use crate::domain::Habit;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit1 = Habit::new("Active habit");
+    let mut habit2 = Habit::new("Archived habit");
+    habit2.archived = true;
+
+    backend.create_habit(&habit1).unwrap();
+    backend.create_habit(&habit2).unwrap();
+
+    let active = backend.list_active_habits().unwrap();
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].name, "Active habit");
+}
+
+#[test]
+fn test_habit_duplicate_id_fails() {
+    use crate::domain::Habit;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit = Habit::new("Original");
+    backend.create_habit(&habit).unwrap();
+
+    let mut duplicate = Habit::new("Duplicate");
+    duplicate.id = habit.id;
+
+    let result = backend.create_habit(&duplicate);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_habit_update_not_found() {
+    use crate::domain::Habit;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit = Habit::new("Non-existent");
+    let result = backend.update_habit(&habit);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_habit_delete_not_found() {
+    use crate::domain::HabitId;
+    use crate::storage::HabitRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let result = backend.delete_habit(&HabitId::new());
+    assert!(result.is_err());
+}
+
+// ==================== Work Log Repository Tests ====================
+
+#[test]
+fn test_work_log_crud() {
+    use crate::domain::WorkLogEntry;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    // Create
+    let entry = WorkLogEntry::new(task.id, "Did some work");
+    backend.create_work_log(&entry).unwrap();
+
+    // Read
+    let retrieved = backend.get_work_log(&entry.id).unwrap();
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().content, "Did some work");
+
+    // Update
+    let mut updated = entry.clone();
+    updated.content = "Updated work description".to_string();
+    backend.update_work_log(&updated).unwrap();
+
+    let retrieved = backend.get_work_log(&entry.id).unwrap().unwrap();
+    assert_eq!(retrieved.content, "Updated work description");
+
+    // Delete
+    backend.delete_work_log(&entry.id).unwrap();
+    let retrieved = backend.get_work_log(&entry.id).unwrap();
+    assert!(retrieved.is_none());
+}
+
+#[test]
+fn test_work_log_list() {
+    use crate::domain::WorkLogEntry;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    let entry1 = WorkLogEntry::new(task.id, "Work 1");
+    let entry2 = WorkLogEntry::new(task.id, "Work 2");
+    backend.create_work_log(&entry1).unwrap();
+    backend.create_work_log(&entry2).unwrap();
+
+    let logs = backend.list_work_logs().unwrap();
+    assert_eq!(logs.len(), 2);
+}
+
+#[test]
+fn test_work_log_get_for_task() {
+    use crate::domain::WorkLogEntry;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let task1 = Task::new("Task 1");
+    let task2 = Task::new("Task 2");
+    backend.create_task(&task1).unwrap();
+    backend.create_task(&task2).unwrap();
+
+    let entry1 = WorkLogEntry::new(task1.id, "Work for task 1");
+    let entry2 = WorkLogEntry::new(task1.id, "More work for task 1");
+    let entry3 = WorkLogEntry::new(task2.id, "Work for task 2");
+    backend.create_work_log(&entry1).unwrap();
+    backend.create_work_log(&entry2).unwrap();
+    backend.create_work_log(&entry3).unwrap();
+
+    let logs = backend.get_work_logs_for_task(&task1.id).unwrap();
+    assert_eq!(logs.len(), 2);
+}
+
+#[test]
+fn test_work_log_duplicate_id_fails() {
+    use crate::domain::WorkLogEntry;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    let entry = WorkLogEntry::new(task.id, "Original");
+    backend.create_work_log(&entry).unwrap();
+
+    let mut duplicate = WorkLogEntry::new(task.id, "Duplicate");
+    duplicate.id = entry.id;
+
+    let result = backend.create_work_log(&duplicate);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_work_log_update_not_found() {
+    use crate::domain::WorkLogEntry;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    let entry = WorkLogEntry::new(task.id, "Non-existent");
+    let result = backend.update_work_log(&entry);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_work_log_delete_not_found() {
+    use crate::domain::WorkLogEntryId;
+    use crate::storage::WorkLogRepository;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let result = backend.delete_work_log(&WorkLogEntryId::new());
+    assert!(result.is_err());
+}

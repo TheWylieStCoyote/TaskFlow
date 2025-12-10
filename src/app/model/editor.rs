@@ -186,3 +186,276 @@ pub trait MultilineEditor {
         self.set_cursor(0, 0);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test editor implementation
+    struct TestEditor {
+        buffer: Vec<String>,
+        cursor_line: usize,
+        cursor_col: usize,
+    }
+
+    impl TestEditor {
+        fn new() -> Self {
+            Self {
+                buffer: vec![String::new()],
+                cursor_line: 0,
+                cursor_col: 0,
+            }
+        }
+    }
+
+    impl MultilineEditor for TestEditor {
+        fn buffer(&self) -> &[String] {
+            &self.buffer
+        }
+
+        fn buffer_mut(&mut self) -> &mut Vec<String> {
+            &mut self.buffer
+        }
+
+        fn cursor_line(&self) -> usize {
+            self.cursor_line
+        }
+
+        fn cursor_col(&self) -> usize {
+            self.cursor_col
+        }
+
+        fn set_cursor(&mut self, line: usize, col: usize) {
+            self.cursor_line = line;
+            self.cursor_col = col;
+        }
+    }
+
+    #[test]
+    fn test_insert_char() {
+        let mut editor = TestEditor::new();
+        editor.insert_char('a');
+        editor.insert_char('b');
+        editor.insert_char('c');
+
+        assert_eq!(editor.content(), "abc");
+        assert_eq!(editor.cursor_col(), 3);
+    }
+
+    #[test]
+    fn test_backspace() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 3);
+
+        editor.backspace();
+        assert_eq!(editor.content(), "ab");
+        assert_eq!(editor.cursor_col(), 2);
+    }
+
+    #[test]
+    fn test_backspace_at_line_start_joins_lines() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(1, 0);
+
+        editor.backspace();
+        assert_eq!(editor.content(), "line1line2");
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.cursor_col(), 5);
+    }
+
+    #[test]
+    fn test_delete_char() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 1);
+
+        editor.delete_char();
+        assert_eq!(editor.content(), "ac");
+    }
+
+    #[test]
+    fn test_delete_char_at_line_end_joins_lines() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(0, 5);
+
+        editor.delete_char();
+        assert_eq!(editor.content(), "line1line2");
+    }
+
+    #[test]
+    fn test_cursor_left() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 2);
+
+        editor.cursor_left();
+        assert_eq!(editor.cursor_col(), 1);
+    }
+
+    #[test]
+    fn test_cursor_left_wraps_to_previous_line() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(1, 0);
+
+        editor.cursor_left();
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.cursor_col(), 5);
+    }
+
+    #[test]
+    fn test_cursor_right() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 1);
+
+        editor.cursor_right();
+        assert_eq!(editor.cursor_col(), 2);
+    }
+
+    #[test]
+    fn test_cursor_right_wraps_to_next_line() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(0, 5);
+
+        editor.cursor_right();
+        assert_eq!(editor.cursor_line(), 1);
+        assert_eq!(editor.cursor_col(), 0);
+    }
+
+    #[test]
+    fn test_cursor_up() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(1, 2);
+
+        editor.cursor_up();
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.cursor_col(), 2);
+    }
+
+    #[test]
+    fn test_cursor_down() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2");
+        editor.set_cursor(0, 2);
+
+        editor.cursor_down();
+        assert_eq!(editor.cursor_line(), 1);
+        assert_eq!(editor.cursor_col(), 2);
+    }
+
+    #[test]
+    fn test_cursor_home() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 3);
+
+        editor.cursor_home();
+        assert_eq!(editor.cursor_col(), 0);
+    }
+
+    #[test]
+    fn test_cursor_end() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abc");
+        editor.set_cursor(0, 0);
+
+        editor.cursor_end();
+        assert_eq!(editor.cursor_col(), 3);
+    }
+
+    #[test]
+    fn test_newline() {
+        let mut editor = TestEditor::new();
+        editor.set_content("abcdef");
+        editor.set_cursor(0, 3);
+
+        editor.newline();
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.buffer[0], "abc");
+        assert_eq!(editor.buffer[1], "def");
+        assert_eq!(editor.cursor_line(), 1);
+        assert_eq!(editor.cursor_col(), 0);
+    }
+
+    #[test]
+    fn test_clear() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2\nline3");
+        editor.set_cursor(1, 2);
+
+        editor.clear();
+        assert_eq!(editor.buffer.len(), 1);
+        assert_eq!(editor.buffer[0], "");
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.cursor_col(), 0);
+    }
+
+    #[test]
+    fn test_content() {
+        let mut editor = TestEditor::new();
+        editor.buffer = vec![
+            "line1".to_string(),
+            "line2".to_string(),
+            "line3".to_string(),
+        ];
+
+        assert_eq!(editor.content(), "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn test_set_content() {
+        let mut editor = TestEditor::new();
+        editor.set_content("line1\nline2\nline3");
+
+        assert_eq!(editor.buffer.len(), 3);
+        assert_eq!(editor.buffer[0], "line1");
+        assert_eq!(editor.buffer[1], "line2");
+        assert_eq!(editor.buffer[2], "line3");
+    }
+
+    #[test]
+    fn test_set_content_empty() {
+        let mut editor = TestEditor::new();
+        editor.set_content("");
+
+        assert_eq!(editor.buffer.len(), 1);
+        assert_eq!(editor.buffer[0], "");
+    }
+
+    #[test]
+    fn test_ensure_buffer_not_empty() {
+        let mut editor = TestEditor::new();
+        editor.buffer.clear();
+
+        editor.ensure_buffer_not_empty();
+        assert_eq!(editor.buffer.len(), 1);
+    }
+
+    #[test]
+    fn test_cursor_up_clamps_column() {
+        let mut editor = TestEditor::new();
+        editor.set_content("ab\nline two");
+        editor.set_cursor(1, 8);
+
+        editor.cursor_up();
+        assert_eq!(editor.cursor_line(), 0);
+        assert_eq!(editor.cursor_col(), 2); // Clamped to shorter line
+    }
+
+    #[test]
+    fn test_cursor_down_clamps_column() {
+        let mut editor = TestEditor::new();
+        editor.set_content("long line\nab");
+        editor.set_cursor(0, 9);
+
+        editor.cursor_down();
+        assert_eq!(editor.cursor_line(), 1);
+        assert_eq!(editor.cursor_col(), 2); // Clamped to shorter line
+    }
+}

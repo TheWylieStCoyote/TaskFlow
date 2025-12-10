@@ -2,7 +2,9 @@
 
 use chrono::Datelike;
 
-use crate::app::{update::update, Message, Model, NavigationMessage, TaskMessage, ViewId};
+use crate::app::{
+    update::update, Message, Model, NavigationMessage, TaskMessage, UiMessage, ViewId,
+};
 use crate::domain::{Task, TaskStatus};
 
 #[test]
@@ -137,4 +139,120 @@ fn test_calendar_task_actions_when_focused() {
 
     // Task should now be Done
     assert_eq!(model.tasks.get(&task_id).unwrap().status, TaskStatus::Done);
+}
+
+#[test]
+fn test_calendar_prev_day() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarPrevDay));
+
+    assert_eq!(model.calendar_state.selected_day, Some(14));
+}
+
+#[test]
+fn test_calendar_prev_day_wraps_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(1);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarPrevDay));
+
+    // Should wrap to May 31
+    assert_eq!(model.calendar_state.month, 5);
+    assert_eq!(model.calendar_state.selected_day, Some(31));
+}
+
+#[test]
+fn test_calendar_prev_day_wraps_year() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 1;
+    model.calendar_state.selected_day = Some(1);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarPrevDay));
+
+    // Should wrap to December 31 of previous year
+    assert_eq!(model.calendar_state.year, 2023);
+    assert_eq!(model.calendar_state.month, 12);
+    assert_eq!(model.calendar_state.selected_day, Some(31));
+}
+
+#[test]
+fn test_calendar_next_day() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarNextDay));
+
+    assert_eq!(model.calendar_state.selected_day, Some(16));
+}
+
+#[test]
+fn test_calendar_next_day_wraps_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(30); // June has 30 days
+
+    update(&mut model, Message::Ui(UiMessage::CalendarNextDay));
+
+    // Should wrap to July 1
+    assert_eq!(model.calendar_state.month, 7);
+    assert_eq!(model.calendar_state.selected_day, Some(1));
+}
+
+#[test]
+fn test_calendar_next_day_wraps_year() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 12;
+    model.calendar_state.selected_day = Some(31);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarNextDay));
+
+    // Should wrap to January 1 of next year
+    assert_eq!(model.calendar_state.year, 2025);
+    assert_eq!(model.calendar_state.month, 1);
+    assert_eq!(model.calendar_state.selected_day, Some(1));
+}
+
+#[test]
+fn test_calendar_nav_does_nothing_outside_calendar_view() {
+    let mut model = Model::new();
+    model.current_view = ViewId::TaskList; // Not calendar
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+
+    update(&mut model, Message::Ui(UiMessage::CalendarNextDay));
+
+    // Should not change
+    assert_eq!(model.calendar_state.selected_day, Some(15));
+}
+
+#[test]
+fn test_calendar_nav_with_no_selected_day() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = None;
+
+    update(&mut model, Message::Ui(UiMessage::CalendarNextDay));
+
+    // Should stay None
+    assert!(model.calendar_state.selected_day.is_none());
 }

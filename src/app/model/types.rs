@@ -673,4 +673,230 @@ mod tests {
         };
         assert!(state.to_date().is_none());
     }
+
+    // ==================== RunningState Tests ====================
+
+    #[test]
+    fn test_running_state_default() {
+        let state = RunningState::default();
+        assert_eq!(state, RunningState::Running);
+    }
+
+    #[test]
+    fn test_running_state_variants() {
+        assert_ne!(RunningState::Running, RunningState::Quitting);
+    }
+
+    // ==================== TimelineZoom Tests ====================
+
+    #[test]
+    fn test_timeline_zoom_default() {
+        let zoom = TimelineZoom::default();
+        assert_eq!(zoom, TimelineZoom::Day);
+    }
+
+    // ==================== TimelineState Tests ====================
+
+    #[test]
+    fn test_timeline_state_default() {
+        let state = TimelineState::default();
+        assert_eq!(state.viewport_days, 21);
+        assert_eq!(state.selected_task_index, 0);
+        assert!(!state.show_dependencies);
+        assert_eq!(state.zoom_level, TimelineZoom::Day);
+    }
+
+    // ==================== AlertState Tests ====================
+
+    #[test]
+    fn test_alert_state_default() {
+        let state = AlertState::default();
+        assert!(!state.show_overdue);
+        assert!(state.storage_error.is_none());
+        assert!(!state.show_storage_error);
+        assert!(state.error_message.is_none());
+        assert!(state.status_message.is_none());
+    }
+
+    // ==================== ViewSelectionState Tests ====================
+
+    #[test]
+    fn test_view_selection_state_default() {
+        let state = ViewSelectionState::default();
+        assert_eq!(state.kanban_column, 0);
+        assert_eq!(state.kanban_task_index, 0);
+        assert_eq!(state.eisenhower_quadrant, 0);
+        assert_eq!(state.weekly_planner_day, 0);
+    }
+
+    // ==================== InputState Tests ====================
+
+    #[test]
+    fn test_input_state_is_editing() {
+        let mut state = InputState::default();
+        assert!(!state.is_editing());
+
+        state.mode = InputMode::Editing;
+        assert!(state.is_editing());
+    }
+
+    #[test]
+    fn test_input_state_clear() {
+        let mut state = InputState {
+            mode: InputMode::Editing,
+            target: InputTarget::Search,
+            buffer: "test search".to_string(),
+            cursor: 5,
+        };
+
+        state.clear();
+
+        assert_eq!(state.mode, InputMode::Normal);
+        assert_eq!(state.target, InputTarget::default());
+        assert!(state.buffer.is_empty());
+        assert_eq!(state.cursor, 0);
+    }
+
+    // ==================== MultiSelectState Tests ====================
+
+    #[test]
+    fn test_multi_select_state_is_active() {
+        let mut state = MultiSelectState::default();
+        assert!(!state.is_active());
+
+        state.mode = true;
+        assert!(state.is_active());
+    }
+
+    #[test]
+    fn test_multi_select_state_has_selection() {
+        use crate::domain::TaskId;
+
+        let mut state = MultiSelectState::default();
+        assert!(!state.has_selection());
+
+        state.selected.insert(TaskId::new());
+        assert!(state.has_selection());
+    }
+
+    #[test]
+    fn test_multi_select_state_clear() {
+        use crate::domain::TaskId;
+
+        let mut state = MultiSelectState {
+            mode: true,
+            selected: HashSet::from([TaskId::new(), TaskId::new()]),
+        };
+
+        state.clear();
+
+        assert!(!state.mode);
+        assert!(state.selected.is_empty());
+    }
+
+    // ==================== ImportState Tests ====================
+
+    #[test]
+    fn test_import_state_has_pending() {
+        use crate::storage::ImportResult;
+
+        let mut state = ImportState::default();
+        assert!(!state.has_pending());
+
+        state.pending = Some(ImportResult {
+            imported: Vec::new(),
+            skipped: Vec::new(),
+            errors: Vec::new(),
+        });
+        assert!(state.has_pending());
+    }
+
+    #[test]
+    fn test_import_state_clear() {
+        use crate::storage::ImportResult;
+
+        let mut state = ImportState {
+            pending: Some(ImportResult {
+                imported: Vec::new(),
+                skipped: Vec::new(),
+                errors: Vec::new(),
+            }),
+            show_preview: true,
+        };
+
+        state.clear();
+
+        assert!(state.pending.is_none());
+        assert!(!state.show_preview);
+    }
+
+    // ==================== DescriptionEditorState Tests ====================
+
+    #[test]
+    fn test_description_editor_state_default() {
+        let state = DescriptionEditorState::default();
+        assert!(!state.visible);
+        assert_eq!(state.buffer, vec![String::new()]);
+        assert_eq!(state.cursor_line, 0);
+        assert_eq!(state.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_description_editor_implements_multiline_editor() {
+        use super::super::MultilineEditor;
+
+        let mut state = DescriptionEditorState::default();
+        state.insert_char('a');
+        state.insert_char('b');
+        state.insert_char('c');
+
+        assert_eq!(state.content(), "abc");
+    }
+
+    // ==================== WorkLogEditorState Tests ====================
+
+    #[test]
+    fn test_work_log_editor_state_default() {
+        let state = WorkLogEditorState::default();
+        assert!(!state.visible);
+        assert_eq!(state.selected, 0);
+        assert_eq!(state.buffer, vec![String::new()]);
+        assert!(state.search_query.is_empty());
+    }
+
+    #[test]
+    fn test_work_log_editor_implements_multiline_editor() {
+        use super::super::MultilineEditor;
+
+        let mut state = WorkLogEditorState::default();
+        state.set_content("line 1\nline 2");
+
+        assert_eq!(state.buffer.len(), 2);
+        assert_eq!(state.content(), "line 1\nline 2");
+    }
+
+    // ==================== StorageState Tests ====================
+
+    #[test]
+    fn test_storage_state_debug() {
+        let state = StorageState::default();
+        let debug_str = format!("{:?}", state);
+        assert!(debug_str.contains("StorageState"));
+    }
+
+    #[test]
+    fn test_storage_state_clone() {
+        use std::path::PathBuf;
+
+        let state = StorageState {
+            backend: None,
+            data_path: Some(PathBuf::from("/tmp/test")),
+            dirty: true,
+        };
+
+        let cloned = state.clone();
+        assert!(cloned.backend.is_none()); // Backend doesn't clone
+        assert_eq!(cloned.data_path, Some(PathBuf::from("/tmp/test")));
+        assert!(cloned.dirty);
+    }
 }

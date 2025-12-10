@@ -21,24 +21,32 @@
 //! - `import_export` - Import/export and reports
 //! - `cascade` - Cascade completion (parent/child)
 //! - `time_tracking` - Time entry management and cleanup
+//! - `habit` - Habit tracking operations
 
 mod bulk;
 mod calendar;
 mod cascade;
 mod chains;
 mod editing;
+mod editors;
+mod filters;
+mod habit;
 mod import_export;
 mod keybindings;
+mod macros;
 mod move_to_project;
 mod navigation;
 mod pomodoro;
 mod project;
 mod recurrence;
+mod reviews;
 mod sidebar;
 mod subtasks;
 mod system;
 mod tag_filter;
 mod task_crud;
+mod templates;
+mod time_log;
 mod time_tracking;
 mod ui;
 mod undo_redo;

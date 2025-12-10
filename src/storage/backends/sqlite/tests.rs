@@ -3,9 +3,13 @@
 use rusqlite::{params, Connection};
 use tempfile::tempdir;
 
-use crate::domain::{Filter, Priority, Project, Tag, Task, TaskId, TaskStatus, TimeEntry};
+use crate::domain::{
+    Filter, Habit, HabitId, Priority, Project, Tag, Task, TaskId, TaskStatus, TimeEntry,
+    WorkLogEntry,
+};
 use crate::storage::{
-    ProjectRepository, StorageBackend, TagRepository, TaskRepository, TimeEntryRepository,
+    HabitRepository, ProjectRepository, StorageBackend, TagRepository, TaskRepository,
+    TimeEntryRepository, WorkLogRepository,
 };
 
 use super::SqliteBackend;
@@ -529,4 +533,224 @@ fn test_sqlite_tag_migration_from_json() {
 
     let tag2_tasks = backend.get_tasks_by_tag("tag2").unwrap();
     assert_eq!(tag2_tasks.len(), 1);
+}
+
+// ==================== Habit Repository Tests ====================
+
+#[test]
+fn test_sqlite_habit_crud() {
+    let (_dir, mut backend) = create_test_backend();
+
+    // Create
+    let habit = Habit::new("Exercise");
+    backend.create_habit(&habit).unwrap();
+
+    // Read
+    let retrieved = backend.get_habit(&habit.id).unwrap();
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().name, "Exercise");
+
+    // Update
+    let mut updated_habit = habit.clone();
+    updated_habit.name = "Morning Exercise".to_string();
+    backend.update_habit(&updated_habit).unwrap();
+
+    let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
+    assert_eq!(retrieved.name, "Morning Exercise");
+
+    // Delete
+    backend.delete_habit(&habit.id).unwrap();
+    assert!(backend.get_habit(&habit.id).unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_habit_list() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit1 = Habit::new("Exercise");
+    let habit2 = Habit::new("Read");
+    backend.create_habit(&habit1).unwrap();
+    backend.create_habit(&habit2).unwrap();
+
+    let habits = backend.list_habits().unwrap();
+    assert_eq!(habits.len(), 2);
+}
+
+#[test]
+fn test_sqlite_habit_list_active() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let active = Habit::new("Active habit");
+    let mut archived = Habit::new("Archived habit");
+    archived.archived = true;
+
+    backend.create_habit(&active).unwrap();
+    backend.create_habit(&archived).unwrap();
+
+    let active_habits = backend.list_active_habits().unwrap();
+    assert_eq!(active_habits.len(), 1);
+    assert_eq!(active_habits[0].name, "Active habit");
+}
+
+#[test]
+fn test_sqlite_habit_with_check_ins() {
+    use chrono::Utc;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let mut habit = Habit::new("Exercise");
+    habit.check_in_today(true, Some("30 minutes".to_string()));
+
+    backend.create_habit(&habit).unwrap();
+
+    // Retrieve and verify check-in was stored
+    let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
+    assert_eq!(retrieved.check_ins.len(), 1);
+
+    let today = Utc::now().date_naive();
+    let check_in = retrieved.check_ins.get(&today).unwrap();
+    assert!(check_in.completed);
+    assert_eq!(check_in.note, Some("30 minutes".to_string()));
+}
+
+#[test]
+fn test_sqlite_habit_update_check_ins() {
+    use chrono::Utc;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let mut habit = Habit::new("Exercise");
+    habit.check_in_today(true, None);
+    backend.create_habit(&habit).unwrap();
+
+    // Add more check-ins
+    habit.check_in_today(false, Some("Skipped".to_string()));
+    backend.update_habit(&habit).unwrap();
+
+    // Verify update
+    let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
+    let today = Utc::now().date_naive();
+    let check_in = retrieved.check_ins.get(&today).unwrap();
+    assert!(!check_in.completed);
+}
+
+#[test]
+fn test_sqlite_habit_update_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit = Habit::new("Non-existent");
+    let result = backend.update_habit(&habit);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_sqlite_habit_delete_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let result = backend.delete_habit(&HabitId::new());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_sqlite_habit_with_tags_and_color() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let habit = Habit::new("Exercise")
+        .with_color("#ff0000")
+        .with_tags(vec!["health".into(), "fitness".into()]);
+
+    backend.create_habit(&habit).unwrap();
+
+    let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
+    assert_eq!(retrieved.color, Some("#ff0000".to_string()));
+    assert!(retrieved.tags.contains(&"health".to_string()));
+    assert!(retrieved.tags.contains(&"fitness".to_string()));
+}
+
+// ==================== Work Log Repository Tests ====================
+
+#[test]
+fn test_sqlite_work_log_crud() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    // Create
+    let entry = WorkLogEntry::new(task.id, "Did some work");
+    backend.create_work_log(&entry).unwrap();
+
+    // Read
+    let retrieved = backend.get_work_log(&entry.id).unwrap();
+    assert!(retrieved.is_some());
+    assert_eq!(retrieved.unwrap().summary(), "Did some work");
+
+    // Update
+    let mut updated_entry = entry.clone();
+    updated_entry.content = "Did more work".to_string();
+    backend.update_work_log(&updated_entry).unwrap();
+
+    let retrieved = backend.get_work_log(&entry.id).unwrap().unwrap();
+    assert_eq!(retrieved.summary(), "Did more work");
+
+    // Delete
+    backend.delete_work_log(&entry.id).unwrap();
+    assert!(backend.get_work_log(&entry.id).unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_work_log_list() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    let entry1 = WorkLogEntry::new(task.id, "Work 1");
+    let entry2 = WorkLogEntry::new(task.id, "Work 2");
+    backend.create_work_log(&entry1).unwrap();
+    backend.create_work_log(&entry2).unwrap();
+
+    let logs = backend.list_work_logs().unwrap();
+    assert_eq!(logs.len(), 2);
+}
+
+#[test]
+fn test_sqlite_work_log_get_for_task() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let task1 = Task::new("Task 1");
+    let task2 = Task::new("Task 2");
+    backend.create_task(&task1).unwrap();
+    backend.create_task(&task2).unwrap();
+
+    let entry1 = WorkLogEntry::new(task1.id, "Work on task 1");
+    let entry2 = WorkLogEntry::new(task2.id, "Work on task 2");
+    backend.create_work_log(&entry1).unwrap();
+    backend.create_work_log(&entry2).unwrap();
+
+    let logs = backend.get_work_logs_for_task(&task1.id).unwrap();
+    assert_eq!(logs.len(), 1);
+    assert_eq!(logs[0].summary(), "Work on task 1");
+}
+
+#[test]
+fn test_sqlite_work_log_update_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let task = Task::new("Test task");
+    backend.create_task(&task).unwrap();
+
+    let entry = WorkLogEntry::new(task.id, "Non-existent");
+    let result = backend.update_work_log(&entry);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_sqlite_work_log_delete_not_found() {
+    use crate::domain::WorkLogEntryId;
+
+    let (_dir, mut backend) = create_test_backend();
+
+    let result = backend.delete_work_log(&WorkLogEntryId::new());
+    assert!(result.is_err());
 }

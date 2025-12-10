@@ -555,4 +555,234 @@ mod tests {
         assert!(content.contains("[y]es"), "Yes option should be visible");
         assert!(content.contains("[n]o"), "No option should be visible");
     }
+
+    // QuickCaptureDialog tests
+    #[test]
+    fn test_quick_capture_dialog_renders() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("Buy groceries", 13, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Quick Capture"), "Title should be visible");
+        assert!(
+            content.contains("Buy groceries"),
+            "Input text should be visible"
+        );
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_shows_hints() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("", 0, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("#tag"), "Tag hint should be visible");
+        assert!(
+            content.contains("@project"),
+            "Project hint should be visible"
+        );
+        assert!(
+            content.contains("!priority"),
+            "Priority hint should be visible"
+        );
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_shows_cursor() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("test", 2, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains('▌'), "Cursor indicator should be visible");
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_empty_input() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("", 0, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains('▌'),
+            "Cursor should be visible with empty input"
+        );
+    }
+
+    // OverdueAlert tests
+    #[test]
+    fn test_overdue_alert_singular() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(1, vec!["Buy milk".to_string()], &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("1 overdue task"),
+            "Should show singular form"
+        );
+        assert!(content.contains("Buy milk"), "Task title should be visible");
+    }
+
+    #[test]
+    fn test_overdue_alert_plural() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(
+            3,
+            vec![
+                "Task 1".to_string(),
+                "Task 2".to_string(),
+                "Task 3".to_string(),
+            ],
+            &theme,
+        );
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("3 overdue tasks"),
+            "Should show plural form"
+        );
+    }
+
+    #[test]
+    fn test_overdue_alert_truncates_long_list() {
+        let theme = test_theme();
+        let tasks: Vec<String> = (1..=10).map(|i| format!("Task {i}")).collect();
+        let alert = OverdueAlert::new(10, tasks, &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("and 5 more"), "Should show overflow count");
+    }
+
+    #[test]
+    fn test_overdue_alert_shows_dismiss_message() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(1, vec!["Task".to_string()], &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Press any key"),
+            "Dismiss message should be visible"
+        );
+    }
+
+    // StorageErrorAlert tests
+    #[test]
+    fn test_storage_error_alert_renders() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("File not found: tasks.json", &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Storage Error"), "Title should be visible");
+        assert!(
+            content.contains("File not found"),
+            "Error message should be visible"
+        );
+    }
+
+    #[test]
+    fn test_storage_error_alert_shows_sample_data_message() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("Error", &theme);
+        let buffer = render_widget(alert, 70, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("sample data"),
+            "Sample data message should be visible"
+        );
+    }
+
+    #[test]
+    fn test_storage_error_alert_shows_continue_message() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("Error", &theme);
+        let buffer = render_widget(alert, 70, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Press any key"),
+            "Continue message should be visible"
+        );
+    }
+
+    // Edge cases for cursor handling
+    #[test]
+    fn test_input_dialog_cursor_at_end() {
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "hello", 5, &theme);
+        let buffer = render_widget(dialog, 40, 5);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("hello"),
+            "Text should be visible with cursor at end"
+        );
+    }
+
+    #[test]
+    fn test_input_dialog_cursor_beyond_length() {
+        let theme = test_theme();
+        // Cursor position beyond string length should be clamped
+        let dialog = InputDialog::new("Test", "abc", 100, &theme);
+        let _ = render_widget(dialog, 40, 5);
+        // Should not panic
+    }
+
+    #[test]
+    fn test_quick_capture_cursor_beyond_length() {
+        let theme = test_theme();
+        // Cursor position beyond string length should be clamped
+        let dialog = QuickCaptureDialog::new("abc", 100, &theme);
+        let _ = render_widget(dialog, 80, 10);
+        // Should not panic
+    }
+
+    // Additional InputTarget tests
+    #[test]
+    fn test_input_target_scheduled_date() {
+        let task_id = TaskId::new();
+        let target = InputTarget::EditScheduledDate(task_id);
+        assert!(matches!(target, InputTarget::EditScheduledDate(_)));
+    }
+
+    #[test]
+    fn test_input_target_import_format() {
+        use crate::storage::ImportFormat;
+        let target = InputTarget::ImportFilePath(ImportFormat::Csv);
+        assert!(matches!(target, InputTarget::ImportFilePath(_)));
+    }
+
+    #[test]
+    fn test_input_target_snooze() {
+        let task_id = TaskId::new();
+        let target = InputTarget::SnoozeTask(task_id);
+        assert!(matches!(target, InputTarget::SnoozeTask(_)));
+    }
+
+    #[test]
+    fn test_input_target_estimate() {
+        let task_id = TaskId::new();
+        let target = InputTarget::EditEstimate(task_id);
+        assert!(matches!(target, InputTarget::EditEstimate(_)));
+    }
+
+    #[test]
+    fn test_input_target_new_habit() {
+        let target = InputTarget::NewHabit;
+        assert!(matches!(target, InputTarget::NewHabit));
+    }
+
+    #[test]
+    fn test_input_target_quick_capture() {
+        let target = InputTarget::QuickCapture;
+        assert!(matches!(target, InputTarget::QuickCapture));
+    }
 }

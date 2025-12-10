@@ -50,8 +50,8 @@ fn test_cancel_import_resets_state() {
 
     assert!(!model.show_import_preview);
     assert!(model.pending_import.is_none());
-    assert!(model.status_message.is_some());
-    assert!(model.status_message.as_ref().unwrap().contains("cancelled"));
+    assert!(model.alerts.status_message.is_some());
+    assert!(model.alerts.status_message.as_ref().unwrap().contains("cancelled"));
 }
 
 #[test]
@@ -74,9 +74,9 @@ fn test_confirm_import_adds_tasks() {
     assert!(model.pending_import.is_none());
     assert_eq!(model.tasks.len(), 1);
     assert!(model.tasks.values().any(|t| t.title == "Imported Task"));
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
-        .status_message
+        .alerts.status_message
         .as_ref()
         .unwrap()
         .contains("Imported 1"));
@@ -102,7 +102,7 @@ fn test_confirm_import_multiple_tasks() {
 
     assert_eq!(model.tasks.len(), 3);
     assert!(model
-        .status_message
+        .alerts.status_message
         .as_ref()
         .unwrap()
         .contains("Imported 3"));
@@ -121,9 +121,9 @@ fn test_import_empty_path_shows_error() {
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Should show error, not crash
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
-        .status_message
+        .alerts.status_message
         .as_ref()
         .unwrap()
         .contains("No file path"));

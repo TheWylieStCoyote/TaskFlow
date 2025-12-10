@@ -222,7 +222,7 @@ pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     // Escape cancels macro slot selection
     if key.code == KeyCode::Esc {
         model.pending_macro_slot = None;
-        model.status_message = Some("Macro cancelled".to_string());
+        model.alerts.status_message = Some("Macro cancelled".to_string());
         return Message::None;
     }
     Message::None

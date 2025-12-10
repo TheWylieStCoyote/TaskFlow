@@ -545,7 +545,7 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
     }
 
     // Show status message if available, otherwise show normal footer
-    if let Some(ref msg) = model.status_message {
+    if let Some(ref msg) = model.alerts.status_message {
         let footer =
             Paragraph::new(msg.clone()).style(Style::default().fg(theme.colors.accent.to_color()));
         frame.render_widget(footer, area);

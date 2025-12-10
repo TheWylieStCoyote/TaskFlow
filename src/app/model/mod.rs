@@ -63,7 +63,6 @@ pub use types::{
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use chrono::{NaiveDate, Utc};
 
@@ -250,12 +249,6 @@ pub struct Model {
     /// State for the calendar view
     pub calendar_state: CalendarState,
 
-    // Status message for user feedback
-    /// Temporary status message to display to user
-    pub status_message: Option<String>,
-    /// When the status message was set (for auto-clear after timeout)
-    pub status_message_set_at: Option<Instant>,
-
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
     pub macro_state: MacroState,
@@ -396,8 +389,6 @@ impl Model {
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
-            status_message: None,
-            status_message_set_at: None,
             macro_state: MacroState::new(),
             pending_macro_slot: None,
             template_manager: TemplateManager::new(),

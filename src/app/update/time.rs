@@ -85,9 +85,9 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
                 ));
                 // Automatically enter focus mode
                 model.focus_mode = true;
-                model.status_message = Some(format!("Pomodoro started: {goal_cycles} cycle goal"));
+                model.alerts.status_message = Some(format!("Pomodoro started: {goal_cycles} cycle goal"));
             } else {
-                model.status_message = Some("Select a task to start Pomodoro".to_string());
+                model.alerts.status_message = Some("Select a task to start Pomodoro".to_string());
             }
         }
         PomodoroMessage::Pause => {
@@ -138,7 +138,7 @@ pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
         PomodoroMessage::Stop => {
             if model.pomodoro.session.is_some() {
                 model.pomodoro.session = None;
-                model.status_message = Some("Pomodoro session stopped".to_string());
+                model.alerts.status_message = Some("Pomodoro session stopped".to_string());
             }
         }
         PomodoroMessage::Tick => {
@@ -240,12 +240,12 @@ fn transition_pomodoro_phase(model: &mut Model) {
 
         // Check if goal reached
         if session.goal_reached() && next_phase == PomodoroPhase::Work {
-            model.status_message = Some(format!(
+            model.alerts.status_message = Some(format!(
                 "🎊 Goal reached! {} cycles completed. Keep going or stop.",
                 session.cycles_completed
             ));
         } else {
-            model.status_message = Some(message);
+            model.alerts.status_message = Some(message);
         }
     }
 }
@@ -329,7 +329,7 @@ mod tests {
         handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
 
         assert!(model.pomodoro.session.is_none());
-        assert!(model.status_message.is_some());
+        assert!(model.alerts.status_message.is_some());
     }
 
     #[test]

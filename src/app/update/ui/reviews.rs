@@ -89,7 +89,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.toggle_complete();
                 });
-                model.status_message = Some("Task completed!".to_string());
+                model.alerts.status_message = Some("Task completed!".to_string());
 
                 // Adjust selection if we just removed an item
                 let new_count = task_ids.len().saturating_sub(1);

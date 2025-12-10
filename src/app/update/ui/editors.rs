@@ -96,7 +96,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
 
                 // Don't save empty entries
                 if content.trim().is_empty() {
-                    model.status_message = Some("Cannot save empty work log entry".to_string());
+                    model.alerts.status_message = Some("Cannot save empty work log entry".to_string());
                     return;
                 }
 
@@ -109,7 +109,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                         model.sync_work_log(&entry);
                         model.work_logs.insert(entry.id, entry);
                         model.work_log_editor.selected = 0; // New entry will be at top
-                        model.status_message = Some("Work log entry added".to_string());
+                        model.alerts.status_message = Some("Work log entry added".to_string());
                     }
                     WorkLogMode::Edit => {
                         let entries = model.work_logs_for_task(&task_id);
@@ -124,7 +124,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                                     after: Box::new(after.clone()),
                                 });
                                 model.sync_work_log(&after);
-                                model.status_message = Some("Work log entry updated".to_string());
+                                model.alerts.status_message = Some("Work log entry updated".to_string());
                             }
                         }
                     }
@@ -156,7 +156,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                             {
                                 model.work_log_editor.selected = remaining.len() - 1;
                             }
-                            model.status_message = Some("Work log entry deleted".to_string());
+                            model.alerts.status_message = Some("Work log entry deleted".to_string());
                         }
                     }
                 }
@@ -408,7 +408,7 @@ pub fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
                     task.description = description;
                 });
 
-                model.status_message = Some("Description updated".to_string());
+                model.alerts.status_message = Some("Description updated".to_string());
             }
             model.description_editor.visible = false;
             model.description_editor.buffer = vec![String::new()];

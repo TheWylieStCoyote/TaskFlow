@@ -51,7 +51,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                 if let Some(entry) = entries.get(model.time_log.selected) {
                     // Can't edit end time of running entry
                     if entry.is_running() {
-                        model.status_message =
+                        model.alerts.status_message =
                             Some("Cannot edit end time of running entry".to_string());
                         return;
                     }
@@ -121,10 +121,10 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                                 after: Box::new(after.clone()),
                             });
                             model.sync_time_entry(&after);
-                            model.status_message = Some("Time entry updated".to_string());
+                            model.alerts.status_message = Some("Time entry updated".to_string());
                         }
                     } else {
-                        model.status_message = Some("Invalid time format. Use HH:MM".to_string());
+                        model.alerts.status_message = Some("Invalid time format. Use HH:MM".to_string());
                         return;
                     }
                 }
@@ -149,7 +149,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                 model.sync_time_entry(&entry);
                 model.time_entries.insert(entry.id, entry);
                 model.time_log.selected = 0; // New entry will be at top (sorted by date)
-                model.status_message = Some("Added 30-minute time entry".to_string());
+                model.alerts.status_message = Some("Added 30-minute time entry".to_string());
             }
         }
         UiMessage::TimeLogDelete => {
@@ -161,7 +161,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
 
                         // Can't delete if it's the active entry
                         if model.active_time_entry.as_ref() == Some(&entry_id) {
-                            model.status_message =
+                            model.alerts.status_message =
                                 Some("Cannot delete running time entry".to_string());
                             model.time_log.mode = TimeLogMode::Browse;
                             return;
@@ -178,7 +178,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                             if model.time_log.selected >= remaining.len() && !remaining.is_empty() {
                                 model.time_log.selected = remaining.len() - 1;
                             }
-                            model.status_message = Some("Time entry deleted".to_string());
+                            model.alerts.status_message = Some("Time entry deleted".to_string());
                         }
                     }
                 }

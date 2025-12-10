@@ -156,9 +156,9 @@ fn test_delete_blocked_for_task_with_subtasks() {
     assert!(!model.show_confirm_delete);
 
     // Error message should be set
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
-        .status_message
+        .alerts.status_message
         .as_ref()
         .unwrap()
         .contains("has subtasks"));

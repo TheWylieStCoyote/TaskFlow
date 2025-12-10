@@ -155,9 +155,10 @@ impl Default for TimelineState {
     }
 }
 
-/// State for alert dialogs and error messages.
+/// State for alert dialogs and status messages.
 ///
-/// Groups related fields for managing alert visibility and messages.
+/// Groups related fields for managing alert visibility, error messages,
+/// and transient status messages displayed to the user.
 #[derive(Debug, Clone, Default)]
 pub struct AlertState {
     /// Whether overdue tasks alert is visible (shown at startup)
@@ -168,6 +169,10 @@ pub struct AlertState {
     pub show_storage_error: bool,
     /// Error message to display in footer (shown in red)
     pub error_message: Option<String>,
+    /// Temporary status message to display to user (success/info)
+    pub status_message: Option<String>,
+    /// When the status message was set (for auto-clear after timeout)
+    pub status_message_set_at: Option<std::time::Instant>,
 }
 
 /// State for view-specific selections.

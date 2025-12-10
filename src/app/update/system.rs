@@ -32,15 +32,15 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
             // Handle periodic updates (e.g., timer display)
 
             // Clear status message after timeout (3 seconds)
-            if model.status_message.is_some() {
-                if let Some(set_at) = model.status_message_set_at {
+            if model.alerts.status_message.is_some() {
+                if let Some(set_at) = model.alerts.status_message_set_at {
                     if set_at.elapsed().as_secs() >= 3 {
-                        model.status_message = None;
-                        model.status_message_set_at = None;
+                        model.alerts.status_message = None;
+                        model.alerts.status_message_set_at = None;
                     }
                 } else {
                     // Message exists but no timestamp - set it now
-                    model.status_message_set_at = Some(std::time::Instant::now());
+                    model.alerts.status_message_set_at = Some(std::time::Instant::now());
                 }
             }
         }
@@ -80,9 +80,9 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::RefreshStorage => {
             let changes = model.refresh_storage();
             if changes > 0 {
-                model.status_message = Some(format!("Refreshed: {changes} change(s) detected"));
+                model.alerts.status_message = Some(format!("Refreshed: {changes} change(s) detected"));
             } else {
-                model.status_message = Some("No external changes detected".to_string());
+                model.alerts.status_message = Some("No external changes detected".to_string());
             }
         }
     }
@@ -231,7 +231,7 @@ fn handle_undo(model: &mut Model) {
         let description = action_description(&action);
         apply_undo_action(model, action, UndoDirection::Undo);
         model.refresh_visible_tasks();
-        model.status_message = Some(format!("Undone: {description}"));
+        model.alerts.status_message = Some(format!("Undone: {description}"));
     }
 }
 
@@ -240,7 +240,7 @@ fn handle_redo(model: &mut Model) {
         let description = action_description(&action);
         apply_undo_action(model, action, UndoDirection::Redo);
         model.refresh_visible_tasks();
-        model.status_message = Some(format!("Redone: {description}"));
+        model.alerts.status_message = Some(format!("Redone: {description}"));
     }
 }
 
@@ -258,19 +258,19 @@ fn handle_export_csv(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported {} tasks to {}",
                         tasks.len(),
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -289,19 +289,19 @@ fn handle_export_ics(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported {} tasks to {}",
                         tasks.len(),
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -319,18 +319,18 @@ fn handle_export_chains_dot(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported task chains to {} (use Graphviz to render)",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -348,18 +348,18 @@ fn handle_export_chains_mermaid(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported task chains to {} (Mermaid diagram)",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -382,18 +382,18 @@ fn handle_export_report_markdown(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported analytics report to {}",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -416,18 +416,18 @@ fn handle_export_report_html(model: &mut Model) {
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported analytics report to {}",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -454,7 +454,7 @@ pub fn handle_execute_import(model: &mut Model) {
 
     let file_path = model.input.buffer.trim();
     if file_path.is_empty() {
-        model.status_message = Some("No file path provided".to_string());
+        model.alerts.status_message = Some("No file path provided".to_string());
         model.input.mode = InputMode::Normal;
         model.input.target = InputTarget::Task;
         return;
@@ -464,7 +464,7 @@ pub fn handle_execute_import(model: &mut Model) {
     let file = match File::open(file_path) {
         Ok(f) => f,
         Err(e) => {
-            model.status_message = Some(format!("Failed to open file: {e}"));
+            model.alerts.status_message = Some(format!("Failed to open file: {e}"));
             model.input.mode = InputMode::Normal;
             model.input.target = InputTarget::Task;
             return;
@@ -483,7 +483,7 @@ pub fn handle_execute_import(model: &mut Model) {
         ImportFormat::Csv => match import_from_csv(reader, &options) {
             Ok(r) => r,
             Err(e) => {
-                model.status_message = Some(format!("Import failed: {e}"));
+                model.alerts.status_message = Some(format!("Import failed: {e}"));
                 model.input.mode = InputMode::Normal;
                 model.input.target = InputTarget::Task;
                 return;
@@ -492,7 +492,7 @@ pub fn handle_execute_import(model: &mut Model) {
         ImportFormat::Ics => match import_from_ics(reader, &options) {
             Ok(r) => r,
             Err(e) => {
-                model.status_message = Some(format!("Import failed: {e}"));
+                model.alerts.status_message = Some(format!("Import failed: {e}"));
                 model.input.mode = InputMode::Normal;
                 model.input.target = InputTarget::Task;
                 return;
@@ -510,7 +510,7 @@ pub fn handle_execute_import(model: &mut Model) {
 
     // If there are tasks to import, show preview
     if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {
-        model.status_message = Some("No tasks found in file".to_string());
+        model.alerts.status_message = Some("No tasks found in file".to_string());
         return;
     }
 
@@ -521,7 +521,7 @@ pub fn handle_execute_import(model: &mut Model) {
 
     model.pending_import = Some(result);
     model.show_import_preview = true;
-    model.status_message = Some(format!(
+    model.alerts.status_message = Some(format!(
         "Preview: {import_count} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
     ));
 }
@@ -539,12 +539,12 @@ fn handle_confirm_import(model: &mut Model) {
         model.dirty = true;
         model.show_import_preview = false;
         model.refresh_visible_tasks();
-        model.status_message = Some(format!("Imported {count} tasks"));
+        model.alerts.status_message = Some(format!("Imported {count} tasks"));
     }
 }
 
 fn handle_cancel_import(model: &mut Model) {
     model.pending_import = None;
     model.show_import_preview = false;
-    model.status_message = Some("Import cancelled".to_string());
+    model.alerts.status_message = Some("Import cancelled".to_string());
 }

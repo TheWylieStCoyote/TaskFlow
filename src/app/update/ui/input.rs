@@ -37,7 +37,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
                 // Show confirmation and stay ready for another capture
-                model.status_message = Some(format!("Task created: {title}"));
+                model.alerts.status_message = Some(format!("Task created: {title}"));
                 model.input.buffer.clear();
                 model.input.cursor = 0;
                 // Don't reset input_mode - stay in QuickCapture mode
@@ -135,15 +135,15 @@ pub fn handle_submit_input(model: &mut Model) {
                 });
                 // Show feedback
                 if let Some(mins) = estimate {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Estimate set to {}",
                         super::format_duration_input(mins)
                     ));
                 } else {
-                    model.status_message = Some("Estimate cleared".to_string());
+                    model.alerts.status_message = Some("Estimate cleared".to_string());
                 }
             } else {
-                model.status_message =
+                model.alerts.status_message =
                     Some("Invalid duration format (try: 30m, 1h, 1h30m)".to_string());
             }
             model.refresh_visible_tasks();
@@ -173,7 +173,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.modify_project_with_undo(&project_id, |project| {
                     project.name.clone_from(&new_name);
                 });
-                model.status_message = Some(format!("Renamed project to '{new_name}'"));
+                model.alerts.status_message = Some(format!("Renamed project to '{new_name}'"));
             }
         }
         InputTarget::Search => {
@@ -364,7 +364,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.saved_filters.insert(filter_id.clone(), saved_filter);
                 model.active_saved_filter = Some(filter_id);
                 model.dirty = true;
-                model.status_message = Some(format!("Saved filter: {input}"));
+                model.alerts.status_message = Some(format!("Saved filter: {input}"));
             }
         }
         InputTarget::SnoozeTask(task_id) => {
@@ -375,16 +375,16 @@ pub fn handle_submit_input(model: &mut Model) {
                     task.clear_snooze();
                 }
                 model.sync_task_by_id(&task_id);
-                model.status_message = Some("Snooze cleared".to_string());
+                model.alerts.status_message = Some("Snooze cleared".to_string());
             } else if let Some(date) = parse_date(&input) {
                 // Set snooze date
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.snooze_until_date(date);
                 }
                 model.sync_task_by_id(&task_id);
-                model.status_message = Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
+                model.alerts.status_message = Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
             } else {
-                model.status_message = Some("Invalid date format".to_string());
+                model.alerts.status_message = Some("Invalid date format".to_string());
             }
             model.refresh_visible_tasks();
         }
@@ -395,7 +395,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.sync_habit(&habit);
                 model.habits.insert(id, habit);
                 model.refresh_visible_habits();
-                model.status_message = Some("Habit created".to_string());
+                model.alerts.status_message = Some("Habit created".to_string());
             }
         }
         InputTarget::EditHabit(habit_id) => {
@@ -407,7 +407,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 }
                 model.sync_habit_by_id(&habit_id);
                 model.refresh_visible_habits();
-                model.status_message = Some("Habit updated".to_string());
+                model.alerts.status_message = Some("Habit updated".to_string());
             }
         }
     }

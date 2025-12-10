@@ -6,7 +6,7 @@ use crate::app::{Model, UndoAction};
 pub fn show_delete_confirm(model: &mut Model) {
     if let Some(task_id) = model.selected_task_id() {
         if model.has_subtasks(&task_id) {
-            model.status_message =
+            model.alerts.status_message =
                 Some("Cannot delete: task has subtasks. Delete subtasks first.".to_string());
         } else {
             model.show_confirm_delete = true;
@@ -57,7 +57,7 @@ pub fn confirm_delete(model: &mut Model) {
             } else {
                 task_title
             };
-            model.status_message = Some(format!("Deleted: {display_title}"));
+            model.alerts.status_message = Some(format!("Deleted: {display_title}"));
         }
         model.refresh_visible_tasks();
     }

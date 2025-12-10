@@ -42,7 +42,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 model.active_saved_filter = Some(filter_id);
                 model.saved_filter_picker.visible = false;
                 model.refresh_visible_tasks();
-                model.status_message = Some(format!("Applied filter: {filter_name}"));
+                model.alerts.status_message = Some(format!("Applied filter: {filter_name}"));
             }
         }
         UiMessage::SaveCurrentFilter => {
@@ -78,7 +78,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                         model.saved_filters.len().saturating_sub(1);
                 }
 
-                model.status_message = Some(format!("Deleted filter: {name}"));
+                model.alerts.status_message = Some(format!("Deleted filter: {name}"));
             }
         }
         UiMessage::ClearSavedFilter => {
@@ -86,7 +86,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
             model.filter = crate::domain::Filter::default();
             model.sort = crate::domain::SortSpec::default();
             model.refresh_visible_tasks();
-            model.status_message = Some("Filter cleared".to_string());
+            model.alerts.status_message = Some("Filter cleared".to_string());
         }
         _ => {}
     }

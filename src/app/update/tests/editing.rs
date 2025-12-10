@@ -493,7 +493,7 @@ fn test_edit_estimate_invalid_keeps_old() {
 
     // Should show error message
     assert!(model
-        .status_message
+        .alerts.status_message
         .as_ref()
         .is_some_and(|m| m.contains("Invalid")));
 }
@@ -613,7 +613,7 @@ fn test_reschedule_tomorrow() {
     let task = model.tasks.get(&task_id).unwrap();
     let tomorrow = today + chrono::Duration::days(1);
     assert_eq!(task.due_date, Some(tomorrow));
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
 }
 
 #[test]

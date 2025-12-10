@@ -220,7 +220,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.input.cursor = model.input.buffer.len();
                 }
             } else {
-                model.status_message = Some("Select a project from the sidebar first".to_string());
+                model.alerts.status_message = Some("Select a project from the sidebar first".to_string());
             }
         }
         UiMessage::DeleteProject => {
@@ -253,12 +253,12 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.selected_project = None;
                     model.dirty = true;
                     model.refresh_visible_tasks();
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Deleted project '{project_name}' (tasks unassigned)"
                     ));
                 }
             } else {
-                model.status_message = Some("Select a project from the sidebar first".to_string());
+                model.alerts.status_message = Some("Select a project from the sidebar first".to_string());
             }
         }
         UiMessage::StartEditTask => {
@@ -698,7 +698,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     task.clear_snooze();
                 }
                 model.sync_task_by_id(&task_id);
-                model.status_message = Some("Snooze cleared".to_string());
+                model.alerts.status_message = Some("Snooze cleared".to_string());
                 model.refresh_visible_tasks();
             }
         }
@@ -710,7 +710,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(tomorrow);
                 });
-                model.status_message = Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
+                model.alerts.status_message = Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
                 model.refresh_visible_tasks();
             }
         }
@@ -720,7 +720,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(next_week);
                 });
-                model.status_message =
+                model.alerts.status_message =
                     Some(format!("Rescheduled to {}", next_week.format("%b %d")));
                 model.refresh_visible_tasks();
             }
@@ -742,7 +742,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(next_monday);
                 });
-                model.status_message =
+                model.alerts.status_message =
                     Some(format!("Rescheduled to {}", next_monday.format("%b %d")));
                 model.refresh_visible_tasks();
             }
@@ -894,7 +894,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     // Find this task's position in visible_tasks
                     if let Some(pos) = model.visible_tasks.iter().position(|id| *id == next_id) {
                         model.selected_index = pos;
-                        model.status_message = Some("→ Next in chain".to_string());
+                        model.alerts.status_message = Some("→ Next in chain".to_string());
                     }
                 }
             }
@@ -913,7 +913,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     // Find this task's position in visible_tasks
                     if let Some(pos) = model.visible_tasks.iter().position(|id| *id == prev_id) {
                         model.selected_index = pos;
-                        model.status_message = Some("← Previous in chain".to_string());
+                        model.alerts.status_message = Some("← Previous in chain".to_string());
                     }
                 }
             }

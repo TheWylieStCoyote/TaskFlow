@@ -39,6 +39,52 @@ impl Default for CalendarState {
     }
 }
 
+impl CalendarState {
+    /// Returns the number of days in the current month.
+    #[must_use]
+    pub fn days_in_month(&self) -> u32 {
+        // Get first day of next month, subtract one day
+        let (next_year, next_month) = if self.month == 12 {
+            (self.year + 1, 1)
+        } else {
+            (self.year, self.month + 1)
+        };
+        NaiveDate::from_ymd_opt(next_year, next_month, 1)
+            .and_then(|d| d.checked_sub_signed(Duration::days(1)))
+            .map_or(31, |d| d.day())
+    }
+
+    /// Validates and clamps the selected day to be within the valid range for the month.
+    ///
+    /// Returns the clamped day value (1 to days_in_month).
+    #[must_use]
+    pub fn validated_day(&self) -> Option<u32> {
+        self.selected_day
+            .map(|day| day.clamp(1, self.days_in_month()))
+    }
+
+    /// Returns true if the current state represents a valid calendar date.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        if !(1..=12).contains(&self.month) {
+            return false;
+        }
+        if let Some(day) = self.selected_day {
+            if day < 1 || day > self.days_in_month() {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Creates a NaiveDate from the current state, if valid.
+    #[must_use]
+    pub fn to_date(&self) -> Option<NaiveDate> {
+        self.selected_day
+            .and_then(|day| NaiveDate::from_ymd_opt(self.year, self.month, day))
+    }
+}
+
 /// Application lifecycle state.
 ///
 /// Indicates whether the application is running or in the process
@@ -273,4 +319,104 @@ pub struct HabitViewState {
     pub show_analytics: bool,
     /// Whether to show archived habits
     pub show_archived: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calendar_state_days_in_month() {
+        // Test various months
+        let mut state = CalendarState::default();
+
+        state.year = 2024;
+        state.month = 1; // January
+        assert_eq!(state.days_in_month(), 31);
+
+        state.month = 2; // February (leap year 2024)
+        assert_eq!(state.days_in_month(), 29);
+
+        state.year = 2023;
+        state.month = 2; // February (non-leap year)
+        assert_eq!(state.days_in_month(), 28);
+
+        state.month = 4; // April
+        assert_eq!(state.days_in_month(), 30);
+    }
+
+    #[test]
+    fn test_calendar_state_is_valid() {
+        let mut state = CalendarState::default();
+
+        // Valid default state
+        assert!(state.is_valid());
+
+        // Invalid month
+        state.month = 0;
+        assert!(!state.is_valid());
+
+        state.month = 13;
+        assert!(!state.is_valid());
+
+        // Invalid day for month
+        state.month = 2;
+        state.year = 2023;
+        state.selected_day = Some(30); // Feb doesn't have 30 days
+        assert!(!state.is_valid());
+
+        // Valid day
+        state.selected_day = Some(28);
+        assert!(state.is_valid());
+
+        // No day selected is valid
+        state.selected_day = None;
+        assert!(state.is_valid());
+    }
+
+    #[test]
+    fn test_calendar_state_validated_day() {
+        let mut state = CalendarState::default();
+        state.year = 2023;
+        state.month = 2; // February with 28 days
+
+        // Day within range
+        state.selected_day = Some(15);
+        assert_eq!(state.validated_day(), Some(15));
+
+        // Day too high gets clamped
+        state.selected_day = Some(31);
+        assert_eq!(state.validated_day(), Some(28));
+
+        // Day too low gets clamped
+        state.selected_day = Some(0);
+        assert_eq!(state.validated_day(), Some(1));
+
+        // None stays None
+        state.selected_day = None;
+        assert_eq!(state.validated_day(), None);
+    }
+
+    #[test]
+    fn test_calendar_state_to_date() {
+        let mut state = CalendarState::default();
+        state.year = 2024;
+        state.month = 3;
+        state.selected_day = Some(15);
+
+        let date = state.to_date();
+        assert!(date.is_some());
+        let date = date.unwrap();
+        assert_eq!(date.year(), 2024);
+        assert_eq!(date.month(), 3);
+        assert_eq!(date.day(), 15);
+
+        // Invalid date returns None
+        state.selected_day = Some(32);
+        assert!(state.to_date().is_none());
+
+        // No day returns None
+        state.selected_day = None;
+        assert!(state.to_date().is_none());
+    }
 }

@@ -15,8 +15,8 @@ use ratatui::{
 
 use crate::app::{Model, ViewId};
 use crate::config::Theme;
-use crate::ui::primitives::panel_block;
 use crate::domain::{Task, TaskId};
+use crate::ui::primitives::panel_block;
 
 pub use item::{project_header_to_list_item, task_to_list_item, TaskItemContext};
 

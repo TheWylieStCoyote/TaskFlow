@@ -18,8 +18,8 @@ use ratatui::{
 };
 
 use crate::config::Theme;
-use crate::ui::primitives::panel_block;
 use crate::domain::{Priority, TaskStatus};
+use crate::ui::primitives::panel_block;
 
 use super::stats::{format_duration, DashboardStats};
 use super::Dashboard;

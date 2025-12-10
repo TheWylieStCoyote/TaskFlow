@@ -27,7 +27,6 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::QuickCapture => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
-                let title = task.title.clone();
                 let task_id = task.id;
                 // Insert first (moves task), then sync by id
                 model
@@ -37,7 +36,9 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
                 // Show confirmation and stay ready for another capture
-                model.alerts.status_message = Some(format!("Task created: {title}"));
+                // Get title from HashMap to avoid extra clone
+                let title = model.tasks.get(&task_id).map(|t| t.title.as_str());
+                model.alerts.status_message = title.map(|t| format!("Task created: {t}"));
                 model.input.buffer.clear();
                 model.input.cursor = 0;
                 // Don't reset input_mode - stay in QuickCapture mode

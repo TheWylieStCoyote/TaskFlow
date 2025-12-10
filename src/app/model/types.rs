@@ -328,20 +328,32 @@ mod tests {
     #[test]
     fn test_calendar_state_days_in_month() {
         // Test various months
-        let mut state = CalendarState::default();
-
-        state.year = 2024;
-        state.month = 1; // January
+        let state = CalendarState {
+            year: 2024,
+            month: 1, // January
+            ..Default::default()
+        };
         assert_eq!(state.days_in_month(), 31);
 
-        state.month = 2; // February (leap year 2024)
+        let state = CalendarState {
+            year: 2024,
+            month: 2, // February (leap year 2024)
+            ..Default::default()
+        };
         assert_eq!(state.days_in_month(), 29);
 
-        state.year = 2023;
-        state.month = 2; // February (non-leap year)
+        let state = CalendarState {
+            year: 2023,
+            month: 2, // February (non-leap year)
+            ..Default::default()
+        };
         assert_eq!(state.days_in_month(), 28);
 
-        state.month = 4; // April
+        let state = CalendarState {
+            year: 2023,
+            month: 4, // April
+            ..Default::default()
+        };
         assert_eq!(state.days_in_month(), 30);
     }
 
@@ -376,33 +388,51 @@ mod tests {
 
     #[test]
     fn test_calendar_state_validated_day() {
-        let mut state = CalendarState::default();
-        state.year = 2023;
-        state.month = 2; // February with 28 days
-
         // Day within range
-        state.selected_day = Some(15);
+        let state = CalendarState {
+            year: 2023,
+            month: 2, // February with 28 days
+            selected_day: Some(15),
+            ..Default::default()
+        };
         assert_eq!(state.validated_day(), Some(15));
 
         // Day too high gets clamped
-        state.selected_day = Some(31);
+        let state = CalendarState {
+            year: 2023,
+            month: 2,
+            selected_day: Some(31),
+            ..Default::default()
+        };
         assert_eq!(state.validated_day(), Some(28));
 
         // Day too low gets clamped
-        state.selected_day = Some(0);
+        let state = CalendarState {
+            year: 2023,
+            month: 2,
+            selected_day: Some(0),
+            ..Default::default()
+        };
         assert_eq!(state.validated_day(), Some(1));
 
         // None stays None
-        state.selected_day = None;
+        let state = CalendarState {
+            year: 2023,
+            month: 2,
+            selected_day: None,
+            ..Default::default()
+        };
         assert_eq!(state.validated_day(), None);
     }
 
     #[test]
     fn test_calendar_state_to_date() {
-        let mut state = CalendarState::default();
-        state.year = 2024;
-        state.month = 3;
-        state.selected_day = Some(15);
+        let state = CalendarState {
+            year: 2024,
+            month: 3,
+            selected_day: Some(15),
+            ..Default::default()
+        };
 
         let date = state.to_date();
         assert!(date.is_some());
@@ -412,11 +442,21 @@ mod tests {
         assert_eq!(date.day(), 15);
 
         // Invalid date returns None
-        state.selected_day = Some(32);
+        let state = CalendarState {
+            year: 2024,
+            month: 3,
+            selected_day: Some(32),
+            ..Default::default()
+        };
         assert!(state.to_date().is_none());
 
         // No day returns None
-        state.selected_day = None;
+        let state = CalendarState {
+            year: 2024,
+            month: 3,
+            selected_day: None,
+            ..Default::default()
+        };
         assert!(state.to_date().is_none());
     }
 }

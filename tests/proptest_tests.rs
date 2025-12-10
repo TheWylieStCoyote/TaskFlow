@@ -230,9 +230,9 @@ proptest! {
         prop_assert_eq!(&retrieved.tags, &task.tags);
     }
 
-    /// Property: List tasks returns all created tasks
+    /// Property: List tasks returns all created tasks (including empty case)
     #[test]
-    fn prop_list_returns_all_tasks(tasks in prop::collection::vec(task_strategy(), 1..20)) {
+    fn prop_list_returns_all_tasks(tasks in prop::collection::vec(task_strategy(), 0..20)) {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test.json");
         let mut backend = create_backend(BackendType::Json, &path).unwrap();
@@ -261,10 +261,10 @@ proptest! {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(30))]
 
-    /// Property: Filtering by status returns correct subset
+    /// Property: Filtering by status returns correct subset (including empty case)
     #[test]
     fn prop_filter_by_status_correct(
-        tasks in prop::collection::vec(task_strategy(), 1..20),
+        tasks in prop::collection::vec(task_strategy(), 0..20),
         filter_status in status_strategy(),
     ) {
         let dir = tempdir().unwrap();
@@ -297,7 +297,7 @@ proptest! {
     /// Property: Filtering by priority returns correct subset
     #[test]
     fn prop_filter_by_priority_correct(
-        tasks in prop::collection::vec(task_strategy(), 1..20),
+        tasks in prop::collection::vec(task_strategy(), 0..20),
         filter_priority in priority_strategy(),
     ) {
         let dir = tempdir().unwrap();
@@ -459,7 +459,7 @@ proptest! {
     /// Property: Combining status and priority filters returns intersection
     #[test]
     fn prop_combined_status_priority_filter(
-        tasks in prop::collection::vec(task_strategy(), 1..20),
+        tasks in prop::collection::vec(task_strategy(), 0..20),
         filter_status in status_strategy(),
         filter_priority in priority_strategy(),
     ) {
@@ -597,7 +597,8 @@ proptest! {
 
 use taskflow::domain::Recurrence;
 
-/// Strategy for generating recurrence patterns
+/// Strategy for generating recurrence patterns.
+/// Uses full day range (1-31) to test boundary cases like month-end dates.
 fn recurrence_strategy() -> impl Strategy<Value = Recurrence> {
     prop_oneof![
         Just(Recurrence::Daily),
@@ -608,8 +609,8 @@ fn recurrence_strategy() -> impl Strategy<Value = Recurrence> {
                 .into_iter()
                 .collect()
         }),
-        (1u32..29).prop_map(|day| Recurrence::Monthly { day }),
-        (1u32..13, 1u32..29).prop_map(|(month, day)| Recurrence::Yearly { month, day }),
+        (1u32..32).prop_map(|day| Recurrence::Monthly { day }),
+        (1u32..13, 1u32..32).prop_map(|(month, day)| Recurrence::Yearly { month, day }),
     ]
 }
 
@@ -894,11 +895,19 @@ proptest! {
 
 use chrono::NaiveDate;
 
-/// Strategy for generating dates within a reasonable range
+/// Strategy for generating dates within a reasonable range.
+/// Generates all possible days (1-31) and clamps invalid dates to the last valid day
+/// of the month, ensuring we test boundary cases like month-end and leap years.
 fn date_strategy() -> impl Strategy<Value = NaiveDate> {
-    (2020i32..2030, 1u32..13, 1u32..29).prop_map(|(year, month, day)| {
-        NaiveDate::from_ymd_opt(year, month, day)
-            .unwrap_or_else(|| NaiveDate::from_ymd_opt(year, month, 1).unwrap())
+    (2020i32..2030, 1u32..13, 1u32..32).prop_map(|(year, month, day)| {
+        // Try the exact date first, then fall back to the last valid day of the month
+        NaiveDate::from_ymd_opt(year, month, day).unwrap_or_else(|| {
+            // Find the last valid day of this month by trying backwards
+            (1..=31)
+                .rev()
+                .find_map(|d| NaiveDate::from_ymd_opt(year, month, d))
+                .expect("every month has at least one valid day")
+        })
     })
 }
 

@@ -8,17 +8,21 @@ use crate::domain::{Priority, Project, Task, TaskStatus};
 fn create_test_model() -> Model {
     let mut model = Model::new();
 
+    // Use dates that are safely within the date range regardless of timezone
+    // Using 2-3 days ago ensures they're always within a 7-day window
+    let base_date = chrono::Utc::now() - chrono::Duration::days(2);
+
     // Add some tasks with various states
     let mut task1 = Task::new("Task 1");
     task1.status = TaskStatus::Done;
-    task1.completed_at = Some(chrono::Utc::now());
+    task1.completed_at = Some(base_date);
     task1.tags = vec!["work".to_string(), "urgent".to_string()];
     task1.actual_minutes = 60;
     model.tasks.insert(task1.id, task1);
 
     let mut task2 = Task::new("Task 2");
     task2.status = TaskStatus::Done;
-    task2.completed_at = Some(chrono::Utc::now() - chrono::Duration::days(1));
+    task2.completed_at = Some(base_date - chrono::Duration::days(1));
     task2.tags = vec!["work".to_string()];
     task2.priority = Priority::High;
     task2.actual_minutes = 30;
@@ -114,12 +118,9 @@ fn test_completion_trend() {
 
     let trend = engine.compute_completion_trend(start, end);
 
-    assert!(
-        !trend.completions_by_day.is_empty()
-            || model.tasks.values().all(|t| t.completed_at.is_none())
-    );
-    // total_completed returns u32, so just verify it's callable
-    let _ = trend.total_completed();
+    // We have 2 completed tasks in create_test_model()
+    assert!(!trend.completions_by_day.is_empty());
+    assert_eq!(trend.total_completed(), 2);
 }
 
 #[test]
@@ -132,11 +133,17 @@ fn test_velocity_metrics() {
 
     let velocity = engine.compute_velocity(start, end);
 
-    // Should have some weekly data
-    assert!(
-        !velocity.weekly_velocity.is_empty()
-            || model.tasks.values().all(|t| t.completed_at.is_none())
-    );
+    // Should have weekly data with 2 completed tasks
+    assert!(!velocity.weekly_velocity.is_empty());
+    // Average should be positive since we have completions
+    assert!(velocity.avg_weekly > 0.0);
+    // Total completed across all weeks should be 2
+    let total: u32 = velocity
+        .weekly_velocity
+        .iter()
+        .map(|(_, count)| count)
+        .sum();
+    assert_eq!(total, 2);
 }
 
 #[test]
@@ -164,8 +171,10 @@ fn test_time_analytics() {
 
     let analytics = engine.compute_time_analytics(start, end);
 
-    // total_minutes is u32, verify analytics computation completes
-    let _ = analytics.total_minutes;
+    // Task1 has 60 minutes, Task2 has 30 minutes = 90 total
+    assert!(analytics.total_minutes >= 90);
+    // Should have time tracked by project (at least the None/"unassigned" project)
+    assert!(!analytics.by_project.is_empty());
 }
 
 #[test]
@@ -220,7 +229,8 @@ fn test_current_streak_calculation() {
     let engine = AnalyticsEngine::new(&model);
     let insights = engine.compute_insights();
 
-    // Should have a 3-day streak
-    assert!(insights.current_streak >= 1);
-    assert!(insights.longest_streak >= 1);
+    // Should have exactly a 3-day streak (today, yesterday, day before)
+    assert_eq!(insights.current_streak, 3);
+    assert_eq!(insights.longest_streak, 3);
+    assert_eq!(insights.total_completed, 3);
 }

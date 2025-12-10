@@ -1,29 +1,34 @@
-//! WorkLogRepository implementation for YAML backend.
+//! WorkLogRepository blanket implementation for in-memory backends.
 
 use crate::domain::{TaskId, WorkLogEntry, WorkLogEntryId};
 use crate::storage::{StorageError, StorageResult, WorkLogRepository};
 
-use super::YamlBackend;
+use super::InMemoryBackend;
 
-impl WorkLogRepository for YamlBackend {
+impl<B: InMemoryBackend> WorkLogRepository for B {
     fn create_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
-        if self.data.work_logs.iter().any(|e| e.id == entry.id) {
+        if self.data().work_logs.iter().any(|e| e.id == entry.id) {
             return Err(StorageError::already_exists(
                 "WorkLogEntry",
                 entry.id.0.to_string(),
             ));
         }
-        self.data.work_logs.push(entry.clone());
+        self.data_mut().work_logs.push(entry.clone());
         self.mark_dirty();
         Ok(())
     }
 
     fn get_work_log(&self, id: &WorkLogEntryId) -> StorageResult<Option<WorkLogEntry>> {
-        Ok(self.data.work_logs.iter().find(|e| &e.id == id).cloned())
+        Ok(self.data().work_logs.iter().find(|e| &e.id == id).cloned())
     }
 
     fn update_work_log(&mut self, entry: &WorkLogEntry) -> StorageResult<()> {
-        if let Some(existing) = self.data.work_logs.iter_mut().find(|e| e.id == entry.id) {
+        if let Some(existing) = self
+            .data_mut()
+            .work_logs
+            .iter_mut()
+            .find(|e| e.id == entry.id)
+        {
             *existing = entry.clone();
             self.mark_dirty();
             Ok(())
@@ -36,9 +41,9 @@ impl WorkLogRepository for YamlBackend {
     }
 
     fn delete_work_log(&mut self, id: &WorkLogEntryId) -> StorageResult<()> {
-        let len_before = self.data.work_logs.len();
-        self.data.work_logs.retain(|e| &e.id != id);
-        if self.data.work_logs.len() == len_before {
+        let len_before = self.data().work_logs.len();
+        self.data_mut().work_logs.retain(|e| &e.id != id);
+        if self.data().work_logs.len() == len_before {
             return Err(StorageError::not_found("WorkLogEntry", id.0.to_string()));
         }
         self.mark_dirty();
@@ -47,7 +52,7 @@ impl WorkLogRepository for YamlBackend {
 
     fn get_work_logs_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<WorkLogEntry>> {
         let mut logs: Vec<_> = self
-            .data
+            .data()
             .work_logs
             .iter()
             .filter(|e| &e.task_id == task_id)
@@ -59,6 +64,6 @@ impl WorkLogRepository for YamlBackend {
     }
 
     fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>> {
-        Ok(self.data.work_logs.clone())
+        Ok(self.data().work_logs.clone())
     }
 }

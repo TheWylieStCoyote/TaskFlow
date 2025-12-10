@@ -39,10 +39,13 @@
 //! [`StorageBackend`]: crate::storage::StorageBackend
 
 mod filter_utils;
+mod in_memory;
 mod json;
 mod markdown;
 mod sqlite;
 mod yaml;
+
+pub use in_memory::InMemoryBackend;
 
 pub use json::JsonBackend;
 pub use markdown::MarkdownBackend;

@@ -1,3 +1,19 @@
+//! Task template system for quick task creation.
+//!
+//! Templates define preset configurations for common task types.
+//! Users can select a template to quickly create tasks with predefined
+//! priority, tags, description, and relative due dates.
+//!
+//! # Built-in Templates
+//!
+//! - Bug Report: High priority with "bug" tag
+//! - Feature Request: Medium priority with "feature" tag
+//! - Code Review: High priority, due in 2 days
+//! - Meeting Notes: Low priority with "meeting" tag
+//! - Documentation: Low priority with "docs" tag
+//!
+//! Custom templates can be added via configuration.
+
 use crate::domain::{Priority, Task};
 
 /// A task template for quickly creating common task types

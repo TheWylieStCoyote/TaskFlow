@@ -239,25 +239,52 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::KanbanLeft => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column > 0 {
                 model.view_selection.kanban_column -= 1;
+                model.view_selection.kanban_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::KanbanRight => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column < 3 {
                 model.view_selection.kanban_column += 1;
+                model.view_selection.kanban_task_index = 0; // Reset task selection
+            }
+        }
+        NavigationMessage::KanbanUp => {
+            if model.current_view == ViewId::Kanban && model.view_selection.kanban_task_index > 0 {
+                model.view_selection.kanban_task_index -= 1;
+            }
+        }
+        NavigationMessage::KanbanDown => {
+            if model.current_view == ViewId::Kanban {
+                let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
+                if model.view_selection.kanban_task_index + 1 < column_tasks.len() {
+                    model.view_selection.kanban_task_index += 1;
+                }
             }
         }
         NavigationMessage::EisenhowerUp => {
-            if model.current_view == ViewId::Eisenhower
-                && model.view_selection.eisenhower_quadrant >= 2
-            {
-                model.view_selection.eisenhower_quadrant -= 2;
+            if model.current_view == ViewId::Eisenhower {
+                // First try to navigate tasks within the quadrant
+                if model.view_selection.eisenhower_task_index > 0 {
+                    model.view_selection.eisenhower_task_index -= 1;
+                } else if model.view_selection.eisenhower_quadrant >= 2 {
+                    // At top of task list, move to upper quadrant
+                    model.view_selection.eisenhower_quadrant -= 2;
+                    model.view_selection.eisenhower_task_index = 0;
+                }
             }
         }
         NavigationMessage::EisenhowerDown => {
-            if model.current_view == ViewId::Eisenhower
-                && model.view_selection.eisenhower_quadrant < 2
-            {
-                model.view_selection.eisenhower_quadrant += 2;
+            if model.current_view == ViewId::Eisenhower {
+                let quadrant_tasks =
+                    model.eisenhower_quadrant_tasks(model.view_selection.eisenhower_quadrant);
+                // First try to navigate tasks within the quadrant
+                if model.view_selection.eisenhower_task_index + 1 < quadrant_tasks.len() {
+                    model.view_selection.eisenhower_task_index += 1;
+                } else if model.view_selection.eisenhower_quadrant < 2 {
+                    // At bottom of task list, move to lower quadrant
+                    model.view_selection.eisenhower_quadrant += 2;
+                    model.view_selection.eisenhower_task_index = 0;
+                }
             }
         }
         NavigationMessage::EisenhowerLeft => {
@@ -265,6 +292,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.eisenhower_quadrant % 2 == 1
             {
                 model.view_selection.eisenhower_quadrant -= 1;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::EisenhowerRight => {
@@ -272,6 +300,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.eisenhower_quadrant.is_multiple_of(2)
             {
                 model.view_selection.eisenhower_quadrant += 1;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::WeeklyPlannerLeft => {
@@ -279,6 +308,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.weekly_planner_day > 0
             {
                 model.view_selection.weekly_planner_day -= 1;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
             }
         }
         NavigationMessage::WeeklyPlannerRight => {
@@ -286,6 +316,80 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.view_selection.weekly_planner_day < 6
             {
                 model.view_selection.weekly_planner_day += 1;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
+            }
+        }
+        NavigationMessage::WeeklyPlannerUp => {
+            if model.current_view == ViewId::WeeklyPlanner
+                && model.view_selection.weekly_planner_task_index > 0
+            {
+                model.view_selection.weekly_planner_task_index -= 1;
+            }
+        }
+        NavigationMessage::WeeklyPlannerDown => {
+            if model.current_view == ViewId::WeeklyPlanner {
+                let day_tasks =
+                    model.weekly_planner_day_tasks(model.view_selection.weekly_planner_day);
+                if model.view_selection.weekly_planner_task_index + 1 < day_tasks.len() {
+                    model.view_selection.weekly_planner_task_index += 1;
+                }
+            }
+        }
+        NavigationMessage::NetworkUp => {
+            if model.current_view == ViewId::Network && model.view_selection.network_task_index > 0
+            {
+                model.view_selection.network_task_index -= 1;
+            }
+        }
+        NavigationMessage::NetworkDown => {
+            if model.current_view == ViewId::Network {
+                let network_tasks = model.network_tasks();
+                if model.view_selection.network_task_index + 1 < network_tasks.len() {
+                    model.view_selection.network_task_index += 1;
+                }
+            }
+        }
+        NavigationMessage::SidebarSelectIndex(index) => {
+            // Direct sidebar selection by index (for mouse click)
+            let max_index = model.sidebar_item_count().saturating_sub(1);
+            if index <= max_index && index != SIDEBAR_SEPARATOR_INDEX {
+                model.sidebar_selected = index;
+                model.focus_pane = FocusPane::Sidebar;
+                handle_sidebar_selection(model);
+            }
+        }
+        NavigationMessage::KanbanSelectColumn(column) => {
+            if model.current_view == ViewId::Kanban && column < 4 {
+                model.view_selection.kanban_column = column;
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::EisenhowerSelectQuadrant(quadrant) => {
+            if model.current_view == ViewId::Eisenhower && quadrant < 4 {
+                model.view_selection.eisenhower_quadrant = quadrant;
+                model.view_selection.eisenhower_task_index = 0; // Reset task selection
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::WeeklyPlannerSelectDay(day) => {
+            if model.current_view == ViewId::WeeklyPlanner && day < 7 {
+                model.view_selection.weekly_planner_day = day;
+                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
+                model.selected_index = 0;
+            }
+        }
+        NavigationMessage::ReportsSelectPanel(panel_idx) => {
+            if model.current_view == ViewId::Reports && panel_idx < 7 {
+                model.report_panel = match panel_idx {
+                    0 => crate::ui::ReportPanel::Overview,
+                    1 => crate::ui::ReportPanel::Velocity,
+                    2 => crate::ui::ReportPanel::Tags,
+                    3 => crate::ui::ReportPanel::Time,
+                    4 => crate::ui::ReportPanel::Focus,
+                    5 => crate::ui::ReportPanel::Insights,
+                    6 => crate::ui::ReportPanel::Estimation,
+                    _ => return,
+                };
             }
         }
     }

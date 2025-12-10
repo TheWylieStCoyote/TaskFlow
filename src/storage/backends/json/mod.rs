@@ -3,13 +3,7 @@
 //! Stores all data in a single JSON file for simplicity.
 //! Good for small to medium datasets and easy backup/version control.
 
-mod habit_repo;
-mod project_repo;
 mod storage;
-mod tag_repo;
-mod task_repo;
-mod time_entry_repo;
-mod work_log_repo;
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +11,7 @@ mod tests;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::InMemoryBackend;
 use crate::storage::{ExportData, StorageError, StorageResult};
 
 /// JSON file-based storage backend.
@@ -76,6 +71,20 @@ impl JsonBackend {
 
     /// Mark the data as modified.
     pub(crate) const fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+}
+
+impl InMemoryBackend for JsonBackend {
+    fn data(&self) -> &ExportData {
+        &self.data
+    }
+
+    fn data_mut(&mut self) -> &mut ExportData {
+        &mut self.data
+    }
+
+    fn mark_dirty(&mut self) {
         self.dirty = true;
     }
 }

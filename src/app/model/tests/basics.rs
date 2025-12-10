@@ -1,7 +1,8 @@
 //! Basic Model tests (construction, defaults, selection).
 
-use crate::app::model::{InputMode, Model, RunningState};
+use crate::app::model::{Model, RunningState};
 use crate::domain::Task;
+use crate::ui::InputMode;
 
 #[test]
 fn test_model_new_defaults() {
@@ -14,23 +15,23 @@ fn test_model_new_defaults() {
     assert!(model.active_time_entry.is_none());
     assert_eq!(model.selected_index, 0);
     assert!(model.visible_tasks.is_empty());
-    assert!(!model.show_completed);
+    assert!(!model.filtering.show_completed);
     assert!(model.show_sidebar);
     assert!(!model.show_help);
-    assert_eq!(model.input_mode, InputMode::Normal);
-    assert!(model.input_buffer.is_empty());
-    assert!(!model.dirty);
+    assert_eq!(model.input.mode, InputMode::Normal);
+    assert!(model.input.buffer.is_empty());
+    assert!(!model.storage.dirty);
 }
 
 #[test]
 fn test_model_with_sample_data() {
     let model = Model::new().with_sample_data();
 
-    // Sample data creates 15 tasks across 3 projects
-    assert_eq!(model.tasks.len(), 15);
-    assert_eq!(model.projects.len(), 3);
-    // Some are completed, so visible should be less
-    assert!(model.visible_tasks.len() < 15);
+    // Sample data creates ~88 tasks across 10 projects
+    assert!(model.tasks.len() >= 80);
+    assert_eq!(model.projects.len(), 10);
+    // Some are completed, so visible should be less than total
+    assert!(model.visible_tasks.len() < model.tasks.len());
 }
 
 #[test]
@@ -68,7 +69,7 @@ fn test_model_selected_index_adjustment() {
 
     // Add 3 tasks
     for i in 0..3 {
-        let task = Task::new(format!("Task {}", i));
+        let task = Task::new(format!("Task {i}"));
         model.tasks.insert(task.id, task);
     }
     model.refresh_visible_tasks();
@@ -77,7 +78,7 @@ fn test_model_selected_index_adjustment() {
     model.selected_index = 2;
 
     // Remove all tasks except one
-    let ids: Vec<_> = model.tasks.keys().skip(1).cloned().collect();
+    let ids: Vec<_> = model.tasks.keys().skip(1).copied().collect();
     for id in ids {
         model.tasks.remove(&id);
     }
@@ -91,13 +92,13 @@ fn test_model_selected_index_adjustment() {
 #[test]
 fn test_model_dirty_flag() {
     let mut model = Model::new();
-    assert!(!model.dirty);
+    assert!(!model.storage.dirty);
 
     let task = Task::new("Task");
     model.tasks.insert(task.id, task);
 
-    model.start_time_tracking(model.tasks.keys().next().cloned().unwrap());
-    assert!(model.dirty);
+    model.start_time_tracking(model.tasks.keys().next().copied().unwrap());
+    assert!(model.storage.dirty);
 }
 
 #[test]

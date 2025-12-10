@@ -25,6 +25,7 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("x".to_string(), Action::ToggleComplete);
     bindings.insert("space".to_string(), Action::ToggleComplete);
     bindings.insert("a".to_string(), Action::CreateTask);
+    bindings.insert("Q".to_string(), Action::QuickCapture);
     bindings.insert("A".to_string(), Action::CreateSubtask);
     bindings.insert("P".to_string(), Action::CreateProject);
     bindings.insert("E".to_string(), Action::EditProject);
@@ -36,8 +37,14 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("n".to_string(), Action::EditDescription);
     bindings.insert("N".to_string(), Action::EditDescriptionMultiline);
     bindings.insert("d".to_string(), Action::DeleteTask);
+    bindings.insert("Y".to_string(), Action::DuplicateTask);
     bindings.insert("p".to_string(), Action::CyclePriority);
     bindings.insert("m".to_string(), Action::MoveToProject);
+
+    // Quick reschedule
+    bindings.insert("]".to_string(), Action::RescheduleTomorrow);
+    bindings.insert("[".to_string(), Action::RescheduleNextWeek);
+    bindings.insert("M".to_string(), Action::RescheduleNextMonday);
 
     // Task snooze
     bindings.insert("z".to_string(), Action::SnoozeTask);

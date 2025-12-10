@@ -1,6 +1,7 @@
 //! Filtering and view tests.
 
-use crate::app::model::{Model, SortSpec, ViewId};
+use crate::app::model::{Model, ViewId};
+use crate::domain::SortSpec;
 use crate::domain::{Priority, SortField, SortOrder, TagFilterMode, Task, TaskStatus};
 
 #[test]
@@ -17,7 +18,7 @@ fn test_model_refresh_visible_tasks_sorts_by_priority() {
     model.tasks.insert(high.id, high.clone());
 
     // Set sort to priority (default is CreatedAt)
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Priority,
         order: SortOrder::Ascending,
     };
@@ -33,7 +34,7 @@ fn test_model_refresh_visible_tasks_sorts_by_priority() {
 #[test]
 fn test_model_refresh_visible_tasks_hides_completed() {
     let mut model = Model::new();
-    model.show_completed = false;
+    model.filtering.show_completed = false;
 
     let todo = Task::new("Todo");
     let done = Task::new("Done").with_status(TaskStatus::Done);
@@ -52,7 +53,7 @@ fn test_model_refresh_visible_tasks_hides_completed() {
 #[test]
 fn test_model_refresh_visible_tasks_shows_completed() {
     let mut model = Model::new();
-    model.show_completed = true;
+    model.filtering.show_completed = true;
 
     let todo = Task::new("Todo");
     let done = Task::new("Done").with_status(TaskStatus::Done);
@@ -88,7 +89,7 @@ fn test_model_refresh_visible_tasks_subtasks_follow_parent() {
     model.tasks.insert(subtask1a.id, subtask1a.clone());
 
     // Sort by priority so parent order is deterministic
-    model.sort = SortSpec {
+    model.filtering.sort = SortSpec {
         field: SortField::Priority,
         order: SortOrder::Ascending,
     };
@@ -279,7 +280,7 @@ fn test_search_filter_matches_title() {
     model.tasks.insert(task_match.id, task_match.clone());
     model.tasks.insert(task_no_match.id, task_no_match);
 
-    model.filter.search_text = Some("build".to_string());
+    model.filtering.filter.search_text = Some("build".to_string());
     model.refresh_visible_tasks();
 
     assert_eq!(model.visible_tasks.len(), 1);
@@ -294,11 +295,11 @@ fn test_search_filter_case_insensitive() {
     model.tasks.insert(task.id, task);
 
     // Search with different cases
-    model.filter.search_text = Some("BUILD".to_string());
+    model.filtering.filter.search_text = Some("BUILD".to_string());
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 1);
 
-    model.filter.search_text = Some("feature".to_string());
+    model.filtering.filter.search_text = Some("feature".to_string());
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 1);
 }
@@ -313,7 +314,7 @@ fn test_search_filter_matches_tags() {
     model.tasks.insert(task_with_tag.id, task_with_tag.clone());
     model.tasks.insert(task_no_tag.id, task_no_tag);
 
-    model.filter.search_text = Some("urgent".to_string());
+    model.filtering.filter.search_text = Some("urgent".to_string());
     model.refresh_visible_tasks();
 
     assert_eq!(model.visible_tasks.len(), 1);
@@ -327,7 +328,7 @@ fn test_search_filter_partial_match() {
     let task = Task::new("Implement authentication");
     model.tasks.insert(task.id, task);
 
-    model.filter.search_text = Some("auth".to_string());
+    model.filtering.filter.search_text = Some("auth".to_string());
     model.refresh_visible_tasks();
 
     assert_eq!(model.visible_tasks.len(), 1);
@@ -344,12 +345,12 @@ fn test_search_filter_empty_clears() {
     model.tasks.insert(task2.id, task2);
 
     // With filter
-    model.filter.search_text = Some("one".to_string());
+    model.filtering.filter.search_text = Some("one".to_string());
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 1);
 
     // Without filter
-    model.filter.search_text = None;
+    model.filtering.filter.search_text = None;
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 2);
 }
@@ -370,8 +371,8 @@ fn test_tag_filter_any_mode() {
     model.tasks.insert(task_none.id, task_none);
 
     // Filter by "rust" tag (Any mode - default)
-    model.filter.tags = Some(vec!["rust".to_string()]);
-    model.filter.tags_mode = TagFilterMode::Any;
+    model.filtering.filter.tags = Some(vec!["rust".to_string()]);
+    model.filtering.filter.tags_mode = TagFilterMode::Any;
     model.refresh_visible_tasks();
 
     assert_eq!(model.visible_tasks.len(), 2);
@@ -393,8 +394,8 @@ fn test_tag_filter_all_mode() {
     model.tasks.insert(task_none.id, task_none);
 
     // Filter by "rust" AND "python" tags (All mode)
-    model.filter.tags = Some(vec!["rust".to_string(), "python".to_string()]);
-    model.filter.tags_mode = TagFilterMode::All;
+    model.filtering.filter.tags = Some(vec!["rust".to_string(), "python".to_string()]);
+    model.filtering.filter.tags_mode = TagFilterMode::All;
     model.refresh_visible_tasks();
 
     // Only task_both has both tags
@@ -410,7 +411,7 @@ fn test_tag_filter_case_insensitive() {
     model.tasks.insert(task.id, task.clone());
 
     // Filter with different case
-    model.filter.tags = Some(vec!["rust".to_string()]);
+    model.filtering.filter.tags = Some(vec!["rust".to_string()]);
     model.refresh_visible_tasks();
 
     assert_eq!(model.visible_tasks.len(), 1);
@@ -428,12 +429,12 @@ fn test_tag_filter_clear() {
     model.tasks.insert(task_untagged.id, task_untagged);
 
     // With filter
-    model.filter.tags = Some(vec!["work".to_string()]);
+    model.filtering.filter.tags = Some(vec!["work".to_string()]);
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 1);
 
     // Clear filter
-    model.filter.tags = None;
+    model.filtering.filter.tags = None;
     model.refresh_visible_tasks();
     assert_eq!(model.visible_tasks.len(), 2);
 }
@@ -452,8 +453,8 @@ fn test_tag_filter_with_search() {
     model.tasks.insert(task_wrong_title.id, task_wrong_title);
 
     // Both search and tag filter
-    model.filter.search_text = Some("Important".to_string());
-    model.filter.tags = Some(vec!["work".to_string()]);
+    model.filtering.filter.search_text = Some("Important".to_string());
+    model.filtering.filter.tags = Some(vec!["work".to_string()]);
     model.refresh_visible_tasks();
 
     // Only task_match matches both criteria
@@ -505,7 +506,7 @@ fn test_view_blocked_excludes_tasks_with_completed_dependencies() {
     model.tasks.insert(task_a.id, task_a);
     model.tasks.insert(task_b.id, task_b);
 
-    model.show_completed = true; // Include completed tasks
+    model.filtering.show_completed = true; // Include completed tasks
     model.refresh_visible_tasks();
 
     // Task B should NOT be visible in Blocked view since its dependency is complete

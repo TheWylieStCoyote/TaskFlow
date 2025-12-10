@@ -17,7 +17,7 @@ Thank you for your interest in contributing to TaskFlow! This document provides 
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.87 or later (MSRV)
 - Cargo
 
 ### Building
@@ -35,9 +35,17 @@ cargo test
 ### Running Lints
 
 ```bash
-cargo clippy
+cargo clippy -- -D warnings
 cargo fmt --check
 ```
+
+### Running Benchmarks
+
+```bash
+cargo bench
+```
+
+Benchmark results are saved to `target/criterion/` with HTML reports.
 
 ## Code Style
 

@@ -6,14 +6,14 @@ use crate::ui::{InputMode, InputTarget};
 #[test]
 fn test_start_create_project() {
     let mut model = Model::new();
-    assert_eq!(model.input_mode, InputMode::Normal);
-    assert_eq!(model.input_target, InputTarget::Task); // Default
+    assert_eq!(model.input.mode, InputMode::Normal);
+    assert_eq!(model.input.target, InputTarget::Task); // Default
 
     update(&mut model, Message::Ui(UiMessage::StartCreateProject));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert_eq!(model.input_target, InputTarget::Project);
-    assert!(model.input_buffer.is_empty());
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert_eq!(model.input.target, InputTarget::Project);
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -38,8 +38,8 @@ fn test_submit_input_creates_project() {
     assert_eq!(project.name, "My New Project");
 
     // Should return to normal mode
-    assert_eq!(model.input_mode, InputMode::Normal);
-    assert_eq!(model.input_target, InputTarget::Task); // Reset to default
+    assert_eq!(model.input.mode, InputMode::Normal);
+    assert_eq!(model.input.target, InputTarget::Task); // Reset to default
 }
 
 #[test]
@@ -57,8 +57,8 @@ fn test_cancel_project_creation() {
 
     // No project should be created
     assert!(model.projects.is_empty());
-    assert_eq!(model.input_mode, InputMode::Normal);
-    assert!(model.input_buffer.is_empty());
+    assert_eq!(model.input.mode, InputMode::Normal);
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn test_empty_project_name_not_created() {
 
     // No project should be created
     assert!(model.projects.is_empty());
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]
@@ -98,13 +98,13 @@ fn test_edit_project_with_undo() {
     update(&mut model, Message::Ui(UiMessage::StartEditProject));
 
     // Should be in editing mode with project name
-    assert_eq!(model.input_mode, InputMode::Editing);
-    assert!(matches!(model.input_target, InputTarget::EditProject(_)));
-    assert_eq!(model.input_buffer, "Original Name");
+    assert_eq!(model.input.mode, InputMode::Editing);
+    assert!(matches!(model.input.target, InputTarget::EditProject(_)));
+    assert_eq!(model.input.buffer, "Original Name");
 
     // Change the name
-    model.input_buffer = "New Name".to_string();
-    model.cursor_position = model.input_buffer.len();
+    model.input.buffer = "New Name".to_string();
+    model.input.cursor = model.input.buffer.len();
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Verify name changed
@@ -180,7 +180,7 @@ fn test_edit_project_requires_selection() {
     // Try to edit - should not enter editing mode
     update(&mut model, Message::Ui(UiMessage::StartEditProject));
 
-    assert_eq!(model.input_mode, InputMode::Normal);
+    assert_eq!(model.input.mode, InputMode::Normal);
 }
 
 #[test]

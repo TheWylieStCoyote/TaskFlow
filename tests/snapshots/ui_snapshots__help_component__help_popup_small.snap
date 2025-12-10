@@ -1,0 +1,20 @@
+---
+source: tests/ui_snapshots.rs
+assertion_line: 113
+expression: output
+---
+┌─── Help (press ? or Esc to close) ───┐
+│Navigation                            │
+│G         Go to last                  │
+│Ctrl+d    Page down                   │
+│Ctrl+u    Page up                     │
+│↓         Move down                   │
+│g         Go to first                 │
+│j         Move down                   │
+│k         Move up                     │
+│pagedown  Page down                   │
+│pageup    Page up                     │
+│↑         Move up                     │
+│                                      │
+│Tasks                                 │
+└──────────────────────────────────────┘

@@ -1,8 +1,26 @@
+//! Text input component and input state management.
+//!
+//! Provides the input field widget for task creation, editing, and search.
+//! Handles different input modes (normal vs editing) and input targets
+//! (task, project, tag, etc.).
+//!
+//! # Input Modes
+//!
+//! - **Normal**: Regular navigation, keypresses trigger actions
+//! - **Editing**: Text input mode, keypresses insert characters
+//!
+//! # Input Targets
+//!
+//! The input field can target different entity types: tasks, subtasks,
+//! projects, tags, due dates, and more.
+
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
+
+use crate::config::Theme;
 
 /// Input mode for the application
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -43,6 +61,7 @@ pub enum InputTarget {
     EditEstimate(TaskId),         // Time estimate for a task (e.g., "30m", "2h", "1h30m")
     NewHabit,                     // Creating a new habit
     EditHabit(HabitId),           // Editing an existing habit's name
+    QuickCapture,                 // Quick capture mode with syntax hints
 }
 
 /// Input dialog for creating/editing items
@@ -50,15 +69,22 @@ pub struct InputDialog<'a> {
     title: &'a str,
     input: &'a str,
     cursor_position: usize,
+    theme: &'a Theme,
 }
 
 impl<'a> InputDialog<'a> {
     #[must_use]
-    pub const fn new(title: &'a str, input: &'a str, cursor_position: usize) -> Self {
+    pub const fn new(
+        title: &'a str,
+        input: &'a str,
+        cursor_position: usize,
+        theme: &'a Theme,
+    ) -> Self {
         Self {
             title,
             input,
             cursor_position,
+            theme,
         }
     }
 }
@@ -69,29 +95,152 @@ impl Widget for InputDialog<'_> {
         Clear.render(area, buf);
 
         // Build the input text with cursor indicator
-        let display_text = if self.cursor_position < self.input.len() {
-            let (before, after) = self.input.split_at(self.cursor_position);
-            let (_cursor_char, rest) = after.split_at(1);
+        // Clamp cursor_position to valid char boundary to prevent panics
+        let cursor = self.cursor_position.min(self.input.len());
+        let cursor = if self.input.is_char_boundary(cursor) {
+            cursor
+        } else {
+            // Find previous valid char boundary (manual implementation for MSRV compatibility)
+            (0..cursor)
+                .rev()
+                .find(|&i| self.input.is_char_boundary(i))
+                .unwrap_or(0)
+        };
+        let display_text = if cursor < self.input.len() {
+            let (before, after) = self.input.split_at(cursor);
+            let char_len = after.chars().next().map_or(1, char::len_utf8);
+            let rest = &after[char_len..];
             format!("{before}▌{rest}")
         } else {
             format!("{}▌", self.input)
         };
 
+        let accent = self.theme.colors.accent.to_color();
         let paragraph = Paragraph::new(display_text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(format!(" {} ", self.title))
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
+                    .border_style(Style::default().fg(accent)),
             );
 
         paragraph.render(area, buf);
+    }
+}
+
+/// Quick capture dialog with syntax hints
+pub struct QuickCaptureDialog<'a> {
+    input: &'a str,
+    cursor_position: usize,
+    theme: &'a Theme,
+}
+
+impl<'a> QuickCaptureDialog<'a> {
+    #[must_use]
+    pub const fn new(input: &'a str, cursor_position: usize, theme: &'a Theme) -> Self {
+        Self {
+            input,
+            cursor_position,
+            theme,
+        }
+    }
+}
+
+impl Widget for QuickCaptureDialog<'_> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        use ratatui::layout::{Constraint, Direction, Layout};
+        use ratatui::text::{Line, Span};
+
+        Clear.render(area, buf);
+
+        let accent = self.theme.colors.accent.to_color();
+        let block = Block::default()
+            .title(" Quick Capture (Esc to close, Enter to add) ")
+            .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(accent));
+
+        let inner = block.inner(area);
+        block.render(area, buf);
+
+        // Split into input line and hints
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
+            .split(inner);
+
+        // Render input with cursor
+        // Clamp cursor_position to valid char boundary to prevent panics
+        let cursor = self.cursor_position.min(self.input.len());
+        let cursor = if self.input.is_char_boundary(cursor) {
+            cursor
+        } else {
+            // Find previous valid char boundary (manual implementation for MSRV compatibility)
+            (0..cursor)
+                .rev()
+                .find(|&i| self.input.is_char_boundary(i))
+                .unwrap_or(0)
+        };
+        let display_text = if cursor < self.input.len() {
+            let (before, after) = self.input.split_at(cursor);
+            let char_len = after.chars().next().map_or(1, char::len_utf8);
+            let rest = &after[char_len..];
+            format!("{before}▌{rest}")
+        } else {
+            format!("{}▌", self.input)
+        };
+
+        let input_line = Paragraph::new(display_text)
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()));
+        input_line.render(chunks[0], buf);
+
+        // Render hints using theme colors
+        let hints = [
+            Line::from(vec![
+                Span::styled(
+                    "#tag ",
+                    Style::default().fg(self.theme.colors.success.to_color()),
+                ),
+                Span::styled(
+                    "@project ",
+                    Style::default().fg(self.theme.priority.high.to_color()),
+                ),
+                Span::styled(
+                    "!priority ",
+                    Style::default().fg(self.theme.colors.warning.to_color()),
+                ),
+                Span::styled(
+                    "due:date ",
+                    Style::default().fg(self.theme.colors.danger.to_color()),
+                ),
+                Span::styled("sched:date", Style::default().fg(accent)),
+            ]),
+            Line::from(vec![
+                Span::styled(
+                    "Examples: ",
+                    Style::default()
+                        .fg(self.theme.colors.muted.to_color())
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled(
+                    "Buy milk #groceries @Home !high due:tomorrow",
+                    Style::default().fg(self.theme.colors.muted.to_color()),
+                ),
+            ]),
+        ];
+
+        for (i, line) in hints.iter().enumerate() {
+            if i + 2 < chunks.len() {
+                let hint_para = Paragraph::new(line.clone());
+                hint_para.render(chunks[i + 2], buf);
+            }
+        }
     }
 }
 
@@ -99,12 +248,17 @@ impl Widget for InputDialog<'_> {
 pub struct ConfirmDialog<'a> {
     title: &'a str,
     message: &'a str,
+    theme: &'a Theme,
 }
 
 impl<'a> ConfirmDialog<'a> {
     #[must_use]
-    pub const fn new(title: &'a str, message: &'a str) -> Self {
-        Self { title, message }
+    pub const fn new(title: &'a str, message: &'a str, theme: &'a Theme) -> Self {
+        Self {
+            title,
+            message,
+            theme,
+        }
     }
 }
 
@@ -113,19 +267,16 @@ impl Widget for ConfirmDialog<'_> {
         Clear.render(area, buf);
 
         let text = format!("{}\n\n[y]es / [n]o", self.message);
+        let warning = self.theme.colors.warning.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(format!(" {} ", self.title))
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(warning).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(warning)),
             );
 
         paragraph.render(area, buf);
@@ -133,19 +284,24 @@ impl Widget for ConfirmDialog<'_> {
 }
 
 /// Overdue tasks alert popup shown at startup
-pub struct OverdueAlert {
+pub struct OverdueAlert<'a> {
     count: usize,
     task_titles: Vec<String>,
+    theme: &'a Theme,
 }
 
-impl OverdueAlert {
+impl<'a> OverdueAlert<'a> {
     #[must_use]
-    pub fn new(count: usize, task_titles: Vec<String>) -> Self {
-        Self { count, task_titles }
+    pub fn new(count: usize, task_titles: Vec<String>, theme: &'a Theme) -> Self {
+        Self {
+            count,
+            task_titles,
+            theme,
+        }
     }
 }
 
-impl Widget for OverdueAlert {
+impl Widget for OverdueAlert<'_> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         Clear.render(area, buf);
 
@@ -167,15 +323,16 @@ impl Widget for OverdueAlert {
         lines.push("Press any key to dismiss".to_string());
 
         let text = lines.join("\n");
+        let danger = self.theme.colors.danger.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(" ⚠ Overdue Tasks ")
-                    .title_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    .title_style(Style::default().fg(danger).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Red)),
+                    .border_style(Style::default().fg(danger)),
             );
 
         paragraph.render(area, buf);
@@ -185,12 +342,16 @@ impl Widget for OverdueAlert {
 /// Storage error alert popup shown when data cannot be loaded
 pub struct StorageErrorAlert<'a> {
     error_message: &'a str,
+    theme: &'a Theme,
 }
 
 impl<'a> StorageErrorAlert<'a> {
     #[must_use]
-    pub fn new(error_message: &'a str) -> Self {
-        Self { error_message }
+    pub fn new(error_message: &'a str, theme: &'a Theme) -> Self {
+        Self {
+            error_message,
+            theme,
+        }
     }
 }
 
@@ -202,19 +363,16 @@ impl Widget for StorageErrorAlert<'_> {
             "Could not load your task data:\n\n  {}\n\nStarting with sample data instead.\nYour existing data has not been modified.\n\nPress any key to continue",
             self.error_message
         );
+        let warning = self.theme.colors.warning.to_color();
 
         let paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            .style(Style::default().fg(self.theme.colors.foreground.to_color()))
             .block(
                 Block::default()
                     .title(" ⚠ Storage Error ")
-                    .title_style(
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    )
+                    .title_style(Style::default().fg(warning).add_modifier(Modifier::BOLD))
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(warning)),
             );
 
         paragraph.render(area, buf);
@@ -248,6 +406,11 @@ mod tests {
             content.push('\n');
         }
         content
+    }
+
+    /// Create a default theme for testing
+    fn test_theme() -> Theme {
+        Theme::default()
     }
 
     // InputMode tests
@@ -295,7 +458,8 @@ mod tests {
     // InputDialog tests
     #[test]
     fn test_input_dialog_renders_title() {
-        let dialog = InputDialog::new("New Task", "", 0);
+        let theme = test_theme();
+        let dialog = InputDialog::new("New Task", "", 0, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -304,7 +468,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_renders_input_text() {
-        let dialog = InputDialog::new("Edit", "Hello World", 11);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Edit", "Hello World", 11, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -316,7 +481,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_shows_cursor() {
-        let dialog = InputDialog::new("Test", "abc", 3);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "abc", 3, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -326,7 +492,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_cursor_in_middle() {
-        let dialog = InputDialog::new("Test", "abcdef", 3);
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "abcdef", 3, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -339,7 +506,8 @@ mod tests {
 
     #[test]
     fn test_input_dialog_empty_input() {
-        let dialog = InputDialog::new("New", "", 0);
+        let theme = test_theme();
+        let dialog = InputDialog::new("New", "", 0, &theme);
         let buffer = render_widget(dialog, 40, 5);
         let content = buffer_content(&buffer);
 
@@ -353,7 +521,8 @@ mod tests {
     // ConfirmDialog tests
     #[test]
     fn test_confirm_dialog_renders_title() {
-        let dialog = ConfirmDialog::new("Confirm Delete", "Are you sure?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Confirm Delete", "Are you sure?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 
@@ -365,7 +534,8 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_renders_message() {
-        let dialog = ConfirmDialog::new("Delete", "Delete this task?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Delete", "Delete this task?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 
@@ -377,11 +547,242 @@ mod tests {
 
     #[test]
     fn test_confirm_dialog_shows_yes_no_options() {
-        let dialog = ConfirmDialog::new("Confirm", "Proceed?");
+        let theme = test_theme();
+        let dialog = ConfirmDialog::new("Confirm", "Proceed?", &theme);
         let buffer = render_widget(dialog, 40, 8);
         let content = buffer_content(&buffer);
 
         assert!(content.contains("[y]es"), "Yes option should be visible");
         assert!(content.contains("[n]o"), "No option should be visible");
+    }
+
+    // QuickCaptureDialog tests
+    #[test]
+    fn test_quick_capture_dialog_renders() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("Buy groceries", 13, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Quick Capture"), "Title should be visible");
+        assert!(
+            content.contains("Buy groceries"),
+            "Input text should be visible"
+        );
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_shows_hints() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("", 0, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("#tag"), "Tag hint should be visible");
+        assert!(
+            content.contains("@project"),
+            "Project hint should be visible"
+        );
+        assert!(
+            content.contains("!priority"),
+            "Priority hint should be visible"
+        );
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_shows_cursor() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("test", 2, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains('▌'), "Cursor indicator should be visible");
+    }
+
+    #[test]
+    fn test_quick_capture_dialog_empty_input() {
+        let theme = test_theme();
+        let dialog = QuickCaptureDialog::new("", 0, &theme);
+        let buffer = render_widget(dialog, 80, 10);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains('▌'),
+            "Cursor should be visible with empty input"
+        );
+    }
+
+    // OverdueAlert tests
+    #[test]
+    fn test_overdue_alert_singular() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(1, vec!["Buy milk".to_string()], &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("1 overdue task"),
+            "Should show singular form"
+        );
+        assert!(content.contains("Buy milk"), "Task title should be visible");
+    }
+
+    #[test]
+    fn test_overdue_alert_plural() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(
+            3,
+            vec![
+                "Task 1".to_string(),
+                "Task 2".to_string(),
+                "Task 3".to_string(),
+            ],
+            &theme,
+        );
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("3 overdue tasks"),
+            "Should show plural form"
+        );
+    }
+
+    #[test]
+    fn test_overdue_alert_truncates_long_list() {
+        let theme = test_theme();
+        let tasks: Vec<String> = (1..=10).map(|i| format!("Task {i}")).collect();
+        let alert = OverdueAlert::new(10, tasks, &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("and 5 more"), "Should show overflow count");
+    }
+
+    #[test]
+    fn test_overdue_alert_shows_dismiss_message() {
+        let theme = test_theme();
+        let alert = OverdueAlert::new(1, vec!["Task".to_string()], &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Press any key"),
+            "Dismiss message should be visible"
+        );
+    }
+
+    // StorageErrorAlert tests
+    #[test]
+    fn test_storage_error_alert_renders() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("File not found: tasks.json", &theme);
+        let buffer = render_widget(alert, 60, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Storage Error"), "Title should be visible");
+        assert!(
+            content.contains("File not found"),
+            "Error message should be visible"
+        );
+    }
+
+    #[test]
+    fn test_storage_error_alert_shows_sample_data_message() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("Error", &theme);
+        let buffer = render_widget(alert, 70, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("sample data"),
+            "Sample data message should be visible"
+        );
+    }
+
+    #[test]
+    fn test_storage_error_alert_shows_continue_message() {
+        let theme = test_theme();
+        let alert = StorageErrorAlert::new("Error", &theme);
+        let buffer = render_widget(alert, 70, 15);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("Press any key"),
+            "Continue message should be visible"
+        );
+    }
+
+    // Edge cases for cursor handling
+    #[test]
+    fn test_input_dialog_cursor_at_end() {
+        let theme = test_theme();
+        let dialog = InputDialog::new("Test", "hello", 5, &theme);
+        let buffer = render_widget(dialog, 40, 5);
+        let content = buffer_content(&buffer);
+
+        assert!(
+            content.contains("hello"),
+            "Text should be visible with cursor at end"
+        );
+    }
+
+    #[test]
+    fn test_input_dialog_cursor_beyond_length() {
+        let theme = test_theme();
+        // Cursor position beyond string length should be clamped
+        let dialog = InputDialog::new("Test", "abc", 100, &theme);
+        let _ = render_widget(dialog, 40, 5);
+        // Should not panic
+    }
+
+    #[test]
+    fn test_quick_capture_cursor_beyond_length() {
+        let theme = test_theme();
+        // Cursor position beyond string length should be clamped
+        let dialog = QuickCaptureDialog::new("abc", 100, &theme);
+        let _ = render_widget(dialog, 80, 10);
+        // Should not panic
+    }
+
+    // Additional InputTarget tests
+    #[test]
+    fn test_input_target_scheduled_date() {
+        let task_id = TaskId::new();
+        let target = InputTarget::EditScheduledDate(task_id);
+        assert!(matches!(target, InputTarget::EditScheduledDate(_)));
+    }
+
+    #[test]
+    fn test_input_target_import_format() {
+        use crate::storage::ImportFormat;
+        let target = InputTarget::ImportFilePath(ImportFormat::Csv);
+        assert!(matches!(target, InputTarget::ImportFilePath(_)));
+    }
+
+    #[test]
+    fn test_input_target_snooze() {
+        let task_id = TaskId::new();
+        let target = InputTarget::SnoozeTask(task_id);
+        assert!(matches!(target, InputTarget::SnoozeTask(_)));
+    }
+
+    #[test]
+    fn test_input_target_estimate() {
+        let task_id = TaskId::new();
+        let target = InputTarget::EditEstimate(task_id);
+        assert!(matches!(target, InputTarget::EditEstimate(_)));
+    }
+
+    #[test]
+    fn test_input_target_new_habit() {
+        let target = InputTarget::NewHabit;
+        assert!(matches!(target, InputTarget::NewHabit));
+    }
+
+    #[test]
+    fn test_input_target_quick_capture() {
+        let target = InputTarget::QuickCapture;
+        assert!(matches!(target, InputTarget::QuickCapture));
     }
 }

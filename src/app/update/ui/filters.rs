@@ -37,20 +37,20 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 let filter_name = saved_filter.name.clone();
 
                 // Apply the filter and sort
-                model.filter = filter;
-                model.sort = sort;
+                model.filtering.filter = filter;
+                model.filtering.sort = sort;
                 model.active_saved_filter = Some(filter_id);
                 model.saved_filter_picker.visible = false;
                 model.refresh_visible_tasks();
-                model.status_message = Some(format!("Applied filter: {filter_name}"));
+                model.alerts.status_message = Some(format!("Applied filter: {filter_name}"));
             }
         }
         UiMessage::SaveCurrentFilter => {
             // Start input mode to name the filter
-            model.input_mode = InputMode::Editing;
-            model.input_target = InputTarget::SavedFilterName;
-            model.input_buffer.clear();
-            model.cursor_position = 0;
+            model.input.mode = InputMode::Editing;
+            model.input.target = InputTarget::SavedFilterName;
+            model.input.buffer.clear();
+            model.input.cursor = 0;
             model.saved_filter_picker.visible = false;
         }
         UiMessage::DeleteSavedFilter => {
@@ -68,7 +68,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 }
 
                 model.saved_filters.remove(&id_to_remove);
-                model.dirty = true;
+                model.storage.dirty = true;
 
                 // Adjust selection
                 if model.saved_filter_picker.selected > 0
@@ -78,15 +78,15 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                         model.saved_filters.len().saturating_sub(1);
                 }
 
-                model.status_message = Some(format!("Deleted filter: {name}"));
+                model.alerts.status_message = Some(format!("Deleted filter: {name}"));
             }
         }
         UiMessage::ClearSavedFilter => {
             model.active_saved_filter = None;
-            model.filter = crate::domain::Filter::default();
-            model.sort = crate::domain::SortSpec::default();
+            model.filtering.filter = crate::domain::Filter::default();
+            model.filtering.sort = crate::domain::SortSpec::default();
             model.refresh_visible_tasks();
-            model.status_message = Some("Filter cleared".to_string());
+            model.alerts.status_message = Some("Filter cleared".to_string());
         }
         _ => {}
     }

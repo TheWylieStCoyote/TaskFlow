@@ -53,7 +53,7 @@ fn test_completing_parent_cascades_to_descendants() {
 #[test]
 fn test_uncompleting_parent_does_not_affect_descendants() {
     let mut model = Model::new();
-    model.show_completed = true; // Show completed tasks so we can select them
+    model.filtering.show_completed = true; // Show completed tasks so we can select them
 
     // Create a hierarchy with all tasks completed
     let mut root = Task::new("Root Task");
@@ -156,8 +156,9 @@ fn test_delete_blocked_for_task_with_subtasks() {
     assert!(!model.show_confirm_delete);
 
     // Error message should be set
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
+        .alerts
         .status_message
         .as_ref()
         .unwrap()

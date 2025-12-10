@@ -5,7 +5,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
@@ -92,11 +92,11 @@ impl Widget for DescriptionEditor<'_> {
             .title(title)
             .title_style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme.colors.warning.to_color())
                     .add_modifier(Modifier::BOLD),
             )
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow));
+            .border_style(Style::default().fg(theme.colors.warning.to_color()));
 
         let paragraph = Paragraph::new(lines).block(block);
 

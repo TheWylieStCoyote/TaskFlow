@@ -215,6 +215,23 @@ impl Task {
         self
     }
 
+    /// Sets a custom completion timestamp.
+    ///
+    /// This is useful for sample data and testing. For normal usage,
+    /// prefer `with_status(TaskStatus::Done)` which auto-sets the timestamp.
+    #[must_use]
+    pub fn with_completed_at(mut self, completed_at: DateTime<Utc>) -> Self {
+        self.completed_at = Some(completed_at);
+        self
+    }
+
+    /// Sets a custom estimated time in minutes.
+    #[must_use]
+    pub const fn with_estimated_minutes(mut self, minutes: u32) -> Self {
+        self.estimated_minutes = Some(minutes);
+        self
+    }
+
     #[must_use]
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {

@@ -32,15 +32,15 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
             // Handle periodic updates (e.g., timer display)
 
             // Clear status message after timeout (3 seconds)
-            if model.status_message.is_some() {
-                if let Some(set_at) = model.status_message_set_at {
+            if model.alerts.status_message.is_some() {
+                if let Some(set_at) = model.alerts.status_message_set_at {
                     if set_at.elapsed().as_secs() >= 3 {
-                        model.status_message = None;
-                        model.status_message_set_at = None;
+                        model.alerts.status_message = None;
+                        model.alerts.status_message_set_at = None;
                     }
                 } else {
                     // Message exists but no timestamp - set it now
-                    model.status_message_set_at = Some(std::time::Instant::now());
+                    model.alerts.status_message_set_at = Some(std::time::Instant::now());
                 }
             }
         }
@@ -80,179 +80,168 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::RefreshStorage => {
             let changes = model.refresh_storage();
             if changes > 0 {
-                model.status_message = Some(format!("Refreshed: {changes} change(s) detected"));
+                model.alerts.status_message =
+                    Some(format!("Refreshed: {changes} change(s) detected"));
             } else {
-                model.status_message = Some("No external changes detected".to_string());
+                model.alerts.status_message = Some("No external changes detected".to_string());
             }
+        }
+    }
+}
+
+/// Get a human-readable description of an undo action
+fn action_description(action: &UndoAction) -> &'static str {
+    match action {
+        UndoAction::TaskCreated(_) => "task creation",
+        UndoAction::TaskDeleted { .. } => "task deletion",
+        UndoAction::TaskModified { .. } => "task change",
+        UndoAction::ProjectCreated(_) => "project creation",
+        UndoAction::ProjectDeleted(_) => "project deletion",
+        UndoAction::ProjectModified { .. } => "project change",
+        UndoAction::TimeEntryStarted(_) => "timer start",
+        UndoAction::TimeEntryStopped { .. } => "timer stop",
+        UndoAction::TimeEntryDeleted(_) => "time entry deletion",
+        UndoAction::TimeEntryModified { .. } => "time entry change",
+        UndoAction::TimerSwitched { .. } => "timer switch",
+        UndoAction::WorkLogCreated(_) => "work log creation",
+        UndoAction::WorkLogDeleted(_) => "work log deletion",
+        UndoAction::WorkLogModified { .. } => "work log change",
+    }
+}
+
+/// Direction for undo/redo operations
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UndoDirection {
+    Undo,
+    Redo,
+}
+
+/// Apply an undo action in the specified direction.
+///
+/// For most actions, Undo reverses the operation and Redo reapplies it.
+/// Note: Modified actions on the redo stack store the inverse (before/after swapped),
+/// so "before" always contains the target state.
+fn apply_undo_action(model: &mut Model, action: UndoAction, dir: UndoDirection) {
+    use UndoDirection::{Redo, Undo};
+
+    match (action, dir) {
+        // Task operations
+        (UndoAction::TaskCreated(task), Undo) => {
+            model.delete_task_from_storage(&task.id);
+            model.tasks.remove(&task.id);
+        }
+        (UndoAction::TaskCreated(task), Redo) => {
+            model.sync_task(&task);
+            model.tasks.insert(task.id, *task);
+        }
+        (UndoAction::TaskDeleted { task, time_entries }, Undo) => {
+            model.sync_task(&task);
+            model.tasks.insert(task.id, *task);
+            for entry in time_entries {
+                model.restore_time_entry(entry);
+            }
+        }
+        (UndoAction::TaskDeleted { task, time_entries }, Redo) => {
+            for entry in &time_entries {
+                model.delete_time_entry(&entry.id);
+            }
+            model.delete_task_from_storage(&task.id);
+            model.tasks.remove(&task.id);
+        }
+        (UndoAction::TaskModified { before, .. }, _) => {
+            model.sync_task(&before);
+            model.tasks.insert(before.id, *before);
+        }
+
+        // Project operations
+        (UndoAction::ProjectCreated(project), Undo)
+        | (UndoAction::ProjectDeleted(project), Redo) => {
+            model.projects.remove(&project.id);
+            model.storage.dirty = true;
+        }
+        (UndoAction::ProjectCreated(project), Redo)
+        | (UndoAction::ProjectDeleted(project), Undo) => {
+            model.sync_project(&project);
+            model.projects.insert(project.id, *project);
+        }
+        (UndoAction::ProjectModified { before, .. }, _) => {
+            model.sync_project(&before);
+            model.projects.insert(before.id, *before);
+        }
+
+        // Time entry operations
+        (UndoAction::TimeEntryStarted(entry), Undo)
+        | (UndoAction::TimeEntryDeleted(entry), Redo) => {
+            model.delete_time_entry(&entry.id);
+        }
+        (UndoAction::TimeEntryStarted(entry), Redo)
+        | (UndoAction::TimeEntryDeleted(entry), Undo) => {
+            model.restore_time_entry(*entry);
+        }
+        (
+            UndoAction::TimeEntryStopped { before, .. }
+            | UndoAction::TimeEntryModified { before, .. },
+            _,
+        ) => {
+            model.restore_time_entry(*before);
+        }
+
+        // Timer switch (unique: involves two entries)
+        (
+            UndoAction::TimerSwitched {
+                stopped_entry_before,
+                started_entry,
+                ..
+            },
+            Undo,
+        ) => {
+            model.delete_time_entry(&started_entry.id);
+            model.restore_time_entry(*stopped_entry_before);
+        }
+        (
+            UndoAction::TimerSwitched {
+                stopped_entry_after,
+                started_entry,
+                ..
+            },
+            Redo,
+        ) => {
+            model.active_time_entry = None;
+            model.restore_time_entry(*stopped_entry_after);
+            model.restore_time_entry(*started_entry);
+        }
+
+        // Work log operations
+        (UndoAction::WorkLogCreated(entry), Undo) | (UndoAction::WorkLogDeleted(entry), Redo) => {
+            model.delete_work_log_from_storage(&entry.id);
+            model.work_logs.remove(&entry.id);
+        }
+        (UndoAction::WorkLogCreated(entry), Redo) | (UndoAction::WorkLogDeleted(entry), Undo) => {
+            model.sync_work_log(&entry);
+            model.work_logs.insert(entry.id, *entry);
+        }
+        (UndoAction::WorkLogModified { before, .. }, _) => {
+            model.sync_work_log(&before);
+            model.work_logs.insert(before.id, *before);
         }
     }
 }
 
 fn handle_undo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_undo() {
-        match action {
-            UndoAction::TaskCreated(task) => {
-                // Undo create by deleting the task
-                model.delete_task_from_storage(&task.id);
-                model.tasks.remove(&task.id);
-            }
-            UndoAction::TaskDeleted { task, time_entries } => {
-                // Undo delete by restoring the task
-                model.sync_task(&task);
-                model.tasks.insert(task.id, *task);
-                // Restore time entries
-                for entry in time_entries {
-                    model.restore_time_entry(entry);
-                }
-            }
-            UndoAction::TaskModified { before, after: _ } => {
-                // Undo modify by restoring previous state
-                model.sync_task(&before);
-                model.tasks.insert(before.id, *before);
-            }
-            UndoAction::ProjectCreated(project) => {
-                // Undo project create by removing it
-                model.projects.remove(&project.id);
-                model.dirty = true;
-            }
-            UndoAction::ProjectDeleted(project) => {
-                // Undo project delete by restoring it
-                model.sync_project(&project);
-                model.projects.insert(project.id, *project);
-            }
-            UndoAction::ProjectModified { before, after: _ } => {
-                // Undo modify by restoring previous state
-                model.sync_project(&before);
-                model.projects.insert(before.id, *before);
-            }
-            UndoAction::TimeEntryStarted(entry) => {
-                // Undo start by deleting the entry
-                model.delete_time_entry(&entry.id);
-            }
-            UndoAction::TimeEntryStopped { before, after: _ } => {
-                // Undo stop by restoring the running state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimeEntryDeleted(entry) => {
-                // Undo delete by restoring the entry
-                model.restore_time_entry(*entry);
-            }
-            UndoAction::TimeEntryModified { before, after: _ } => {
-                // Undo modification by restoring previous state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimerSwitched {
-                stopped_entry_before,
-                stopped_entry_after: _,
-                started_entry,
-            } => {
-                // Undo timer switch: delete new entry, restore old entry to running state
-                model.delete_time_entry(&started_entry.id);
-                model.restore_time_entry(*stopped_entry_before);
-            }
-            UndoAction::WorkLogCreated(entry) => {
-                // Undo work log create by deleting it
-                model.delete_work_log_from_storage(&entry.id);
-                model.work_logs.remove(&entry.id);
-            }
-            UndoAction::WorkLogDeleted(entry) => {
-                // Undo work log delete by restoring it
-                model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id, *entry);
-            }
-            UndoAction::WorkLogModified { before, after: _ } => {
-                // Undo work log modify by restoring previous state
-                model.sync_work_log(&before);
-                model.work_logs.insert(before.id, *before);
-            }
-        }
+        let description = action_description(&action);
+        apply_undo_action(model, action, UndoDirection::Undo);
         model.refresh_visible_tasks();
+        model.alerts.status_message = Some(format!("Undone: {description}"));
     }
 }
 
 fn handle_redo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_redo() {
-        match action {
-            UndoAction::TaskCreated(task) => {
-                // Redo create by restoring the task
-                model.sync_task(&task);
-                model.tasks.insert(task.id, *task);
-            }
-            UndoAction::TaskDeleted { task, time_entries } => {
-                // Redo delete by removing the task and its time entries
-                // Delete time entries first
-                for entry in &time_entries {
-                    model.delete_time_entry(&entry.id);
-                }
-                model.delete_task_from_storage(&task.id);
-                model.tasks.remove(&task.id);
-            }
-            UndoAction::TaskModified { before, after: _ } => {
-                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
-                model.sync_task(&before);
-                model.tasks.insert(before.id, *before);
-            }
-            UndoAction::ProjectCreated(project) => {
-                // Redo project create by restoring it
-                model.sync_project(&project);
-                model.projects.insert(project.id, *project);
-            }
-            UndoAction::ProjectDeleted(project) => {
-                // Redo project delete by removing it
-                model.projects.remove(&project.id);
-                model.dirty = true;
-            }
-            UndoAction::ProjectModified { before, after: _ } => {
-                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
-                model.sync_project(&before);
-                model.projects.insert(before.id, *before);
-            }
-            UndoAction::TimeEntryStarted(entry) => {
-                // Redo start by restoring the entry
-                model.restore_time_entry(*entry);
-            }
-            UndoAction::TimeEntryStopped { before, after: _ } => {
-                // Redo stop: the redo stack holds the inverse, so "before" is the stopped state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimeEntryDeleted(entry) => {
-                // Redo delete by removing the entry
-                model.delete_time_entry(&entry.id);
-            }
-            UndoAction::TimeEntryModified { before, after: _ } => {
-                // Redo modification: inverse has swapped before/after, so "before" is now the new state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimerSwitched {
-                stopped_entry_before: _,
-                stopped_entry_after,
-                started_entry,
-            } => {
-                // Redo timer switch: stop old entry, restore new entry
-                // First clear the active entry (the old one that was restored by undo)
-                model.active_time_entry = None;
-                // Restore the stopped state of old entry
-                model.restore_time_entry(*stopped_entry_after);
-                // Restore the new entry (will become active since we cleared active above)
-                model.restore_time_entry(*started_entry);
-            }
-            UndoAction::WorkLogCreated(entry) => {
-                // Redo work log create by restoring it
-                model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id, *entry);
-            }
-            UndoAction::WorkLogDeleted(entry) => {
-                // Redo work log delete by removing it
-                model.delete_work_log_from_storage(&entry.id);
-                model.work_logs.remove(&entry.id);
-            }
-            UndoAction::WorkLogModified { before, after: _ } => {
-                // Redo work log modify: inverse has swapped before/after, so "before" is the new state
-                model.sync_work_log(&before);
-                model.work_logs.insert(before.id, *before);
-            }
-        }
+        let description = action_description(&action);
+        apply_undo_action(model, action, UndoDirection::Redo);
         model.refresh_visible_tasks();
+        model.alerts.status_message = Some(format!("Redone: {description}"));
     }
 }
 
@@ -263,26 +252,26 @@ fn handle_export_csv(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Csv) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("tasks.csv"),
                 |p| p.with_extension("csv"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported {} tasks to {}",
                         tasks.len(),
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -294,26 +283,26 @@ fn handle_export_ics(model: &mut Model) {
     match export_to_string(&tasks, ExportFormat::Ics) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("tasks.ics"),
                 |p| p.with_extension("ics"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported {} tasks to {}",
                         tasks.len(),
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -324,25 +313,25 @@ fn handle_export_chains_dot(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Dot) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("task_chains.dot"),
                 |p| p.with_extension("dot"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported task chains to {} (use Graphviz to render)",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -353,25 +342,25 @@ fn handle_export_chains_mermaid(model: &mut Model) {
     match export_chains_to_string(&model.tasks, ExportFormat::Mermaid) {
         Ok(content) => {
             // Determine export path
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("task_chains.md"),
                 |p| p.with_extension("md"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported task chains to {} (Mermaid diagram)",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -387,25 +376,25 @@ fn handle_export_report_markdown(model: &mut Model) {
 
     match export_report_to_markdown_string(&report) {
         Ok(content) => {
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("taskflow_report.md"),
                 |p| p.with_extension("report.md"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported analytics report to {}",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
@@ -421,34 +410,34 @@ fn handle_export_report_html(model: &mut Model) {
 
     match export_report_to_html_string(&report) {
         Ok(content) => {
-            let export_path = model.data_path.as_ref().map_or_else(
+            let export_path = model.storage.data_path.as_ref().map_or_else(
                 || std::path::PathBuf::from("taskflow_report.html"),
                 |p| p.with_extension("report.html"),
             );
 
             match std::fs::write(&export_path, content) {
                 Ok(()) => {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Exported analytics report to {}",
                         export_path.display()
                     ));
                 }
                 Err(e) => {
-                    model.status_message = Some(format!("Export failed: {e}"));
+                    model.alerts.status_message = Some(format!("Export failed: {e}"));
                 }
             }
         }
         Err(e) => {
-            model.status_message = Some(format!("Export failed: {e}"));
+            model.alerts.status_message = Some(format!("Export failed: {e}"));
         }
     }
 }
 
 fn handle_start_import(model: &mut Model, format: crate::storage::ImportFormat) {
-    model.input_mode = InputMode::Editing;
-    model.input_target = InputTarget::ImportFilePath(format);
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.mode = InputMode::Editing;
+    model.input.target = InputTarget::ImportFilePath(format);
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 }
 
 pub fn handle_execute_import(model: &mut Model) {
@@ -459,16 +448,16 @@ pub fn handle_execute_import(model: &mut Model) {
     use std::fs::File;
     use std::io::BufReader;
 
-    let format = match &model.input_target {
+    let format = match &model.input.target {
         InputTarget::ImportFilePath(fmt) => *fmt,
         _ => return,
     };
 
-    let file_path = model.input_buffer.trim();
+    let file_path = model.input.buffer.trim();
     if file_path.is_empty() {
-        model.status_message = Some("No file path provided".to_string());
-        model.input_mode = InputMode::Normal;
-        model.input_target = InputTarget::Task;
+        model.alerts.status_message = Some("No file path provided".to_string());
+        model.input.mode = InputMode::Normal;
+        model.input.target = InputTarget::Task;
         return;
     }
 
@@ -476,9 +465,9 @@ pub fn handle_execute_import(model: &mut Model) {
     let file = match File::open(file_path) {
         Ok(f) => f,
         Err(e) => {
-            model.status_message = Some(format!("Failed to open file: {e}"));
-            model.input_mode = InputMode::Normal;
-            model.input_target = InputTarget::Task;
+            model.alerts.status_message = Some(format!("Failed to open file: {e}"));
+            model.input.mode = InputMode::Normal;
+            model.input.target = InputTarget::Task;
             return;
         }
     };
@@ -495,18 +484,18 @@ pub fn handle_execute_import(model: &mut Model) {
         ImportFormat::Csv => match import_from_csv(reader, &options) {
             Ok(r) => r,
             Err(e) => {
-                model.status_message = Some(format!("Import failed: {e}"));
-                model.input_mode = InputMode::Normal;
-                model.input_target = InputTarget::Task;
+                model.alerts.status_message = Some(format!("Import failed: {e}"));
+                model.input.mode = InputMode::Normal;
+                model.input.target = InputTarget::Task;
                 return;
             }
         },
         ImportFormat::Ics => match import_from_ics(reader, &options) {
             Ok(r) => r,
             Err(e) => {
-                model.status_message = Some(format!("Import failed: {e}"));
-                model.input_mode = InputMode::Normal;
-                model.input_target = InputTarget::Task;
+                model.alerts.status_message = Some(format!("Import failed: {e}"));
+                model.input.mode = InputMode::Normal;
+                model.input.target = InputTarget::Task;
                 return;
             }
         },
@@ -516,13 +505,13 @@ pub fn handle_execute_import(model: &mut Model) {
     apply_merge_strategy(&mut result, &model.tasks, options.merge_strategy);
 
     // Reset input mode
-    model.input_mode = InputMode::Normal;
-    model.input_target = InputTarget::Task;
-    model.input_buffer.clear();
+    model.input.mode = InputMode::Normal;
+    model.input.target = InputTarget::Task;
+    model.input.buffer.clear();
 
     // If there are tasks to import, show preview
     if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {
-        model.status_message = Some("No tasks found in file".to_string());
+        model.alerts.status_message = Some("No tasks found in file".to_string());
         return;
     }
 
@@ -531,15 +520,15 @@ pub fn handle_execute_import(model: &mut Model) {
     let skip_count = result.skipped.len();
     let error_count = result.errors.len();
 
-    model.pending_import = Some(result);
-    model.show_import_preview = true;
-    model.status_message = Some(format!(
+    model.import.pending = Some(result);
+    model.import.show_preview = true;
+    model.alerts.status_message = Some(format!(
         "Preview: {import_count} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
     ));
 }
 
 fn handle_confirm_import(model: &mut Model) {
-    if let Some(result) = model.pending_import.take() {
+    if let Some(result) = model.import.pending.take() {
         let count = result.imported.len();
 
         // Add all imported tasks
@@ -548,15 +537,15 @@ fn handle_confirm_import(model: &mut Model) {
             model.tasks.insert(task.id, task);
         }
 
-        model.dirty = true;
-        model.show_import_preview = false;
+        model.storage.dirty = true;
+        model.import.show_preview = false;
         model.refresh_visible_tasks();
-        model.status_message = Some(format!("Imported {count} tasks"));
+        model.alerts.status_message = Some(format!("Imported {count} tasks"));
     }
 }
 
 fn handle_cancel_import(model: &mut Model) {
-    model.pending_import = None;
-    model.show_import_preview = false;
-    model.status_message = Some("Import cancelled".to_string());
+    model.import.pending = None;
+    model.import.show_preview = false;
+    model.alerts.status_message = Some("Import cancelled".to_string());
 }

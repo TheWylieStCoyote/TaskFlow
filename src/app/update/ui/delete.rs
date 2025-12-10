@@ -4,9 +4,9 @@ use crate::app::{Model, UndoAction};
 
 /// Show delete confirmation if task has no subtasks.
 pub fn show_delete_confirm(model: &mut Model) {
-    if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+    if let Some(task_id) = model.selected_task_id() {
         if model.has_subtasks(&task_id) {
-            model.status_message =
+            model.alerts.status_message =
                 Some("Cannot delete: task has subtasks. Delete subtasks first.".to_string());
         } else {
             model.show_confirm_delete = true;
@@ -16,8 +16,11 @@ pub fn show_delete_confirm(model: &mut Model) {
 
 /// Confirm and execute task deletion.
 pub fn confirm_delete(model: &mut Model) {
-    if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
+    if let Some(id) = model.selected_task_id() {
         if let Some(task) = model.tasks.remove(&id) {
+            // Save the task title for feedback message
+            let task_title = task.title.clone();
+
             // Collect time entries for this task before deleting
             let task_entries: Vec<_> = model
                 .time_entries
@@ -47,6 +50,14 @@ pub fn confirm_delete(model: &mut Model) {
                 task: Box::new(task),
                 time_entries: task_entries,
             });
+
+            // Truncate long titles for display
+            let display_title = if task_title.len() > 40 {
+                format!("{}...", &task_title[..37])
+            } else {
+                task_title
+            };
+            model.alerts.status_message = Some(format!("Deleted: {display_title}"));
         }
         model.refresh_visible_tasks();
     }

@@ -17,6 +17,7 @@ pub enum Action {
     // Task actions
     ToggleComplete,
     CreateTask,
+    QuickCapture,
     CreateSubtask,
     CreateProject,
     EditProject,
@@ -28,6 +29,7 @@ pub enum Action {
     EditDescription,
     EditDescriptionMultiline,
     DeleteTask,
+    DuplicateTask,
     CyclePriority,
     MoveToProject,
 
@@ -123,6 +125,11 @@ pub enum Action {
 
     // Keybindings editor
     ShowKeybindingsEditor,
+
+    // Quick reschedule
+    RescheduleTomorrow,
+    RescheduleNextWeek,
+    RescheduleNextMonday,
 
     // Task snooze
     SnoozeTask,
@@ -236,6 +243,7 @@ impl Action {
             // Task actions
             Self::ToggleComplete => "Toggle complete",
             Self::CreateTask => "Create task",
+            Self::QuickCapture => "Quick capture with hints",
             Self::CreateSubtask => "Create subtask",
             Self::EditTask => "Edit task title",
             Self::EditDueDate => "Edit due date",
@@ -244,6 +252,7 @@ impl Action {
             Self::EditDescription => "Edit description",
             Self::EditDescriptionMultiline => "Edit description (multi-line)",
             Self::DeleteTask => "Delete task",
+            Self::DuplicateTask => "Duplicate task",
             Self::CyclePriority => "Cycle priority",
             Self::MoveToProject => "Move to project",
             // Project actions
@@ -327,6 +336,10 @@ impl Action {
             Self::ShowTemplates => "Show templates",
             // Keybindings
             Self::ShowKeybindingsEditor => "Edit keybindings",
+            // Quick reschedule
+            Self::RescheduleTomorrow => "Reschedule to tomorrow",
+            Self::RescheduleNextWeek => "Reschedule to next week",
+            Self::RescheduleNextMonday => "Reschedule to next Monday",
             // Snooze
             Self::SnoozeTask => "Snooze task",
             Self::ClearSnooze => "Clear snooze",
@@ -363,6 +376,7 @@ impl Action {
 
             Self::ToggleComplete
             | Self::CreateTask
+            | Self::QuickCapture
             | Self::CreateSubtask
             | Self::EditTask
             | Self::EditDueDate
@@ -371,10 +385,14 @@ impl Action {
             | Self::EditDescription
             | Self::EditDescriptionMultiline
             | Self::DeleteTask
+            | Self::DuplicateTask
             | Self::CyclePriority
             | Self::MoveToProject
             | Self::MoveTaskUp
             | Self::MoveTaskDown
+            | Self::RescheduleTomorrow
+            | Self::RescheduleNextWeek
+            | Self::RescheduleNextMonday
             | Self::SnoozeTask
             | Self::ClearSnooze => ActionCategory::Tasks,
 

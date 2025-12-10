@@ -23,10 +23,15 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
     }
 
     if model.calendar_state.focus_task_list {
-        // When focused on task list, h goes back to calendar grid
+        // When focused on task list
         match key.code {
+            // h goes back to calendar grid
             KeyCode::Char('h') | KeyCode::Left => {
                 return Some(Message::Navigation(NavigationMessage::CalendarFocusGrid));
+            }
+            // Enter opens task detail view (focus mode)
+            KeyCode::Enter => {
+                return Some(Message::Ui(UiMessage::ToggleFocusMode));
             }
             _ => {}
         }
@@ -36,14 +41,17 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
             KeyCode::Left => return Some(Message::Ui(UiMessage::CalendarPrevDay)),
             KeyCode::Right => return Some(Message::Ui(UiMessage::CalendarNextDay)),
             KeyCode::Char('h') => return Some(Message::Ui(UiMessage::CalendarPrevDay)),
-            KeyCode::Char('l') => {
-                // l moves to task list if there are tasks, otherwise next day
+            KeyCode::Char('l') | KeyCode::Enter => {
+                // l/Enter moves to task list if there are tasks, otherwise next day (for l only)
                 if !model.tasks_for_selected_day().is_empty() {
                     return Some(Message::Navigation(
                         NavigationMessage::CalendarFocusTaskList,
                     ));
                 }
-                return Some(Message::Ui(UiMessage::CalendarNextDay));
+                // Enter stays on grid if no tasks, l advances to next day
+                if key.code == KeyCode::Char('l') {
+                    return Some(Message::Ui(UiMessage::CalendarNextDay));
+                }
             }
             _ => {}
         }
@@ -136,6 +144,11 @@ pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('l') | KeyCode::Right => {
             Some(Message::Navigation(NavigationMessage::KanbanRight))
         }
+        KeyCode::Char('k') | KeyCode::Up => Some(Message::Navigation(NavigationMessage::KanbanUp)),
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::KanbanDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::KanbanViewSelected)),
         _ => None,
     }
 }
@@ -158,6 +171,7 @@ pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('j') | KeyCode::Down => {
             Some(Message::Navigation(NavigationMessage::EisenhowerDown))
         }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::EisenhowerViewSelected)),
         _ => None,
     }
 }
@@ -174,6 +188,13 @@ pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Char('l') | KeyCode::Right => {
             Some(Message::Navigation(NavigationMessage::WeeklyPlannerRight))
         }
+        KeyCode::Char('k') | KeyCode::Up => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerUp))
+        }
+        KeyCode::Char('j') | KeyCode::Down => {
+            Some(Message::Navigation(NavigationMessage::WeeklyPlannerDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::WeeklyPlannerViewSelected)),
         _ => None,
     }
 }
@@ -186,6 +207,24 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
         ))),
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
+        _ => None,
+    }
+}
+
+/// Handle network view input
+pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        // h/l as aliases for k/j to match other views
+        KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') | KeyCode::Left => {
+            Some(Message::Navigation(NavigationMessage::NetworkUp))
+        }
+        KeyCode::Char('j') | KeyCode::Down | KeyCode::Char('l') | KeyCode::Right => {
+            Some(Message::Navigation(NavigationMessage::NetworkDown))
+        }
+        KeyCode::Enter => Some(Message::Ui(UiMessage::NetworkViewSelected)),
         _ => None,
     }
 }

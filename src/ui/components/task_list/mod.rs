@@ -9,7 +9,7 @@ mod tests;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::{Block, Borders, List, ListState, StatefulWidget, Widget},
 };
 
@@ -71,7 +71,7 @@ impl<'a> TaskList<'a> {
                 // Use cached values for performance
                 let time_spent = model.task_cache.get_time_sum(*task_id);
                 let nesting_depth = model.task_cache.get_depth(*task_id);
-                let is_multi_selected = model.selected_tasks.contains(task_id);
+                let is_multi_selected = model.multi_select.selected.contains(task_id);
                 let has_dependencies = !task.dependencies.is_empty();
                 let is_recurring = task.recurrence.is_some();
                 let has_chain = task.next_task_id.is_some();
@@ -130,7 +130,7 @@ impl<'a> TaskList<'a> {
                     // Use cached values for performance
                     let time_spent = model.task_cache.get_time_sum(task_id);
                     let nesting_depth = model.task_cache.get_depth(task_id);
-                    let is_multi_selected = model.selected_tasks.contains(&task_id);
+                    let is_multi_selected = model.multi_select.selected.contains(&task_id);
                     let has_dependencies = !task.dependencies.is_empty();
                     let is_recurring = task.recurrence.is_some();
                     let has_chain = task.next_task_id.is_some();
@@ -225,7 +225,7 @@ impl Widget for TaskList<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             );
 

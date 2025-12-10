@@ -12,7 +12,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Widget},
 };
@@ -38,11 +38,11 @@ impl Dashboard<'_> {
 
         // Overall rate
         let rate_color = if rate >= 75.0 {
-            Color::Green
+            theme.colors.success.to_color()
         } else if rate >= 50.0 {
-            Color::Yellow
+            theme.colors.warning.to_color()
         } else {
-            Color::Red
+            theme.colors.danger.to_color()
         };
 
         let lines = [
@@ -66,7 +66,7 @@ impl Dashboard<'_> {
                     Style::default().fg(if overdue > 0 {
                         theme.colors.danger.to_color()
                     } else {
-                        Color::Green
+                        theme.colors.success.to_color()
                     }),
                 ),
             ]),
@@ -159,7 +159,7 @@ impl Dashboard<'_> {
                 Span::styled(
                     if active { "● Active" } else { "○ Idle" },
                     Style::default().fg(if active {
-                        Color::Green
+                        theme.colors.success.to_color()
                     } else {
                         theme.colors.muted.to_color()
                     }),
@@ -224,11 +224,11 @@ impl Dashboard<'_> {
             };
 
             let rate_color = if rate >= 75.0 {
-                Color::Green
+                theme.colors.success.to_color()
             } else if rate >= 50.0 {
-                Color::Yellow
+                theme.colors.warning.to_color()
             } else if rate > 0.0 {
-                Color::Red
+                theme.colors.danger.to_color()
             } else {
                 theme.colors.muted.to_color()
             };
@@ -326,7 +326,10 @@ impl Dashboard<'_> {
                     "Completed: ",
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
-                Span::styled(format!("{completed}"), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{completed}"),
+                    Style::default().fg(theme.colors.success.to_color()),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -378,7 +381,7 @@ impl Dashboard<'_> {
         let variance_color = if total_variance > 0 {
             theme.colors.danger.to_color()
         } else if total_variance < 0 {
-            Color::Green
+            theme.colors.success.to_color()
         } else {
             theme.colors.accent.to_color()
         };
@@ -386,11 +389,11 @@ impl Dashboard<'_> {
         // Accuracy color
         let accuracy_color = avg_accuracy.map_or(theme.colors.muted.to_color(), |acc| {
             if (90.0..=110.0).contains(&acc) {
-                Color::Green
+                theme.colors.success.to_color()
             } else if (70.0..=130.0).contains(&acc) {
-                Color::Yellow
+                theme.colors.warning.to_color()
             } else {
-                Color::Red
+                theme.colors.danger.to_color()
             }
         });
 
@@ -432,7 +435,10 @@ impl Dashboard<'_> {
                     " Under: ",
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
-                Span::styled(format!("{under}"), Style::default().fg(Color::Green)),
+                Span::styled(
+                    format!("{under}"),
+                    Style::default().fg(theme.colors.success.to_color()),
+                ),
                 Span::styled(" OK: ", Style::default().fg(theme.colors.muted.to_color())),
                 Span::styled(
                     format!("{on_target}"),
@@ -456,15 +462,15 @@ impl Dashboard<'_> {
         let inner = block.inner(area);
         block.render(area, buf);
 
-        let stats = &self.model.pomodoro_stats;
-        let has_active = self.model.pomodoro_session.is_some();
+        let stats = &self.model.pomodoro.stats;
+        let has_active = self.model.pomodoro.session.is_some();
 
         // Active session indicator
         let active_indicator = if has_active {
             Span::styled(
                 "● Active",
                 Style::default()
-                    .fg(Color::Green)
+                    .fg(theme.colors.success.to_color())
                     .add_modifier(Modifier::BOLD),
             )
         } else {
@@ -508,7 +514,7 @@ impl Dashboard<'_> {
                 Span::styled(
                     format!("{} days", stats.current_streak()),
                     Style::default().fg(if stats.current_streak() > 0 {
-                        Color::Green
+                        theme.colors.success.to_color()
                     } else {
                         theme.colors.muted.to_color()
                     }),

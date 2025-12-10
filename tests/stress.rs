@@ -105,7 +105,7 @@ mod level_1 {
     #[test]
     fn test_refresh_visible_tasks() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -123,8 +123,8 @@ mod level_1 {
     #[test]
     fn test_filter_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -141,8 +141,8 @@ mod level_1 {
     #[test]
     fn test_sort_by_due_date() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -162,8 +162,8 @@ mod level_1 {
     #[test]
     fn test_search() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.search_text = Some("task 5".to_string());
+        model.filtering.show_completed = true;
+        model.filtering.filter.search_text = Some("task 5".to_string());
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -180,10 +180,10 @@ mod level_1 {
     #[test]
     fn test_combined_operations() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = false;
-        model.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
-        model.filter.search_text = Some("task".to_string());
-        model.sort = SortSpec {
+        model.filtering.show_completed = false;
+        model.filtering.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
+        model.filtering.filter.search_text = Some("task".to_string());
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -213,7 +213,7 @@ mod level_2 {
     #[test]
     fn test_refresh_visible_tasks() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -231,8 +231,8 @@ mod level_2 {
     #[test]
     fn test_filter_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -257,8 +257,8 @@ mod level_2 {
     #[test]
     fn test_sort_by_due_date() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -278,8 +278,8 @@ mod level_2 {
     #[test]
     fn test_sort_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::Priority,
             order: SortOrder::Descending,
         };
@@ -299,8 +299,8 @@ mod level_2 {
     #[test]
     fn test_search() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.search_text = Some("task 5".to_string());
+        model.filtering.show_completed = true;
+        model.filtering.filter.search_text = Some("task 5".to_string());
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -321,8 +321,8 @@ mod level_2 {
     #[test]
     fn test_filter_by_tags() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.tags = Some(vec!["tag5".to_string()]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.tags = Some(vec!["tag5".to_string()]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -348,10 +348,10 @@ mod level_2 {
     #[test]
     fn test_combined_operations() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = false;
-        model.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
-        model.filter.search_text = Some("task".to_string());
-        model.sort = SortSpec {
+        model.filtering.show_completed = false;
+        model.filtering.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
+        model.filtering.filter.search_text = Some("task".to_string());
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -371,7 +371,7 @@ mod level_2 {
     #[test]
     fn test_multiple_refresh_cycles() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         for _ in 0..10 {
@@ -400,7 +400,7 @@ mod level_3 {
     #[test]
     fn test_refresh_visible_tasks() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -418,8 +418,8 @@ mod level_3 {
     #[test]
     fn test_filter_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -436,8 +436,8 @@ mod level_3 {
     #[test]
     fn test_sort_by_due_date() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -457,8 +457,8 @@ mod level_3 {
     #[test]
     fn test_search() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.search_text = Some("task 5".to_string());
+        model.filtering.show_completed = true;
+        model.filtering.filter.search_text = Some("task 5".to_string());
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -475,10 +475,10 @@ mod level_3 {
     #[test]
     fn test_combined_operations() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = false;
-        model.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
-        model.filter.search_text = Some("task".to_string());
-        model.sort = SortSpec {
+        model.filtering.show_completed = false;
+        model.filtering.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
+        model.filtering.filter.search_text = Some("task".to_string());
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -509,7 +509,7 @@ mod level_4 {
     #[ignore = "slow test - run with: cargo test --test stress level_4 -- --ignored"]
     fn test_refresh_visible_tasks() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -528,8 +528,8 @@ mod level_4 {
     #[ignore = "slow test - run with: cargo test --test stress level_4 -- --ignored"]
     fn test_filter_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -547,8 +547,8 @@ mod level_4 {
     #[ignore = "slow test - run with: cargo test --test stress level_4 -- --ignored"]
     fn test_sort_by_due_date() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -569,8 +569,8 @@ mod level_4 {
     #[ignore = "slow test - run with: cargo test --test stress level_4 -- --ignored"]
     fn test_search() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.search_text = Some("task 5".to_string());
+        model.filtering.show_completed = true;
+        model.filtering.filter.search_text = Some("task 5".to_string());
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -588,10 +588,10 @@ mod level_4 {
     #[ignore = "slow test - run with: cargo test --test stress level_4 -- --ignored"]
     fn test_combined_operations() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = false;
-        model.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
-        model.filter.search_text = Some("task".to_string());
-        model.sort = SortSpec {
+        model.filtering.show_completed = false;
+        model.filtering.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
+        model.filtering.filter.search_text = Some("task".to_string());
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -622,7 +622,7 @@ mod level_5 {
     #[ignore = "very slow test - run with: cargo test --test stress level_5 -- --ignored"]
     fn test_refresh_visible_tasks() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
+        model.filtering.show_completed = true;
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -641,8 +641,8 @@ mod level_5 {
     #[ignore = "very slow test - run with: cargo test --test stress level_5 -- --ignored"]
     fn test_filter_by_priority() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
+        model.filtering.show_completed = true;
+        model.filtering.filter.priority = Some(vec![Priority::Urgent, Priority::High]);
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -660,8 +660,8 @@ mod level_5 {
     #[ignore = "very slow test - run with: cargo test --test stress level_5 -- --ignored"]
     fn test_sort_by_due_date() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.sort = SortSpec {
+        model.filtering.show_completed = true;
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };
@@ -682,8 +682,8 @@ mod level_5 {
     #[ignore = "very slow test - run with: cargo test --test stress level_5 -- --ignored"]
     fn test_search() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = true;
-        model.filter.search_text = Some("task 5".to_string());
+        model.filtering.show_completed = true;
+        model.filtering.filter.search_text = Some("task 5".to_string());
 
         let start = Instant::now();
         model.refresh_visible_tasks();
@@ -701,10 +701,10 @@ mod level_5 {
     #[ignore = "very slow test - run with: cargo test --test stress level_5 -- --ignored"]
     fn test_combined_operations() {
         let mut model = create_model_with_n_tasks(COUNT);
-        model.show_completed = false;
-        model.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
-        model.filter.search_text = Some("task".to_string());
-        model.sort = SortSpec {
+        model.filtering.show_completed = false;
+        model.filtering.filter.priority = Some(vec![Priority::High, Priority::Urgent]);
+        model.filtering.filter.search_text = Some("task".to_string());
+        model.filtering.sort = SortSpec {
             field: SortField::DueDate,
             order: SortOrder::Ascending,
         };

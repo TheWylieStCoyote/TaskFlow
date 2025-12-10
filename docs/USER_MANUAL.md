@@ -49,7 +49,7 @@ Whether you're managing personal todos, tracking work projects, or organizing co
 
 - **Operating System**: Linux, macOS, or Windows (with a terminal supporting ANSI colors)
 - **Terminal**: Any modern terminal with UTF-8 support
-- **Rust**: Version 1.70+ (for building from source)
+- **Rust**: Version 1.87+ (for building from source)
 
 ---
 

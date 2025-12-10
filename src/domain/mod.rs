@@ -124,6 +124,9 @@ mod task;
 mod time_entry;
 mod work_log;
 
+#[cfg(test)]
+mod proptest_tests;
+
 pub use filter::*;
 pub use habit::*;
 pub use pomodoro::*;

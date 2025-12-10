@@ -252,7 +252,7 @@ Without backups, data cannot be recovered.
 
 **Check Rust version:**
 ```bash
-rustc --version  # Needs 1.70+
+rustc --version  # Needs 1.87+
 ```
 
 **Check for data corruption:**

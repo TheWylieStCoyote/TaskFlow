@@ -1,0 +1,36 @@
+//! TagRepository blanket implementation for in-memory backends.
+
+use crate::domain::Tag;
+use crate::storage::{StorageError, StorageResult, TagRepository};
+
+use super::InMemoryBackend;
+
+impl<B: InMemoryBackend> TagRepository for B {
+    fn save_tag(&mut self, tag: &Tag) -> StorageResult<()> {
+        if let Some(existing) = self.data_mut().tags.iter_mut().find(|t| t.name == tag.name) {
+            *existing = tag.clone();
+        } else {
+            self.data_mut().tags.push(tag.clone());
+        }
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn get_tag(&self, name: &str) -> StorageResult<Option<Tag>> {
+        Ok(self.data().tags.iter().find(|t| t.name == name).cloned())
+    }
+
+    fn delete_tag(&mut self, name: &str) -> StorageResult<()> {
+        let len_before = self.data().tags.len();
+        self.data_mut().tags.retain(|t| t.name != name);
+        if self.data().tags.len() == len_before {
+            return Err(StorageError::not_found("Tag", name));
+        }
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn list_tags(&self) -> StorageResult<Vec<Tag>> {
+        Ok(self.data().tags.clone())
+    }
+}

@@ -59,7 +59,9 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
     // Sync to storage
     model.sync_task(&task);
     if let Err(e) = model.save() {
-        eprintln!("Warning: Could not save task: {e}");
+        eprintln!("Warning: Task added to session but could not save to disk: {e}");
+        eprintln!("  The task will be available until you close the TUI.");
+        eprintln!("  Check disk space and file permissions, then try again.");
     }
 
     // Print confirmation
@@ -85,7 +87,7 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
         if task.project_id.is_some() {
             println!("  Project: @{project_name}");
         } else {
-            println!("  Project: @{project_name} (not found)");
+            eprintln!("  Project: @{project_name} (not found - create it in the TUI with 'P')");
         }
     }
 

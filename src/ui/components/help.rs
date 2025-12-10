@@ -1,27 +1,55 @@
+//! Help popup component.
+//!
+//! Displays a modal overlay with keybinding hints organized by category.
+//! The help popup dynamically reads from the user's keybinding configuration
+//! to show the actual bound keys.
+//!
+//! # Categories
+//!
+//! - Navigation (j/k, arrows, page up/down)
+//! - Task operations (create, edit, delete, complete)
+//! - Views and panels (sidebar, calendar, dashboard)
+//! - Time tracking (start/stop, Pomodoro)
+
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
 };
 
-use crate::config::Keybindings;
+use crate::config::{Keybindings, Theme};
+
+/// View-specific navigation hints (key, description)
+const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
+    ("1-0", "Switch views (Task/Calendar/Dashboard/...)"),
+    ("Kanban", "h/l columns, j/k tasks"),
+    ("Eisenhwr", "h/l/j/k quadrants"),
+    ("Weekly", "h/l days, j/k tasks"),
+    ("Timeline", "h/l scroll, </> zoom, t today"),
+    ("Habits", "n new, Space check-in, e edit"),
+    ("Network", "h/l/j/k navigate nodes"),
+    ("Focus", "[/] chain nav, t timer, f exit"),
+];
 
 /// Help popup widget that displays keybindings dynamically
 pub struct HelpPopup<'a> {
     keybindings: &'a Keybindings,
+    theme: &'a Theme,
 }
 
 impl<'a> HelpPopup<'a> {
     #[must_use]
-    pub const fn new(keybindings: &'a Keybindings) -> Self {
-        Self { keybindings }
+    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme) -> Self {
+        Self { keybindings, theme }
     }
 }
 
 impl Widget for HelpPopup<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let theme = self.theme;
+
         // Clear the area first
         Clear.render(area, buf);
 
@@ -29,6 +57,7 @@ impl Widget for HelpPopup<'_> {
         let grouped = self.keybindings.bindings_by_category();
 
         let mut help_lines: Vec<Line<'_>> = Vec::new();
+        let key_color = theme.colors.accent.to_color();
 
         for (category, bindings) in grouped {
             // Add category header
@@ -46,7 +75,7 @@ impl Widget for HelpPopup<'_> {
                 let padded_key = format!("{display_key:<10}");
 
                 help_lines.push(Line::from(vec![
-                    Span::styled(padded_key, Style::default().fg(Color::Cyan)),
+                    Span::styled(padded_key, Style::default().fg(key_color)),
                     Span::raw(description),
                 ]));
             }
@@ -60,13 +89,26 @@ impl Widget for HelpPopup<'_> {
             help_lines.pop();
         }
 
+        // Add specialized views section
+        help_lines.push(Line::from(""));
+        help_lines.push(Line::from(vec![Span::styled(
+            "Specialized Views",
+            Style::default().add_modifier(Modifier::BOLD),
+        )]));
+        for (keys, desc) in SPECIALIZED_VIEW_HINTS {
+            help_lines.push(Line::from(vec![
+                Span::styled(format!("{keys:<10}"), Style::default().fg(key_color)),
+                Span::raw(*desc),
+            ]));
+        }
+
         let paragraph = Paragraph::new(help_lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(" Help (press ? or Esc to close) ")
                     .title_alignment(Alignment::Center)
-                    .border_style(Style::default().fg(Color::Yellow)),
+                    .border_style(Style::default().fg(theme.colors.warning.to_color())),
             )
             .wrap(Wrap { trim: false })
             .alignment(Alignment::Left);
@@ -205,10 +247,15 @@ mod tests {
         assert_eq!(popup.height, 20); // Should be clamped to screen height
     }
 
+    fn test_theme() -> Theme {
+        Theme::default()
+    }
+
     #[test]
     fn test_help_popup_renders_title() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 30);
         let content = buffer_content(&buffer);
 
@@ -218,7 +265,8 @@ mod tests {
     #[test]
     fn test_help_popup_renders_categories() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
@@ -236,7 +284,8 @@ mod tests {
     #[test]
     fn test_help_popup_renders_keybindings() {
         let keybindings = Keybindings::default();
-        let popup = HelpPopup::new(&keybindings);
+        let theme = test_theme();
+        let popup = HelpPopup::new(&keybindings, &theme);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 

@@ -27,11 +27,11 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::StartEditKeybinding => {
             model.keybindings_editor.capturing = true;
-            model.status_message = Some("Press a key combination...".to_string());
+            model.alerts.status_message = Some("Press a key combination...".to_string());
         }
         UiMessage::CancelEditKeybinding => {
             model.keybindings_editor.capturing = false;
-            model.status_message = None;
+            model.alerts.status_message = None;
         }
         UiMessage::ApplyKeybinding(new_key) => {
             let bindings = model.keybindings.sorted_bindings();
@@ -43,9 +43,9 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                     .set_binding(new_key.clone(), action.clone());
 
                 if conflicts.is_empty() {
-                    model.status_message = Some(format!("Bound '{new_key}' to {action:?}"));
+                    model.alerts.status_message = Some(format!("Bound '{new_key}' to {action:?}"));
                 } else {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Bound '{new_key}' to {:?}. {}",
                         action,
                         conflicts.join("; ")
@@ -67,10 +67,10 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                         .set_binding(default_key.clone(), action.clone());
 
                     if conflicts.is_empty() {
-                        model.status_message =
+                        model.alerts.status_message =
                             Some(format!("Reset {action:?} to default key '{default_key}'"));
                     } else {
-                        model.status_message = Some(format!(
+                        model.alerts.status_message = Some(format!(
                             "Reset {:?} to '{}'. {}",
                             action,
                             default_key,
@@ -78,20 +78,21 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
                         ));
                     }
                 } else {
-                    model.status_message = Some("No default binding for this action".to_string());
+                    model.alerts.status_message =
+                        Some("No default binding for this action".to_string());
                 }
             }
         }
         UiMessage::ResetAllKeybindings => {
             model.keybindings = crate::config::Keybindings::default();
-            model.status_message = Some("All keybindings reset to defaults".to_string());
+            model.alerts.status_message = Some("All keybindings reset to defaults".to_string());
         }
         UiMessage::SaveKeybindings => match model.keybindings.save() {
             Ok(()) => {
-                model.status_message = Some("Keybindings saved".to_string());
+                model.alerts.status_message = Some("Keybindings saved".to_string());
             }
             Err(e) => {
-                model.status_message = Some(format!("Failed to save keybindings: {e}"));
+                model.alerts.status_message = Some(format!("Failed to save keybindings: {e}"));
             }
         },
         UiMessage::DismissOverdueAlert => {

@@ -65,7 +65,8 @@ jobs:
           COVERAGE=$(cargo tarpaulin --skip-clean --ignore-tests 2>&1 | grep -oP '\d+\.\d+(?=% coverage)' | tail -1)
           echo "Coverage: ${COVERAGE}%"
 
-          # Fail if coverage is below 70%
-          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
-            echo "::warning::Coverage ${COVERAGE}% is below 70% threshold"
+          # Fail if coverage is below 81%
+          if (( $(echo "$COVERAGE < 81" | bc -l) )); then
+            echo "::error::Coverage ${COVERAGE}% is below 81% threshold"
+            exit 1
           fi

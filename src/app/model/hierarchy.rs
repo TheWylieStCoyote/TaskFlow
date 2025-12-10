@@ -6,6 +6,34 @@ use crate::domain::{Task, TaskId};
 
 use super::Model;
 
+/// Traverses ancestors with cycle detection, calling the visitor for each ancestor.
+///
+/// This is a shared utility to avoid duplicating cycle detection logic.
+/// Returns the number of ancestors visited (the depth).
+pub(super) fn traverse_ancestors<F>(
+    start_id: TaskId,
+    get_parent: impl Fn(TaskId) -> Option<TaskId>,
+    mut visitor: F,
+) -> usize
+where
+    F: FnMut(TaskId),
+{
+    let mut current_id = start_id;
+    let mut visited = HashSet::new();
+    let mut count = 0;
+
+    while let Some(parent_id) = get_parent(current_id) {
+        if visited.contains(&parent_id) {
+            break; // Cycle detected
+        }
+        visited.insert(current_id);
+        visitor(parent_id);
+        count += 1;
+        current_id = parent_id;
+    }
+    count
+}
+
 impl Model {
     /// Returns subtask completion progress for a task.
     ///
@@ -49,24 +77,11 @@ impl Model {
     /// Includes cycle detection to prevent infinite loops from corrupted data.
     #[must_use]
     pub fn task_depth(&self, task_id: &TaskId) -> usize {
-        let mut depth = 0;
-        let mut current_id = *task_id;
-        let mut visited = HashSet::new();
-
-        while let Some(task) = self.tasks.get(&current_id) {
-            if let Some(ref parent_id) = task.parent_task_id {
-                if visited.contains(parent_id) {
-                    // Circular reference detected - break to prevent infinite loop
-                    break;
-                }
-                visited.insert(current_id);
-                depth += 1;
-                current_id = *parent_id;
-            } else {
-                break;
-            }
-        }
-        depth
+        traverse_ancestors(
+            *task_id,
+            |id| self.tasks.get(&id).and_then(|t| t.parent_task_id),
+            |_| {}, // No-op visitor, we just need the count
+        )
     }
 
     /// Returns overdue task count and the overdue tasks themselves
@@ -114,21 +129,11 @@ impl Model {
     #[must_use]
     pub fn get_all_ancestors(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut ancestors = Vec::new();
-        let mut current_id = *task_id;
-        let mut visited = HashSet::new();
-
-        while let Some(task) = self.tasks.get(&current_id) {
-            if let Some(ref parent_id) = task.parent_task_id {
-                if visited.contains(parent_id) {
-                    break; // Circular reference
-                }
-                visited.insert(current_id);
-                ancestors.push(*parent_id);
-                current_id = *parent_id;
-            } else {
-                break;
-            }
-        }
+        traverse_ancestors(
+            *task_id,
+            |id| self.tasks.get(&id).and_then(|t| t.parent_task_id),
+            |parent_id| ancestors.push(parent_id),
+        );
         ancestors
     }
 

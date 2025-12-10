@@ -1,3 +1,17 @@
+//! Storage error types and result aliases.
+//!
+//! This module defines the error types used throughout the storage layer.
+//! All storage operations return [`StorageResult<T>`] which wraps potential
+//! [`StorageError`] variants.
+//!
+//! # Error Types
+//!
+//! - `NotFound`: Requested entity doesn't exist
+//! - `AlreadyExists`: Duplicate entity creation attempted
+//! - `Io`: File system errors
+//! - `Serialization`: JSON/YAML/TOML parsing errors
+//! - `Database`: SQLite-specific errors
+
 use std::path::PathBuf;
 use thiserror::Error;
 

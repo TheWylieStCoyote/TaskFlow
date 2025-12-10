@@ -1,3 +1,15 @@
+//! Time log editor component.
+//!
+//! A modal popup for viewing and editing time entries associated with a task.
+//! Users can browse entries, edit start/end times, and delete entries.
+//!
+//! # Modes
+//!
+//! - **Browse**: Navigate through time entries
+//! - **EditStart**: Edit the start time of selected entry
+//! - **EditEnd**: Edit the end time of selected entry
+//! - **ConfirmDelete**: Confirm deletion of an entry
+
 use ratatui::{
     buffer::Buffer,
     layout::Rect,

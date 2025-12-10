@@ -9,8 +9,8 @@ use crate::app::update::system::handle_execute_import;
 /// Handle input submission
 #[allow(clippy::too_many_lines)]
 pub fn handle_submit_input(model: &mut Model) {
-    let input = model.input_buffer.trim().to_string();
-    match &model.input_target {
+    let input = model.input.buffer.trim().to_string();
+    match &model.input.target {
         InputTarget::Task => {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
@@ -22,6 +22,27 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.tasks.insert(task_id, task);
                 model.sync_task_by_id(&task_id);
                 model.refresh_visible_tasks();
+            }
+        }
+        InputTarget::QuickCapture => {
+            if !input.is_empty() {
+                let task = create_task_from_quick_add(&input, model, None);
+                let task_id = task.id;
+                // Insert first (moves task), then sync by id
+                model
+                    .undo_stack
+                    .push(UndoAction::TaskCreated(Box::new(task.clone())));
+                model.tasks.insert(task_id, task);
+                model.sync_task_by_id(&task_id);
+                model.refresh_visible_tasks();
+                // Show confirmation and stay ready for another capture
+                // Get title from HashMap to avoid extra clone
+                let title = model.tasks.get(&task_id).map(|t| t.title.as_str());
+                model.alerts.status_message = title.map(|t| format!("Task created: {t}"));
+                model.input.buffer.clear();
+                model.input.cursor = 0;
+                // Don't reset input_mode - stay in QuickCapture mode
+                return;
             }
         }
         InputTarget::Subtask(parent_id) => {
@@ -115,15 +136,15 @@ pub fn handle_submit_input(model: &mut Model) {
                 });
                 // Show feedback
                 if let Some(mins) = estimate {
-                    model.status_message = Some(format!(
+                    model.alerts.status_message = Some(format!(
                         "Estimate set to {}",
                         super::format_duration_input(mins)
                     ));
                 } else {
-                    model.status_message = Some("Estimate cleared".to_string());
+                    model.alerts.status_message = Some("Estimate cleared".to_string());
                 }
             } else {
-                model.status_message =
+                model.alerts.status_message =
                     Some("Invalid duration format (try: 30m, 1h, 1h30m)".to_string());
             }
             model.refresh_visible_tasks();
@@ -153,14 +174,14 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.modify_project_with_undo(&project_id, |project| {
                     project.name.clone_from(&new_name);
                 });
-                model.status_message = Some(format!("Renamed project to '{new_name}'"));
+                model.alerts.status_message = Some(format!("Renamed project to '{new_name}'"));
             }
         }
         InputTarget::Search => {
             if input.is_empty() {
-                model.filter.search_text = None;
+                model.filtering.filter.search_text = None;
             } else {
-                model.filter.search_text = Some(input);
+                model.filtering.filter.search_text = Some(input);
             }
             model.refresh_visible_tasks();
         }
@@ -185,7 +206,7 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::FilterByTag => {
             if input.is_empty() || input.starts_with("Available:") {
                 // Clear the tag filter
-                model.filter.tags = None;
+                model.filtering.filter.tags = None;
             } else {
                 // Parse comma-separated tags, trim whitespace, filter empty
                 let tags: Vec<String> = input
@@ -194,9 +215,9 @@ pub fn handle_submit_input(model: &mut Model) {
                     .filter(|s| !s.is_empty())
                     .collect();
                 if tags.is_empty() {
-                    model.filter.tags = None;
+                    model.filtering.filter.tags = None;
                 } else {
-                    model.filter.tags = Some(tags);
+                    model.filtering.filter.tags = Some(tags);
                 }
             }
             model.refresh_visible_tasks();
@@ -211,15 +232,15 @@ pub fn handle_submit_input(model: &mut Model) {
                 };
 
                 // Move all selected tasks
-                let tasks_to_move: Vec<_> = model.selected_tasks.iter().copied().collect();
+                let tasks_to_move: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 for task_id in tasks_to_move {
                     let proj = target_project;
                     model.modify_task_with_undo(&task_id, |task| {
                         task.project_id = proj;
                     });
                 }
-                model.selected_tasks.clear();
-                model.multi_select_mode = false;
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
                 model.refresh_visible_tasks();
             }
         }
@@ -235,7 +256,7 @@ pub fn handle_submit_input(model: &mut Model) {
             };
 
             if let Some(new_status) = status {
-                let tasks_to_update: Vec<_> = model.selected_tasks.iter().copied().collect();
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 for task_id in tasks_to_update {
                     model.modify_task_with_undo(&task_id, |task| {
                         task.status = new_status;
@@ -246,8 +267,8 @@ pub fn handle_submit_input(model: &mut Model) {
                         }
                     });
                 }
-                model.selected_tasks.clear();
-                model.multi_select_mode = false;
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
                 model.refresh_visible_tasks();
             }
         }
@@ -337,14 +358,14 @@ pub fn handle_submit_input(model: &mut Model) {
                 // Create a new saved filter from current filter settings
                 let saved_filter = crate::domain::SavedFilter::new(
                     input.clone(),
-                    model.filter.clone(),
-                    model.sort.clone(),
+                    model.filtering.filter.clone(),
+                    model.filtering.sort.clone(),
                 );
                 let filter_id = saved_filter.id.clone();
                 model.saved_filters.insert(filter_id.clone(), saved_filter);
                 model.active_saved_filter = Some(filter_id);
-                model.dirty = true;
-                model.status_message = Some(format!("Saved filter: {input}"));
+                model.storage.dirty = true;
+                model.alerts.status_message = Some(format!("Saved filter: {input}"));
             }
         }
         InputTarget::SnoozeTask(task_id) => {
@@ -355,16 +376,17 @@ pub fn handle_submit_input(model: &mut Model) {
                     task.clear_snooze();
                 }
                 model.sync_task_by_id(&task_id);
-                model.status_message = Some("Snooze cleared".to_string());
+                model.alerts.status_message = Some("Snooze cleared".to_string());
             } else if let Some(date) = parse_date(&input) {
                 // Set snooze date
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.snooze_until_date(date);
                 }
                 model.sync_task_by_id(&task_id);
-                model.status_message = Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
+                model.alerts.status_message =
+                    Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
             } else {
-                model.status_message = Some("Invalid date format".to_string());
+                model.alerts.status_message = Some("Invalid date format".to_string());
             }
             model.refresh_visible_tasks();
         }
@@ -375,7 +397,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.sync_habit(&habit);
                 model.habits.insert(id, habit);
                 model.refresh_visible_habits();
-                model.status_message = Some("Habit created".to_string());
+                model.alerts.status_message = Some("Habit created".to_string());
             }
         }
         InputTarget::EditHabit(habit_id) => {
@@ -387,14 +409,14 @@ pub fn handle_submit_input(model: &mut Model) {
                 }
                 model.sync_habit_by_id(&habit_id);
                 model.refresh_visible_habits();
-                model.status_message = Some("Habit updated".to_string());
+                model.alerts.status_message = Some("Habit updated".to_string());
             }
         }
     }
-    model.input_mode = InputMode::Normal;
-    model.input_target = InputTarget::default();
-    model.input_buffer.clear();
-    model.cursor_position = 0;
+    model.input.mode = InputMode::Normal;
+    model.input.target = InputTarget::default();
+    model.input.buffer.clear();
+    model.input.cursor = 0;
 }
 
 /// Create a task from quick add input, applying parsed metadata

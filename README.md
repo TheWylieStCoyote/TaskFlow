@@ -39,7 +39,7 @@ cargo build --release
 
 ### Requirements
 
-- Rust 1.70 or later
+- Rust 1.87 or later
 - A terminal with UTF-8 support
 
 ### Shell Completions

@@ -1,3 +1,21 @@
+//! Keyboard macro recording and playback.
+//!
+//! This module enables users to record sequences of actions and replay them.
+//! Macros are useful for repetitive tasks like bulk editing or applying
+//! the same changes to multiple items.
+//!
+//! # Usage
+//!
+//! 1. Start recording with `q` followed by a register key
+//! 2. Perform the desired actions
+//! 3. Stop recording with `q`
+//! 4. Replay with `@` followed by the register key
+//!
+//! # Filtering
+//!
+//! Certain messages (like quit, undo, macro control) are filtered out
+//! during recording to prevent unexpected behavior during playback.
+
 use super::Message;
 
 /// A recorded macro consisting of a sequence of messages
@@ -61,6 +79,8 @@ pub struct MacroState {
     pub slots: [Option<Macro>; 10],
     /// Whether currently playing back a macro
     pub playing: bool,
+    /// Pending slot for record/playback (waiting for digit input)
+    pub pending_slot: Option<usize>,
 }
 
 impl MacroState {

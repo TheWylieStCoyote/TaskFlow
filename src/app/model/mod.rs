@@ -46,6 +46,7 @@
 //! ```
 
 mod cache;
+mod editor;
 mod filtering;
 mod hierarchy;
 mod sample_data;
@@ -53,26 +54,25 @@ mod storage;
 mod time_tracking;
 mod types;
 
-pub use cache::{FooterStats, TaskCache};
+pub use editor::MultilineEditor;
+
+pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
-    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
-    KeybindingsEditorState, RunningState, SavedFilterPickerState, TemplatePickerState,
+    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, FilterState,
+    HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
+    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TemplatePickerState,
     TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
     WorkLogEditorState,
 };
 
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::time::Instant;
 
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Filter, Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, SortSpec,
-    Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, Task, TaskId,
+    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
-use crate::storage::StorageBackend;
-use crate::ui::{InputMode, InputTarget};
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
 
@@ -113,6 +113,10 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::WeeklyPlanner,    // 15: Weekly Planner
     ViewId::Timeline,         // 16: Timeline
     ViewId::Snoozed,          // 17: Snoozed
+    ViewId::Heatmap,          // 18: Heatmap
+    ViewId::Forecast,         // 19: Forecast
+    ViewId::Network,          // 20: Network
+    ViewId::Burndown,         // 21: Burndown
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -192,12 +196,8 @@ pub struct Model {
     pub visible_tasks: Vec<TaskId>,
 
     // Filter/Sort
-    /// Current filter settings
-    pub filter: Filter,
-    /// Current sort settings
-    pub sort: SortSpec,
-    /// Whether to show completed tasks
-    pub show_completed: bool,
+    /// Filter and sort state (filter, sort, show_completed)
+    pub filtering: FilterState,
 
     // UI state
     /// Whether sidebar is visible
@@ -216,30 +216,18 @@ pub struct Model {
     pub selected_project: Option<ProjectId>,
 
     // Input state
-    /// Current input mode (Normal or Editing)
-    pub input_mode: InputMode,
-    /// What the input is targeting (new task, edit, search, etc.)
-    pub input_target: InputTarget,
-    /// Current text in the input field
-    pub input_buffer: String,
-    /// Cursor position within input buffer
-    pub cursor_position: usize,
+    /// Text input state (mode, target, buffer, cursor)
+    pub input: InputState,
     /// Whether delete confirmation dialog is showing
     pub show_confirm_delete: bool,
 
     // Multi-select state for bulk operations
-    /// Set of selected task IDs for bulk operations
-    pub selected_tasks: std::collections::HashSet<TaskId>,
-    /// Whether multi-select mode is active
-    pub multi_select_mode: bool,
+    /// Multi-select state (mode, selected tasks)
+    pub multi_select: MultiSelectState,
 
     // Storage
-    /// Active storage backend (if configured)
-    pub(crate) storage: Option<Box<dyn StorageBackend>>,
-    /// Path to data file/directory
-    pub data_path: Option<PathBuf>,
-    /// Whether there are unsaved changes
-    pub dirty: bool,
+    /// Storage state (backend, data_path, dirty)
+    pub storage: StorageState,
 
     // Configuration
     /// Default priority for new tasks
@@ -253,17 +241,9 @@ pub struct Model {
     /// State for the calendar view
     pub calendar_state: CalendarState,
 
-    // Status message for user feedback
-    /// Temporary status message to display to user
-    pub status_message: Option<String>,
-    /// When the status message was set (for auto-clear after timeout)
-    pub status_message_set_at: Option<Instant>,
-
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
     pub macro_state: MacroState,
-    /// Pending macro slot when starting recording
-    pub pending_macro_slot: Option<usize>,
 
     // Task templates
     /// Task template manager
@@ -272,12 +252,8 @@ pub struct Model {
     pub template_picker: TemplatePickerState,
 
     // Pomodoro timer
-    /// Active Pomodoro session (if any)
-    pub pomodoro_session: Option<crate::domain::PomodoroSession>,
-    /// Pomodoro timer configuration
-    pub pomodoro_config: crate::domain::PomodoroConfig,
-    /// Pomodoro statistics
-    pub pomodoro_stats: crate::domain::PomodoroStats,
+    /// Pomodoro timer state (session, config, stats)
+    pub pomodoro: PomodoroState,
 
     // Keybindings editor
     /// Keybindings editor state
@@ -290,10 +266,8 @@ pub struct Model {
     pub report_panel: crate::ui::ReportPanel,
 
     // Import state
-    /// Pending import result awaiting confirmation
-    pub pending_import: Option<crate::storage::ImportResult>,
-    /// Whether import preview dialog is showing
-    pub show_import_preview: bool,
+    /// Import state (pending, show_preview)
+    pub import: ImportState,
 
     // Alert state
     /// Consolidated alert and error state
@@ -350,6 +324,8 @@ pub struct Model {
     pub footer_stats: FooterStats,
     /// Cached per-task metadata (time sums, depths, subtask progress)
     pub task_cache: TaskCache,
+    /// Cached layout rectangles for mouse hit-testing
+    pub layout_cache: LayoutCache,
 }
 
 impl Model {
@@ -381,9 +357,7 @@ impl Model {
             current_view: ViewId::default(),
             selected_index: 0,
             visible_tasks: Vec::new(),
-            filter: Filter::default(),
-            sort: SortSpec::default(),
-            show_completed: false,
+            filtering: FilterState::default(),
             show_sidebar: true,
             show_help: false,
             focus_mode: false,
@@ -391,33 +365,21 @@ impl Model {
             focus_pane: FocusPane::default(),
             sidebar_selected: 0,
             selected_project: None,
-            input_mode: InputMode::Normal,
-            input_target: InputTarget::default(),
-            input_buffer: String::new(),
-            cursor_position: 0,
+            input: InputState::default(),
             show_confirm_delete: false,
-            selected_tasks: std::collections::HashSet::new(),
-            multi_select_mode: false,
-            storage: None,
-            data_path: None,
-            dirty: false,
+            multi_select: MultiSelectState::default(),
+            storage: StorageState::default(),
             default_priority: Priority::default(),
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
-            status_message: None,
-            status_message_set_at: None,
             macro_state: MacroState::new(),
-            pending_macro_slot: None,
             template_manager: TemplateManager::new(),
             template_picker: TemplatePickerState::default(),
-            pomodoro_session: None,
-            pomodoro_config: crate::domain::PomodoroConfig::default(),
-            pomodoro_stats: crate::domain::PomodoroStats::default(),
+            pomodoro: PomodoroState::default(),
             keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
-            pending_import: None,
-            show_import_preview: false,
+            import: ImportState::default(),
             alerts: AlertState::default(),
             time_log: TimeLogEditorState::default(),
             work_logs: HashMap::new(),
@@ -435,6 +397,7 @@ impl Model {
             habit_view: HabitViewState::default(),
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
+            layout_cache: LayoutCache::default(),
         }
     }
 
@@ -490,7 +453,8 @@ impl Model {
         self.tasks
             .values()
             .filter(|t| {
-                t.due_date == Some(date) && (self.show_completed || !t.status.is_complete())
+                t.due_date == Some(date)
+                    && (self.filtering.show_completed || !t.status.is_complete())
             })
             .count()
     }

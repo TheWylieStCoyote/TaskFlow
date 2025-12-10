@@ -33,10 +33,10 @@ pub fn handle_ui_templates(model: &mut Model, msg: UiMessage) {
                 model.tasks.insert(task.id, task.clone());
 
                 // Start editing the task title
-                model.input_mode = InputMode::Editing;
-                model.input_target = InputTarget::EditTask(task.id);
-                model.input_buffer = task.title;
-                model.cursor_position = model.input_buffer.len();
+                model.input.mode = InputMode::Editing;
+                model.input.target = InputTarget::EditTask(task.id);
+                model.input.buffer = task.title;
+                model.input.cursor = model.input.buffer.len();
 
                 model.template_picker.visible = false;
                 model.refresh_visible_tasks();

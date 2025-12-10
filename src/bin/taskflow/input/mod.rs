@@ -1,8 +1,10 @@
-//! Key event handling.
+//! Input event handling.
 //!
-//! This module provides centralized input handling for the TaskFlow TUI.
+//! This module provides centralized input handling for the TaskFlow TUI,
+//! including keyboard and mouse events.
 
 mod handlers;
+mod mouse;
 mod util;
 
 use crossterm::event::{self, KeyCode};
@@ -13,10 +15,11 @@ use taskflow::ui::InputMode;
 
 pub use handlers::{
     handle_calendar_view, handle_description_editor, handle_eisenhower_view, handle_habits_view,
-    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_reports_view,
-    handle_template_picker, handle_time_log, handle_timeline_view, handle_weekly_planner_view,
-    handle_work_log,
+    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_network_view,
+    handle_reports_view, handle_template_picker, handle_time_log, handle_timeline_view,
+    handle_weekly_planner_view, handle_work_log,
 };
+pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
 
 /// Handle a key event and return the appropriate message.
@@ -35,7 +38,7 @@ pub fn handle_key_event(
     }
 
     // Handle import preview dialog
-    if model.show_import_preview {
+    if model.import.show_preview {
         return match key.code {
             KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
                 Message::System(SystemMessage::ConfirmImport)
@@ -46,7 +49,7 @@ pub fn handle_key_event(
     }
 
     // Handle input mode
-    if model.input_mode == InputMode::Editing {
+    if model.input.mode == InputMode::Editing {
         return match key.code {
             KeyCode::Enter => Message::Ui(UiMessage::SubmitInput),
             KeyCode::Esc => Message::Ui(UiMessage::CancelInput),
@@ -76,9 +79,14 @@ pub fn handle_key_event(
         return Message::Ui(UiMessage::HideHelp);
     }
 
-    // If focus mode is active, Esc exits it
-    if model.focus_mode && key.code == KeyCode::Esc {
-        return Message::Ui(UiMessage::ToggleFocusMode);
+    // If focus mode is active, handle special keys
+    if model.focus_mode {
+        match key.code {
+            KeyCode::Esc => return Message::Ui(UiMessage::ToggleFocusMode),
+            KeyCode::Char(']') => return Message::Ui(UiMessage::ChainNext),
+            KeyCode::Char('[') => return Message::Ui(UiMessage::ChainPrev),
+            _ => {}
+        }
     }
 
     // If template picker is showing, handle navigation and selection
@@ -107,7 +115,7 @@ pub fn handle_key_event(
     }
 
     // In multi-select mode, Space toggles task selection
-    if model.multi_select_mode && key.code == KeyCode::Char(' ') {
+    if model.multi_select.mode && key.code == KeyCode::Char(' ') {
         return Message::Ui(UiMessage::ToggleTaskSelection);
     }
 
@@ -162,6 +170,13 @@ pub fn handle_key_event(
         }
     }
 
+    // In Network view, handle task navigation
+    if model.current_view == taskflow::app::ViewId::Network {
+        if let Some(msg) = handle_network_view(key) {
+            return msg;
+        }
+    }
+
     // If habit analytics is showing, handle it
     if model.habit_view.show_analytics {
         return match key.code {
@@ -173,7 +188,7 @@ pub fn handle_key_event(
     }
 
     // Handle macro slot selection if pending
-    if model.pending_macro_slot.is_some() {
+    if model.macro_state.pending_slot.is_some() {
         return handle_macro_slot(key, model);
     }
 

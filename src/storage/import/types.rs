@@ -81,6 +81,27 @@ pub enum ImportSkipReason {
     ValidationFailed(String),
 }
 
+impl std::fmt::Display for ImportSkipReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateId(id) => write!(f, "task with ID '{id}' already exists"),
+            Self::DuplicateTitleDate { title, due_date } => {
+                if let Some(date) = due_date {
+                    write!(
+                        f,
+                        "task '{}' with due date {} already exists",
+                        title,
+                        date.format("%Y-%m-%d")
+                    )
+                } else {
+                    write!(f, "task '{title}' already exists")
+                }
+            }
+            Self::ValidationFailed(msg) => write!(f, "validation failed: {msg}"),
+        }
+    }
+}
+
 /// Error that occurred during import of a specific row/entry
 #[derive(Debug, Clone)]
 pub struct ImportError {
@@ -99,7 +120,7 @@ impl std::fmt::Display for ImportError {
 }
 
 /// Result of an import operation
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ImportResult {
     /// Successfully parsed tasks
     pub imported: Vec<Task>,
@@ -161,5 +182,56 @@ mod tests {
         });
         assert!(result.has_errors());
         assert_eq!(result.total_processed(), 2);
+    }
+
+    #[test]
+    fn test_import_skip_reason_display_duplicate_id() {
+        let task_id = TaskId::new();
+        let reason = ImportSkipReason::DuplicateId(task_id);
+        let display = reason.to_string();
+        assert!(display.contains("already exists"));
+        assert!(display.contains(&task_id.to_string()));
+    }
+
+    #[test]
+    fn test_import_skip_reason_display_duplicate_title_with_date() {
+        let reason = ImportSkipReason::DuplicateTitleDate {
+            title: "Buy milk".to_string(),
+            due_date: Some(NaiveDate::from_ymd_opt(2025, 12, 25).unwrap()),
+        };
+        let display = reason.to_string();
+        assert!(display.contains("Buy milk"));
+        assert!(display.contains("2025-12-25"));
+        assert!(display.contains("already exists"));
+    }
+
+    #[test]
+    fn test_import_skip_reason_display_duplicate_title_without_date() {
+        let reason = ImportSkipReason::DuplicateTitleDate {
+            title: "Buy milk".to_string(),
+            due_date: None,
+        };
+        let display = reason.to_string();
+        assert!(display.contains("Buy milk"));
+        assert!(display.contains("already exists"));
+        assert!(!display.contains("due date"));
+    }
+
+    #[test]
+    fn test_import_skip_reason_display_validation_failed() {
+        let reason = ImportSkipReason::ValidationFailed("title cannot be empty".to_string());
+        let display = reason.to_string();
+        assert!(display.contains("validation failed"));
+        assert!(display.contains("title cannot be empty"));
+    }
+
+    #[test]
+    fn test_import_error_display() {
+        let error = ImportError {
+            line: 42,
+            message: "invalid date format".to_string(),
+            content: Some("bad,data,here".to_string()),
+        };
+        assert_eq!(error.to_string(), "Line 42: invalid date format");
     }
 }

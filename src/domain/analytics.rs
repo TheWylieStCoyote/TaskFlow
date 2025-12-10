@@ -580,7 +580,7 @@ mod tests {
         };
         assert_eq!(breakdown.total(), 30);
         // 5 high + 0 urgent = 5 out of 30 = 16.67%
-        assert!((breakdown.high_priority_percentage() - 16.666666).abs() < 0.001);
+        assert!((breakdown.high_priority_percentage() - 16.666_666).abs() < 0.001);
     }
 
     #[test]

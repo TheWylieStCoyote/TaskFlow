@@ -2,6 +2,7 @@
 name = "taskflow"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.87"
 description = "A TUI project management application"
 license = "MIT"
 
@@ -47,3 +48,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3.13"
 pretty_assertions = "1.4"
 proptest = "1.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+insta = { version = "1.41", features = ["json", "yaml"] }
+
+[[bench]]
+name = "taskflow_benchmarks"
+harness = false

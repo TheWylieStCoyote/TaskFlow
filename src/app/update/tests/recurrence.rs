@@ -15,11 +15,11 @@ fn test_set_recurrence_daily() {
 
     // Start editing recurrence
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
 
     // Set to daily
-    model.input_buffer = "d".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "d".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let task = model.tasks.get(&task_id).unwrap();
@@ -32,8 +32,8 @@ fn test_set_recurrence_weekly() {
     let task_id = model.visible_tasks[0];
 
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
-    model.input_buffer = "w".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "w".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let task = model.tasks.get(&task_id).unwrap();
@@ -52,8 +52,8 @@ fn test_clear_recurrence() {
 
     // Now clear it
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
-    model.input_buffer = "0".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "0".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     let task = model.tasks.get(&task_id).unwrap();
@@ -110,8 +110,8 @@ fn test_recurrence_undo() {
 
     // Set recurrence
     update(&mut model, Message::Ui(UiMessage::StartEditRecurrence));
-    model.input_buffer = "d".to_string();
-    model.cursor_position = 1;
+    model.input.buffer = "d".to_string();
+    model.input.cursor = 1;
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     assert!(model.tasks.get(&task_id).unwrap().recurrence.is_some());

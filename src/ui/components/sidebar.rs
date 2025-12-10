@@ -1,6 +1,17 @@
+//! Sidebar navigation component.
+//!
+//! The sidebar provides quick access to different views and projects.
+//! It displays view counts (inbox, today, upcoming) and allows project selection.
+//!
+//! # Sections
+//!
+//! - **Views**: Task List, Today, Upcoming, Overdue, Calendar, etc.
+//! - **Projects**: User-created project folders with task counts
+//! - **Tags**: Quick filters by tag (when expanded)
+
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
@@ -209,6 +220,46 @@ impl Widget for Sidebar<'_> {
                     theme,
                 ),
             ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🟩 ", Style::default()),
+                styled_view_name(
+                    "Heatmap",
+                    ViewId::Heatmap,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📈 ", Style::default()),
+                styled_view_name(
+                    "Forecast",
+                    ViewId::Forecast,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("🔗 ", Style::default()),
+                styled_view_name(
+                    "Network",
+                    ViewId::Network,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
+                Span::styled("📉 ", Style::default()),
+                styled_view_name(
+                    "Burndown",
+                    ViewId::Burndown,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
             // Separator
             ListItem::new(Line::from("───────────")),
             // Projects section
@@ -268,7 +319,7 @@ impl Widget for Sidebar<'_> {
             )
             .highlight_style(
                 Style::default()
-                    .bg(Color::DarkGray)
+                    .bg(self.theme.colors.accent_secondary.to_color())
                     .add_modifier(Modifier::BOLD),
             );
 
@@ -434,8 +485,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        // Height 25 to accommodate all views including Habits
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 30 to accommodate all views including Heatmap, Forecast, Network, Burndown
+        let buffer = render_widget(sidebar, 30, 30);
         let content = buffer_content(&buffer);
 
         assert!(
@@ -449,7 +500,8 @@ mod tests {
         let model = Model::new();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 30 to accommodate all views including analytics views
+        let buffer = render_widget(sidebar, 30, 30);
         let content = buffer_content(&buffer);
 
         assert!(
@@ -463,12 +515,18 @@ mod tests {
         let model = Model::new().with_sample_data();
         let theme = Theme::default();
         let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 25);
+        // Height 50 to accommodate all views (20+) plus 10 projects
+        let buffer = render_widget(sidebar, 30, 50);
         let content = buffer_content(&buffer);
 
-        // Sample data has "Backend API", "Frontend UI", "Documentation" projects
+        // Sample data has 10 projects; at least one should be visible
         assert!(
-            content.contains("Backend") || content.contains("Frontend") || content.contains("Doc"),
+            content.contains("Backend")
+                || content.contains("Frontend")
+                || content.contains("Doc")
+                || content.contains("DevOps")
+                || content.contains("Mobile")
+                || content.contains("Personal"),
             "Project names should be visible"
         );
     }

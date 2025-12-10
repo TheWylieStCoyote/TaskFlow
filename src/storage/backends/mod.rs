@@ -1,8 +1,51 @@
+//! Storage backend implementations.
+//!
+//! This module provides concrete implementations of the [`StorageBackend`] trait
+//! for different file formats and databases. Each backend supports the full
+//! CRUD operations for tasks, projects, time entries, and habits.
+//!
+//! # Available Backends
+//!
+//! | Backend | Format | Use Case |
+//! |---------|--------|----------|
+//! | [`JsonBackend`] | JSON | Human-readable, easy debugging |
+//! | [`YamlBackend`] | YAML | Human-readable, good for config-like data |
+//! | [`SqliteBackend`] | SQLite | Fast queries, large datasets |
+//! | [`MarkdownBackend`] | Markdown | Portable, works with other tools |
+//!
+//! # Choosing a Backend
+//!
+//! - **JSON**: Best for development and small task lists (<1000 tasks)
+//! - **YAML**: Similar to JSON, preferred if you edit files manually
+//! - **SQLite**: Best for large task lists, fast filtering and search
+//! - **Markdown**: Best for interoperability with other note-taking tools
+//!
+//! # Example
+//!
+//! ```no_run
+//! use taskflow::storage::{create_backend, BackendType};
+//! use std::path::Path;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a JSON backend
+//! let _backend = create_backend(BackendType::Json, Path::new("tasks.json"))?;
+//!
+//! // Create a SQLite backend for better performance
+//! let _backend = create_backend(BackendType::Sqlite, Path::new("tasks.db"))?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! [`StorageBackend`]: crate::storage::StorageBackend
+
 mod filter_utils;
+mod in_memory;
 mod json;
 mod markdown;
 mod sqlite;
 mod yaml;
+
+pub use in_memory::InMemoryBackend;
 
 pub use json::JsonBackend;
 pub use markdown::MarkdownBackend;

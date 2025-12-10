@@ -1,3 +1,16 @@
+//! Focus mode view component.
+//!
+//! A minimalist, distraction-free view for working on a single task.
+//! Displays the current task prominently with an optional Pomodoro timer
+//! and task chain navigation.
+//!
+//! # Features
+//!
+//! - Large, centered task display
+//! - Pomodoro timer with visual progress
+//! - Task chain navigation (previous/next in sequence)
+//! - Subtask progress indicator
+
 use std::time::Duration;
 
 use ratatui::{
@@ -80,25 +93,39 @@ impl Widget for FocusView<'_> {
         let inner = outer_block.inner(area);
         outer_block.render(area, buf);
 
-        // Layout: padding, content, timer, help
+        // Check if task is part of a chain
+        let has_chain = task.next_task_id.is_some()
+            || self
+                .model
+                .tasks
+                .values()
+                .any(|t| t.next_task_id == Some(task.id));
+
+        // Layout: padding, content, chain info, timer, help
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2), // Top padding
-                Constraint::Min(6),    // Main content
-                Constraint::Length(3), // Timer
-                Constraint::Length(2), // Help text
+                Constraint::Length(2),                             // Top padding
+                Constraint::Min(6),                                // Main content
+                Constraint::Length(if has_chain { 2 } else { 0 }), // Chain info (conditional)
+                Constraint::Length(3),                             // Timer
+                Constraint::Length(2),                             // Help text
             ])
             .split(inner);
 
         // Render task title with status
         self.render_task_title(task, chunks[1], buf, theme);
 
+        // Render chain info if applicable
+        if has_chain {
+            self.render_chain_info(task, chunks[2], buf, theme);
+        }
+
         // Render timer
-        self.render_timer(task, chunks[2], buf, theme);
+        self.render_timer(task, chunks[3], buf, theme);
 
         // Render help
-        self.render_help(chunks[3], buf, theme);
+        self.render_help(chunks[4], buf, theme, task);
     }
 }
 
@@ -240,14 +267,33 @@ impl FocusView<'_> {
         buf.set_line(area.x, y, &timer_line, area.width);
     }
 
-    fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
+    fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme, task: &Task) {
         let is_tracking = self.model.active_time_entry.is_some();
 
-        let help_text = if is_tracking {
-            "[t] Stop Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
+        // Build help text with chain navigation hints if applicable
+        let has_chain =
+            task.next_task_id.is_some() || self.get_prev_task_in_chain(task.id).is_some();
+
+        let mut help_parts = Vec::new();
+        help_parts.push(if is_tracking {
+            "[t] Stop Timer"
         } else {
-            "[t] Start Timer  [x] Toggle Complete  [f/Esc] Exit Focus"
-        };
+            "[t] Start Timer"
+        });
+        help_parts.push("[x] Toggle");
+
+        if has_chain {
+            if self.get_prev_task_in_chain(task.id).is_some() {
+                help_parts.push("[[] Prev");
+            }
+            if task.next_task_id.is_some() {
+                help_parts.push("[]] Next");
+            }
+        }
+
+        help_parts.push("[f/Esc] Exit");
+
+        let help_text = help_parts.join("  ");
 
         let help_line = Line::from(Span::styled(
             help_text,
@@ -256,6 +302,85 @@ impl FocusView<'_> {
         .alignment(Alignment::Center);
 
         buf.set_line(area.x, area.y, &help_line, area.width);
+    }
+
+    /// Get the previous task in a chain (the task that links to this one)
+    fn get_prev_task_in_chain(
+        &self,
+        task_id: crate::domain::TaskId,
+    ) -> Option<crate::domain::TaskId> {
+        self.model
+            .tasks
+            .values()
+            .find(|t| t.next_task_id == Some(task_id))
+            .map(|t| t.id)
+    }
+
+    /// Render chain navigation info
+    fn render_chain_info(&self, task: &Task, area: Rect, buf: &mut Buffer, theme: &Theme) {
+        let prev_in_chain = self.get_prev_task_in_chain(task.id);
+        let next_in_chain = task.next_task_id;
+
+        // Only render if task is part of a chain
+        if prev_in_chain.is_none() && next_in_chain.is_none() {
+            return;
+        }
+
+        let mut spans = vec![Span::styled(
+            "      Chain: ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        )];
+
+        // Show previous task in chain
+        if let Some(prev_id) = prev_in_chain {
+            if let Some(prev_task) = self.model.tasks.get(&prev_id) {
+                let prev_title: String = prev_task.title.chars().take(20).collect();
+                let prev_status = if prev_task.status.is_complete() {
+                    "✓"
+                } else {
+                    "○"
+                };
+                spans.push(Span::styled(
+                    format!("{prev_status} {prev_title}"),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ));
+                spans.push(Span::styled(
+                    " → ",
+                    Style::default().fg(theme.colors.accent.to_color()),
+                ));
+            }
+        }
+
+        // Current task indicator
+        spans.push(Span::styled(
+            "● CURRENT",
+            Style::default()
+                .fg(theme.colors.accent.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+
+        // Show next task in chain
+        if let Some(next_id) = next_in_chain {
+            if let Some(next_task) = self.model.tasks.get(&next_id) {
+                let next_title: String = next_task.title.chars().take(20).collect();
+                let next_status = if next_task.status.is_complete() {
+                    "✓"
+                } else {
+                    "○"
+                };
+                spans.push(Span::styled(
+                    " → ",
+                    Style::default().fg(theme.colors.accent.to_color()),
+                ));
+                spans.push(Span::styled(
+                    format!("{next_status} {next_title}"),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ));
+            }
+        }
+
+        let chain_line = Line::from(spans);
+        buf.set_line(area.x, area.y, &chain_line, area.width);
     }
 }
 
@@ -346,7 +471,7 @@ mod tests {
         let content = buffer_content(&buffer);
 
         assert!(
-            content.contains("Exit Focus"),
+            content.contains("Exit") || content.contains("Esc"),
             "Help text should mention exiting focus mode"
         );
     }
@@ -387,5 +512,243 @@ mod tests {
             FocusView::format_duration(Duration::from_secs(7200)),
             "02:00:00"
         );
+    }
+
+    #[test]
+    fn test_focus_view_with_high_priority_task() {
+        use crate::domain::{Priority, Task};
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let mut task = Task::new("High priority task");
+        task.priority = Priority::High;
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("High priority task"));
+        assert!(content.contains("High")); // Priority label
+    }
+
+    #[test]
+    fn test_focus_view_with_due_date() {
+        use crate::domain::Task;
+        use chrono::{Duration as ChronoDuration, Utc};
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let mut task = Task::new("Task with due date");
+        task.due_date = Some(Utc::now().date_naive() + ChronoDuration::days(5));
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Due:"));
+    }
+
+    #[test]
+    fn test_focus_view_with_scheduled_date() {
+        use crate::domain::Task;
+        use chrono::Utc;
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let mut task = Task::new("Task with scheduled date");
+        task.scheduled_date = Some(Utc::now().date_naive());
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("Scheduled:"));
+    }
+
+    #[test]
+    fn test_focus_view_with_description() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let mut task = Task::new("Task with description");
+        task.description = Some("This is a detailed description of the task.".to_string());
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("detailed description"));
+    }
+
+    #[test]
+    fn test_focus_view_completed_task() {
+        use crate::domain::{Task, TaskStatus};
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let task = Task::new("Completed task").with_status(TaskStatus::Done);
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        assert!(content.contains("[x]")); // Completed checkbox
+    }
+
+    #[test]
+    fn test_focus_view_with_chain() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        // Create a chain of tasks
+        let mut task1 = Task::new("First in chain");
+        let task2 = Task::new("Second in chain");
+
+        task1.next_task_id = Some(task2.id);
+        let task2_id = task2.id;
+
+        model.tasks.insert(task1.id, task1);
+        model.tasks.insert(task2.id, task2);
+        model.visible_tasks = vec![task2_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        // Should show chain info - second task is pointed to by first
+        assert!(content.contains("Chain") || content.contains("CURRENT"));
+    }
+
+    #[test]
+    fn test_focus_view_with_next_in_chain() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        // Create a chain of tasks
+        let mut task1 = Task::new("First in chain");
+        let task2 = Task::new("Second in chain");
+
+        task1.next_task_id = Some(task2.id);
+        let task1_id = task1.id;
+
+        model.tasks.insert(task1.id, task1);
+        model.tasks.insert(task2.id, task2);
+        model.visible_tasks = vec![task1_id];
+        model.selected_index = 0;
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        // Should show chain info - first task has next
+        assert!(
+            content.contains("Chain") || content.contains("CURRENT") || content.contains("Second")
+        );
+    }
+
+    #[test]
+    fn test_focus_view_timer_start_stop_hint() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let task = Task::new("Task for timer test");
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        // When not tracking
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+        assert!(content.contains("Start Timer") || content.contains("[t]"));
+    }
+
+    #[test]
+    fn test_focus_view_with_active_timer() {
+        use crate::domain::{Task, TimeEntry};
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let task = Task::new("Task being tracked");
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        // Start tracking
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id;
+        model.time_entries.insert(entry.id, entry);
+        model.active_time_entry = Some(entry_id);
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+        let content = buffer_content(&buffer);
+
+        // Should show timer and stop hint
+        assert!(content.contains("Stop Timer") || content.contains("[t]"));
+    }
+
+    #[test]
+    fn test_focus_view_time_tracked_from_entries() {
+        use crate::domain::{Task, TimeEntry};
+        use chrono::{Duration as ChronoDuration, Utc};
+
+        let mut model = Model::new();
+        let theme = Theme::default();
+
+        let task = Task::new("Task with time entries");
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+        model.visible_tasks = vec![task_id];
+        model.selected_index = 0;
+
+        // Add a completed time entry (30 minutes)
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = Utc::now() - ChronoDuration::minutes(30);
+        entry.stop();
+        model.time_entries.insert(entry.id, entry);
+
+        let focus_view = FocusView::new(&model, &theme);
+        let buffer = render_widget(focus_view, 80, 24);
+
+        // Should render with time tracked (contains colon from time format)
+        let content = buffer_content(&buffer);
+        assert!(content.contains(':'));
     }
 }

@@ -69,7 +69,14 @@ pub fn mark_task_done(
 
     match matches.len() {
         0 => {
-            eprintln!("No matching incomplete tasks found for: {}", query);
+            eprintln!("No matching incomplete tasks found for: \"{}\"", query);
+            eprintln!();
+            eprintln!("Tips:");
+            eprintln!("  - Check spelling of your search query");
+            eprintln!("  - Use 'taskflow list' to see available tasks");
+            if project_filter.is_some() || tags_filter.is_some() {
+                eprintln!("  - Try without --project or --tags filters");
+            }
             std::process::exit(1);
         }
         1 => {
@@ -97,7 +104,11 @@ pub fn mark_task_done(
                     .unwrap_or_default();
                 println!("  {}. {}{}", i + 1, task.title, due_str);
             }
-            eprintln!("\nPlease use a more specific query.");
+            eprintln!();
+            eprintln!("Tips:");
+            eprintln!("  - Use a more specific search query");
+            eprintln!("  - Add --project <name> to filter by project");
+            eprintln!("  - Add --tags <tag> to filter by tag");
             std::process::exit(1);
         }
     }

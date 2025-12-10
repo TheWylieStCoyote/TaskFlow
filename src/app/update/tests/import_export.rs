@@ -13,12 +13,12 @@ fn test_start_import_csv_sets_input_mode() {
 
     update(&mut model, Message::System(SystemMessage::StartImportCsv));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
     assert!(matches!(
-        model.input_target,
+        model.input.target,
         InputTarget::ImportFilePath(ImportFormat::Csv)
     ));
-    assert!(model.input_buffer.is_empty());
+    assert!(model.input.buffer.is_empty());
 }
 
 #[test]
@@ -27,9 +27,9 @@ fn test_start_import_ics_sets_input_mode() {
 
     update(&mut model, Message::System(SystemMessage::StartImportIcs));
 
-    assert_eq!(model.input_mode, InputMode::Editing);
+    assert_eq!(model.input.mode, InputMode::Editing);
     assert!(matches!(
-        model.input_target,
+        model.input.target,
         InputTarget::ImportFilePath(ImportFormat::Ics)
     ));
 }
@@ -39,8 +39,8 @@ fn test_cancel_import_resets_state() {
     let mut model = Model::new();
 
     // Set up pending import state
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![],
         skipped: vec![],
         errors: vec![],
@@ -48,10 +48,15 @@ fn test_cancel_import_resets_state() {
 
     update(&mut model, Message::System(SystemMessage::CancelImport));
 
-    assert!(!model.show_import_preview);
-    assert!(model.pending_import.is_none());
-    assert!(model.status_message.is_some());
-    assert!(model.status_message.as_ref().unwrap().contains("cancelled"));
+    assert!(!model.import.show_preview);
+    assert!(model.import.pending.is_none());
+    assert!(model.alerts.status_message.is_some());
+    assert!(model
+        .alerts
+        .status_message
+        .as_ref()
+        .unwrap()
+        .contains("cancelled"));
 }
 
 #[test]
@@ -61,8 +66,8 @@ fn test_confirm_import_adds_tasks() {
     // Create a task to import
     let task = Task::new("Imported Task");
 
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![task.clone()],
         skipped: vec![],
         errors: vec![],
@@ -70,12 +75,13 @@ fn test_confirm_import_adds_tasks() {
 
     update(&mut model, Message::System(SystemMessage::ConfirmImport));
 
-    assert!(!model.show_import_preview);
-    assert!(model.pending_import.is_none());
+    assert!(!model.import.show_preview);
+    assert!(model.import.pending.is_none());
     assert_eq!(model.tasks.len(), 1);
     assert!(model.tasks.values().any(|t| t.title == "Imported Task"));
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
+        .alerts
         .status_message
         .as_ref()
         .unwrap()
@@ -91,8 +97,8 @@ fn test_confirm_import_multiple_tasks() {
     let task2 = Task::new("Task 2");
     let task3 = Task::new("Task 3");
 
-    model.show_import_preview = true;
-    model.pending_import = Some(ImportResult {
+    model.import.show_preview = true;
+    model.import.pending = Some(ImportResult {
         imported: vec![task1, task2, task3],
         skipped: vec![],
         errors: vec![],
@@ -102,6 +108,7 @@ fn test_confirm_import_multiple_tasks() {
 
     assert_eq!(model.tasks.len(), 3);
     assert!(model
+        .alerts
         .status_message
         .as_ref()
         .unwrap()
@@ -113,16 +120,17 @@ fn test_import_empty_path_shows_error() {
     let mut model = Model::new();
 
     // Set up for file path input
-    model.input_mode = InputMode::Editing;
-    model.input_target = InputTarget::ImportFilePath(ImportFormat::Csv);
-    model.input_buffer = "   ".to_string(); // Whitespace only
+    model.input.mode = InputMode::Editing;
+    model.input.target = InputTarget::ImportFilePath(ImportFormat::Csv);
+    model.input.buffer = "   ".to_string(); // Whitespace only
 
     // Submit the input
     update(&mut model, Message::Ui(UiMessage::SubmitInput));
 
     // Should show error, not crash
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
     assert!(model
+        .alerts
         .status_message
         .as_ref()
         .unwrap()

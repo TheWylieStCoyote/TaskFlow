@@ -89,6 +89,155 @@ Fix bug #backend !high due:tomorrow @Work
 
 ---
 
+## Views
+
+Switch between views using number keys:
+
+| Key | View |
+|-----|------|
+| `1` | Task List |
+| `2` | Calendar |
+| `3` | Dashboard |
+| `4` | Kanban |
+| `5` | Eisenhower Matrix |
+| `6` | Weekly Planner |
+| `7` | Timeline |
+| `8` | Habits |
+| `9` | Heatmap |
+| `0` | Forecast |
+
+Additional views (access via search/command):
+- **Burndown** - Sprint progress chart
+- **Network** - Task dependency graph
+- **Snoozed** - Hidden tasks until snooze expires
+- **Focus Mode** - Distraction-free single-task view
+
+---
+
+## Kanban Board (4)
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Move between columns |
+| `j` / `k` | Move between tasks in column |
+| `Enter` | View task details |
+| `x` | Toggle complete |
+
+Columns: Todo → In Progress → Done
+
+---
+
+## Eisenhower Matrix (5)
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Move left / right quadrants |
+| `j` / `k` | Move up / down quadrants |
+| `Enter` | View task details |
+
+Quadrants based on priority and due date:
+- **Urgent + Important** (top-left)
+- **Not Urgent + Important** (top-right)
+- **Urgent + Not Important** (bottom-left)
+- **Not Urgent + Not Important** (bottom-right)
+
+---
+
+## Weekly Planner (6)
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Move between days |
+| `j` / `k` | Move between tasks |
+| `Enter` | View task details |
+| `D` | Set due date for selected task |
+
+Shows tasks organized by day of the week.
+
+---
+
+## Timeline (7)
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` | Scroll left / right |
+| `j` / `k` | Select previous / next task |
+| `<` / `>` | Zoom out / in |
+| `t` | Jump to today |
+| `Enter` | View task details |
+
+Visual timeline of tasks with due dates.
+
+---
+
+## Habits (8)
+
+| Key | Action |
+|-----|--------|
+| `n` | Create new habit |
+| `e` | Edit habit |
+| `d` | Delete habit |
+| `Space` | Check in today |
+| `j` / `k` | Navigate habits |
+
+Track daily/weekly habits with streak counters.
+
+---
+
+## Heatmap (9)
+
+View-only calendar showing task completion intensity over time.
+- Darker cells = more tasks completed
+- Navigate with standard calendar controls
+
+---
+
+## Forecast (0)
+
+View-only workload projection:
+- Weekly task distribution chart
+- Daily capacity breakdown
+- Upcoming deadlines
+- ⚠ Overload warnings when capacity exceeded
+
+---
+
+## Network Graph
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate between nodes |
+| `h` / `l` | Navigate between nodes |
+| `Enter` | View task details |
+
+Visual graph of task dependencies and chains.
+
+---
+
+## Focus Mode (f)
+
+| Key | Action |
+|-----|--------|
+| `[` / `]` | Navigate chain (prev/next) |
+| `t` | Start/stop timer |
+| `x` | Toggle complete |
+| `f` / `Esc` | Exit focus mode |
+
+Distraction-free view for working on a single task.
+
+---
+
+## Snoozed Tasks
+
+| Key | Action |
+|-----|--------|
+| `z` | Snooze selected task |
+| Standard navigation | Same as task list |
+
+Snoozed tasks are hidden until their snooze time expires.
+
+---
+
 ## Multi-Select
 
 | Key | Action |

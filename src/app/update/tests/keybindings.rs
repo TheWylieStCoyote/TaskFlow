@@ -50,7 +50,7 @@ fn test_start_edit_keybinding() {
 
     update(&mut model, Message::Ui(UiMessage::StartEditKeybinding));
     assert!(model.keybindings_editor.capturing);
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
 }
 
 #[test]
@@ -58,11 +58,11 @@ fn test_cancel_edit_keybinding() {
     let mut model = Model::new();
     model.keybindings_editor.visible = true;
     model.keybindings_editor.capturing = true;
-    model.status_message = Some("Press a key...".to_string());
+    model.alerts.status_message = Some("Press a key...".to_string());
 
     update(&mut model, Message::Ui(UiMessage::CancelEditKeybinding));
     assert!(!model.keybindings_editor.capturing);
-    assert!(model.status_message.is_none());
+    assert!(model.alerts.status_message.is_none());
 }
 
 #[test]
@@ -103,5 +103,5 @@ fn test_reset_all_keybindings() {
 
     // Should be back to default ("1" is not a default binding)
     assert_eq!(model.keybindings.get_action("1"), None);
-    assert!(model.status_message.is_some());
+    assert!(model.alerts.status_message.is_some());
 }

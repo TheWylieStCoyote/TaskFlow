@@ -65,3 +65,94 @@ impl WeeklyReviewPhase {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_phase_next_transitions() {
+        assert_eq!(
+            WeeklyReviewPhase::Welcome.next(),
+            WeeklyReviewPhase::CompletedTasks
+        );
+        assert_eq!(
+            WeeklyReviewPhase::CompletedTasks.next(),
+            WeeklyReviewPhase::OverdueTasks
+        );
+        assert_eq!(
+            WeeklyReviewPhase::OverdueTasks.next(),
+            WeeklyReviewPhase::UpcomingWeek
+        );
+        assert_eq!(
+            WeeklyReviewPhase::UpcomingWeek.next(),
+            WeeklyReviewPhase::StaleProjects
+        );
+        assert_eq!(
+            WeeklyReviewPhase::StaleProjects.next(),
+            WeeklyReviewPhase::Summary
+        );
+        // Summary stays at end
+        assert_eq!(
+            WeeklyReviewPhase::Summary.next(),
+            WeeklyReviewPhase::Summary
+        );
+    }
+
+    #[test]
+    fn test_phase_prev_transitions() {
+        // Welcome stays at start
+        assert_eq!(
+            WeeklyReviewPhase::Welcome.prev(),
+            WeeklyReviewPhase::Welcome
+        );
+        assert_eq!(
+            WeeklyReviewPhase::CompletedTasks.prev(),
+            WeeklyReviewPhase::Welcome
+        );
+        assert_eq!(
+            WeeklyReviewPhase::OverdueTasks.prev(),
+            WeeklyReviewPhase::CompletedTasks
+        );
+        assert_eq!(
+            WeeklyReviewPhase::UpcomingWeek.prev(),
+            WeeklyReviewPhase::OverdueTasks
+        );
+        assert_eq!(
+            WeeklyReviewPhase::StaleProjects.prev(),
+            WeeklyReviewPhase::UpcomingWeek
+        );
+        assert_eq!(
+            WeeklyReviewPhase::Summary.prev(),
+            WeeklyReviewPhase::StaleProjects
+        );
+    }
+
+    #[test]
+    fn test_phase_numbers() {
+        assert_eq!(WeeklyReviewPhase::Welcome.number(), 1);
+        assert_eq!(WeeklyReviewPhase::CompletedTasks.number(), 2);
+        assert_eq!(WeeklyReviewPhase::OverdueTasks.number(), 3);
+        assert_eq!(WeeklyReviewPhase::UpcomingWeek.number(), 4);
+        assert_eq!(WeeklyReviewPhase::StaleProjects.number(), 5);
+        assert_eq!(WeeklyReviewPhase::Summary.number(), 6);
+    }
+
+    #[test]
+    fn test_phase_titles() {
+        assert_eq!(WeeklyReviewPhase::Welcome.title(), "Weekly Review");
+        assert_eq!(
+            WeeklyReviewPhase::CompletedTasks.title(),
+            "Completed This Week"
+        );
+        assert_eq!(WeeklyReviewPhase::OverdueTasks.title(), "Overdue Tasks");
+        assert_eq!(WeeklyReviewPhase::UpcomingWeek.title(), "Next 7 Days");
+        assert_eq!(WeeklyReviewPhase::StaleProjects.title(), "Project Check");
+        assert_eq!(WeeklyReviewPhase::Summary.title(), "Weekly Summary");
+    }
+
+    #[test]
+    fn test_phase_default() {
+        assert_eq!(WeeklyReviewPhase::default(), WeeklyReviewPhase::Welcome);
+    }
+}

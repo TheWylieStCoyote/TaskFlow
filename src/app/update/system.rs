@@ -108,85 +108,128 @@ fn action_description(action: &UndoAction) -> &'static str {
     }
 }
 
+/// Direction for undo/redo operations
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UndoDirection {
+    Undo,
+    Redo,
+}
+
+/// Apply an undo action in the specified direction.
+///
+/// For most actions, Undo reverses the operation and Redo reapplies it.
+/// Note: Modified actions on the redo stack store the inverse (before/after swapped),
+/// so "before" always contains the target state.
+fn apply_undo_action(model: &mut Model, action: UndoAction, dir: UndoDirection) {
+    use UndoDirection::{Redo, Undo};
+
+    match (action, dir) {
+        // Task operations
+        (UndoAction::TaskCreated(task), Undo) => {
+            model.delete_task_from_storage(&task.id);
+            model.tasks.remove(&task.id);
+        }
+        (UndoAction::TaskCreated(task), Redo) => {
+            model.sync_task(&task);
+            model.tasks.insert(task.id, *task);
+        }
+        (UndoAction::TaskDeleted { task, time_entries }, Undo) => {
+            model.sync_task(&task);
+            model.tasks.insert(task.id, *task);
+            for entry in time_entries {
+                model.restore_time_entry(entry);
+            }
+        }
+        (UndoAction::TaskDeleted { task, time_entries }, Redo) => {
+            for entry in &time_entries {
+                model.delete_time_entry(&entry.id);
+            }
+            model.delete_task_from_storage(&task.id);
+            model.tasks.remove(&task.id);
+        }
+        (UndoAction::TaskModified { before, .. }, _) => {
+            model.sync_task(&before);
+            model.tasks.insert(before.id, *before);
+        }
+
+        // Project operations
+        (UndoAction::ProjectCreated(project), Undo)
+        | (UndoAction::ProjectDeleted(project), Redo) => {
+            model.projects.remove(&project.id);
+            model.dirty = true;
+        }
+        (UndoAction::ProjectCreated(project), Redo)
+        | (UndoAction::ProjectDeleted(project), Undo) => {
+            model.sync_project(&project);
+            model.projects.insert(project.id, *project);
+        }
+        (UndoAction::ProjectModified { before, .. }, _) => {
+            model.sync_project(&before);
+            model.projects.insert(before.id, *before);
+        }
+
+        // Time entry operations
+        (UndoAction::TimeEntryStarted(entry), Undo)
+        | (UndoAction::TimeEntryDeleted(entry), Redo) => {
+            model.delete_time_entry(&entry.id);
+        }
+        (UndoAction::TimeEntryStarted(entry), Redo)
+        | (UndoAction::TimeEntryDeleted(entry), Undo) => {
+            model.restore_time_entry(*entry);
+        }
+        (
+            UndoAction::TimeEntryStopped { before, .. }
+            | UndoAction::TimeEntryModified { before, .. },
+            _,
+        ) => {
+            model.restore_time_entry(*before);
+        }
+
+        // Timer switch (unique: involves two entries)
+        (
+            UndoAction::TimerSwitched {
+                stopped_entry_before,
+                started_entry,
+                ..
+            },
+            Undo,
+        ) => {
+            model.delete_time_entry(&started_entry.id);
+            model.restore_time_entry(*stopped_entry_before);
+        }
+        (
+            UndoAction::TimerSwitched {
+                stopped_entry_after,
+                started_entry,
+                ..
+            },
+            Redo,
+        ) => {
+            model.active_time_entry = None;
+            model.restore_time_entry(*stopped_entry_after);
+            model.restore_time_entry(*started_entry);
+        }
+
+        // Work log operations
+        (UndoAction::WorkLogCreated(entry), Undo) | (UndoAction::WorkLogDeleted(entry), Redo) => {
+            model.delete_work_log_from_storage(&entry.id);
+            model.work_logs.remove(&entry.id);
+        }
+        (UndoAction::WorkLogCreated(entry), Redo) | (UndoAction::WorkLogDeleted(entry), Undo) => {
+            model.sync_work_log(&entry);
+            model.work_logs.insert(entry.id, *entry);
+        }
+        (UndoAction::WorkLogModified { before, .. }, _) => {
+            model.sync_work_log(&before);
+            model.work_logs.insert(before.id, *before);
+        }
+    }
+}
+
 fn handle_undo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_undo() {
         let description = action_description(&action);
-        match action {
-            UndoAction::TaskCreated(task) => {
-                // Undo create by deleting the task
-                model.delete_task_from_storage(&task.id);
-                model.tasks.remove(&task.id);
-            }
-            UndoAction::TaskDeleted { task, time_entries } => {
-                // Undo delete by restoring the task
-                model.sync_task(&task);
-                model.tasks.insert(task.id, *task);
-                // Restore time entries
-                for entry in time_entries {
-                    model.restore_time_entry(entry);
-                }
-            }
-            UndoAction::TaskModified { before, after: _ } => {
-                // Undo modify by restoring previous state
-                model.sync_task(&before);
-                model.tasks.insert(before.id, *before);
-            }
-            UndoAction::ProjectCreated(project) => {
-                // Undo project create by removing it
-                model.projects.remove(&project.id);
-                model.dirty = true;
-            }
-            UndoAction::ProjectDeleted(project) => {
-                // Undo project delete by restoring it
-                model.sync_project(&project);
-                model.projects.insert(project.id, *project);
-            }
-            UndoAction::ProjectModified { before, after: _ } => {
-                // Undo modify by restoring previous state
-                model.sync_project(&before);
-                model.projects.insert(before.id, *before);
-            }
-            UndoAction::TimeEntryStarted(entry) => {
-                // Undo start by deleting the entry
-                model.delete_time_entry(&entry.id);
-            }
-            UndoAction::TimeEntryStopped { before, after: _ } => {
-                // Undo stop by restoring the running state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimeEntryDeleted(entry) => {
-                // Undo delete by restoring the entry
-                model.restore_time_entry(*entry);
-            }
-            UndoAction::TimeEntryModified { before, after: _ } => {
-                // Undo modification by restoring previous state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimerSwitched {
-                stopped_entry_before,
-                stopped_entry_after: _,
-                started_entry,
-            } => {
-                // Undo timer switch: delete new entry, restore old entry to running state
-                model.delete_time_entry(&started_entry.id);
-                model.restore_time_entry(*stopped_entry_before);
-            }
-            UndoAction::WorkLogCreated(entry) => {
-                // Undo work log create by deleting it
-                model.delete_work_log_from_storage(&entry.id);
-                model.work_logs.remove(&entry.id);
-            }
-            UndoAction::WorkLogDeleted(entry) => {
-                // Undo work log delete by restoring it
-                model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id, *entry);
-            }
-            UndoAction::WorkLogModified { before, after: _ } => {
-                // Undo work log modify by restoring previous state
-                model.sync_work_log(&before);
-                model.work_logs.insert(before.id, *before);
-            }
-        }
+        apply_undo_action(model, action, UndoDirection::Undo);
         model.refresh_visible_tasks();
         model.status_message = Some(format!("Undone: {description}"));
     }
@@ -195,86 +238,7 @@ fn handle_undo(model: &mut Model) {
 fn handle_redo(model: &mut Model) {
     if let Some(action) = model.undo_stack.pop_for_redo() {
         let description = action_description(&action);
-        match action {
-            UndoAction::TaskCreated(task) => {
-                // Redo create by restoring the task
-                model.sync_task(&task);
-                model.tasks.insert(task.id, *task);
-            }
-            UndoAction::TaskDeleted { task, time_entries } => {
-                // Redo delete by removing the task and its time entries
-                // Delete time entries first
-                for entry in &time_entries {
-                    model.delete_time_entry(&entry.id);
-                }
-                model.delete_task_from_storage(&task.id);
-                model.tasks.remove(&task.id);
-            }
-            UndoAction::TaskModified { before, after: _ } => {
-                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
-                model.sync_task(&before);
-                model.tasks.insert(before.id, *before);
-            }
-            UndoAction::ProjectCreated(project) => {
-                // Redo project create by restoring it
-                model.sync_project(&project);
-                model.projects.insert(project.id, *project);
-            }
-            UndoAction::ProjectDeleted(project) => {
-                // Redo project delete by removing it
-                model.projects.remove(&project.id);
-                model.dirty = true;
-            }
-            UndoAction::ProjectModified { before, after: _ } => {
-                // Redo modify: the redo stack holds the inverse, so "before" is the state we want
-                model.sync_project(&before);
-                model.projects.insert(before.id, *before);
-            }
-            UndoAction::TimeEntryStarted(entry) => {
-                // Redo start by restoring the entry
-                model.restore_time_entry(*entry);
-            }
-            UndoAction::TimeEntryStopped { before, after: _ } => {
-                // Redo stop: the redo stack holds the inverse, so "before" is the stopped state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimeEntryDeleted(entry) => {
-                // Redo delete by removing the entry
-                model.delete_time_entry(&entry.id);
-            }
-            UndoAction::TimeEntryModified { before, after: _ } => {
-                // Redo modification: inverse has swapped before/after, so "before" is now the new state
-                model.restore_time_entry(*before);
-            }
-            UndoAction::TimerSwitched {
-                stopped_entry_before: _,
-                stopped_entry_after,
-                started_entry,
-            } => {
-                // Redo timer switch: stop old entry, restore new entry
-                // First clear the active entry (the old one that was restored by undo)
-                model.active_time_entry = None;
-                // Restore the stopped state of old entry
-                model.restore_time_entry(*stopped_entry_after);
-                // Restore the new entry (will become active since we cleared active above)
-                model.restore_time_entry(*started_entry);
-            }
-            UndoAction::WorkLogCreated(entry) => {
-                // Redo work log create by restoring it
-                model.sync_work_log(&entry);
-                model.work_logs.insert(entry.id, *entry);
-            }
-            UndoAction::WorkLogDeleted(entry) => {
-                // Redo work log delete by removing it
-                model.delete_work_log_from_storage(&entry.id);
-                model.work_logs.remove(&entry.id);
-            }
-            UndoAction::WorkLogModified { before, after: _ } => {
-                // Redo work log modify: inverse has swapped before/after, so "before" is the new state
-                model.sync_work_log(&before);
-                model.work_logs.insert(before.id, *before);
-            }
-        }
+        apply_undo_action(model, action, UndoDirection::Redo);
         model.refresh_visible_tasks();
         model.status_message = Some(format!("Redone: {description}"));
     }

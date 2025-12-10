@@ -180,6 +180,26 @@ impl MarkdownBackend {
         Ok(())
     }
 
+    /// Load saved filters from saved_filters.yaml.
+    pub(crate) fn load_saved_filters(&mut self) -> StorageResult<()> {
+        let filters_file = self.base_path.join("saved_filters.yaml");
+        if filters_file.exists() {
+            let content = fs::read_to_string(&filters_file)
+                .map_err(|e| StorageError::io(&filters_file, e))?;
+            self.saved_filters = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// Save saved filters to saved_filters.yaml.
+    pub(crate) fn save_saved_filters(&self) -> StorageResult<()> {
+        let filters_file = self.base_path.join("saved_filters.yaml");
+        let content = serde_yaml::to_string(&self.saved_filters)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&filters_file, content).map_err(|e| StorageError::io(&filters_file, e))?;
+        Ok(())
+    }
+
     /// Parse a task from a markdown file with YAML frontmatter.
     pub(crate) fn parse_task_file(&self, path: &Path) -> StorageResult<Task> {
         let content = fs::read_to_string(path).map_err(|e| StorageError::io(path, e))?;

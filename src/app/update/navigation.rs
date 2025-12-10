@@ -34,10 +34,8 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             FocusPane::Sidebar => {
                 if model.sidebar_selected > 0 {
                     model.sidebar_selected -= 1;
-                    // Skip separator
-                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
-                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
-                    }
+                    // Skip separators and headers
+                    skip_sidebar_non_selectable_up(model);
                 }
             }
         },
@@ -62,10 +60,8 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.sidebar_item_count().saturating_sub(1);
                 if model.sidebar_selected < max_index {
                     model.sidebar_selected += 1;
-                    // Skip separator
-                    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
-                        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX + 1;
-                    }
+                    // Skip separators and headers
+                    skip_sidebar_non_selectable_down(model, max_index);
                 }
             }
         },
@@ -456,6 +452,54 @@ fn handle_calendar_down(model: &mut Model) {
     }
 }
 
+/// Skip non-selectable items when navigating up in sidebar
+fn skip_sidebar_non_selectable_up(model: &mut Model) {
+    let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
+    let filters_separator = projects_end;
+    let filters_header = projects_end + 1;
+
+    // Skip first separator
+    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
+        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
+    }
+    // Skip filters separator
+    else if model.sidebar_selected == filters_separator {
+        model.sidebar_selected = filters_separator - 1;
+    }
+    // Skip filters header
+    else if model.sidebar_selected == filters_header {
+        model.sidebar_selected = filters_header - 1;
+        // Also skip the separator we just landed on
+        if model.sidebar_selected == filters_separator {
+            model.sidebar_selected = filters_separator - 1;
+        }
+    }
+}
+
+/// Skip non-selectable items when navigating down in sidebar
+fn skip_sidebar_non_selectable_down(model: &mut Model, max_index: usize) {
+    let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
+    let filters_separator = projects_end;
+    let filters_header = projects_end + 1;
+
+    // Skip first separator
+    if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX && model.sidebar_selected < max_index {
+        model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX + 1;
+    }
+    // Skip filters separator
+    else if model.sidebar_selected == filters_separator && model.sidebar_selected < max_index {
+        model.sidebar_selected = filters_separator + 1;
+        // Also skip the header
+        if model.sidebar_selected == filters_header && model.sidebar_selected < max_index {
+            model.sidebar_selected = filters_header + 1;
+        }
+    }
+    // Skip filters header
+    else if model.sidebar_selected == filters_header && model.sidebar_selected < max_index {
+        model.sidebar_selected = filters_header + 1;
+    }
+}
+
 /// Handle sidebar item selection
 fn handle_sidebar_selection(model: &mut Model) {
     let selected = model.sidebar_selected;
@@ -465,6 +509,7 @@ fn handle_sidebar_selection(model: &mut Model) {
     // SIDEBAR_SEPARATOR_INDEX: Separator (skip)
     // SIDEBAR_PROJECTS_HEADER_INDEX: "Projects" header
     // SIDEBAR_FIRST_PROJECT_INDEX+: Individual projects
+    // Then: Separator, "Saved Filters" header, individual filters
 
     // Helper to activate a view
     let activate_view = |model: &mut Model, view: ViewId| {
@@ -481,14 +526,20 @@ fn handle_sidebar_selection(model: &mut Model) {
         return;
     }
 
+    // Calculate indices for sections
+    let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
+    let filters_separator = projects_end;
+    let filters_header = projects_end + 1;
+    let filters_start = model.sidebar_saved_filters_start();
+
     // Handle special items after the views
     match selected {
-        n if n == SIDEBAR_SEPARATOR_INDEX => {} // Separator, do nothing
+        n if n == SIDEBAR_SEPARATOR_INDEX => {} // First separator, do nothing
         n if n == SIDEBAR_PROJECTS_HEADER_INDEX => {
             // Projects header - go to Projects view showing all project tasks
             activate_view(model, ViewId::Projects);
         }
-        n if n >= SIDEBAR_FIRST_PROJECT_INDEX => {
+        n if n >= SIDEBAR_FIRST_PROJECT_INDEX && n < projects_end => {
             // Select a specific project
             let project_index = n - SIDEBAR_FIRST_PROJECT_INDEX;
             let project_ids: Vec<_> = model.projects.keys().copied().collect();
@@ -498,6 +549,27 @@ fn handle_sidebar_selection(model: &mut Model) {
                 model.focus_pane = FocusPane::TaskList;
                 model.selected_index = 0;
                 model.refresh_visible_tasks();
+            }
+        }
+        n if n == filters_separator => {} // Filters separator, do nothing
+        n if n == filters_header => {}    // Filters header, do nothing
+        n if n >= filters_start => {
+            // Select a saved filter
+            let filter_index = n - filters_start;
+            let mut filters: Vec<_> = model.saved_filters.values().collect();
+            filters.sort_by(|a, b| a.name.cmp(&b.name));
+            if let Some(filter) = filters.get(filter_index) {
+                // Clone the filter data before modifying model
+                let filter_clone = (*filter).clone();
+                let filter_name = filter_clone.name.clone();
+                // Apply the filter
+                model.filtering.filter = filter_clone.filter;
+                model.filtering.sort = filter_clone.sort;
+                model.active_saved_filter = Some(filter_clone.id);
+                model.focus_pane = FocusPane::TaskList;
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
+                model.alerts.status_message = Some(format!("Applied filter: {filter_name}"));
             }
         }
         _ => {}

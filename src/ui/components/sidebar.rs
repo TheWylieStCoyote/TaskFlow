@@ -304,6 +304,46 @@ impl Widget for Sidebar<'_> {
             ))));
         }
 
+        // Saved Filters section
+        items.push(ListItem::new(Line::from("───────────")));
+        items.push(ListItem::new(Line::from(Span::styled(
+            "Saved Filters",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ))));
+
+        // List saved filters (sorted by name)
+        let mut filters: Vec<_> = self.model.saved_filters.values().collect();
+        filters.sort_by(|a, b| a.name.cmp(&b.name));
+
+        for filter in filters {
+            let is_active = self.model.active_saved_filter.as_ref() == Some(&filter.id);
+            let icon = filter.icon.as_deref().unwrap_or("🔍");
+            let name_style = if is_active {
+                Style::default()
+                    .fg(theme.colors.accent.to_color())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.colors.foreground.to_color())
+            };
+
+            items.push(ListItem::new(Line::from(vec![
+                Span::styled(format!("  {icon} "), Style::default()),
+                Span::styled(filter.name.clone(), name_style),
+                if is_active {
+                    Span::styled(" ✓", Style::default().fg(theme.colors.success.to_color()))
+                } else {
+                    Span::raw("")
+                },
+            ])));
+        }
+
+        if self.model.saved_filters.is_empty() {
+            items.push(ListItem::new(Line::from(Span::styled(
+                "  Press F to add",
+                Style::default().fg(theme.colors.muted.to_color()),
+            ))));
+        }
+
         let border_color = if is_focused {
             theme.colors.accent.to_color()
         } else {

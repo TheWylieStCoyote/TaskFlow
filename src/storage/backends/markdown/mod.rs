@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::domain::{
-    Habit, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
-    TimeEntry, WorkLogEntry,
+    Habit, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, SavedFilter, Tag,
+    Task, TaskId, TimeEntry, WorkLogEntry,
 };
 use crate::storage::StorageResult;
 
@@ -64,6 +64,7 @@ pub struct MarkdownBackend {
     pub(crate) time_entries: Vec<TimeEntry>,
     pub(crate) work_logs: Vec<WorkLogEntry>,
     pub(crate) habits: Vec<Habit>,
+    pub(crate) saved_filters: Vec<SavedFilter>,
     pub(crate) pomodoro_state: PomodoroState,
     pub(crate) dirty: bool,
 }
@@ -87,6 +88,7 @@ impl MarkdownBackend {
             time_entries: Vec::new(),
             work_logs: Vec::new(),
             habits: Vec::new(),
+            saved_filters: Vec::new(),
             pomodoro_state: PomodoroState::default(),
             dirty: false,
         })

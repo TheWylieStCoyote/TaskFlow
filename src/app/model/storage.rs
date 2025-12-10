@@ -94,6 +94,11 @@ impl Model {
             self.pomodoro.stats = stats;
         }
 
+        // Load saved filters
+        for filter in export_data.saved_filters {
+            self.saved_filters.insert(filter.id.clone(), filter);
+        }
+
         self.storage.backend = Some(backend);
         self.storage.data_path = Some(path);
         self.refresh_visible_tasks();

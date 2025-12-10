@@ -412,11 +412,21 @@ impl Model {
 
     /// Returns the total number of items in the sidebar.
     ///
-    /// Uses [`SIDEBAR_FIRST_PROJECT_INDEX`] as the base count, plus projects.
+    /// Uses [`SIDEBAR_FIRST_PROJECT_INDEX`] as the base count, plus projects,
+    /// plus the saved filters section.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
         // Base items (views + separator + Projects header) + project count
-        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1)
+        let projects_section = SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1);
+        // +1 for separator, +1 for "Saved Filters" header, + filters count (min 1 for "Press F" message)
+        projects_section + 2 + self.saved_filters.len().max(1)
+    }
+
+    /// Returns the index where saved filters start in the sidebar.
+    #[must_use]
+    pub fn sidebar_saved_filters_start(&self) -> usize {
+        // After projects section + separator + header
+        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1) + 2
     }
 
     /// Returns all tasks due on a specific day.

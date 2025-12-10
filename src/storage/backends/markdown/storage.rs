@@ -16,6 +16,7 @@ impl StorageBackend for MarkdownBackend {
         self.load_time_entries()?;
         self.load_work_logs()?;
         self.load_habits()?;
+        self.load_saved_filters()?;
         self.load_pomodoro_state()?;
         Ok(())
     }
@@ -26,6 +27,7 @@ impl StorageBackend for MarkdownBackend {
         self.save_time_entries()?;
         self.save_work_logs()?;
         self.save_habits()?;
+        self.save_saved_filters()?;
         self.save_pomodoro_state()?;
         self.dirty = false;
         Ok(())
@@ -43,6 +45,7 @@ impl StorageBackend for MarkdownBackend {
             pomodoro_session: self.pomodoro_state.session.clone(),
             pomodoro_config: self.pomodoro_state.config.clone(),
             pomodoro_stats: self.pomodoro_state.stats.clone(),
+            saved_filters: self.saved_filters.clone(),
         })
     }
 
@@ -62,6 +65,7 @@ impl StorageBackend for MarkdownBackend {
         self.time_entries.clear();
         self.work_logs.clear();
         self.habits.clear();
+        self.saved_filters.clear();
 
         // Import new data
         for project in &data.projects {
@@ -89,6 +93,12 @@ impl StorageBackend for MarkdownBackend {
             self.habits.push(habit.clone());
         }
         self.save_habits()?;
+
+        // Import saved filters
+        for filter in &data.saved_filters {
+            self.saved_filters.push(filter.clone());
+        }
+        self.save_saved_filters()?;
 
         // Import Pomodoro state
         self.pomodoro_state = PomodoroState {

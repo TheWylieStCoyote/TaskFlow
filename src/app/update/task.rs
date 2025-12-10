@@ -262,10 +262,20 @@ pub fn create_next_recurring_task(task: &Task) -> Task {
         }
         Some(Recurrence::Yearly { month, day }) => {
             let next_year = base_date.year() + 1;
-            // Try exact date, fall back to 28th if invalid (e.g., Feb 30)
+            // Try exact date, fall back to last day of month if invalid (e.g., Feb 29 in non-leap year)
             NaiveDate::from_ymd_opt(next_year, *month, *day).unwrap_or_else(|| {
-                NaiveDate::from_ymd_opt(next_year, *month, 28)
-                    .expect("day 28 always exists in any month")
+                // Get last day of the target month (first of next month minus 1 day)
+                NaiveDate::from_ymd_opt(
+                    if *month == 12 {
+                        next_year + 1
+                    } else {
+                        next_year
+                    },
+                    if *month == 12 { 1 } else { month + 1 },
+                    1,
+                )
+                .expect("day 1 of any month always exists")
+                    - Duration::days(1)
             })
         }
         None => today + Duration::days(1), // Shouldn't happen

@@ -580,9 +580,19 @@ mod tests {
         // Add some tasks with completion dates spread over time
         let today = Local::now().date_naive();
         let mut task1 = Task::new("Task 1").with_status(TaskStatus::Done);
-        task1.completed_at = Some((today - Duration::days(3)).and_hms_opt(12, 0, 0).unwrap().and_utc());
+        task1.completed_at = Some(
+            (today - Duration::days(3))
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
+        );
         let mut task2 = Task::new("Task 2").with_status(TaskStatus::Done);
-        task2.completed_at = Some((today - Duration::days(2)).and_hms_opt(12, 0, 0).unwrap().and_utc());
+        task2.completed_at = Some(
+            (today - Duration::days(2))
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
+        );
         let task3 = Task::new("Task 3");
 
         model.tasks.insert(task1.id, task1);
@@ -604,7 +614,11 @@ mod tests {
 
         // Add several tasks with varying states
         for i in 0..10 {
-            let status = if i < 5 { TaskStatus::Done } else { TaskStatus::Todo };
+            let status = if i < 5 {
+                TaskStatus::Done
+            } else {
+                TaskStatus::Todo
+            };
             let task = Task::new(format!("Task {i}")).with_status(status);
             model.tasks.insert(task.id, task);
         }

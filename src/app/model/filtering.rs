@@ -553,25 +553,34 @@ mod tests {
         let mut urgent_important = Task::new("Urgent Important");
         urgent_important.priority = Priority::High;
         urgent_important.due_date = Some(today + Duration::days(1));
-        model.tasks.insert(urgent_important.id, urgent_important.clone());
+        model
+            .tasks
+            .insert(urgent_important.id, urgent_important.clone());
 
         // Q1: Not Urgent + Important (due later, high priority)
         let mut not_urgent_important = Task::new("Not Urgent Important");
         not_urgent_important.priority = Priority::High;
         not_urgent_important.due_date = Some(today + Duration::days(10));
-        model.tasks.insert(not_urgent_important.id, not_urgent_important.clone());
+        model
+            .tasks
+            .insert(not_urgent_important.id, not_urgent_important.clone());
 
         // Q2: Urgent + Not Important (due soon, low priority)
         let mut urgent_not_important = Task::new("Urgent Not Important");
         urgent_not_important.priority = Priority::Low;
         urgent_not_important.due_date = Some(today);
-        model.tasks.insert(urgent_not_important.id, urgent_not_important.clone());
+        model
+            .tasks
+            .insert(urgent_not_important.id, urgent_not_important.clone());
 
         // Q3: Not Urgent + Not Important
         let mut not_urgent_not_important = Task::new("Not Urgent Not Important");
         not_urgent_not_important.priority = Priority::Low;
         not_urgent_not_important.due_date = Some(today + Duration::days(30));
-        model.tasks.insert(not_urgent_not_important.id, not_urgent_not_important.clone());
+        model.tasks.insert(
+            not_urgent_not_important.id,
+            not_urgent_not_important.clone(),
+        );
 
         model.visible_tasks = vec![
             urgent_important.id,
@@ -747,9 +756,18 @@ mod tests {
 
         // Should be sorted alphabetically
         assert_eq!(model.visible_tasks.len(), 3);
-        assert_eq!(model.tasks.get(&model.visible_tasks[0]).unwrap().title, "Alpha");
-        assert_eq!(model.tasks.get(&model.visible_tasks[1]).unwrap().title, "Bravo");
-        assert_eq!(model.tasks.get(&model.visible_tasks[2]).unwrap().title, "Charlie");
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[0]).unwrap().title,
+            "Alpha"
+        );
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[1]).unwrap().title,
+            "Bravo"
+        );
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[2]).unwrap().title,
+            "Charlie"
+        );
     }
 
     #[test]
@@ -768,9 +786,21 @@ mod tests {
         model.refresh_visible_tasks();
 
         // Parent should come before children
-        let parent_idx = model.visible_tasks.iter().position(|id| *id == parent_id).unwrap();
-        let child1_idx = model.visible_tasks.iter().position(|id| *id == child1.id).unwrap();
-        let child2_idx = model.visible_tasks.iter().position(|id| *id == child2.id).unwrap();
+        let parent_idx = model
+            .visible_tasks
+            .iter()
+            .position(|id| *id == parent_id)
+            .unwrap();
+        let child1_idx = model
+            .visible_tasks
+            .iter()
+            .position(|id| *id == child1.id)
+            .unwrap();
+        let child2_idx = model
+            .visible_tasks
+            .iter()
+            .position(|id| *id == child2.id)
+            .unwrap();
 
         assert!(parent_idx < child1_idx);
         assert!(parent_idx < child2_idx);
@@ -828,7 +858,10 @@ mod tests {
         model.refresh_visible_tasks();
 
         // Urgent should come first
-        assert_eq!(model.tasks.get(&model.visible_tasks[0]).unwrap().priority, Priority::Urgent);
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[0]).unwrap().priority,
+            Priority::Urgent
+        );
     }
 
     #[test]
@@ -851,8 +884,17 @@ mod tests {
         model.refresh_visible_tasks();
 
         // Soon should come first, no due date last
-        assert_eq!(model.tasks.get(&model.visible_tasks[0]).unwrap().title, "Due soon");
-        assert_eq!(model.tasks.get(&model.visible_tasks[1]).unwrap().title, "Due later");
-        assert_eq!(model.tasks.get(&model.visible_tasks[2]).unwrap().title, "No due date");
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[0]).unwrap().title,
+            "Due soon"
+        );
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[1]).unwrap().title,
+            "Due later"
+        );
+        assert_eq!(
+            model.tasks.get(&model.visible_tasks[2]).unwrap().title,
+            "No due date"
+        );
     }
 }

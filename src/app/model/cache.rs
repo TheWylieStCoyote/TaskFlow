@@ -660,7 +660,10 @@ mod tests {
         cache.set_weekly_planner_day(10, Rect::default()); // Out of bounds
 
         for i in 0..7 {
-            assert_eq!(cache.weekly_planner_day(i), Some(Rect::new(i as u16 * 10, 0, 10, 30)));
+            assert_eq!(
+                cache.weekly_planner_day(i),
+                Some(Rect::new(i as u16 * 10, 0, 10, 30))
+            );
         }
         assert!(cache.weekly_planner_day(10).is_none());
 
@@ -860,7 +863,9 @@ mod tests {
         tasks.insert(parent.id, parent);
 
         // Two children - one completed
-        let child1 = Task::new("Child 1").with_parent(parent_id).with_status(TaskStatus::Done);
+        let child1 = Task::new("Child 1")
+            .with_parent(parent_id)
+            .with_status(TaskStatus::Done);
         let child2 = Task::new("Child 2").with_parent(parent_id);
         tasks.insert(child1.id, child1);
         tasks.insert(child2.id, child2);

@@ -527,7 +527,10 @@ fn test_render_footer_summary_phase() {
 
     let content = buffer_content(&buffer);
     // Summary footer should mention Exit
-    assert!(content.contains("Exit"), "Summary footer should show exit hint");
+    assert!(
+        content.contains("Exit"),
+        "Summary footer should show exit hint"
+    );
 }
 
 #[test]

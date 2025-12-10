@@ -619,7 +619,10 @@ mod tests {
         timeline.render_title_bar(area, &mut buffer, today);
 
         let content = buffer_content(&buffer);
-        assert!(content.contains("Timeline"), "Should contain Timeline title");
+        assert!(
+            content.contains("Timeline"),
+            "Should contain Timeline title"
+        );
         assert!(content.contains("Day"), "Should show zoom level");
         assert!(content.contains("ON"), "Dependencies should be ON");
     }
@@ -885,8 +888,8 @@ mod tests {
 
     #[test]
     fn test_task_color_priority_high() {
-        use chrono::NaiveDate;
         use crate::domain::Priority;
+        use chrono::NaiveDate;
 
         let model = Model::new();
         let theme = Theme::default();
@@ -901,8 +904,8 @@ mod tests {
 
     #[test]
     fn test_task_color_completed() {
-        use chrono::NaiveDate;
         use crate::domain::TaskStatus;
+        use chrono::NaiveDate;
 
         let model = Model::new();
         let theme = Theme::default();

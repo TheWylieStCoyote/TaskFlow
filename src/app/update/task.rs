@@ -447,8 +447,7 @@ mod tests {
 
     #[test]
     fn test_create_next_recurring_task_no_due_date_uses_today() {
-        let task = Task::new("No due date")
-            .with_recurrence(Some(Recurrence::Daily));
+        let task = Task::new("No due date").with_recurrence(Some(Recurrence::Daily));
 
         let next = create_next_recurring_task(&task);
         let today = Utc::now().date_naive();

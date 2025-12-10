@@ -553,7 +553,10 @@ mod tests {
         assert_eq!(DailyReviewPhase::Welcome.title(), "Good Morning!");
         assert_eq!(DailyReviewPhase::OverdueTasks.title(), "Overdue Tasks");
         assert_eq!(DailyReviewPhase::TodayTasks.title(), "Today's Tasks");
-        assert_eq!(DailyReviewPhase::ScheduledTasks.title(), "Scheduled for Today");
+        assert_eq!(
+            DailyReviewPhase::ScheduledTasks.title(),
+            "Scheduled for Today"
+        );
         assert_eq!(DailyReviewPhase::Summary.title(), "Daily Summary");
     }
 
@@ -720,7 +723,13 @@ mod tests {
         let today = Utc::now().date_naive();
 
         // Add tasks with different priorities
-        for priority in [Priority::Urgent, Priority::High, Priority::Medium, Priority::Low, Priority::None] {
+        for priority in [
+            Priority::Urgent,
+            Priority::High,
+            Priority::Medium,
+            Priority::Low,
+            Priority::None,
+        ] {
             let mut task = Task::new(format!("{:?} priority", priority));
             task.due_date = Some(today - Duration::days(1)); // Make overdue
             task.priority = priority;

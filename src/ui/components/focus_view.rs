@@ -672,7 +672,9 @@ mod tests {
         let content = buffer_content(&buffer);
 
         // Should show chain info - first task has next
-        assert!(content.contains("Chain") || content.contains("CURRENT") || content.contains("Second"));
+        assert!(
+            content.contains("Chain") || content.contains("CURRENT") || content.contains("Second")
+        );
     }
 
     #[test]

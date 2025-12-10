@@ -241,8 +241,6 @@ pub struct Model {
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
     pub macro_state: MacroState,
-    /// Pending macro slot when starting recording
-    pub pending_macro_slot: Option<usize>,
 
     // Task templates
     /// Task template manager
@@ -372,7 +370,6 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             macro_state: MacroState::new(),
-            pending_macro_slot: None,
             template_manager: TemplateManager::new(),
             template_picker: TemplatePickerState::default(),
             pomodoro: PomodoroState::default(),

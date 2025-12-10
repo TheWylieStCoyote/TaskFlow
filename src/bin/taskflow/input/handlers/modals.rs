@@ -210,7 +210,7 @@ pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     if let KeyCode::Char(c) = key.code {
         if let Some(digit) = c.to_digit(10) {
             let slot = digit as usize;
-            model.pending_macro_slot = Some(slot);
+            model.macro_state.pending_slot = Some(slot);
             if model.macro_state.is_recording() {
                 // Stop recording and save to this slot
                 return Message::Ui(UiMessage::StopRecordMacro);
@@ -221,7 +221,7 @@ pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     }
     // Escape cancels macro slot selection
     if key.code == KeyCode::Esc {
-        model.pending_macro_slot = None;
+        model.macro_state.pending_slot = None;
         model.alerts.status_message = Some("Macro cancelled".to_string());
         return Message::None;
     }

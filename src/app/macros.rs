@@ -79,6 +79,8 @@ pub struct MacroState {
     pub slots: [Option<Macro>; 10],
     /// Whether currently playing back a macro
     pub playing: bool,
+    /// Pending slot for record/playback (waiting for digit input)
+    pub pending_slot: Option<usize>,
 }
 
 impl MacroState {

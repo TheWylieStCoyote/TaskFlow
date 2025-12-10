@@ -188,7 +188,7 @@ pub fn handle_key_event(
     }
 
     // Handle macro slot selection if pending
-    if model.pending_macro_slot.is_some() {
+    if model.macro_state.pending_slot.is_some() {
         return handle_macro_slot(key, model);
     }
 

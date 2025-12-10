@@ -31,8 +31,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::WorkLogDown => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
-                let entries = model.work_logs_for_task(task_id);
+            if let Some(task_id) = model.selected_task_id() {
+                let entries = model.work_logs_for_task(&task_id);
                 if model.work_log_editor.selected < entries.len().saturating_sub(1) {
                     model.work_log_editor.selected += 1;
                 }
@@ -40,8 +40,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::WorkLogView => {
             if model.work_log_editor.mode == WorkLogMode::Browse {
-                if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
-                    let entries = model.work_logs_for_task(task_id);
+                if let Some(task_id) = model.selected_task_id() {
+                    let entries = model.work_logs_for_task(&task_id);
                     if entries.get(model.work_log_editor.selected).is_some() {
                         model.work_log_editor.mode = WorkLogMode::View;
                     }
@@ -58,8 +58,8 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
             model.work_log_editor.cursor_col = 0;
         }
         UiMessage::WorkLogEdit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
-                let entries = model.work_logs_for_task(task_id);
+            if let Some(task_id) = model.selected_task_id() {
+                let entries = model.work_logs_for_task(&task_id);
                 // Clone content to avoid borrow conflict with model
                 let content = entries
                     .get(model.work_log_editor.selected)
@@ -91,7 +91,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
             model.work_log_editor.cursor_col = 0;
         }
         UiMessage::WorkLogSubmit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 let content = model.work_log_editor.buffer.join("\n");
 
                 // Don't save empty entries
@@ -138,7 +138,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::WorkLogDelete => {
             if model.work_log_editor.mode == WorkLogMode::ConfirmDelete {
-                if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+                if let Some(task_id) = model.selected_task_id() {
                     let entries = model.work_logs_for_task(&task_id);
                     if let Some(entry) = entries.get(model.work_log_editor.selected) {
                         let entry_id = entry.id;
@@ -370,8 +370,8 @@ pub fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
     match msg {
         UiMessage::StartEditDescriptionMultiline => {
             // Only open if a task is selected
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
-                if let Some(task) = model.tasks.get(task_id) {
+            if let Some(task_id) = model.selected_task_id() {
+                if let Some(task) = model.tasks.get(&task_id) {
                     // Load description into buffer as lines
                     let description = task.description.clone().unwrap_or_default();
                     model.description_editor.buffer = if description.is_empty() {
@@ -395,7 +395,7 @@ pub fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
             model.description_editor.cursor_col = 0;
         }
         UiMessage::DescriptionSubmit => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 let content = model.description_editor.buffer.join("\n");
                 let description = if content.trim().is_empty() {
                     None

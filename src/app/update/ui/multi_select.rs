@@ -15,7 +15,7 @@ pub fn toggle_multi_select(model: &mut Model) {
 /// Toggle selection of the current task.
 pub fn toggle_task_selection(model: &mut Model) {
     if model.multi_select_mode {
-        if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+        if let Some(task_id) = model.selected_task_id() {
             if model.selected_tasks.contains(&task_id) {
                 model.selected_tasks.remove(&task_id);
             } else {

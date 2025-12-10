@@ -22,7 +22,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
         // 2. Recurring tasks: completing creates the next occurrence automatically
         // 3. Task chains: completing auto-schedules the next linked task for today
         TaskMessage::ToggleComplete => {
-            let task_id = model.visible_tasks.get(model.selected_index).copied();
+            let task_id = model.selected_task_id();
 
             if let Some(id) = task_id {
                 // Phase 1: Gather data BEFORE any mutations (to avoid borrow conflicts)
@@ -113,7 +113,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             model.refresh_visible_tasks();
         }
         TaskMessage::CyclePriority => {
-            if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(id) = model.selected_task_id() {
                 model.modify_task_with_undo(&id, |task| {
                     task.priority = match task.priority {
                         Priority::None => Priority::Low,
@@ -176,7 +176,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             model.refresh_visible_tasks();
         }
         TaskMessage::Duplicate => {
-            if let Some(id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(id) = model.selected_task_id() {
                 if let Some(original) = model.tasks.get(&id) {
                     // Create duplicate with "Copy of" prefix
                     let mut new_task = Task::new(format!("Copy of {}", original.title))

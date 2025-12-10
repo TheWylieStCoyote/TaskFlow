@@ -12,7 +12,7 @@ use crate::domain::{PomodoroPhase, PomodoroSession};
 pub fn handle_time(model: &mut Model, msg: TimeMessage) {
     match msg {
         TimeMessage::StartTracking => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
 
                 if let Some((before, after)) = stopped_entry {
@@ -39,7 +39,7 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
             }
         }
         TimeMessage::ToggleTracking => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if model.is_tracking_task(&task_id) {
                     // Stop tracking current task
                     if let Some((before, after)) = model.stop_time_tracking() {

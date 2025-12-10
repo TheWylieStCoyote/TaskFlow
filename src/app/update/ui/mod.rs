@@ -195,7 +195,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::StartCreateSubtask => {
             // Create a subtask under the currently selected task
-            if let Some(parent_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(parent_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&parent_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::Subtask(parent_id);
@@ -262,7 +262,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditTask => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditTask(task_id);
@@ -272,7 +272,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditDueDate => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditDueDate(task_id);
@@ -286,7 +286,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditScheduledDate => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditScheduledDate(task_id);
@@ -300,7 +300,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditTags => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditTags(task_id);
@@ -311,7 +311,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditDescription => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditDescription(task_id);
@@ -322,7 +322,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditEstimate => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditEstimate(task_id);
@@ -336,7 +336,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartMoveToProject => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::MoveToProject(task_id);
@@ -480,7 +480,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::StartBulkMoveToProject => multi_select::start_bulk_move_to_project(model),
         UiMessage::StartBulkSetStatus => multi_select::start_bulk_set_status(model),
         UiMessage::StartEditDependencies => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditDependencies(task_id);
@@ -504,7 +504,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::StartEditRecurrence => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input_mode = InputMode::Editing;
                     model.input_target = InputTarget::EditRecurrence(task_id);
@@ -530,7 +530,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         // Task chains
         UiMessage::StartLinkTask => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&task_id) {
                     model.input_mode = InputMode::Editing;
                     // Show current link if any
@@ -552,7 +552,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::UnlinkTask => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 // Only unlink if currently linked
                 let is_linked = model
                     .tasks
@@ -685,7 +685,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
 
         // Task snooze
         UiMessage::StartSnoozeTask => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 model.input_mode = InputMode::Editing;
                 model.input_target = InputTarget::SnoozeTask(task_id);
                 model.input_buffer.clear();
@@ -693,7 +693,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::ClearSnooze => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get_mut(&task_id) {
                     task.clear_snooze();
                 }
@@ -705,7 +705,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
 
         // Quick reschedule
         UiMessage::RescheduleTomorrow => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 let tomorrow = chrono::Local::now().date_naive() + chrono::Duration::days(1);
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(tomorrow);
@@ -715,7 +715,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::RescheduleNextWeek => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 let next_week = chrono::Local::now().date_naive() + chrono::Duration::days(7);
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(next_week);
@@ -726,7 +726,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         UiMessage::RescheduleNextMonday => {
-            if let Some(task_id) = model.visible_tasks.get(model.selected_index).copied() {
+            if let Some(task_id) = model.selected_task_id() {
                 use chrono::Datelike;
                 let today = chrono::Local::now().date_naive();
                 // num_days_from_monday: Mon=0, Tue=1, ..., Sun=6

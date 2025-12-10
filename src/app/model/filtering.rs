@@ -9,6 +9,22 @@ use crate::domain::{ProjectId, SortField, SortOrder, TagFilterMode, Task, TaskId
 use super::{Model, ViewId};
 
 impl Model {
+    // ========================================================================
+    // Selection Helpers
+    // ========================================================================
+
+    /// Returns the TaskId of the currently selected task, if any.
+    ///
+    /// Returns `None` if no task is selected or the selection index is out of bounds.
+    #[inline]
+    pub fn selected_task_id(&self) -> Option<TaskId> {
+        self.visible_tasks.get(self.selected_index).copied()
+    }
+
+    // ========================================================================
+    // Cache Management
+    // ========================================================================
+
     /// Rebuilds all performance caches.
     ///
     /// Should be called when:

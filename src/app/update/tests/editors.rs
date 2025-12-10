@@ -166,7 +166,7 @@ fn test_work_log_submit_empty() {
     let mut model = create_model_with_work_logs();
     model.work_log_editor.visible = true;
     model.work_log_editor.mode = WorkLogMode::Add;
-    model.work_log_editor.buffer = vec!["".to_string()];
+    model.work_log_editor.buffer = vec![String::new()];
 
     let initial_count = model.work_logs.len();
 
@@ -360,7 +360,7 @@ fn test_description_submit_empty() {
     model.refresh_visible_tasks();
     model.selected_index = 0;
     model.description_editor.visible = true;
-    model.description_editor.buffer = vec!["".to_string()];
+    model.description_editor.buffer = vec![String::new()];
 
     update(&mut model, Message::Ui(UiMessage::DescriptionSubmit));
 

@@ -880,7 +880,7 @@ mod tests {
     #[test]
     fn test_storage_state_debug() {
         let state = StorageState::default();
-        let debug_str = format!("{:?}", state);
+        let debug_str = format!("{state:?}");
         assert!(debug_str.contains("StorageState"));
     }
 

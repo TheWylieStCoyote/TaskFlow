@@ -1,6 +1,6 @@
 //! Template picker tests.
 
-use crate::app::{update::update, Message, Model, TaskTemplate, UiMessage};
+use crate::app::{update::update, Message, Model, UiMessage};
 use crate::ui::InputMode;
 
 #[test]

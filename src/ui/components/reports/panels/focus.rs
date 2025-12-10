@@ -14,7 +14,7 @@ use super::super::ReportsView;
 
 impl ReportsView<'_> {
     pub(crate) fn render_focus(&self, area: Rect, buf: &mut Buffer) {
-        let stats = &self.model.pomodoro_stats;
+        let stats = &self.model.pomodoro.stats;
 
         // Split vertically
         let chunks = Layout::default()

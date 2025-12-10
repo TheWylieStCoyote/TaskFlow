@@ -264,7 +264,7 @@ fn test_dashboard_renders_focus_sessions_panel() {
 fn test_dashboard_shows_focus_stats() {
     let mut model = Model::new();
     // Record a pomodoro cycle
-    model.pomodoro_stats.record_cycle(25);
+    model.pomodoro.stats.record_cycle(25);
 
     let theme = Theme::default();
     let dashboard = Dashboard::new(&model, &theme);
@@ -889,8 +889,8 @@ fn test_panel_focus_sessions_with_stats() {
     let mut model = Model::new();
 
     // Record some pomodoro cycles
-    model.pomodoro_stats.record_cycle(25);
-    model.pomodoro_stats.record_cycle(25);
+    model.pomodoro.stats.record_cycle(25);
+    model.pomodoro.stats.record_cycle(25);
 
     let theme = Theme::default();
     let dashboard = Dashboard::new(&model, &theme);

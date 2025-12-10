@@ -78,20 +78,20 @@ impl Model {
             let config = export_data
                 .pomodoro_config
                 .as_ref()
-                .unwrap_or(&self.pomodoro_config);
+                .unwrap_or(&self.pomodoro.config);
             session.recalculate_remaining_time(config);
 
             // Validate that the task still exists
             if self.tasks.contains_key(&session.task_id) {
-                self.pomodoro_session = Some(session);
+                self.pomodoro.session = Some(session);
             }
             // If task doesn't exist, discard the session
         }
         if let Some(config) = export_data.pomodoro_config {
-            self.pomodoro_config = config;
+            self.pomodoro.config = config;
         }
         if let Some(stats) = export_data.pomodoro_stats {
-            self.pomodoro_stats = stats;
+            self.pomodoro.stats = stats;
         }
 
         self.storage = Some(backend);
@@ -112,9 +112,9 @@ impl Model {
     pub fn save(&mut self) -> anyhow::Result<()> {
         if let Some(ref mut backend) = self.storage {
             // Sync Pomodoro state before flushing
-            backend.set_pomodoro_session(self.pomodoro_session.as_ref())?;
-            backend.set_pomodoro_config(&self.pomodoro_config)?;
-            backend.set_pomodoro_stats(&self.pomodoro_stats)?;
+            backend.set_pomodoro_session(self.pomodoro.session.as_ref())?;
+            backend.set_pomodoro_config(&self.pomodoro.config)?;
+            backend.set_pomodoro_stats(&self.pomodoro.stats)?;
 
             backend.flush()?;
             self.dirty = false;

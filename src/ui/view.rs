@@ -622,7 +622,7 @@ fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme
     }
 
     // Add Pomodoro timer display if active
-    if let Some(ref session) = model.pomodoro_session {
+    if let Some(ref session) = model.pomodoro.session {
         spans.push(Span::styled(
             " | ",
             Style::default().fg(theme.colors.muted.to_color()),

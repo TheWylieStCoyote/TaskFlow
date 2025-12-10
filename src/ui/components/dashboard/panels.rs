@@ -462,8 +462,8 @@ impl Dashboard<'_> {
         let inner = block.inner(area);
         block.render(area, buf);
 
-        let stats = &self.model.pomodoro_stats;
-        let has_active = self.model.pomodoro_session.is_some();
+        let stats = &self.model.pomodoro.stats;
+        let has_active = self.model.pomodoro.session.is_some();
 
         // Active session indicator
         let active_indicator = if has_active {

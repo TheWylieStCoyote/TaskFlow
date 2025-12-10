@@ -56,9 +56,9 @@ mod types;
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
     AlertState, CalendarState, DailyReviewState, DescriptionEditorState, HabitViewState,
-    KeybindingsEditorState, RunningState, SavedFilterPickerState, TemplatePickerState,
-    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
-    WorkLogEditorState,
+    KeybindingsEditorState, PomodoroState, RunningState, SavedFilterPickerState,
+    TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState,
+    WeeklyReviewState, WorkLogEditorState,
 };
 
 use std::collections::HashMap;
@@ -276,12 +276,8 @@ pub struct Model {
     pub template_picker: TemplatePickerState,
 
     // Pomodoro timer
-    /// Active Pomodoro session (if any)
-    pub pomodoro_session: Option<crate::domain::PomodoroSession>,
-    /// Pomodoro timer configuration
-    pub pomodoro_config: crate::domain::PomodoroConfig,
-    /// Pomodoro statistics
-    pub pomodoro_stats: crate::domain::PomodoroStats,
+    /// Pomodoro timer state (session, config, stats)
+    pub pomodoro: PomodoroState,
 
     // Keybindings editor
     /// Keybindings editor state
@@ -416,9 +412,7 @@ impl Model {
             pending_macro_slot: None,
             template_manager: TemplateManager::new(),
             template_picker: TemplatePickerState::default(),
-            pomodoro_session: None,
-            pomodoro_config: crate::domain::PomodoroConfig::default(),
-            pomodoro_stats: crate::domain::PomodoroStats::default(),
+            pomodoro: PomodoroState::default(),
             keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),

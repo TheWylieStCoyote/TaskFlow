@@ -160,7 +160,7 @@ fn run_app(
 
         // Tick Pomodoro timer every second if active and not paused
         if last_pomodoro_tick.elapsed() >= Duration::from_secs(1) {
-            if let Some(ref session) = model.pomodoro_session {
+            if let Some(ref session) = model.pomodoro.session {
                 if !session.paused {
                     update(model, Message::Pomodoro(PomodoroMessage::Tick));
                 }

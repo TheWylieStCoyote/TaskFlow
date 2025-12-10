@@ -747,8 +747,8 @@ mod reports_component {
     fn test_reports_focus_panel() {
         let mut model = create_model_with_estimates();
         // Add some pomodoro stats
-        model.pomodoro_stats.record_cycle(25);
-        model.pomodoro_stats.record_cycle(25);
+        model.pomodoro.stats.record_cycle(25);
+        model.pomodoro.stats.record_cycle(25);
 
         let theme = Theme::default();
 

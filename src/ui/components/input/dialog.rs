@@ -2,11 +2,12 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    style::Style,
+    widgets::{Clear, Paragraph, Widget},
 };
 
 use crate::config::Theme;
+use crate::ui::primitives::accent_block;
 
 /// Input dialog for creating/editing items
 pub struct InputDialog<'a> {
@@ -59,16 +60,9 @@ impl Widget for InputDialog<'_> {
             format!("{}▌", self.input)
         };
 
-        let accent = self.theme.colors.accent.to_color();
         let paragraph = Paragraph::new(display_text)
             .style(Style::default().fg(self.theme.colors.foreground.to_color()))
-            .block(
-                Block::default()
-                    .title(format!(" {} ", self.title))
-                    .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(accent)),
-            );
+            .block(accent_block(self.title, self.theme));
 
         paragraph.render(area, buf);
     }

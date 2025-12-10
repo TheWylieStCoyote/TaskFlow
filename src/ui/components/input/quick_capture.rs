@@ -4,10 +4,11 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Clear, Paragraph, Widget},
 };
 
 use crate::config::Theme;
+use crate::ui::primitives::accent_block;
 
 /// Quick capture dialog with syntax hints
 pub struct QuickCaptureDialog<'a> {
@@ -31,12 +32,7 @@ impl Widget for QuickCaptureDialog<'_> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         Clear.render(area, buf);
 
-        let accent = self.theme.colors.accent.to_color();
-        let block = Block::default()
-            .title(" Quick Capture (Esc to close, Enter to add) ")
-            .title_style(Style::default().fg(accent).add_modifier(Modifier::BOLD))
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(accent));
+        let block = accent_block("Quick Capture (Esc to close, Enter to add)", self.theme);
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -95,7 +91,10 @@ impl Widget for QuickCaptureDialog<'_> {
                     "due:date ",
                     Style::default().fg(self.theme.colors.danger.to_color()),
                 ),
-                Span::styled("sched:date", Style::default().fg(accent)),
+                Span::styled(
+                    "sched:date",
+                    Style::default().fg(self.theme.colors.accent.to_color()),
+                ),
             ]),
             Line::from(vec![
                 Span::styled(

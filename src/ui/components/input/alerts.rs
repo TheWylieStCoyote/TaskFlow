@@ -2,11 +2,12 @@
 
 use ratatui::{
     layout::Rect,
-    style::{Modifier, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    style::Style,
+    widgets::{Clear, Paragraph, Widget},
 };
 
 use crate::config::Theme;
+use crate::ui::primitives::{danger_block, warning_block};
 
 /// Overdue tasks alert popup shown at startup
 pub struct OverdueAlert<'a> {
@@ -48,17 +49,10 @@ impl Widget for OverdueAlert<'_> {
         lines.push("Press any key to dismiss".to_string());
 
         let text = lines.join("\n");
-        let danger = self.theme.colors.danger.to_color();
 
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(self.theme.colors.foreground.to_color()))
-            .block(
-                Block::default()
-                    .title(" ⚠ Overdue Tasks ")
-                    .title_style(Style::default().fg(danger).add_modifier(Modifier::BOLD))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(danger)),
-            );
+            .block(danger_block("⚠ Overdue Tasks", self.theme));
 
         paragraph.render(area, buf);
     }
@@ -88,17 +82,10 @@ impl Widget for StorageErrorAlert<'_> {
             "Could not load your task data:\n\n  {}\n\nStarting with sample data instead.\nYour existing data has not been modified.\n\nPress any key to continue",
             self.error_message
         );
-        let warning = self.theme.colors.warning.to_color();
 
         let paragraph = Paragraph::new(text)
             .style(Style::default().fg(self.theme.colors.foreground.to_color()))
-            .block(
-                Block::default()
-                    .title(" ⚠ Storage Error ")
-                    .title_style(Style::default().fg(warning).add_modifier(Modifier::BOLD))
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(warning)),
-            );
+            .block(warning_block("⚠ Storage Error", self.theme));
 
         paragraph.render(area, buf);
     }

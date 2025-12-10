@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use tracing::warn;
 
 use crate::domain::{
     Habit, HabitId, Project, ProjectId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId,
@@ -128,8 +129,13 @@ impl Model {
     pub fn sync_task(&mut self, task: &Task) {
         if let Some(ref mut backend) = self.storage {
             // Try update first, if not found, create
-            if backend.update_task(task).is_err() {
-                let _ = backend.create_task(task);
+            if let Err(e) = backend.update_task(task) {
+                if let Err(e2) = backend.create_task(task) {
+                    warn!(
+                        "Failed to sync task {}: update={}, create={}",
+                        task.id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -142,8 +148,13 @@ impl Model {
     pub fn sync_task_by_id(&mut self, task_id: &TaskId) {
         if let (Some(ref mut backend), Some(task)) = (&mut self.storage, self.tasks.get(task_id)) {
             // Try update first, if not found, create
-            if backend.update_task(task).is_err() {
-                let _ = backend.create_task(task);
+            if let Err(e) = backend.update_task(task) {
+                if let Err(e2) = backend.create_task(task) {
+                    warn!(
+                        "Failed to sync task {}: update={}, create={}",
+                        task_id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -154,7 +165,9 @@ impl Model {
     /// Removes the task from the storage backend.
     pub fn delete_task_from_storage(&mut self, id: &TaskId) {
         if let Some(ref mut backend) = self.storage {
-            let _ = backend.delete_task(id);
+            if let Err(e) = backend.delete_task(id) {
+                warn!("Failed to delete task {} from storage: {}", id, e);
+            }
             self.dirty = true;
         }
     }
@@ -165,8 +178,13 @@ impl Model {
     pub fn sync_project(&mut self, project: &Project) {
         if let Some(ref mut backend) = self.storage {
             // Try update first, if not found, create
-            if backend.update_project(project).is_err() {
-                let _ = backend.create_project(project);
+            if let Err(e) = backend.update_project(project) {
+                if let Err(e2) = backend.create_project(project) {
+                    warn!(
+                        "Failed to sync project {}: update={}, create={}",
+                        project.id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -181,8 +199,13 @@ impl Model {
             (&mut self.storage, self.projects.get(project_id))
         {
             // Try update first, if not found, create
-            if backend.update_project(project).is_err() {
-                let _ = backend.create_project(project);
+            if let Err(e) = backend.update_project(project) {
+                if let Err(e2) = backend.create_project(project) {
+                    warn!(
+                        "Failed to sync project {}: update={}, create={}",
+                        project_id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -194,8 +217,13 @@ impl Model {
     pub fn sync_habit(&mut self, habit: &Habit) {
         if let Some(ref mut backend) = self.storage {
             // Try update first, if not found, create
-            if HabitRepository::update_habit(backend.as_mut(), habit).is_err() {
-                let _ = HabitRepository::create_habit(backend.as_mut(), habit);
+            if let Err(e) = HabitRepository::update_habit(backend.as_mut(), habit) {
+                if let Err(e2) = HabitRepository::create_habit(backend.as_mut(), habit) {
+                    warn!(
+                        "Failed to sync habit {}: update={}, create={}",
+                        habit.id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -208,8 +236,13 @@ impl Model {
         if let (Some(ref mut backend), Some(habit)) = (&mut self.storage, self.habits.get(habit_id))
         {
             // Try update first, if not found, create
-            if HabitRepository::update_habit(backend.as_mut(), habit).is_err() {
-                let _ = HabitRepository::create_habit(backend.as_mut(), habit);
+            if let Err(e) = HabitRepository::update_habit(backend.as_mut(), habit) {
+                if let Err(e2) = HabitRepository::create_habit(backend.as_mut(), habit) {
+                    warn!(
+                        "Failed to sync habit {}: update={}, create={}",
+                        habit_id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -220,7 +253,9 @@ impl Model {
     /// Removes the habit from the storage backend.
     pub fn delete_habit_from_storage(&mut self, id: &HabitId) {
         if let Some(ref mut backend) = self.storage {
-            let _ = HabitRepository::delete_habit(backend.as_mut(), id);
+            if let Err(e) = HabitRepository::delete_habit(backend.as_mut(), id) {
+                warn!("Failed to delete habit {} from storage: {}", id, e);
+            }
             self.dirty = true;
         }
     }
@@ -231,8 +266,13 @@ impl Model {
     pub fn sync_time_entry(&mut self, entry: &TimeEntry) {
         if let Some(ref mut backend) = self.storage {
             // Try update first, if not found, create
-            if backend.update_time_entry(entry).is_err() {
-                let _ = backend.create_time_entry(entry);
+            if let Err(e) = backend.update_time_entry(entry) {
+                if let Err(e2) = backend.create_time_entry(entry) {
+                    warn!(
+                        "Failed to sync time entry {}: update={}, create={}",
+                        entry.id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -349,8 +389,13 @@ impl Model {
     pub fn sync_work_log(&mut self, entry: &WorkLogEntry) {
         if let Some(ref mut backend) = self.storage {
             // Try update first, if not found, create
-            if WorkLogRepository::update_work_log(backend.as_mut(), entry).is_err() {
-                let _ = WorkLogRepository::create_work_log(backend.as_mut(), entry);
+            if let Err(e) = WorkLogRepository::update_work_log(backend.as_mut(), entry) {
+                if let Err(e2) = WorkLogRepository::create_work_log(backend.as_mut(), entry) {
+                    warn!(
+                        "Failed to sync work log {}: update={}, create={}",
+                        entry.id, e, e2
+                    );
+                }
             }
             self.dirty = true;
         }
@@ -361,7 +406,9 @@ impl Model {
     /// Removes the work log entry from the storage backend.
     pub fn delete_work_log_from_storage(&mut self, id: &WorkLogEntryId) {
         if let Some(ref mut backend) = self.storage {
-            let _ = WorkLogRepository::delete_work_log(backend.as_mut(), id);
+            if let Err(e) = WorkLogRepository::delete_work_log(backend.as_mut(), id) {
+                warn!("Failed to delete work log {} from storage: {}", id, e);
+            }
             self.dirty = true;
         }
     }

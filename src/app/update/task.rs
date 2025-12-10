@@ -10,26 +10,33 @@ use crate::app::{Model, TaskMessage, UndoAction};
 use crate::domain::{Priority, Recurrence, Task, TaskStatus};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 
-/// Handle task messages
+/// Handles task-related messages.
+///
+/// This is the main entry point for all task operations. Each message type
+/// is processed with proper undo support and storage synchronization.
 #[allow(clippy::too_many_lines)]
 pub fn handle_task(model: &mut Model, msg: TaskMessage) {
     match msg {
+        // Toggle completion is complex because it handles three special cases:
+        // 1. Cascade completion: completing a parent auto-completes all descendants
+        // 2. Recurring tasks: completing creates the next occurrence automatically
+        // 3. Task chains: completing auto-schedules the next linked task for today
         TaskMessage::ToggleComplete => {
-            // Get the task id first to avoid borrow issues
             let task_id = model.visible_tasks.get(model.selected_index).copied();
 
             if let Some(id) = task_id {
-                // Check if completing a recurring task
+                // Phase 1: Gather data BEFORE any mutations (to avoid borrow conflicts)
+
+                // For recurring tasks: prepare the next occurrence if completing
                 let next_task = model.tasks.get(&id).and_then(|task| {
                     if task.status != TaskStatus::Done && task.recurrence.is_some() {
-                        // Create next occurrence
                         Some(create_next_recurring_task(task))
                     } else {
                         None
                     }
                 });
 
-                // Check for task chain - if completing and has next_task_id, schedule it
+                // For task chains: find the next task to schedule if completing
                 let chain_next_id = model.tasks.get(&id).and_then(|task| {
                     if task.status == TaskStatus::Done {
                         None
@@ -38,19 +45,18 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     }
                 });
 
-                // Check if we're completing (not uncompleting) to cascade to descendants
+                // For cascade completion: check direction and gather descendants
                 let is_completing = model
                     .tasks
                     .get(&id)
                     .is_some_and(|t| t.status != TaskStatus::Done);
-
-                // Get all descendants BEFORE modifying the task
                 let descendants = if is_completing {
                     model.get_all_descendants(&id)
                 } else {
                     Vec::new()
                 };
 
+                // Phase 2: Toggle the task itself
                 if let Some(task) = model.tasks.get_mut(&id) {
                     let before = task.clone();
                     task.toggle_complete();
@@ -62,9 +68,9 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     });
                 }
 
-                // Auto-complete all descendants when completing a parent task
+                // Phase 3: Cascade - auto-complete all descendants
+                // Each gets its own undo action so undo reverses the entire cascade
                 for descendant_id in descendants {
-                    // Only complete if not already complete
                     let needs_complete = model
                         .tasks
                         .get(&descendant_id)
@@ -76,7 +82,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     }
                 }
 
-                // Add the next recurring task if one was created
+                // Phase 4: Handle recurring task - add next occurrence
                 if let Some(new_task) = next_task {
                     model.sync_task(&new_task);
                     model
@@ -85,7 +91,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     model.tasks.insert(new_task.id, new_task);
                 }
 
-                // Auto-schedule the next task in chain for today
+                // Phase 5: Handle task chain - schedule next task for today
                 if let Some(next_id) = chain_next_id {
                     model.modify_task_with_undo(&next_id, |task| {
                         task.scheduled_date = Some(chrono::Local::now().date_naive());

@@ -44,7 +44,7 @@ mod ui;
 mod undo_redo;
 
 use crate::app::Model;
-use crate::domain::Task;
+use crate::domain::{Task, TaskId};
 
 /// Creates a test model with 5 sample tasks.
 pub fn create_test_model_with_tasks() -> Model {
@@ -56,4 +56,28 @@ pub fn create_test_model_with_tasks() -> Model {
     }
     model.refresh_visible_tasks();
     model
+}
+
+/// Safely gets a visible task ID with bounds checking.
+/// Panics with a descriptive message if index is out of bounds.
+#[allow(dead_code)]
+pub fn visible_task_id(model: &Model, index: usize) -> TaskId {
+    assert!(
+        index < model.visible_tasks.len(),
+        "Test requires visible task at index {}, but only {} tasks are visible",
+        index,
+        model.visible_tasks.len()
+    );
+    model.visible_tasks[index]
+}
+
+/// Safely gets a reference to a visible task with bounds checking.
+/// Panics with a descriptive message if index is out of bounds.
+#[allow(dead_code)]
+pub fn visible_task(model: &Model, index: usize) -> &Task {
+    let task_id = visible_task_id(model, index);
+    model
+        .tasks
+        .get(&task_id)
+        .expect("Task ID in visible_tasks should exist in tasks map")
 }

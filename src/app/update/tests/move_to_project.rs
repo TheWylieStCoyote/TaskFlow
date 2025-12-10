@@ -4,12 +4,12 @@ use crate::app::{update::update, Message, SystemMessage, UiMessage};
 use crate::domain::Project;
 use crate::ui::{InputMode, InputTarget};
 
-use super::create_test_model_with_tasks;
+use super::{create_test_model_with_tasks, visible_task_id};
 
 #[test]
 fn test_start_move_to_project() {
     let mut model = create_test_model_with_tasks();
-    let _task_id = model.visible_tasks[0];
+    let _task_id = visible_task_id(&model, 0);
 
     // Add some projects
     let project1 = Project::new("Project Alpha");
@@ -29,7 +29,7 @@ fn test_start_move_to_project() {
 #[test]
 fn test_move_to_project_assign() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0];
+    let task_id = visible_task_id(&model, 0);
 
     // Initially no project
     assert!(model.tasks.get(&task_id).unwrap().project_id.is_none());
@@ -58,7 +58,7 @@ fn test_move_to_project_assign() {
 #[test]
 fn test_move_to_project_remove() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0];
+    let task_id = visible_task_id(&model, 0);
 
     // Add a project and assign task to it
     let project = Project::new("Test Project");
@@ -84,7 +84,7 @@ fn test_move_to_project_remove() {
 #[test]
 fn test_move_to_project_undo() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0];
+    let task_id = visible_task_id(&model, 0);
 
     // Add a project
     let project = Project::new("Test Project");
@@ -113,7 +113,7 @@ fn test_move_to_project_undo() {
 #[test]
 fn test_move_to_project_invalid_input_ignored() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0];
+    let task_id = visible_task_id(&model, 0);
 
     // Add a project
     let project = Project::new("Test Project");
@@ -137,7 +137,7 @@ fn test_move_to_project_invalid_input_ignored() {
 #[test]
 fn test_move_to_project_out_of_range_ignored() {
     let mut model = create_test_model_with_tasks();
-    let task_id = model.visible_tasks[0];
+    let task_id = visible_task_id(&model, 0);
 
     // Add one project
     let project = Project::new("Test Project");

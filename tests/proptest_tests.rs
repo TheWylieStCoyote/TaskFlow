@@ -1206,4 +1206,35 @@ proptest! {
         // Should not crash, task count should be 0 or 1
         prop_assert!(model.tasks.len() <= 1);
     }
+
+    /// Property: Empty model handles navigation safely
+    #[test]
+    fn prop_empty_model_navigation_safe(nav_count in 0usize..50) {
+        let mut model = Model::new();
+        model.refresh_visible_tasks();
+
+        // Navigate on empty task list
+        for _ in 0..nav_count {
+            update(&mut model, Message::Navigation(NavigationMessage::Down));
+            update(&mut model, Message::Navigation(NavigationMessage::Up));
+        }
+
+        // Should not crash, selected_index should be 0
+        prop_assert_eq!(model.selected_index, 0);
+        prop_assert!(model.visible_tasks.is_empty());
+    }
+
+    /// Property: Empty model handles toggle complete safely
+    #[test]
+    fn prop_empty_model_toggle_safe(toggle_count in 1usize..10) {
+        let mut model = Model::new();
+        model.refresh_visible_tasks();
+
+        // Toggle complete on empty model multiple times should not crash
+        for _ in 0..toggle_count {
+            update(&mut model, Message::Task(TaskMessage::ToggleComplete));
+        }
+
+        prop_assert!(model.visible_tasks.is_empty());
+    }
 }

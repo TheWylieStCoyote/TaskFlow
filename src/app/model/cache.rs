@@ -12,6 +12,8 @@ use ratatui::layout::Rect;
 
 use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId};
 
+use super::hierarchy::traverse_ancestors;
+
 /// Internal layout data for mouse hit-testing.
 #[derive(Debug, Clone, Default)]
 struct LayoutData {
@@ -380,22 +382,11 @@ impl TaskCache {
             return depth;
         }
 
-        let mut depth = 0;
-        let mut current_id = task_id;
-        let mut visited = HashSet::new();
-
-        while let Some(task) = tasks.get(&current_id) {
-            if let Some(parent_id) = task.parent_task_id {
-                if visited.contains(&parent_id) {
-                    break; // Cycle detected
-                }
-                visited.insert(current_id);
-                depth += 1;
-                current_id = parent_id;
-            } else {
-                break;
-            }
-        }
+        let depth = traverse_ancestors(
+            task_id,
+            |id| tasks.get(&id).and_then(|t| t.parent_task_id),
+            |_| {}, // No-op visitor, we just need the count
+        );
 
         self.depths.insert(task_id, depth);
         depth

@@ -95,9 +95,21 @@ impl Widget for InputDialog<'_> {
         Clear.render(area, buf);
 
         // Build the input text with cursor indicator
-        let display_text = if self.cursor_position < self.input.len() {
-            let (before, after) = self.input.split_at(self.cursor_position);
-            let (_cursor_char, rest) = after.split_at(1);
+        // Clamp cursor_position to valid char boundary to prevent panics
+        let cursor = self.cursor_position.min(self.input.len());
+        let cursor = if self.input.is_char_boundary(cursor) {
+            cursor
+        } else {
+            // Find previous valid char boundary (manual implementation for MSRV compatibility)
+            (0..cursor)
+                .rev()
+                .find(|&i| self.input.is_char_boundary(i))
+                .unwrap_or(0)
+        };
+        let display_text = if cursor < self.input.len() {
+            let (before, after) = self.input.split_at(cursor);
+            let char_len = after.chars().next().map_or(1, char::len_utf8);
+            let rest = &after[char_len..];
             format!("{before}▌{rest}")
         } else {
             format!("{}▌", self.input)
@@ -164,9 +176,21 @@ impl Widget for QuickCaptureDialog<'_> {
             .split(inner);
 
         // Render input with cursor
-        let display_text = if self.cursor_position < self.input.len() {
-            let (before, after) = self.input.split_at(self.cursor_position);
-            let (_cursor_char, rest) = after.split_at(1);
+        // Clamp cursor_position to valid char boundary to prevent panics
+        let cursor = self.cursor_position.min(self.input.len());
+        let cursor = if self.input.is_char_boundary(cursor) {
+            cursor
+        } else {
+            // Find previous valid char boundary (manual implementation for MSRV compatibility)
+            (0..cursor)
+                .rev()
+                .find(|&i| self.input.is_char_boundary(i))
+                .unwrap_or(0)
+        };
+        let display_text = if cursor < self.input.len() {
+            let (before, after) = self.input.split_at(cursor);
+            let char_len = after.chars().next().map_or(1, char::len_utf8);
+            let rest = &after[char_len..];
             format!("{before}▌{rest}")
         } else {
             format!("{}▌", self.input)

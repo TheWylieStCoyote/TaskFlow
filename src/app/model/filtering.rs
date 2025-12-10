@@ -222,111 +222,80 @@ impl Model {
         }
 
         // Filter by current view
+        self.task_matches_view(task)
+    }
+
+    /// Checks if a task matches the current view's criteria.
+    ///
+    /// Views are grouped by behavior:
+    /// - Aggregate views (TaskList, Dashboard, etc.): show all tasks
+    /// - Date-based views (Today, Upcoming, etc.): filter by dates
+    /// - Property views (Projects, Untagged, etc.): filter by task properties
+    fn task_matches_view(&self, task: &Task) -> bool {
+        let today = Utc::now().date_naive();
+
         match self.current_view {
-            // TaskList and Dashboard show all tasks
-            ViewId::TaskList | ViewId::Dashboard => true,
-            ViewId::Today => {
-                // Show tasks due today
-                task.due_date.is_some_and(|d| d == Utc::now().date_naive())
+            // Aggregate views - show all tasks (UI groups/filters them)
+            ViewId::TaskList
+            | ViewId::Dashboard
+            | ViewId::Reports
+            | ViewId::Kanban
+            | ViewId::Eisenhower
+            | ViewId::Heatmap
+            | ViewId::Forecast
+            | ViewId::Network
+            | ViewId::Burndown => true,
+
+            // Non-task view - filter out all tasks
+            ViewId::Habits => false,
+
+            // Date-based views
+            ViewId::Today => task.due_date == Some(today),
+            ViewId::Upcoming => task.due_date.is_some_and(|d| d > today),
+            ViewId::Overdue => task.due_date.is_some_and(|d| d < today),
+            ViewId::Scheduled => task.scheduled_date.is_some(),
+            ViewId::Snoozed => task.is_snoozed(),
+            ViewId::Timeline => task.scheduled_date.is_some() || task.due_date.is_some(),
+            ViewId::RecentlyModified => {
+                let week_ago = Utc::now() - chrono::Duration::days(7);
+                task.updated_at >= week_ago
             }
-            ViewId::Upcoming => {
-                // Show tasks with future due dates
-                task.due_date.is_some_and(|d| d > Utc::now().date_naive())
+            ViewId::WeeklyPlanner => {
+                let week_start =
+                    today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+                let week_end = week_start + chrono::Duration::days(6);
+                let in_week = |d: NaiveDate| d >= week_start && d <= week_end;
+                task.due_date.is_some_and(in_week) || task.scheduled_date.is_some_and(in_week)
             }
-            ViewId::Overdue => {
-                // Show tasks with past due dates (before today)
-                task.due_date.is_some_and(|d| d < Utc::now().date_naive())
-            }
-            ViewId::Scheduled => {
-                // Show tasks with scheduled dates
-                task.scheduled_date.is_some()
-            }
-            ViewId::Calendar => {
-                // Show tasks for the selected day in calendar (if any)
-                self.calendar_state.selected_day.map_or_else(
-                    || {
-                        // No day selected, show tasks for the entire month
-                        task.due_date.is_some_and(|d| {
-                            d.year() == self.calendar_state.year
-                                && d.month() == self.calendar_state.month
-                        })
-                    },
-                    |selected_day| {
-                        NaiveDate::from_ymd_opt(
-                            self.calendar_state.year,
-                            self.calendar_state.month,
-                            selected_day,
-                        )
-                        .is_some_and(|date| task.due_date == Some(date))
-                    },
-                )
-            }
-            ViewId::Projects => {
-                // Show tasks that belong to a project
-                task.project_id.is_some()
-            }
+            ViewId::Calendar => self.calendar_state.selected_day.map_or_else(
+                || {
+                    // No day selected - show tasks for the entire month
+                    task.due_date.is_some_and(|d| {
+                        d.year() == self.calendar_state.year
+                            && d.month() == self.calendar_state.month
+                    })
+                },
+                |day| {
+                    NaiveDate::from_ymd_opt(
+                        self.calendar_state.year,
+                        self.calendar_state.month,
+                        day,
+                    )
+                    .is_some_and(|date| task.due_date == Some(date))
+                },
+            ),
+
+            // Property-based views
+            ViewId::Projects => task.project_id.is_some(),
+            ViewId::NoProject => task.project_id.is_none(),
+            ViewId::Untagged => task.tags.is_empty(),
             ViewId::Blocked => {
-                // Show tasks with incomplete dependencies
                 !task.dependencies.is_empty()
                     && task.dependencies.iter().any(|dep_id| {
                         self.tasks
                             .get(dep_id)
                             .is_none_or(|d| !d.status.is_complete())
                     })
-            }
-            ViewId::Untagged => {
-                // Show tasks without any tags
-                task.tags.is_empty()
-            }
-            ViewId::NoProject => {
-                // Show tasks not assigned to any project
-                task.project_id.is_none()
-            }
-            ViewId::RecentlyModified => {
-                // Show tasks modified in the last 7 days
-                let week_ago = Utc::now() - chrono::Duration::days(7);
-                task.updated_at >= week_ago
-            }
-            ViewId::Reports => {
-                // Reports view shows all tasks (used for analytics)
-                true
-            }
-            ViewId::Kanban => {
-                // Kanban view shows all tasks (grouped by status in the UI)
-                true
-            }
-            ViewId::Eisenhower => {
-                // Eisenhower matrix shows all tasks (grouped by urgency/importance in the UI)
-                true
-            }
-            ViewId::WeeklyPlanner => {
-                // Weekly planner shows tasks with due dates or scheduled dates in the current week
-                let today = Utc::now().date_naive();
-                let week_start =
-                    today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
-                let week_end = week_start + chrono::Duration::days(6);
-
-                task.due_date
-                    .is_some_and(|d| d >= week_start && d <= week_end)
-                    || task
-                        .scheduled_date
-                        .is_some_and(|d| d >= week_start && d <= week_end)
-            }
-            ViewId::Snoozed => {
-                // Show only snoozed tasks
-                task.is_snoozed()
-            }
-            ViewId::Habits => {
-                // Habits view shows habits, not tasks - filter out all tasks
-                false
-            }
-            ViewId::Timeline => {
-                // Timeline shows tasks with at least one date (scheduled or due)
-                task.scheduled_date.is_some() || task.due_date.is_some()
-            }
-            ViewId::Heatmap | ViewId::Forecast | ViewId::Network | ViewId::Burndown => {
-                // Analytics views show all tasks
-                true
             }
         }
     }

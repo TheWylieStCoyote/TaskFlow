@@ -1,9 +1,18 @@
 //! TaskRepository implementation for SQLite backend.
 
 use rusqlite::params;
+use tracing::warn;
 
 use crate::domain::{Filter, ProjectId, Task, TaskId};
 use crate::storage::{StorageError, StorageResult, TaskRepository};
+
+/// Helper to serialize a value to JSON with warning on failure.
+fn json_or_empty<T: serde::Serialize>(value: &T, context: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|e| {
+        warn!("Failed to serialize {}: {}", context, e);
+        String::new()
+    })
+}
 
 use super::rows::task_from_row;
 use super::SqliteBackend;
@@ -25,8 +34,8 @@ impl TaskRepository for SqliteBackend {
                 task.priority.as_str(),
                 task.project_id.as_ref().map(|p| p.0.to_string()),
                 task.parent_task_id.as_ref().map(|t| t.0.to_string()),
-                serde_json::to_string(&task.tags).unwrap_or_default(),
-                serde_json::to_string(&task.dependencies.iter().map(|d| d.0.to_string()).collect::<Vec<_>>()).unwrap_or_default(),
+                json_or_empty(&task.tags, "task.tags"),
+                json_or_empty(&task.dependencies.iter().map(|d| d.0.to_string()).collect::<Vec<_>>(), "task.dependencies"),
                 task.created_at.to_rfc3339(),
                 task.updated_at.to_rfc3339(),
                 task.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
@@ -37,7 +46,7 @@ impl TaskRepository for SqliteBackend {
                 task.actual_minutes as i32,
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
-                serde_json::to_string(&task.custom_fields).unwrap_or_default(),
+                json_or_empty(&task.custom_fields, "task.custom_fields"),
             ],
         )?;
         // Sync tags to junction table
@@ -72,15 +81,15 @@ impl TaskRepository for SqliteBackend {
                 task.priority.as_str(),
                 task.project_id.as_ref().map(|p| p.0.to_string()),
                 task.parent_task_id.as_ref().map(|t| t.0.to_string()),
-                serde_json::to_string(&task.tags).unwrap_or_default(),
-                serde_json::to_string(
+                json_or_empty(&task.tags, "task.tags"),
+                json_or_empty(
                     &task
                         .dependencies
                         .iter()
                         .map(|d| d.0.to_string())
-                        .collect::<Vec<_>>()
-                )
-                .unwrap_or_default(),
+                        .collect::<Vec<_>>(),
+                    "task.dependencies"
+                ),
                 task.updated_at.to_rfc3339(),
                 task.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 task.scheduled_date
@@ -93,7 +102,7 @@ impl TaskRepository for SqliteBackend {
                 task.actual_minutes as i32,
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
-                serde_json::to_string(&task.custom_fields).unwrap_or_default(),
+                json_or_empty(&task.custom_fields, "task.custom_fields"),
             ],
         )?;
         if rows == 0 {

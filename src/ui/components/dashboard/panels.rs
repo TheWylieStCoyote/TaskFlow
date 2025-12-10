@@ -14,10 +14,11 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Widget},
+    widgets::Widget,
 };
 
 use crate::config::Theme;
+use crate::ui::primitives::panel_block;
 use crate::domain::{Priority, TaskStatus};
 
 use super::stats::{format_duration, DashboardStats};
@@ -25,10 +26,7 @@ use super::Dashboard;
 
 impl Dashboard<'_> {
     pub(crate) fn render_completion_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Completion ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Completion", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -108,10 +106,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_time_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Time Tracking ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Time Tracking", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -175,10 +170,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_projects_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Projects ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Projects", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -244,10 +236,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_status_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Status Distribution ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Status Distribution", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -292,10 +281,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_activity_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" This Week ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("This Week", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -358,10 +344,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_estimation_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Estimation ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Estimation", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -455,10 +438,7 @@ impl Dashboard<'_> {
     }
 
     pub(crate) fn render_focus_panel(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Focus Sessions ")
-            .border_style(Style::default().fg(theme.colors.border.to_color()));
+        let block = panel_block("Focus Sessions", theme);
         let inner = block.inner(area);
         block.render(area, buf);
 

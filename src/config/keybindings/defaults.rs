@@ -61,6 +61,8 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("c".to_string(), Action::ToggleShowCompleted);
     bindings.insert("?".to_string(), Action::ShowHelp);
     bindings.insert("f".to_string(), Action::ToggleFocusMode);
+    bindings.insert("F".to_string(), Action::ToggleFullScreenFocus);
+    bindings.insert("Q".to_string(), Action::AddToFocusQueue);
     bindings.insert("h".to_string(), Action::FocusSidebar);
     bindings.insert("l".to_string(), Action::FocusTaskList);
     bindings.insert("left".to_string(), Action::FocusSidebar);

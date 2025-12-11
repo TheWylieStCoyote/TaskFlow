@@ -17,7 +17,10 @@ use taskflow::config::Settings;
 use taskflow::storage::BackendType;
 
 use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, ListFilters};
-use commands::{extract_git_todos, list_tasks, mark_task_done, quick_add_task};
+use commands::{
+    extract_git_todos, list_tasks, mark_task_done, next_task, quick_add_task, show_stats,
+    today_tasks,
+};
 use tui::run_tui;
 
 /// Initialize the tracing/logging subsystem.
@@ -157,6 +160,15 @@ fn main() -> anyhow::Result<()> {
                 priority,
                 *dry_run,
             );
+        }
+        Some(Commands::Today { completed }) => {
+            return today_tasks(&cli, *completed);
+        }
+        Some(Commands::Next) => {
+            return next_task(&cli);
+        }
+        Some(Commands::Stats) => {
+            return show_stats(&cli);
         }
         None => {}
     }

@@ -28,6 +28,14 @@ pub enum UiMessage {
     HideHelp,
     /// Toggle focus mode (single-task view with timer)
     ToggleFocusMode,
+    /// Toggle full-screen in focus mode (hides header/footer)
+    ToggleFullScreenFocus,
+    /// Add selected task to focus queue
+    AddToFocusQueue,
+    /// Clear the focus queue
+    ClearFocusQueue,
+    /// Advance to next task in focus queue
+    AdvanceFocusQueue,
 
     // Input mode - starting various edit operations
     /// Enter input mode to create a new task

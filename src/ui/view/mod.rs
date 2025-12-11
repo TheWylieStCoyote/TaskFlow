@@ -37,24 +37,32 @@ use crate::config::Theme;
 pub fn view(model: &Model, frame: &mut Frame<'_>, theme: &Theme) {
     let area = frame.area();
 
-    // Main layout: header, content, footer
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // Header
-            Constraint::Min(0),    // Content
-            Constraint::Length(1), // Footer
-        ])
-        .split(area);
+    // Full-screen focus mode: hide header and footer for minimal distraction
+    let is_full_screen_focus = model.focus_mode && model.pomodoro.full_screen;
 
-    // Render header
-    layout::render_header(frame, chunks[0], theme);
+    if is_full_screen_focus {
+        // Render only the content (FocusView takes over entire area)
+        layout::render_content(model, frame, area, theme);
+    } else {
+        // Main layout: header, content, footer
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3), // Header
+                Constraint::Min(0),    // Content
+                Constraint::Length(1), // Footer
+            ])
+            .split(area);
 
-    // Render main content
-    layout::render_content(model, frame, chunks[1], theme);
+        // Render header
+        layout::render_header(frame, chunks[0], theme);
 
-    // Render footer
-    footer::render_footer(model, frame, chunks[2], theme);
+        // Render main content
+        layout::render_content(model, frame, chunks[1], theme);
+
+        // Render footer
+        footer::render_footer(model, frame, chunks[2], theme);
+    }
 
     // Render popups (help, dialogs, editors, alerts, reviews)
     popups::render_popups(model, frame, area, theme);

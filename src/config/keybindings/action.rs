@@ -44,6 +44,10 @@ pub enum Action {
     ToggleShowCompleted,
     ShowHelp,
     ToggleFocusMode,
+    ToggleFullScreenFocus,
+    AddToFocusQueue,
+    ClearFocusQueue,
+    AdvanceFocusQueue,
     FocusSidebar,
     FocusTaskList,
     Select,
@@ -288,6 +292,10 @@ impl Action {
             Self::ToggleShowCompleted => "Toggle show completed",
             Self::ShowHelp => "Show help",
             Self::ToggleFocusMode => "Toggle focus mode",
+            Self::ToggleFullScreenFocus => "Toggle full-screen focus",
+            Self::AddToFocusQueue => "Add to focus queue",
+            Self::ClearFocusQueue => "Clear focus queue",
+            Self::AdvanceFocusQueue => "Next in focus queue",
             Self::FocusSidebar => "Focus sidebar",
             Self::FocusTaskList => "Focus task list",
             Self::Select => "Select item",
@@ -439,6 +447,10 @@ impl Action {
             | Self::ToggleShowCompleted
             | Self::ShowHelp
             | Self::ToggleFocusMode
+            | Self::ToggleFullScreenFocus
+            | Self::AddToFocusQueue
+            | Self::ClearFocusQueue
+            | Self::AdvanceFocusQueue
             | Self::FocusSidebar
             | Self::FocusTaskList
             | Self::Select

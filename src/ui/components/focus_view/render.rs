@@ -159,17 +159,14 @@ impl FocusView<'_> {
 
     pub(crate) fn render_help(&self, area: Rect, buf: &mut Buffer, theme: &Theme, task: &Task) {
         let is_tracking = self.model.active_time_entry.is_some();
+        let is_full_screen = self.model.pomodoro.full_screen;
 
         // Build help text with chain navigation hints if applicable
         let has_chain =
             task.next_task_id.is_some() || self.get_prev_task_in_chain(task.id).is_some();
 
         let mut help_parts = Vec::new();
-        help_parts.push(if is_tracking {
-            "[t] Stop Timer"
-        } else {
-            "[t] Start Timer"
-        });
+        help_parts.push(if is_tracking { "[t] Stop" } else { "[t] Start" });
         help_parts.push("[x] Toggle");
 
         if has_chain {
@@ -180,6 +177,13 @@ impl FocusView<'_> {
                 help_parts.push("[]] Next");
             }
         }
+
+        // Full-screen toggle
+        help_parts.push(if is_full_screen {
+            "[F] Windowed"
+        } else {
+            "[F] Full"
+        });
 
         help_parts.push("[f/Esc] Exit");
 

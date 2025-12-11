@@ -1,6 +1,5 @@
 ---
 source: tests/ui_snapshots.rs
-assertion_line: 314
 expression: output
 ---
 ┌───────────────────────────────── FOCUS MODE ─────────────────────────────────┐
@@ -24,6 +23,6 @@ expression: output
 │                                                                              │
 │⏱ 00:00:00                                                                    │
 │                                                                              │
-│[t] Start Timer  [x] Toggle  [f/Esc] Exit                                     │
+│[t] Start  [x] Toggle  [F] Full  [f/Esc] Exit                                 │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘

@@ -190,6 +190,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ShowHelp => view_state::show_help(model),
         UiMessage::HideHelp => view_state::hide_help(model),
         UiMessage::ToggleFocusMode => view_state::toggle_focus_mode(model),
+        UiMessage::ToggleFullScreenFocus => view_state::toggle_full_screen_focus(model),
+        UiMessage::AddToFocusQueue => view_state::add_to_focus_queue(model),
+        UiMessage::ClearFocusQueue => view_state::clear_focus_queue(model),
+        UiMessage::AdvanceFocusQueue => view_state::advance_focus_queue(model),
         // Input mode handling
         UiMessage::StartCreateTask => {
             start_input(model, InputTarget::Task, None);

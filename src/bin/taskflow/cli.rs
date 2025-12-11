@@ -157,6 +157,19 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// List today's tasks (shortcut for `list --view today`)
+    #[command(alias = "t")]
+    Today {
+        /// Show completed tasks
+        #[arg(short, long)]
+        completed: bool,
+    },
+    /// Show the next task to work on (highest priority incomplete task)
+    #[command(alias = "n")]
+    Next,
+    /// Show quick productivity statistics
+    #[command(alias = "s")]
+    Stats,
 }
 
 /// Parse priority strings into Priority enum values

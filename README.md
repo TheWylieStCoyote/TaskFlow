@@ -14,10 +14,13 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 
 - **Task Management**: Create, edit, and track tasks with priorities, due dates, status, and subtasks
 - **Project Organization**: Group related tasks under projects with sidebar navigation
+- **Goal/OKR Tracking**: Set objectives and key results with progress tracking and quarterly filtering
+- **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer; persists across restarts
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
 - **Sorting**: Sort tasks by priority, due date, title, status, or creation date
+- **Multiple Views**: Calendar, Timeline, Kanban, Eisenhower Matrix, Heatmap, Burndown charts, and more
 - **Undo Support**: Undo task, project, and time tracking operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
 - **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown

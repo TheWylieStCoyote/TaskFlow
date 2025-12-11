@@ -42,7 +42,9 @@ pub fn handle_submit_input(model: &mut Model) {
     let input = model.input.buffer.trim().to_string();
     match &model.input.target {
         InputTarget::Task => {
-            if !input.is_empty() {
+            if input.is_empty() {
+                model.alerts.status_message = Some("Task title cannot be empty".to_string());
+            } else {
                 let task = create_task_from_quick_add(&input, model, None);
                 let task_id = task.id;
 
@@ -71,7 +73,9 @@ pub fn handle_submit_input(model: &mut Model) {
             }
         }
         InputTarget::QuickCapture => {
-            if !input.is_empty() {
+            if input.is_empty() {
+                model.alerts.status_message = Some("Task title cannot be empty".to_string());
+            } else {
                 let task = create_task_from_quick_add(&input, model, None);
                 let task_id = task.id;
 
@@ -337,6 +341,11 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.multi_select.selected.clear();
                 model.multi_select.mode = false;
                 model.refresh_visible_tasks();
+            } else {
+                model.alerts.status_message = Some(
+                    "Invalid status: enter 1-5 (Todo/InProgress/Blocked/Done/Cancelled)"
+                        .to_string(),
+                );
             }
         }
         InputTarget::EditDependencies(task_id) => {

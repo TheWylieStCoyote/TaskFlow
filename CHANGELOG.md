@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Goal/OKR Tracking**: Full OKR (Objectives and Key Results) management with goals, key results, progress tracking, and quarterly filtering
+- **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics; includes archival and habit view
+- **Timeline View**: Gantt-style timeline for visualizing task schedules with zoom controls
 - **Advanced Analytics Views**: New Heatmap, Forecast, Network, and Burndown chart views for visualizing task completion patterns, predicting workload, and tracking project progress
 - **Quick Capture Mode**: Fast task entry with syntax hints for due dates, priorities, and tags
 - **Mouse Support**: Click navigation and view interaction throughout the application

@@ -26,7 +26,7 @@ pub fn handle_move_task(model: &mut Model, direction: i32) {
         model.selected_index - 1
     } else {
         // Moving down - find next task
-        if model.selected_index >= model.visible_tasks.len() - 1 {
+        if model.selected_index + 1 >= model.visible_tasks.len() {
             return;
         }
         model.selected_index + 1

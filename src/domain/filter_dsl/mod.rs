@@ -23,7 +23,7 @@
 //!
 //! ## Date Fields
 //!
-//! All date fields support relative keywords and specific dates with comparison operators.
+//! All date fields support relative keywords, comparison operators, and range syntax.
 //!
 //! | Field | Aliases | Keywords | Date Formats |
 //! |-------|---------|----------|--------------|
@@ -33,14 +33,34 @@
 //! | `completed:` | | `today`, `yesterday`, `thisweek`, `lastweek` | `YYYY-MM-DD`, `<YYYY-MM-DD`, `>YYYY-MM-DD` |
 //! | `modified:` | `updated:` | `today`, `yesterday`, `thisweek`, `lastweek` | `YYYY-MM-DD`, `<YYYY-MM-DD`, `>YYYY-MM-DD` |
 //!
+//! ### Date Range Syntax
+//!
+//! All date fields also support range syntax for filtering within a date range:
+//!
+//! | Pattern | Meaning | Example |
+//! |---------|---------|---------|
+//! | `start..end` | Within range (inclusive) | `due:2025-01-01..2025-01-31` |
+//! | `start..` | On or after date | `created:2025-01-01..` |
+//! | `..end` | On or before date | `completed:..2025-06-30` |
+//!
 //! ## Numeric Fields
 //!
-//! Time-based fields support comparison operators for filtering by duration (in minutes).
+//! Time-based fields support comparison operators and range syntax for filtering by duration (in minutes).
 //!
 //! | Field | Aliases | Description | Examples |
 //! |-------|---------|-------------|----------|
 //! | `estimate:` | `est:` | Time estimate | `>60`, `<30`, `>=60`, `<=30`, `60`, `none` |
 //! | `actual:` | `tracked:` | Tracked time | `>0`, `<120`, `>=30`, `<=60`, `45`, `none` |
+//!
+//! ### Numeric Range Syntax
+//!
+//! Numeric fields also support range syntax:
+//!
+//! | Pattern | Meaning | Example |
+//! |---------|---------|---------|
+//! | `min..max` | Between min and max (inclusive) | `estimate:30..120` |
+//! | `min..` | Greater than or equal to min | `actual:60..` |
+//! | `..max` | Less than or equal to max | `estimate:..30` |
 //!
 //! ## Field Presence (`has:`)
 //!
@@ -115,8 +135,14 @@
 //! # Overdue tasks in a specific project
 //! due:overdue AND project:frontend
 //!
-//! # Tasks due in January 2025
-//! due:>2024-12-31 AND due:<2025-02-01
+//! # Tasks due in January 2025 (using range syntax)
+//! due:2025-01-01..2025-01-31
+//!
+//! # Tasks due in Q1 2025
+//! due:2025-01-01..2025-03-31
+//!
+//! # Tasks due from today onward
+//! due:2025-01-01..
 //!
 //! # Tasks with no due date
 //! due:none AND status:todo
@@ -146,6 +172,12 @@
 //!
 //! # Tasks with over an hour tracked
 //! actual:>60
+//!
+//! # Tasks with 1-2 hours tracked (using range syntax)
+//! actual:60..120
+//!
+//! # Medium-sized tasks (30 min to 2 hours estimated)
+//! estimate:30..120
 //!
 //! # Completed tasks with no time tracked
 //! status:done AND actual:0

@@ -324,6 +324,56 @@ fn parse_status(s: &str) -> Option<TaskStatus> {
     }
 }
 
+/// Parse a date range from a string like "2025-01-01..2025-12-31".
+/// Returns (start, end) where either can be None for open-ended ranges.
+fn parse_date_range(s: &str) -> Option<(Option<NaiveDate>, Option<NaiveDate>)> {
+    let (start, end) = s.split_once("..")?;
+
+    let start_date = if start.is_empty() {
+        None
+    } else {
+        Some(NaiveDate::parse_from_str(start, "%Y-%m-%d").ok()?)
+    };
+
+    let end_date = if end.is_empty() {
+        None
+    } else {
+        Some(NaiveDate::parse_from_str(end, "%Y-%m-%d").ok()?)
+    };
+
+    // At least one side must be present
+    if start_date.is_some() || end_date.is_some() {
+        Some((start_date, end_date))
+    } else {
+        None
+    }
+}
+
+/// Parse a numeric range from a string like "30..120".
+/// Returns (start, end) where either can be None for open-ended ranges.
+fn parse_numeric_range(s: &str) -> Option<(Option<u32>, Option<u32>)> {
+    let (start, end) = s.split_once("..")?;
+
+    let start_num = if start.is_empty() {
+        None
+    } else {
+        Some(start.parse().ok()?)
+    };
+
+    let end_num = if end.is_empty() {
+        None
+    } else {
+        Some(end.parse().ok()?)
+    };
+
+    // At least one side must be present
+    if start_num.is_some() || end_num.is_some() {
+        Some((start_num, end_num))
+    } else {
+        None
+    }
+}
+
 /// Parse a due date filter value.
 fn parse_due(s: &str, position: usize) -> ParseResult<DueFilter> {
     match s.to_lowercase().as_str() {
@@ -334,6 +384,26 @@ fn parse_due(s: &str, position: usize) -> ParseResult<DueFilter> {
         "overdue" => Ok(DueFilter::Overdue),
         "none" => Ok(DueFilter::None),
         _ => {
+            // Try range: YYYY-MM-DD..YYYY-MM-DD or open-ended variants
+            if let Some((start, end)) = parse_date_range(s) {
+                return match (start, end) {
+                    (Some(s), Some(e)) => {
+                        if s > e {
+                            Err(ParseError::invalid_value(
+                                "due",
+                                s.to_string(),
+                                Some("Range end must be on or after start".to_string()),
+                                position,
+                            ))
+                        } else {
+                            Ok(DueFilter::Between(s, e))
+                        }
+                    }
+                    (Some(s), None) => Ok(DueFilter::OnOrAfter(s)),
+                    (None, Some(e)) => Ok(DueFilter::OnOrBefore(e)),
+                    (None, None) => unreachable!(),
+                };
+            }
             // Try before date: <YYYY-MM-DD
             if let Some(date_str) = s.strip_prefix('<') {
                 if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
@@ -353,7 +423,7 @@ fn parse_due(s: &str, position: usize) -> ParseResult<DueFilter> {
             Err(ParseError::invalid_value(
                 "due",
                 s,
-                Some("Valid values: today, tomorrow, thisweek, nextweek, overdue, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                Some("Valid values: today, tomorrow, thisweek, nextweek, overdue, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD".to_string()),
                 position,
             ))
         }
@@ -385,6 +455,26 @@ fn parse_created(s: &str, position: usize) -> ParseResult<CreatedFilter> {
         "thisweek" | "this-week" | "this_week" => Ok(CreatedFilter::ThisWeek),
         "lastweek" | "last-week" | "last_week" => Ok(CreatedFilter::LastWeek),
         _ => {
+            // Try range: YYYY-MM-DD..YYYY-MM-DD or open-ended variants
+            if let Some((start, end)) = parse_date_range(s) {
+                return match (start, end) {
+                    (Some(s), Some(e)) => {
+                        if s > e {
+                            Err(ParseError::invalid_value(
+                                "created",
+                                s.to_string(),
+                                Some("Range end must be on or after start".to_string()),
+                                position,
+                            ))
+                        } else {
+                            Ok(CreatedFilter::Between(s, e))
+                        }
+                    }
+                    (Some(s), None) => Ok(CreatedFilter::OnOrAfter(s)),
+                    (None, Some(e)) => Ok(CreatedFilter::OnOrBefore(e)),
+                    (None, None) => unreachable!(),
+                };
+            }
             // Try before date: <YYYY-MM-DD
             if let Some(date_str) = s.strip_prefix('<') {
                 if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
@@ -404,7 +494,7 @@ fn parse_created(s: &str, position: usize) -> ParseResult<CreatedFilter> {
             Err(ParseError::invalid_value(
                 "created",
                 s,
-                Some("Valid values: today, yesterday, thisweek, lastweek, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                Some("Valid values: today, yesterday, thisweek, lastweek, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD".to_string()),
                 position,
             ))
         }
@@ -420,6 +510,26 @@ fn parse_scheduled(s: &str, position: usize) -> ParseResult<ScheduledFilter> {
         "nextweek" | "next-week" | "next_week" => Ok(ScheduledFilter::NextWeek),
         "none" => Ok(ScheduledFilter::None),
         _ => {
+            // Try range: YYYY-MM-DD..YYYY-MM-DD or open-ended variants
+            if let Some((start, end)) = parse_date_range(s) {
+                return match (start, end) {
+                    (Some(s), Some(e)) => {
+                        if s > e {
+                            Err(ParseError::invalid_value(
+                                "scheduled",
+                                s.to_string(),
+                                Some("Range end must be on or after start".to_string()),
+                                position,
+                            ))
+                        } else {
+                            Ok(ScheduledFilter::Between(s, e))
+                        }
+                    }
+                    (Some(s), None) => Ok(ScheduledFilter::OnOrAfter(s)),
+                    (None, Some(e)) => Ok(ScheduledFilter::OnOrBefore(e)),
+                    (None, None) => unreachable!(),
+                };
+            }
             // Try before date: <YYYY-MM-DD
             if let Some(date_str) = s.strip_prefix('<') {
                 if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
@@ -439,7 +549,7 @@ fn parse_scheduled(s: &str, position: usize) -> ParseResult<ScheduledFilter> {
             Err(ParseError::invalid_value(
                 "scheduled",
                 s,
-                Some("Valid values: today, tomorrow, thisweek, nextweek, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                Some("Valid values: today, tomorrow, thisweek, nextweek, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD, YYYY-MM-DD..YYYY-MM-DD".to_string()),
                 position,
             ))
         }
@@ -453,6 +563,27 @@ fn parse_numeric(s: &str, position: usize, field_name: &str) -> ParseResult<Nume
     // Handle "none" keyword
     if s_lower == "none" {
         return Ok(NumericFilter::None);
+    }
+
+    // Try range: number..number or open-ended variants
+    if let Some((start, end)) = parse_numeric_range(s) {
+        return match (start, end) {
+            (Some(s), Some(e)) => {
+                if s > e {
+                    Err(ParseError::invalid_value(
+                        field_name,
+                        s.to_string(),
+                        Some("Range end must be greater than or equal to start".to_string()),
+                        position,
+                    ))
+                } else {
+                    Ok(NumericFilter::Between(s, e))
+                }
+            }
+            (Some(s), None) => Ok(NumericFilter::GreaterOrEqual(s)),
+            (None, Some(e)) => Ok(NumericFilter::LessOrEqual(e)),
+            (None, None) => unreachable!(),
+        };
     }
 
     // Try comparison operators: >=, <=, >, <
@@ -485,7 +616,10 @@ fn parse_numeric(s: &str, position: usize, field_name: &str) -> ParseResult<Nume
     Err(ParseError::invalid_value(
         field_name,
         s,
-        Some("Valid values: number, >number, <number, >=number, <=number, none".to_string()),
+        Some(
+            "Valid values: number, >number, <number, >=number, <=number, number..number, none"
+                .to_string(),
+        ),
         position,
     ))
 }
@@ -881,6 +1015,241 @@ mod tests {
             assert_eq!(
                 cond.value,
                 FilterValue::Created(CreatedFilter::After(expected))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    // ========================================================================
+    // Range syntax tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_due_date_range() {
+        let expr = parse("due:2025-01-01..2025-01-31").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+            let end = NaiveDate::from_ymd_opt(2025, 1, 31).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(start, end)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_due_open_start_range() {
+        let expr = parse("due:2025-06-01..").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrAfter(date)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_due_open_end_range() {
+        let expr = parse("due:..2025-12-31").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 12, 31).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrBefore(date)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_due_invalid_range_end_before_start() {
+        let result = parse("due:2025-12-31..2025-01-01");
+        assert!(matches!(result, Err(ParseError::InvalidValue { field, .. }) if field == "due"));
+    }
+
+    #[test]
+    fn test_parse_created_date_range() {
+        let expr = parse("created:2025-01-01..2025-03-31").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+            let end = NaiveDate::from_ymd_opt(2025, 3, 31).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::Between(start, end))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_created_open_start_range() {
+        let expr = parse("created:2025-01-01..").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::OnOrAfter(date))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_created_open_end_range() {
+        let expr = parse("created:..2025-06-30").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::OnOrBefore(date))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_date_range() {
+        let expr = parse("scheduled:2025-02-01..2025-02-28").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let start = NaiveDate::from_ymd_opt(2025, 2, 1).unwrap();
+            let end = NaiveDate::from_ymd_opt(2025, 2, 28).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Scheduled(ScheduledFilter::Between(start, end))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_open_start_range() {
+        let expr = parse("scheduled:2025-03-01..").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 3, 1).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Scheduled(ScheduledFilter::OnOrAfter(date))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_open_end_range() {
+        let expr = parse("scheduled:..2025-04-30").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 4, 30).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Scheduled(ScheduledFilter::OnOrBefore(date))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_estimate_numeric_range() {
+        let expr = parse("estimate:30..120").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(
+                cond.value,
+                FilterValue::Estimate(NumericFilter::Between(30, 120))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_estimate_open_start_range() {
+        let expr = parse("estimate:60..").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(
+                cond.value,
+                FilterValue::Estimate(NumericFilter::GreaterOrEqual(60))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_estimate_open_end_range() {
+        let expr = parse("estimate:..30").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(
+                cond.value,
+                FilterValue::Estimate(NumericFilter::LessOrEqual(30))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_actual_numeric_range() {
+        let expr = parse("actual:15..90").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(
+                cond.value,
+                FilterValue::Actual(NumericFilter::Between(15, 90))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_estimate_invalid_range_end_before_start() {
+        let result = parse("estimate:120..30");
+        assert!(
+            matches!(result, Err(ParseError::InvalidValue { field, .. }) if field == "estimate")
+        );
+    }
+
+    #[test]
+    fn test_parse_invalid_date_range_format() {
+        // Invalid date format in range
+        let result = parse("due:2025-01-01..invalid");
+        assert!(matches!(result, Err(ParseError::InvalidValue { .. })));
+    }
+
+    #[test]
+    fn test_parse_empty_range() {
+        // Just ".." should fail - lexer rejects it as unexpected character
+        let result = parse("due:..");
+        assert!(result.is_err());
+        // Either UnexpectedChar (from lexer) or InvalidValue (from parser) is acceptable
+        assert!(
+            matches!(result, Err(ParseError::UnexpectedChar { .. }))
+                || matches!(result, Err(ParseError::InvalidValue { .. }))
+        );
+    }
+
+    #[test]
+    fn test_parse_range_same_date() {
+        // Same start and end should be allowed (single day range)
+        let expr = parse("due:2025-06-15..2025-06-15").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let date = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(date, date)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_range_same_number() {
+        // Same start and end should be allowed
+        let expr = parse("estimate:60..60").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(
+                cond.value,
+                FilterValue::Estimate(NumericFilter::Between(60, 60))
             );
         } else {
             panic!("Expected Condition");

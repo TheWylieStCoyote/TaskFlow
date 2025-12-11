@@ -9,10 +9,15 @@ use regex::Regex;
 use super::error::{ParseError, ParseResult};
 
 /// Pre-compiled regex for identifiers (field names and values).
-/// Allows letters, digits, underscores, and hyphens. Can start with letter, digit, or underscore.
+/// Allows letters, digits, underscores, hyphens, and dots. Can start with letter, digit, underscore, or dots.
 /// Also allows optional `<` or `>` prefix for comparison values (e.g., `<2025-12-25`).
-static IDENTIFIER_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[<>]?[a-zA-Z0-9_][a-zA-Z0-9_-]*").expect("valid regex"));
+/// Dots are allowed for range syntax:
+/// - Full range: `2025-01-01..2025-12-31`
+/// - Open start: `..2025-12-31` (up to end)
+/// - Open end: `2025-01-01..` (from start onward)
+static IDENTIFIER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[<>]?\.{0,2}[a-zA-Z0-9_][a-zA-Z0-9_.\-]*").expect("valid regex")
+});
 
 /// Token types produced by the lexer.
 #[derive(Debug, Clone, PartialEq)]

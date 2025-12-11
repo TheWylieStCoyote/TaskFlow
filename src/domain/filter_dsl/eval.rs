@@ -169,6 +169,12 @@ fn evaluate_due(filter: &DueFilter, task: &Task, today: NaiveDate) -> bool {
         DueFilter::Before(date) => task.due_date.is_some_and(|d| d < *date),
 
         DueFilter::After(date) => task.due_date.is_some_and(|d| d > *date),
+
+        DueFilter::Between(start, end) => task.due_date.is_some_and(|d| d >= *start && d <= *end),
+
+        DueFilter::OnOrAfter(date) => task.due_date.is_some_and(|d| d >= *date),
+
+        DueFilter::OnOrBefore(date) => task.due_date.is_some_and(|d| d <= *date),
     }
 }
 
@@ -205,6 +211,12 @@ fn evaluate_created(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> bo
         CreatedFilter::Before(date) => created_date < *date,
 
         CreatedFilter::After(date) => created_date > *date,
+
+        CreatedFilter::Between(start, end) => created_date >= *start && created_date <= *end,
+
+        CreatedFilter::OnOrAfter(date) => created_date >= *date,
+
+        CreatedFilter::OnOrBefore(date) => created_date <= *date,
     }
 }
 
@@ -258,6 +270,14 @@ fn evaluate_scheduled(filter: &ScheduledFilter, task: &Task, today: NaiveDate) -
         ScheduledFilter::Before(date) => task.scheduled_date.is_some_and(|d| d < *date),
 
         ScheduledFilter::After(date) => task.scheduled_date.is_some_and(|d| d > *date),
+
+        ScheduledFilter::Between(start, end) => task
+            .scheduled_date
+            .is_some_and(|d| d >= *start && d <= *end),
+
+        ScheduledFilter::OnOrAfter(date) => task.scheduled_date.is_some_and(|d| d >= *date),
+
+        ScheduledFilter::OnOrBefore(date) => task.scheduled_date.is_some_and(|d| d <= *date),
     }
 }
 
@@ -296,6 +316,12 @@ fn evaluate_completed(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> 
         CreatedFilter::Before(date) => completed_date < *date,
 
         CreatedFilter::After(date) => completed_date > *date,
+
+        CreatedFilter::Between(start, end) => completed_date >= *start && completed_date <= *end,
+
+        CreatedFilter::OnOrAfter(date) => completed_date >= *date,
+
+        CreatedFilter::OnOrBefore(date) => completed_date <= *date,
     }
 }
 
@@ -331,6 +357,12 @@ fn evaluate_modified(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> b
         CreatedFilter::Before(date) => modified_date < *date,
 
         CreatedFilter::After(date) => modified_date > *date,
+
+        CreatedFilter::Between(start, end) => modified_date >= *start && modified_date <= *end,
+
+        CreatedFilter::OnOrAfter(date) => modified_date >= *date,
+
+        CreatedFilter::OnOrBefore(date) => modified_date <= *date,
     }
 }
 
@@ -343,6 +375,7 @@ fn evaluate_numeric(filter: &NumericFilter, value: Option<u32>) -> bool {
         NumericFilter::LessThan(n) => value.is_some_and(|v| v < *n),
         NumericFilter::GreaterOrEqual(n) => value.is_some_and(|v| v >= *n),
         NumericFilter::LessOrEqual(n) => value.is_some_and(|v| v <= *n),
+        NumericFilter::Between(min, max) => value.is_some_and(|v| v >= *min && v <= *max),
     }
 }
 
@@ -819,5 +852,290 @@ mod tests {
         assert!(!evaluate(&expr, &task_before, &ctx));
         assert!(!evaluate(&expr, &task_on, &ctx)); // Not strictly after
         assert!(evaluate(&expr, &task_after, &ctx));
+    }
+
+    // ========================================================================
+    // Range evaluation tests
+    // ========================================================================
+
+    #[test]
+    fn test_eval_due_date_range() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let start = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
+
+        // Task within range
+        let task_in =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+        let expr = crate::domain::filter_dsl::parse("due:2025-06-01..2025-06-30").unwrap();
+        assert!(evaluate(&expr, &task_in, &ctx));
+
+        // Task before range
+        let task_before =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 5, 15).unwrap());
+        assert!(!evaluate(&expr, &task_before, &ctx));
+
+        // Task after range
+        let task_after =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 7, 15).unwrap());
+        assert!(!evaluate(&expr, &task_after, &ctx));
+
+        // Task on start boundary (inclusive)
+        let task_start = Task::new("Test").with_due_date(start);
+        assert!(evaluate(&expr, &task_start, &ctx));
+
+        // Task on end boundary (inclusive)
+        let task_end = Task::new("Test").with_due_date(end);
+        assert!(evaluate(&expr, &task_end, &ctx));
+    }
+
+    #[test]
+    fn test_eval_due_on_or_after() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let boundary = NaiveDate::from_ymd_opt(2025, 6, 10).unwrap();
+
+        // Task on boundary (inclusive)
+        let task_on = Task::new("Test").with_due_date(boundary);
+        let expr = crate::domain::filter_dsl::parse("due:2025-06-10..").unwrap();
+        assert!(evaluate(&expr, &task_on, &ctx));
+
+        // Task after boundary
+        let task_after =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 6, 20).unwrap());
+        assert!(evaluate(&expr, &task_after, &ctx));
+
+        // Task before boundary
+        let task_before =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 6, 5).unwrap());
+        assert!(!evaluate(&expr, &task_before, &ctx));
+    }
+
+    #[test]
+    fn test_eval_due_on_or_before() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let boundary = NaiveDate::from_ymd_opt(2025, 6, 20).unwrap();
+
+        // Task on boundary (inclusive)
+        let task_on = Task::new("Test").with_due_date(boundary);
+        let expr = crate::domain::filter_dsl::parse("due:..2025-06-20").unwrap();
+        assert!(evaluate(&expr, &task_on, &ctx));
+
+        // Task before boundary
+        let task_before =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 6, 10).unwrap());
+        assert!(evaluate(&expr, &task_before, &ctx));
+
+        // Task after boundary
+        let task_after =
+            Task::new("Test").with_due_date(NaiveDate::from_ymd_opt(2025, 6, 25).unwrap());
+        assert!(!evaluate(&expr, &task_after, &ctx));
+    }
+
+    #[test]
+    fn test_eval_created_date_range() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let start = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
+
+        // Task within range
+        let task_in = task_created_on(NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+        let expr = crate::domain::filter_dsl::parse("created:2025-06-01..2025-06-30").unwrap();
+        assert!(evaluate(&expr, &task_in, &ctx));
+
+        // Task before range
+        let task_before = task_created_on(NaiveDate::from_ymd_opt(2025, 5, 15).unwrap());
+        assert!(!evaluate(&expr, &task_before, &ctx));
+
+        // Task on boundaries (inclusive)
+        let task_start = task_created_on(start);
+        let task_end = task_created_on(end);
+        assert!(evaluate(&expr, &task_start, &ctx));
+        assert!(evaluate(&expr, &task_end, &ctx));
+    }
+
+    #[test]
+    fn test_eval_created_on_or_after() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let boundary = NaiveDate::from_ymd_opt(2025, 6, 10).unwrap();
+
+        let task_on = task_created_on(boundary);
+        let task_after = task_created_on(NaiveDate::from_ymd_opt(2025, 6, 20).unwrap());
+        let task_before = task_created_on(NaiveDate::from_ymd_opt(2025, 6, 5).unwrap());
+
+        let expr = crate::domain::filter_dsl::parse("created:2025-06-10..").unwrap();
+        assert!(evaluate(&expr, &task_on, &ctx)); // Inclusive
+        assert!(evaluate(&expr, &task_after, &ctx));
+        assert!(!evaluate(&expr, &task_before, &ctx));
+    }
+
+    #[test]
+    fn test_eval_created_on_or_before() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let boundary = NaiveDate::from_ymd_opt(2025, 6, 10).unwrap();
+
+        let task_on = task_created_on(boundary);
+        let task_after = task_created_on(NaiveDate::from_ymd_opt(2025, 6, 20).unwrap());
+        let task_before = task_created_on(NaiveDate::from_ymd_opt(2025, 6, 5).unwrap());
+
+        let expr = crate::domain::filter_dsl::parse("created:..2025-06-10").unwrap();
+        assert!(evaluate(&expr, &task_on, &ctx)); // Inclusive
+        assert!(!evaluate(&expr, &task_after, &ctx));
+        assert!(evaluate(&expr, &task_before, &ctx));
+    }
+
+    #[test]
+    fn test_eval_scheduled_date_range() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let start = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
+
+        // Task within range
+        let mut task_in = Task::new("Test");
+        task_in.scheduled_date = Some(NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+        let expr = crate::domain::filter_dsl::parse("scheduled:2025-06-01..2025-06-30").unwrap();
+        assert!(evaluate(&expr, &task_in, &ctx));
+
+        // Task outside range
+        let mut task_before = Task::new("Test");
+        task_before.scheduled_date = Some(NaiveDate::from_ymd_opt(2025, 5, 15).unwrap());
+        assert!(!evaluate(&expr, &task_before, &ctx));
+
+        // Task on boundaries (inclusive)
+        let mut task_start = Task::new("Test");
+        task_start.scheduled_date = Some(start);
+        let mut task_end = Task::new("Test");
+        task_end.scheduled_date = Some(end);
+        assert!(evaluate(&expr, &task_start, &ctx));
+        assert!(evaluate(&expr, &task_end, &ctx));
+    }
+
+    #[test]
+    fn test_eval_estimate_numeric_range() {
+        let ctx = empty_ctx();
+
+        // Estimate within range
+        let mut task = Task::new("Test");
+        task.estimated_minutes = Some(60);
+
+        let expr = crate::domain::filter_dsl::parse("estimate:30..120").unwrap();
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // Estimate below range
+        task.estimated_minutes = Some(15);
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // Estimate above range
+        task.estimated_minutes = Some(180);
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // Boundary values (inclusive)
+        task.estimated_minutes = Some(30);
+        assert!(evaluate(&expr, &task, &ctx));
+        task.estimated_minutes = Some(120);
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_eval_estimate_open_start() {
+        let ctx = empty_ctx();
+
+        let mut task = Task::new("Test");
+
+        // Open-ended: >= 60
+        let expr = crate::domain::filter_dsl::parse("estimate:60..").unwrap();
+
+        task.estimated_minutes = Some(60);
+        assert!(evaluate(&expr, &task, &ctx)); // Inclusive
+
+        task.estimated_minutes = Some(120);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        task.estimated_minutes = Some(30);
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_eval_estimate_open_end() {
+        let ctx = empty_ctx();
+
+        let mut task = Task::new("Test");
+
+        // Open-ended: <= 60
+        let expr = crate::domain::filter_dsl::parse("estimate:..60").unwrap();
+
+        task.estimated_minutes = Some(60);
+        assert!(evaluate(&expr, &task, &ctx)); // Inclusive
+
+        task.estimated_minutes = Some(30);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        task.estimated_minutes = Some(120);
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_eval_actual_numeric_range() {
+        let ctx = empty_ctx();
+
+        let mut task = Task::new("Test");
+
+        let expr = crate::domain::filter_dsl::parse("actual:30..90").unwrap();
+
+        // Within range
+        task.actual_minutes = 60;
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // Below range
+        task.actual_minutes = 15;
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // Above range
+        task.actual_minutes = 120;
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // Boundaries (inclusive)
+        task.actual_minutes = 30;
+        assert!(evaluate(&expr, &task, &ctx));
+        task.actual_minutes = 90;
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_eval_range_vs_comparison_semantics() {
+        let today = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        let ctx = ctx_with_date(today);
+
+        let boundary = NaiveDate::from_ymd_opt(2025, 6, 10).unwrap();
+        let task_on_boundary = Task::new("Test").with_due_date(boundary);
+
+        // Strict comparison: > is exclusive
+        let expr_after = crate::domain::filter_dsl::parse("due:>2025-06-10").unwrap();
+        assert!(!evaluate(&expr_after, &task_on_boundary, &ctx));
+
+        // Range syntax: start.. is inclusive (OnOrAfter)
+        let expr_from = crate::domain::filter_dsl::parse("due:2025-06-10..").unwrap();
+        assert!(evaluate(&expr_from, &task_on_boundary, &ctx));
+
+        // Strict comparison: < is exclusive
+        let expr_before = crate::domain::filter_dsl::parse("due:<2025-06-10").unwrap();
+        assert!(!evaluate(&expr_before, &task_on_boundary, &ctx));
+
+        // Range syntax: ..end is inclusive (OnOrBefore)
+        let expr_until = crate::domain::filter_dsl::parse("due:..2025-06-10").unwrap();
+        assert!(evaluate(&expr_until, &task_on_boundary, &ctx));
     }
 }

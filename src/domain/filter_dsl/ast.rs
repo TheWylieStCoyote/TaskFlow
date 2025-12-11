@@ -206,10 +206,16 @@ pub enum DueFilter {
     None,
     /// Due on a specific date.
     On(NaiveDate),
-    /// Due before a specific date.
+    /// Due before a specific date (exclusive).
     Before(NaiveDate),
-    /// Due after a specific date.
+    /// Due after a specific date (exclusive).
     After(NaiveDate),
+    /// Due within a date range (inclusive).
+    Between(NaiveDate, NaiveDate),
+    /// Due on or after a date (inclusive, for `start..` syntax).
+    OnOrAfter(NaiveDate),
+    /// Due on or before a date (inclusive, for `..end` syntax).
+    OnOrBefore(NaiveDate),
 }
 
 /// Creation date filter options.
@@ -226,10 +232,16 @@ pub enum CreatedFilter {
     LastWeek,
     /// Created on a specific date.
     On(NaiveDate),
-    /// Created before a specific date.
+    /// Created before a specific date (exclusive).
     Before(NaiveDate),
-    /// Created after a specific date.
+    /// Created after a specific date (exclusive).
     After(NaiveDate),
+    /// Created within a date range (inclusive).
+    Between(NaiveDate, NaiveDate),
+    /// Created on or after a date (inclusive, for `start..` syntax).
+    OnOrAfter(NaiveDate),
+    /// Created on or before a date (inclusive, for `..end` syntax).
+    OnOrBefore(NaiveDate),
 }
 
 /// Scheduled date filter options.
@@ -248,10 +260,16 @@ pub enum ScheduledFilter {
     None,
     /// Scheduled on a specific date.
     On(NaiveDate),
-    /// Scheduled before a specific date.
+    /// Scheduled before a specific date (exclusive).
     Before(NaiveDate),
-    /// Scheduled after a specific date.
+    /// Scheduled after a specific date (exclusive).
     After(NaiveDate),
+    /// Scheduled within a date range (inclusive).
+    Between(NaiveDate, NaiveDate),
+    /// Scheduled on or after a date (inclusive, for `start..` syntax).
+    OnOrAfter(NaiveDate),
+    /// Scheduled on or before a date (inclusive, for `..end` syntax).
+    OnOrBefore(NaiveDate),
 }
 
 /// Numeric comparison filter for time estimates and actuals.
@@ -270,6 +288,8 @@ pub enum NumericFilter {
     LessOrEqual(u32),
     /// Has no value (None).
     None,
+    /// Value within a range (inclusive).
+    Between(u32, u32),
 }
 
 /// Fields that can be checked for presence with `has:`.

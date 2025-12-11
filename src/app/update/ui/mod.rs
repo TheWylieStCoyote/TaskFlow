@@ -84,7 +84,7 @@ use crate::ui::{InputMode, InputTarget};
 use calendar::handle_ui_calendar;
 use editors::{handle_ui_description_editor, handle_ui_work_log};
 use filters::handle_ui_saved_filters;
-use input::handle_submit_input;
+use input::{enter_focus_for_task, handle_submit_input, start_input};
 use keybindings::handle_ui_keybindings;
 use macros::handle_ui_macros;
 use reviews::{handle_ui_daily_review, handle_ui_weekly_review};
@@ -182,42 +182,31 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ToggleFocusMode => view_state::toggle_focus_mode(model),
         // Input mode handling
         UiMessage::StartCreateTask => {
-            model.input.mode = InputMode::Editing;
-            model.input.target = InputTarget::Task;
-            model.input.buffer.clear();
-            model.input.cursor = 0;
+            start_input(model, InputTarget::Task, None);
         }
         UiMessage::StartQuickCapture => {
-            model.input.mode = InputMode::Editing;
-            model.input.target = InputTarget::QuickCapture;
-            model.input.buffer.clear();
-            model.input.cursor = 0;
+            start_input(model, InputTarget::QuickCapture, None);
         }
         UiMessage::StartCreateSubtask => {
             // Create a subtask under the currently selected task
             if let Some(parent_id) = model.selected_task_id() {
                 if model.tasks.contains_key(&parent_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::Subtask(parent_id);
-                    model.input.buffer.clear();
-                    model.input.cursor = 0;
+                    start_input(model, InputTarget::Subtask(parent_id), None);
                 }
             }
         }
         UiMessage::StartCreateProject => {
-            model.input.mode = InputMode::Editing;
-            model.input.target = InputTarget::Project;
-            model.input.buffer.clear();
-            model.input.cursor = 0;
+            start_input(model, InputTarget::Project, None);
         }
         UiMessage::StartEditProject => {
             // Edit the currently selected project (from sidebar)
             if let Some(ref project_id) = model.selected_project {
                 if let Some(project) = model.projects.get(project_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditProject(*project_id);
-                    model.input.buffer.clone_from(&project.name);
-                    model.input.cursor = model.input.buffer.len();
+                    start_input(
+                        model,
+                        InputTarget::EditProject(*project_id),
+                        Some(project.name.clone()),
+                    );
                 }
             } else {
                 model.alerts.status_message =
@@ -265,76 +254,50 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::StartEditTask => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditTask(task_id);
-                    model.input.buffer = task.title.clone();
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model.tasks.get(&task_id).map(|t| t.title.clone());
+                start_input(model, InputTarget::EditTask(task_id), prefill);
             }
         }
         UiMessage::StartEditDueDate => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditDueDate(task_id);
-                    // Pre-fill with existing due date or empty
-                    model.input.buffer = task
-                        .due_date
-                        .map(|d| d.format("%Y-%m-%d").to_string())
-                        .unwrap_or_default();
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(|t| t.due_date.map(|d| d.format("%Y-%m-%d").to_string()));
+                start_input(model, InputTarget::EditDueDate(task_id), prefill);
             }
         }
         UiMessage::StartEditScheduledDate => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditScheduledDate(task_id);
-                    // Pre-fill with existing scheduled date or empty
-                    model.input.buffer = task
-                        .scheduled_date
-                        .map(|d| d.format("%Y-%m-%d").to_string())
-                        .unwrap_or_default();
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(|t| t.scheduled_date.map(|d| d.format("%Y-%m-%d").to_string()));
+                start_input(model, InputTarget::EditScheduledDate(task_id), prefill);
             }
         }
         UiMessage::StartEditTags => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditTags(task_id);
-                    // Pre-fill with existing tags as comma-separated
-                    model.input.buffer = task.tags.join(", ");
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model.tasks.get(&task_id).map(|t| t.tags.join(", "));
+                start_input(model, InputTarget::EditTags(task_id), prefill);
             }
         }
         UiMessage::StartEditDescription => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditDescription(task_id);
-                    // Pre-fill with existing description
-                    model.input.buffer = task.description.clone().unwrap_or_default();
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(|t| t.description.clone());
+                start_input(model, InputTarget::EditDescription(task_id), prefill);
             }
         }
         UiMessage::StartEditEstimate => {
             if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get(&task_id) {
-                    model.input.mode = InputMode::Editing;
-                    model.input.target = InputTarget::EditEstimate(task_id);
-                    // Pre-fill with existing estimate in human-readable format
-                    model.input.buffer = task
-                        .estimated_minutes
-                        .map(format_duration_input)
-                        .unwrap_or_default();
-                    model.input.cursor = model.input.buffer.len();
-                }
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(|t| t.estimated_minutes.map(format_duration_input));
+                start_input(model, InputTarget::EditEstimate(task_id), prefill);
             }
         }
         UiMessage::StartMoveToProject => {
@@ -419,10 +382,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.refresh_visible_tasks();
         }
         UiMessage::CancelInput => {
-            model.input.mode = InputMode::Normal;
-            model.input.target = InputTarget::default();
-            model.input.buffer.clear();
-            model.input.cursor = 0;
+            model.input.clear();
         }
         UiMessage::SubmitInput => {
             handle_submit_input(model);
@@ -693,10 +653,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         // Task snooze
         UiMessage::StartSnoozeTask => {
             if let Some(task_id) = model.selected_task_id() {
-                model.input.mode = InputMode::Editing;
-                model.input.target = InputTarget::SnoozeTask(task_id);
-                model.input.buffer.clear();
-                model.input.cursor = 0;
+                start_input(model, InputTarget::SnoozeTask(task_id), None);
             }
         }
         UiMessage::ClearSnooze => {
@@ -758,18 +715,11 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
 
         // Habit tracking UI
         UiMessage::StartCreateHabit => {
-            model.input.mode = InputMode::Editing;
-            model.input.target = InputTarget::NewHabit;
-            model.input.buffer.clear();
-            model.input.cursor = 0;
+            start_input(model, InputTarget::NewHabit, None);
         }
         UiMessage::StartEditHabit(habit_id) => {
-            if let Some(habit) = model.habits.get(&habit_id) {
-                model.input.mode = InputMode::Editing;
-                model.input.target = InputTarget::EditHabit(habit_id);
-                model.input.buffer.clone_from(&habit.name);
-                model.input.cursor = habit.name.len();
-            }
+            let prefill = model.habits.get(&habit_id).map(|h| h.name.clone());
+            start_input(model, InputTarget::EditHabit(habit_id), prefill);
         }
         UiMessage::HabitUp => {
             if model.habit_view.selected > 0 {
@@ -832,67 +782,33 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 .filter(|t| t.scheduled_date.is_some() || t.due_date.is_some())
                 .collect();
 
-            // Get the selected task from timeline
             if let Some(task) = timeline_tasks.get(model.timeline_state.selected_task_index) {
-                let task_id = task.id;
-                // Find this task's position in visible_tasks
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                    model.focus_mode = true;
-                }
+                enter_focus_for_task(model, task.id);
             }
         }
         UiMessage::KanbanViewSelected => {
-            // Get tasks in the current Kanban column
             let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
-
-            // Get the selected task from the column
             if let Some(&task_id) = column_tasks.get(model.view_selection.kanban_task_index) {
-                // Find this task's position in visible_tasks
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                    model.focus_mode = true;
-                }
+                enter_focus_for_task(model, task_id);
             }
         }
         UiMessage::EisenhowerViewSelected => {
-            // Get tasks in the current Eisenhower quadrant
             let quadrant_tasks =
                 model.eisenhower_quadrant_tasks(model.view_selection.eisenhower_quadrant);
-
-            // Get the selected task from the quadrant
             if let Some(&task_id) = quadrant_tasks.get(model.view_selection.eisenhower_task_index) {
-                // Find this task's position in visible_tasks
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                    model.focus_mode = true;
-                }
+                enter_focus_for_task(model, task_id);
             }
         }
         UiMessage::WeeklyPlannerViewSelected => {
-            // Get tasks for the current day in Weekly Planner
             let day_tasks = model.weekly_planner_day_tasks(model.view_selection.weekly_planner_day);
-
-            // Get the selected task from the day
             if let Some(&task_id) = day_tasks.get(model.view_selection.weekly_planner_task_index) {
-                // Find this task's position in visible_tasks
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                    model.focus_mode = true;
-                }
+                enter_focus_for_task(model, task_id);
             }
         }
         UiMessage::NetworkViewSelected => {
-            // Get tasks in the network view
             let network_tasks = model.network_tasks();
-
-            // Get the selected task
             if let Some(&task_id) = network_tasks.get(model.view_selection.network_task_index) {
-                // Find this task's position in visible_tasks
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                    model.focus_mode = true;
-                }
+                enter_focus_for_task(model, task_id);
             }
         }
         UiMessage::ChainNext => {

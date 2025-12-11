@@ -247,7 +247,7 @@ fn parse_csv_task(
     // Parse description
     let description = get_field("description")
         .filter(|s| !s.is_empty())
-        .map(|s| s.replace("\"\"", "\"").clone());
+        .map(|s| s.replace("\"\"", "\""));
 
     // Parse created timestamp
     let created_at = get_field("created")

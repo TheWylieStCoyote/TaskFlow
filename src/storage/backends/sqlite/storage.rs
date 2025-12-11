@@ -4,7 +4,9 @@ use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::domain::{PomodoroConfig, PomodoroSession, PomodoroStats};
+use crate::domain::{
+    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, SavedFilter, SavedFilterId, SortSpec,
+};
 use crate::storage::{
     ExportData, HabitRepository, ProjectRepository, StorageBackend, StorageError, StorageResult,
     TagRepository, TaskRepository, TimeEntryRepository, WorkLogRepository,
@@ -66,6 +68,49 @@ impl SqliteBackend {
         }
         Ok(())
     }
+
+    fn list_saved_filters(&self) -> StorageResult<Vec<SavedFilter>> {
+        let conn = self.inner.conn()?;
+        let mut stmt =
+            conn.prepare("SELECT id, name, filter_json, sort_json, icon FROM saved_filters")?;
+        let rows = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let filter_json: String = row.get(2)?;
+            let sort_json: String = row.get(3)?;
+            let icon: Option<String> = row.get(4)?;
+            Ok((id, name, filter_json, sort_json, icon))
+        })?;
+
+        let mut filters = Vec::new();
+        for row in rows {
+            let (id, name, filter_json, sort_json, icon) = row?;
+            let filter: Filter = serde_json::from_str(&filter_json)
+                .map_err(|e| StorageError::serialization(e.to_string()))?;
+            let sort: SortSpec = serde_json::from_str(&sort_json)
+                .map_err(|e| StorageError::serialization(e.to_string()))?;
+            let mut saved = SavedFilter::new(name, filter, sort);
+            saved.id = SavedFilterId(id);
+            if let Some(i) = icon {
+                saved = saved.with_icon(i);
+            }
+            filters.push(saved);
+        }
+        Ok(filters)
+    }
+
+    fn create_saved_filter(&self, filter: &SavedFilter) -> StorageResult<()> {
+        let conn = self.inner.conn()?;
+        let filter_json = serde_json::to_string(&filter.filter)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        let sort_json = serde_json::to_string(&filter.sort)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO saved_filters (id, name, filter_json, sort_json, icon) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![filter.id.0, filter.name, filter_json, sort_json, filter.icon],
+        )?;
+        Ok(())
+    }
 }
 
 impl StorageBackend for SqliteBackend {
@@ -96,6 +141,7 @@ impl StorageBackend for SqliteBackend {
             pomodoro_session: self.get_pomodoro_value("session")?,
             pomodoro_config: self.get_pomodoro_value("config")?,
             pomodoro_stats: self.get_pomodoro_value("stats")?,
+            saved_filters: self.list_saved_filters()?,
         })
     }
 
@@ -104,7 +150,7 @@ impl StorageBackend for SqliteBackend {
 
         // Clear existing data (habits cascade to habit_check_ins)
         conn.execute_batch(
-            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits;",
+            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits; DELETE FROM saved_filters;",
         )?;
 
         // Import data
@@ -125,6 +171,9 @@ impl StorageBackend for SqliteBackend {
         }
         for habit in &data.habits {
             self.create_habit(habit)?;
+        }
+        for filter in &data.saved_filters {
+            self.create_saved_filter(filter)?;
         }
 
         // Import Pomodoro state

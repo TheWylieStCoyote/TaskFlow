@@ -47,17 +47,9 @@ struct LayoutData {
 ///
 /// Uses interior mutability so layout can be updated during rendering
 /// even when the Model is borrowed immutably.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct LayoutCache {
     data: RefCell<LayoutData>,
-}
-
-impl Clone for LayoutCache {
-    fn clone(&self) -> Self {
-        Self {
-            data: RefCell::new(self.data.borrow().clone()),
-        }
-    }
 }
 
 impl LayoutCache {

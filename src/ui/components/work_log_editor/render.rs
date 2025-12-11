@@ -1,96 +1,17 @@
-//! Work log editor popup widget.
-//!
-//! Displays and allows editing of work log entries for a task.
+//! Work log editor rendering methods.
 
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Widget, Wrap},
 };
 
-use crate::config::Theme;
-use crate::domain::{WorkLogEntry, WorkLogEntryId};
-
-/// Mode for work log editor
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WorkLogMode {
-    /// Browsing entries list
-    #[default]
-    Browse,
-    /// Viewing a single entry's full content
-    View,
-    /// Adding a new entry (multi-line input)
-    Add,
-    /// Editing an existing entry (multi-line input)
-    Edit,
-    /// Confirming deletion
-    ConfirmDelete,
-    /// Searching/filtering entries
-    Search,
-}
-
-/// Work log editor popup widget
-pub struct WorkLogEditor<'a> {
-    entries: Vec<&'a WorkLogEntry>,
-    selected: usize,
-    mode: WorkLogMode,
-    edit_buffer: &'a [String],
-    cursor_line: usize,
-    cursor_col: usize,
-    search_query: &'a str,
-    theme: &'a Theme,
-}
-
-impl<'a> WorkLogEditor<'a> {
-    #[must_use]
-    pub fn new(
-        entries: Vec<&'a WorkLogEntry>,
-        selected: usize,
-        mode: WorkLogMode,
-        edit_buffer: &'a [String],
-        cursor_line: usize,
-        cursor_col: usize,
-        search_query: &'a str,
-        theme: &'a Theme,
-    ) -> Self {
-        Self {
-            entries,
-            selected,
-            mode,
-            edit_buffer,
-            cursor_line,
-            cursor_col,
-            search_query,
-            theme,
-        }
-    }
-
-    /// Get the selected entry ID if any
-    #[must_use]
-    pub fn selected_entry_id(&self) -> Option<&WorkLogEntryId> {
-        self.entries.get(self.selected).map(|e| &e.id)
-    }
-}
-
-impl Widget for WorkLogEditor<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        // Clear the area first
-        Clear.render(area, buf);
-
-        match self.mode {
-            WorkLogMode::Browse => self.render_browse(area, buf),
-            WorkLogMode::View => self.render_view(area, buf),
-            WorkLogMode::Add | WorkLogMode::Edit => self.render_edit(area, buf),
-            WorkLogMode::ConfirmDelete => self.render_confirm_delete(area, buf),
-            WorkLogMode::Search => self.render_search(area, buf),
-        }
-    }
-}
+use super::{truncate_string, WorkLogEditor, WorkLogMode};
 
 impl WorkLogEditor<'_> {
-    fn render_browse(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_browse(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         // Build list items
@@ -171,7 +92,7 @@ impl WorkLogEditor<'_> {
         list.render(area, buf);
     }
 
-    fn render_view(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_view(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         let content = if let Some(entry) = self.entries.get(self.selected) {
@@ -207,7 +128,7 @@ impl WorkLogEditor<'_> {
         paragraph.render(area, buf);
     }
 
-    fn render_edit(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_edit(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         // Render the multi-line edit buffer with cursor
@@ -273,7 +194,7 @@ impl WorkLogEditor<'_> {
         paragraph.render(area, buf);
     }
 
-    fn render_confirm_delete(&self, area: Rect, buf: &mut Buffer) {
+    pub(crate) fn render_confirm_delete(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         let content = if let Some(entry) = self.entries.get(self.selected) {
@@ -301,9 +222,7 @@ impl WorkLogEditor<'_> {
         paragraph.render(area, buf);
     }
 
-    fn render_search(&self, area: Rect, buf: &mut Buffer) {
-        use ratatui::layout::{Constraint, Direction, Layout};
-
+    pub(crate) fn render_search(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
 
         // Split into search input (top) and results (bottom)
@@ -386,190 +305,5 @@ impl WorkLogEditor<'_> {
             let list = List::new(items);
             list.render(results_inner, buf);
         }
-    }
-}
-
-/// Truncate a string to a maximum length, adding ellipsis if needed.
-fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len - 3])
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::Theme;
-    use crate::domain::TaskId;
-    use ratatui::buffer::Buffer;
-
-    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
-        let area = Rect::new(0, 0, width, height);
-        let mut buffer = Buffer::empty(area);
-        widget.render(area, &mut buffer);
-        buffer
-    }
-
-    fn buffer_content(buffer: &Buffer) -> String {
-        let mut content = String::new();
-        for y in 0..buffer.area.height {
-            for x in 0..buffer.area.width {
-                content.push(
-                    buffer
-                        .cell((x, y))
-                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
-                );
-            }
-            content.push('\n');
-        }
-        content
-    }
-
-    #[test]
-    fn test_work_log_editor_empty() {
-        let theme = Theme::default();
-        let empty_buffer = vec![String::new()];
-        let editor = WorkLogEditor::new(
-            vec![],
-            0,
-            WorkLogMode::Browse,
-            &empty_buffer,
-            0,
-            0,
-            "",
-            &theme,
-        );
-        let buffer = render_widget(editor, 70, 10);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Work Log"));
-        assert!(content.contains("No work log entries"));
-    }
-
-    #[test]
-    fn test_work_log_editor_with_entry() {
-        let theme = Theme::default();
-        let task_id = TaskId::new();
-        let entry = WorkLogEntry::new(task_id, "Test entry content");
-        let empty_buffer = vec![String::new()];
-
-        let editor = WorkLogEditor::new(
-            vec![&entry],
-            0,
-            WorkLogMode::Browse,
-            &empty_buffer,
-            0,
-            0,
-            "",
-            &theme,
-        );
-        let buffer = render_widget(editor, 80, 10);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Work Log"));
-        assert!(content.contains("Test entry"));
-    }
-
-    #[test]
-    fn test_work_log_editor_view_mode() {
-        let theme = Theme::default();
-        let task_id = TaskId::new();
-        let entry = WorkLogEntry::new(task_id, "Full content\nwith multiple\nlines");
-        let empty_buffer = vec![String::new()];
-
-        let editor = WorkLogEditor::new(
-            vec![&entry],
-            0,
-            WorkLogMode::View,
-            &empty_buffer,
-            0,
-            0,
-            "",
-            &theme,
-        );
-        let buffer = render_widget(editor, 80, 15);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("View Entry"));
-        assert!(content.contains("Full content"));
-    }
-
-    #[test]
-    fn test_work_log_editor_add_mode() {
-        let theme = Theme::default();
-        let buffer_content_vec = vec!["First line".to_string(), "Second line".to_string()];
-
-        let editor = WorkLogEditor::new(
-            vec![],
-            0,
-            WorkLogMode::Add,
-            &buffer_content_vec,
-            0,
-            5,
-            "",
-            &theme,
-        );
-        let buffer = render_widget(editor, 80, 15);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Add Entry"));
-        assert!(content.contains("First line"));
-    }
-
-    #[test]
-    fn test_work_log_editor_confirm_delete() {
-        let theme = Theme::default();
-        let task_id = TaskId::new();
-        let entry = WorkLogEntry::new(task_id, "Entry to delete");
-        let empty_buffer = vec![String::new()];
-
-        let editor = WorkLogEditor::new(
-            vec![&entry],
-            0,
-            WorkLogMode::ConfirmDelete,
-            &empty_buffer,
-            0,
-            0,
-            "",
-            &theme,
-        );
-        let buffer = render_widget(editor, 80, 10);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Confirm Delete"));
-        assert!(content.contains("Entry to delete"));
-    }
-
-    #[test]
-    fn test_work_log_search_mode() {
-        let theme = Theme::default();
-        let task_id = TaskId::new();
-        let entry1 = WorkLogEntry::new(task_id, "Meeting notes from Monday");
-        let entry2 = WorkLogEntry::new(task_id, "Bug fix details");
-        let empty_buffer = vec![String::new()];
-
-        let editor = WorkLogEditor::new(
-            vec![&entry1, &entry2],
-            0,
-            WorkLogMode::Search,
-            &empty_buffer,
-            0,
-            0,
-            "meeting",
-            &theme,
-        );
-        let buffer = render_widget(editor, 80, 15);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Search Work Log"));
-        assert!(content.contains("2 matches")); // Shows count of filtered entries passed in
-    }
-
-    #[test]
-    fn test_truncate_string() {
-        assert_eq!(truncate_string("short", 10), "short");
-        assert_eq!(truncate_string("very long string here", 10), "very lo...");
     }
 }

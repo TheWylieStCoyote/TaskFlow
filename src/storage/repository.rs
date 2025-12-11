@@ -21,7 +21,7 @@
 
 use crate::domain::{
     Filter, Habit, HabitId, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId,
-    Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    SavedFilter, Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 use super::error::StorageResult;
@@ -319,6 +319,9 @@ pub struct ExportData {
     /// Pomodoro statistics
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pomodoro_stats: Option<PomodoroStats>,
+    /// Saved filters for quick access
+    #[serde(default)]
+    pub saved_filters: Vec<SavedFilter>,
 }
 
 impl Default for ExportData {
@@ -334,6 +337,7 @@ impl Default for ExportData {
             pomodoro_session: None,
             pomodoro_config: None,
             pomodoro_stats: None,
+            saved_filters: Vec::new(),
         }
     }
 }

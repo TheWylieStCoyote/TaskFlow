@@ -214,29 +214,7 @@ mod tests {
     use super::*;
     use crate::config::Theme;
     use crate::domain::TaskId;
-    use ratatui::buffer::Buffer;
-
-    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
-        let area = Rect::new(0, 0, width, height);
-        let mut buffer = Buffer::empty(area);
-        widget.render(area, &mut buffer);
-        buffer
-    }
-
-    fn buffer_content(buffer: &Buffer) -> String {
-        let mut content = String::new();
-        for y in 0..buffer.area.height {
-            for x in 0..buffer.area.width {
-                content.push(
-                    buffer
-                        .cell((x, y))
-                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
-                );
-            }
-            content.push('\n');
-        }
-        content
-    }
+    use crate::ui::test_utils::{buffer_content, render_widget};
 
     #[test]
     fn test_time_log_editor_empty() {

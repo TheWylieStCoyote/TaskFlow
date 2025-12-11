@@ -127,6 +127,14 @@ impl SqliteBackendInner {
                 FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_habit_check_ins_date ON habit_check_ins(date);
+
+            CREATE TABLE IF NOT EXISTS saved_filters (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                filter_json TEXT NOT NULL,
+                sort_json TEXT NOT NULL,
+                icon TEXT
+            );
             ",
         )?;
 

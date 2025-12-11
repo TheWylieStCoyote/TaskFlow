@@ -26,7 +26,11 @@
 //! allowing customization of the visual appearance.
 
 mod components;
+pub mod primitives;
 mod view;
+
+#[cfg(test)]
+pub mod test_utils;
 
 pub use components::*;
 pub use view::*;

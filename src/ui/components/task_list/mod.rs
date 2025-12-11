@@ -10,12 +10,13 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
-    widgets::{Block, Borders, List, ListState, StatefulWidget, Widget},
+    widgets::{List, ListState, StatefulWidget, Widget},
 };
 
 use crate::app::{Model, ViewId};
 use crate::config::Theme;
 use crate::domain::{Task, TaskId};
+use crate::ui::primitives::panel_block;
 
 pub use item::{project_header_to_list_item, task_to_list_item, TaskItemContext};
 
@@ -211,18 +212,13 @@ impl Widget for TaskList<'_> {
             .collect();
 
         let title = if self.is_grouped {
-            " Tasks (by Project) "
+            "Tasks (by Project)"
         } else {
-            " Tasks "
+            "Tasks"
         };
 
         let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(title)
-                    .border_style(Style::default().fg(theme.colors.border.to_color())),
-            )
+            .block(panel_block(title, theme))
             .highlight_style(
                 Style::default()
                     .bg(theme.colors.accent_secondary.to_color())

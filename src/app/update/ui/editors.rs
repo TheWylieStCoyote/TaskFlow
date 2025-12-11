@@ -133,7 +133,7 @@ pub fn handle_ui_work_log(model: &mut Model, msg: UiMessage) {
                         if let Some(removed) = model.work_logs.remove(&entry_id) {
                             model
                                 .undo_stack
-                                .push(UndoAction::WorkLogDeleted(Box::new(removed.clone())));
+                                .push(UndoAction::WorkLogDeleted(Box::new(removed)));
                             model.delete_work_log_from_storage(&entry_id);
 
                             // Adjust selection

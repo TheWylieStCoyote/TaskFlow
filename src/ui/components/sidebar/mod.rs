@@ -9,6 +9,9 @@
 //! - **Projects**: User-created project folders with task counts
 //! - **Tags**: Quick filters by tag (when expanded)
 
+#[cfg(test)]
+mod tests;
+
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
@@ -304,6 +307,46 @@ impl Widget for Sidebar<'_> {
             ))));
         }
 
+        // Saved Filters section
+        items.push(ListItem::new(Line::from("───────────")));
+        items.push(ListItem::new(Line::from(Span::styled(
+            "Saved Filters",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ))));
+
+        // List saved filters (sorted by name)
+        let mut filters: Vec<_> = self.model.saved_filters.values().collect();
+        filters.sort_by(|a, b| a.name.cmp(&b.name));
+
+        for filter in filters {
+            let is_active = self.model.active_saved_filter.as_ref() == Some(&filter.id);
+            let icon = filter.icon.as_deref().unwrap_or("🔍");
+            let name_style = if is_active {
+                Style::default()
+                    .fg(theme.colors.accent.to_color())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.colors.foreground.to_color())
+            };
+
+            items.push(ListItem::new(Line::from(vec![
+                Span::styled(format!("  {icon} "), Style::default()),
+                Span::styled(filter.name.clone(), name_style),
+                if is_active {
+                    Span::styled(" ✓", Style::default().fg(theme.colors.success.to_color()))
+                } else {
+                    Span::raw("")
+                },
+            ])));
+        }
+
+        if self.model.saved_filters.is_empty() {
+            items.push(ListItem::new(Line::from(Span::styled(
+                "  Press F to add",
+                Style::default().fg(theme.colors.muted.to_color()),
+            ))));
+        }
+
         let border_color = if is_focused {
             theme.colors.accent.to_color()
         } else {
@@ -353,205 +396,5 @@ fn styled_view_name(
             name.to_string(),
             Style::default().fg(theme.colors.foreground.to_color()),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ratatui::buffer::Buffer;
-
-    /// Helper to render a widget into a buffer
-    fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
-        let area = Rect::new(0, 0, width, height);
-        let mut buffer = Buffer::empty(area);
-        widget.render(area, &mut buffer);
-        buffer
-    }
-
-    /// Extract text content from buffer
-    fn buffer_content(buffer: &Buffer) -> String {
-        let mut content = String::new();
-        for y in 0..buffer.area.height {
-            for x in 0..buffer.area.width {
-                content.push(
-                    buffer
-                        .cell((x, y))
-                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
-                );
-            }
-            content.push('\n');
-        }
-        content
-    }
-
-    #[test]
-    fn test_sidebar_renders_navigation_title() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Navigation"),
-            "Navigation title should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_all_tasks_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("All Tasks"),
-            "All Tasks view should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_today_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(content.contains("Today"), "Today view should be visible");
-    }
-
-    #[test]
-    fn test_sidebar_renders_upcoming_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Upcoming"),
-            "Upcoming view should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_overdue_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Overdue"),
-            "Overdue view should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_calendar_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Calendar"),
-            "Calendar view should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_dashboard_view() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Dashboard"),
-            "Dashboard view should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_projects_section() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        // Height 30 to accommodate all views including Heatmap, Forecast, Network, Burndown
-        let buffer = render_widget(sidebar, 30, 30);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("Projects"),
-            "Projects section should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_shows_no_projects_when_empty() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        // Height 30 to accommodate all views including analytics views
-        let buffer = render_widget(sidebar, 30, 30);
-        let content = buffer_content(&buffer);
-
-        assert!(
-            content.contains("No projects"),
-            "Should show 'No projects' when empty"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_renders_projects_with_task_counts() {
-        let model = Model::new().with_sample_data();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        // Height 50 to accommodate all views (20+) plus 10 projects
-        let buffer = render_widget(sidebar, 30, 50);
-        let content = buffer_content(&buffer);
-
-        // Sample data has 10 projects; at least one should be visible
-        assert!(
-            content.contains("Backend")
-                || content.contains("Frontend")
-                || content.contains("Doc")
-                || content.contains("DevOps")
-                || content.contains("Mobile")
-                || content.contains("Personal"),
-            "Project names should be visible"
-        );
-    }
-
-    #[test]
-    fn test_sidebar_uses_focused_border_when_focused() {
-        let mut model = Model::new();
-        model.focus_pane = FocusPane::Sidebar;
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-
-        // Just ensure it renders without panic when focused
-        let buffer = render_widget(sidebar, 30, 20);
-        let _ = buffer_content(&buffer);
-    }
-
-    #[test]
-    fn test_sidebar_renders_separator() {
-        let model = Model::new();
-        let theme = Theme::default();
-        let sidebar = Sidebar::new(&model, &theme);
-        let buffer = render_widget(sidebar, 30, 20);
-        let content = buffer_content(&buffer);
-
-        // There should be a separator line between views and projects
-        assert!(content.contains('─'), "Separator should be visible");
     }
 }

@@ -68,7 +68,6 @@ pub fn create_test_model_with_tasks() -> Model {
 
 /// Safely gets a visible task ID with bounds checking.
 /// Panics with a descriptive message if index is out of bounds.
-#[allow(dead_code)]
 pub fn visible_task_id(model: &Model, index: usize) -> TaskId {
     assert!(
         index < model.visible_tasks.len(),

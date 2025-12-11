@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::domain::{
-    Habit, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId,
-    TimeEntry, WorkLogEntry,
+    Habit, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, SavedFilter, Tag,
+    Task, TaskId, TimeEntry, WorkLogEntry,
 };
 use crate::storage::StorageResult;
 
@@ -64,6 +64,7 @@ pub struct MarkdownBackend {
     pub(crate) time_entries: Vec<TimeEntry>,
     pub(crate) work_logs: Vec<WorkLogEntry>,
     pub(crate) habits: Vec<Habit>,
+    pub(crate) saved_filters: Vec<SavedFilter>,
     pub(crate) pomodoro_state: PomodoroState,
     pub(crate) dirty: bool,
 }
@@ -73,7 +74,7 @@ impl MarkdownBackend {
     ///
     /// # Errors
     ///
-    /// Returns a [`crate::storage::StorageError`] if the backend cannot be created.
+    /// Returns an error if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             base_path: path.to_path_buf(),
@@ -87,14 +88,10 @@ impl MarkdownBackend {
             time_entries: Vec::new(),
             work_logs: Vec::new(),
             habits: Vec::new(),
+            saved_filters: Vec::new(),
             pomodoro_state: PomodoroState::default(),
             dirty: false,
         })
-    }
-
-    #[allow(dead_code)]
-    pub(crate) const fn mark_dirty(&mut self) {
-        self.dirty = true;
     }
 
     /// Refresh the cache by checking for external changes.

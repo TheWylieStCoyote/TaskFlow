@@ -170,6 +170,13 @@ pub enum Commands {
     /// Show quick productivity statistics
     #[command(alias = "s")]
     Stats,
+    /// Pipe interface for scripting integration (stdin/stdout JSON/YAML/CSV)
+    #[command(alias = "p")]
+    Pipe {
+        /// Output format (json, yaml, csv)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+    },
 }
 
 /// Parse priority strings into Priority enum values

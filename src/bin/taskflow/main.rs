@@ -18,7 +18,7 @@ use taskflow::storage::BackendType;
 
 use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, ListFilters};
 use commands::{
-    extract_git_todos, list_tasks, mark_task_done, next_task, quick_add_task, show_stats,
+    extract_git_todos, list_tasks, mark_task_done, next_task, quick_add_task, run_pipe, show_stats,
     today_tasks,
 };
 use tui::run_tui;
@@ -169,6 +169,9 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Stats) => {
             return show_stats(&cli);
+        }
+        Some(Commands::Pipe { format }) => {
+            return run_pipe(&cli, format);
         }
         None => {}
     }

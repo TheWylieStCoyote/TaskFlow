@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Pipe Interface**: Scripting integration via `taskflow pipe` command for stdin/stdout interaction
+  - Full CRUD operations for all entity types (tasks, projects, time entries, work logs, habits, goals, key results, tags)
+  - JSON request/response protocol for programmatic access
+  - Multiple output formats: JSON (default), YAML, and CSV
+  - Filtering, sorting, and pagination for list operations
+  - Bulk export/import operations
 - **Goal/OKR Tracking**: Full OKR (Objectives and Key Results) management with goals, key results, progress tracking, and quarterly filtering
 - **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics; includes archival and habit view
 - **Timeline View**: Gantt-style timeline for visualizing task schedules with zoom controls

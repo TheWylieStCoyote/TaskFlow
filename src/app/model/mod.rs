@@ -59,8 +59,8 @@ pub use editor::MultilineEditor;
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
-    DescriptionEditorState, DuplicatesViewState, FilterState, HabitViewState, ImportState,
-    InputState, KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState,
+    DescriptionEditorState, DuplicatesViewState, FilterState, GoalViewState, HabitViewState,
+    ImportState, InputState, KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState,
     SavedFilterPickerState, StorageState, TemplatePickerState, TimeLogEditorState, TimelineState,
     TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
@@ -70,8 +70,9 @@ use std::collections::HashMap;
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    CalendarEvent, CalendarEventId, Habit, HabitId, Priority, Project, ProjectId, SavedFilter,
-    SavedFilterId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    CalendarEvent, CalendarEventId, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Priority,
+    Project, ProjectId, SavedFilter, SavedFilterId, Task, TaskId, TimeEntry, TimeEntryId,
+    WorkLogEntry, WorkLogEntryId,
 };
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
@@ -104,20 +105,21 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::Dashboard,        // 6: Dashboard
     ViewId::Reports,          // 7: Reports
     ViewId::Habits,           // 8: Habits
-    ViewId::Blocked,          // 9: Blocked
-    ViewId::Untagged,         // 10: Untagged
-    ViewId::NoProject,        // 11: No Project
-    ViewId::RecentlyModified, // 12: Recent
-    ViewId::Kanban,           // 13: Kanban
-    ViewId::Eisenhower,       // 14: Eisenhower
-    ViewId::WeeklyPlanner,    // 15: Weekly Planner
-    ViewId::Timeline,         // 16: Timeline
-    ViewId::Snoozed,          // 17: Snoozed
-    ViewId::Heatmap,          // 18: Heatmap
-    ViewId::Forecast,         // 19: Forecast
-    ViewId::Network,          // 20: Network
-    ViewId::Burndown,         // 21: Burndown
-    ViewId::Duplicates,       // 22: Duplicates
+    ViewId::Goals,            // 9: Goals
+    ViewId::Blocked,          // 10: Blocked
+    ViewId::Untagged,         // 11: Untagged
+    ViewId::NoProject,        // 12: No Project
+    ViewId::RecentlyModified, // 13: Recent
+    ViewId::Kanban,           // 14: Kanban
+    ViewId::Eisenhower,       // 15: Eisenhower
+    ViewId::WeeklyPlanner,    // 16: Weekly Planner
+    ViewId::Timeline,         // 17: Timeline
+    ViewId::Snoozed,          // 18: Snoozed
+    ViewId::Heatmap,          // 19: Heatmap
+    ViewId::Forecast,         // 20: Forecast
+    ViewId::Network,          // 21: Network
+    ViewId::Burndown,         // 22: Burndown
+    ViewId::Duplicates,       // 23: Duplicates
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -322,6 +324,16 @@ pub struct Model {
     /// Habit view state (selection, analytics, archive filter)
     pub habit_view: HabitViewState,
 
+    // Goal/OKR tracking
+    /// All goals indexed by ID
+    pub goals: HashMap<GoalId, Goal>,
+    /// All key results indexed by ID
+    pub key_results: HashMap<KeyResultId, KeyResult>,
+    /// Visible goal IDs (filtered by archived/quarter status)
+    pub visible_goals: Vec<GoalId>,
+    /// Goal view state (selection, expansion, filters)
+    pub goal_view: GoalViewState,
+
     // Duplicate detection
     /// Duplicates view state (selection, pairs, threshold)
     pub duplicates_view: DuplicatesViewState,
@@ -407,6 +419,10 @@ impl Model {
             habits: HashMap::new(),
             visible_habits: Vec::new(),
             habit_view: HabitViewState::default(),
+            goals: HashMap::new(),
+            key_results: HashMap::new(),
+            visible_goals: Vec::new(),
+            goal_view: GoalViewState::default(),
             duplicates_view: DuplicatesViewState::default(),
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
@@ -588,6 +604,151 @@ impl Model {
             .collect();
         events.sort_by_key(|e| e.start);
         events
+    }
+
+    /// Refresh the visible goals list based on filters.
+    ///
+    /// Filters by archived status and optionally by quarter.
+    pub fn refresh_visible_goals(&mut self) {
+        self.visible_goals = self
+            .goals
+            .values()
+            .filter(|g| {
+                // Filter by archived status
+                if !self.goal_view.show_archived && !g.is_active() {
+                    return false;
+                }
+                // Filter by quarter if set
+                if let Some((year, quarter)) = self.goal_view.filter_quarter {
+                    if g.quarter != Some((year, quarter)) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|g| g.id)
+            .collect();
+
+        // Sort by quarter (if present), then by name
+        self.visible_goals.sort_by(|a, b| {
+            let goal_a = self.goals.get(a);
+            let goal_b = self.goals.get(b);
+            match (goal_a, goal_b) {
+                (Some(a), Some(b)) => {
+                    // Sort by quarter first (goals with quarters come first)
+                    match (&a.quarter, &b.quarter) {
+                        (Some(qa), Some(qb)) => qa.cmp(qb).then(a.name.cmp(&b.name)),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => a.name.cmp(&b.name),
+                    }
+                }
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+
+        // Clamp selection
+        if self.visible_goals.is_empty() {
+            self.goal_view.selected_goal = 0;
+        } else {
+            self.goal_view.selected_goal = self
+                .goal_view
+                .selected_goal
+                .min(self.visible_goals.len() - 1);
+        }
+    }
+
+    /// Returns the currently selected goal (if any).
+    #[must_use]
+    pub fn selected_goal(&self) -> Option<&Goal> {
+        self.visible_goals
+            .get(self.goal_view.selected_goal)
+            .and_then(|id| self.goals.get(id))
+    }
+
+    /// Returns all key results for a specific goal.
+    ///
+    /// Results are sorted by name.
+    #[must_use]
+    pub fn key_results_for_goal(&self, goal_id: GoalId) -> Vec<&KeyResult> {
+        let mut krs: Vec<_> = self
+            .key_results
+            .values()
+            .filter(|kr| kr.goal_id == goal_id)
+            .collect();
+        krs.sort_by(|a, b| a.name.cmp(&b.name));
+        krs
+    }
+
+    /// Calculate goal progress (0-100).
+    ///
+    /// Returns manual progress if set, otherwise averages key result progress.
+    #[must_use]
+    pub fn goal_progress(&self, goal_id: GoalId) -> u8 {
+        // Check manual override first
+        if let Some(goal) = self.goals.get(&goal_id) {
+            if let Some(manual) = goal.manual_progress {
+                return manual;
+            }
+        }
+
+        // Auto-calculate from key results
+        let krs = self.key_results_for_goal(goal_id);
+        if krs.is_empty() {
+            return 0;
+        }
+
+        let total: u32 = krs
+            .iter()
+            .map(|kr| u32::from(self.key_result_progress(kr.id)))
+            .sum();
+        (total / krs.len() as u32) as u8
+    }
+
+    /// Calculate key result progress (0-100).
+    ///
+    /// Priority:
+    /// 1. Manual progress override
+    /// 2. Target/current value ratio
+    /// 3. Linked task completion percentage
+    #[must_use]
+    pub fn key_result_progress(&self, kr_id: KeyResultId) -> u8 {
+        if let Some(kr) = self.key_results.get(&kr_id) {
+            // Manual override
+            if let Some(manual) = kr.manual_progress {
+                return manual;
+            }
+
+            // From target/current values
+            if kr.target_value > 0.0 {
+                let pct = (kr.current_value / kr.target_value * 100.0).min(100.0);
+                return pct as u8;
+            }
+
+            // From linked tasks
+            let completed = kr
+                .linked_task_ids
+                .iter()
+                .filter(|id| self.tasks.get(id).is_some_and(|t| t.status.is_complete()))
+                .count();
+            let total = kr.linked_task_ids.len();
+            if total > 0 {
+                return (completed * 100 / total) as u8;
+            }
+        }
+        0
+    }
+
+    /// Returns all goals as a vector for export.
+    #[must_use]
+    pub fn goals_for_export(&self) -> Vec<Goal> {
+        self.goals.values().cloned().collect()
+    }
+
+    /// Returns all key results as a vector for export.
+    #[must_use]
+    pub fn key_results_for_export(&self) -> Vec<KeyResult> {
+        self.key_results.values().cloned().collect()
     }
 }
 

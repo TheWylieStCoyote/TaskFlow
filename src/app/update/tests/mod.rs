@@ -22,6 +22,7 @@
 //! - `cascade` - Cascade completion (parent/child)
 //! - `time_tracking` - Time entry management and cleanup
 //! - `habit` - Habit tracking operations
+//! - `goal` - Goal and key result CRUD
 
 mod bulk;
 mod calendar;
@@ -30,6 +31,7 @@ mod chains;
 mod editing;
 mod editors;
 mod filters;
+mod goal;
 mod habit;
 mod import_export;
 mod keybindings;

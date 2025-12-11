@@ -168,6 +168,8 @@ pub enum ViewId {
     Snoozed,
     /// Habit tracking view
     Habits,
+    /// Goal/OKR tracking view
+    Goals,
     /// Heatmap view (GitHub-style contribution graph)
     Heatmap,
     /// Forecast view (workload projection into future)

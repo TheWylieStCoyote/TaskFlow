@@ -1,6 +1,5 @@
 ---
 source: tests/ui_snapshots.rs
-assertion_line: 501
 expression: output
 ---
 ┌ Navigation ───────────┐
@@ -13,8 +12,8 @@ expression: output
 │📊  Dashboard           │
 │📈  Reports             │
 │🔄  Habits              │
+│🎯  Goals               │
 │🔒  Blocked             │
 │🏷️   Untagged           │
 │📁  No Project          │
-│🕐  Recent              │
 └───────────────────────┘

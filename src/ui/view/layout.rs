@@ -14,8 +14,8 @@ use crate::app::{Model, ViewId};
 use crate::config::Theme;
 
 use crate::ui::components::{
-    Burndown, Calendar, Dashboard, Duplicates, Eisenhower, FocusView, Forecast, HabitsView,
-    Heatmap, Kanban, Network, ReportsView, Sidebar, TaskList, Timeline, WeeklyPlanner,
+    Burndown, Calendar, Dashboard, Duplicates, Eisenhower, FocusView, Forecast, GoalsView,
+    HabitsView, Heatmap, Kanban, Network, ReportsView, Sidebar, TaskList, Timeline, WeeklyPlanner,
 };
 
 /// Renders the application header
@@ -118,6 +118,10 @@ pub(super) fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Re
         ViewId::Habits => {
             let habits = HabitsView::new(model, theme);
             frame.render_widget(habits, area);
+        }
+        ViewId::Goals => {
+            let goals = GoalsView::new(model, theme);
+            frame.render_widget(goals, area);
         }
         ViewId::Kanban => {
             // Cache kanban column areas - divide into 4 equal columns

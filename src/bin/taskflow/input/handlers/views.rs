@@ -94,6 +94,48 @@ pub fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message
     }
 }
 
+/// Handle goals view input
+pub fn handle_goals_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
+    use taskflow::app::GoalMessage;
+
+    match key.code {
+        // Exit to task list
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
+            taskflow::app::ViewId::TaskList,
+        ))),
+        // Navigation
+        KeyCode::Up | KeyCode::Char('k') => Some(Message::Goal(GoalMessage::NavigateUp)),
+        KeyCode::Down | KeyCode::Char('j') => Some(Message::Goal(GoalMessage::NavigateDown)),
+        // Create new goal
+        KeyCode::Char('n') => Some(Message::Ui(UiMessage::StartCreateGoal)),
+        // Create new key result (under selected goal)
+        KeyCode::Char('N') => Some(Message::Ui(UiMessage::StartCreateKeyResult)),
+        // Expand/collapse goal OR navigate into key results
+        KeyCode::Enter | KeyCode::Char('l') => Some(Message::Goal(GoalMessage::NavigateInto)),
+        // Navigate back (collapse)
+        KeyCode::Char('h') => Some(Message::Goal(GoalMessage::NavigateBack)),
+        // Edit selected goal
+        KeyCode::Char('e') => {
+            if let Some(&goal_id) = model.visible_goals.get(model.goal_view.selected_goal) {
+                Some(Message::Ui(UiMessage::StartEditGoal(goal_id)))
+            } else {
+                None
+            }
+        }
+        // Delete selected goal
+        KeyCode::Char('d') => {
+            if let Some(&goal_id) = model.visible_goals.get(model.goal_view.selected_goal) {
+                Some(Message::Goal(GoalMessage::Delete(goal_id)))
+            } else {
+                None
+            }
+        }
+        // Toggle show archived
+        KeyCode::Char('a') => Some(Message::Goal(GoalMessage::ToggleArchived)),
+        _ => None,
+    }
+}
+
 /// Handle timeline view input
 pub fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {

@@ -27,7 +27,7 @@ pub use confirm::ConfirmDialog;
 pub use dialog::InputDialog;
 pub use quick_capture::QuickCaptureDialog;
 
-use crate::domain::{HabitId, ProjectId, TaskId};
+use crate::domain::{GoalId, HabitId, ProjectId, TaskId};
 use crate::storage::ImportFormat;
 
 /// Input mode for the application
@@ -66,4 +66,7 @@ pub enum InputTarget {
     NewHabit,                     // Creating a new habit
     EditHabit(HabitId),           // Editing an existing habit's name
     QuickCapture,                 // Quick capture mode with syntax hints
+    GoalName,                     // Creating a new goal
+    EditGoalName(GoalId),         // Editing an existing goal's name
+    KeyResultName(GoalId),        // Creating a key result for a goal
 }

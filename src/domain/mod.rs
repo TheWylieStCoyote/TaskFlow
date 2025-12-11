@@ -5,6 +5,8 @@
 //!
 //! - [`Task`] - A work item with title, status, priority, and metadata
 //! - [`Project`] - A container for organizing related tasks
+//! - [`Goal`] - An OKR-style objective with timeframe and progress tracking
+//! - [`KeyResult`] - A measurable outcome linked to a Goal
 //! - [`Tag`] - A label for categorizing tasks
 //! - [`TimeEntry`] - A time tracking record for a task
 //! - [`Filter`] - Query parameters for filtering tasks
@@ -118,7 +120,9 @@ pub mod analytics;
 mod calendar_event;
 pub mod duplicate_detector;
 mod filter;
+mod goal;
 mod habit;
+mod key_result;
 mod pomodoro;
 mod project;
 mod tag;
@@ -131,7 +135,9 @@ mod proptest_tests;
 
 pub use calendar_event::*;
 pub use filter::*;
+pub use goal::*;
 pub use habit::*;
+pub use key_result::*;
 pub use pomodoro::*;
 pub use project::*;
 pub use tag::*;

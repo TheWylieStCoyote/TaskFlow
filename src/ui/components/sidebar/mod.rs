@@ -134,6 +134,16 @@ impl Widget for Sidebar<'_> {
                 ),
             ])),
             ListItem::new(Line::from(vec![
+                Span::styled("🎯 ", Style::default()),
+                styled_view_name(
+                    "Goals",
+                    ViewId::Goals,
+                    self.model.current_view,
+                    self.model.selected_project.is_none(),
+                    theme,
+                ),
+            ])),
+            ListItem::new(Line::from(vec![
                 Span::styled("🔒 ", Style::default()),
                 styled_view_name(
                     "Blocked",

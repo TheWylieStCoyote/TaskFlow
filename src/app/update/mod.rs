@@ -8,6 +8,7 @@
 //! - `ui`: Input handling, multi-select, templates, keybindings
 //! - `system`: Quit, save, undo/redo, import/export
 
+mod goal;
 mod habit;
 mod navigation;
 pub mod system;
@@ -56,6 +57,10 @@ pub fn update(model: &mut Model, message: Message) {
         Message::Habit(msg) => {
             debug!(?msg, "Habit tracking");
             habit::handle_habit(model, msg);
+        }
+        Message::Goal(msg) => {
+            debug!(?msg, "Goal tracking");
+            goal::handle_goal(model, msg);
         }
         Message::Ui(msg) => {
             trace!(?msg, "UI event"); // trace level since these are frequent

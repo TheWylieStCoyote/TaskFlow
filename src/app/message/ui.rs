@@ -1,6 +1,6 @@
 //! UI state and interaction messages.
 
-use crate::domain::HabitId;
+use crate::domain::{GoalId, HabitId};
 
 /// UI state and interaction messages.
 ///
@@ -374,6 +374,14 @@ pub enum UiMessage {
     HabitDelete,
     /// Toggle showing archived habits
     HabitToggleShowArchived,
+
+    // Goal/OKR tracking
+    /// Start creating a new goal
+    StartCreateGoal,
+    /// Start editing the selected goal
+    StartEditGoal(GoalId),
+    /// Start creating a new key result for the selected goal
+    StartCreateKeyResult,
 
     // Timeline view
     /// Toggle showing dependency lines in timeline

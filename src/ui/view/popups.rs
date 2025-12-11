@@ -57,6 +57,9 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
             InputTarget::NewHabit => "New Habit",
             InputTarget::EditHabit(_) => "Edit Habit",
             InputTarget::QuickCapture => "Quick Capture",
+            InputTarget::GoalName => "New Goal",
+            InputTarget::EditGoalName(_) => "Edit Goal",
+            InputTarget::KeyResultName(_) => "New Key Result",
         };
 
         // QuickCapture gets a special larger dialog with syntax hints

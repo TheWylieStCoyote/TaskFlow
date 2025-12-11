@@ -15,6 +15,7 @@
 //! └── None        - No-op
 //! ```
 
+mod goal;
 mod habit;
 mod navigation;
 mod pomodoro;
@@ -23,6 +24,7 @@ mod task;
 mod time;
 mod ui;
 
+pub use goal::GoalMessage;
 pub use habit::HabitMessage;
 pub use navigation::{NavigationMessage, ViewId};
 pub use pomodoro::PomodoroMessage;
@@ -88,6 +90,8 @@ pub enum Message {
     Pomodoro(PomodoroMessage),
     /// Habit tracking operations
     Habit(HabitMessage),
+    /// Goal/OKR tracking operations
+    Goal(GoalMessage),
     /// UI state changes
     Ui(UiMessage),
     /// System-level operations
@@ -135,6 +139,12 @@ impl From<PomodoroMessage> for Message {
 impl From<HabitMessage> for Message {
     fn from(msg: HabitMessage) -> Self {
         Self::Habit(msg)
+    }
+}
+
+impl From<GoalMessage> for Message {
+    fn from(msg: GoalMessage) -> Self {
+        Self::Goal(msg)
     }
 }
 

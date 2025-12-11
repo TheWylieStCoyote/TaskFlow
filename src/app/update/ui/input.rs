@@ -479,6 +479,41 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.alerts.status_message = Some("Habit updated".to_string());
             }
         }
+        InputTarget::GoalName => {
+            if !input.is_empty() {
+                crate::app::update::goal::handle_goal(
+                    model,
+                    crate::app::GoalMessage::Create(input.clone()),
+                );
+                model.alerts.status_message = Some("Goal created".to_string());
+            }
+        }
+        InputTarget::EditGoalName(goal_id) => {
+            let goal_id = *goal_id;
+            if !input.is_empty() {
+                crate::app::update::goal::handle_goal(
+                    model,
+                    crate::app::GoalMessage::UpdateName {
+                        id: goal_id,
+                        name: input.clone(),
+                    },
+                );
+                model.alerts.status_message = Some("Goal updated".to_string());
+            }
+        }
+        InputTarget::KeyResultName(goal_id) => {
+            let goal_id = *goal_id;
+            if !input.is_empty() {
+                crate::app::update::goal::handle_goal(
+                    model,
+                    crate::app::GoalMessage::CreateKeyResult {
+                        goal_id,
+                        name: input.clone(),
+                    },
+                );
+                model.alerts.status_message = Some("Key result created".to_string());
+            }
+        }
     }
     model.input.mode = InputMode::Normal;
     model.input.target = InputTarget::default();

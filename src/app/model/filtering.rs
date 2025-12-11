@@ -269,7 +269,7 @@ impl Model {
             | ViewId::Burndown => true,
 
             // Non-task views - filter out all tasks (they use their own data)
-            ViewId::Habits | ViewId::Duplicates => false,
+            ViewId::Habits | ViewId::Goals | ViewId::Duplicates => false,
 
             // Date-based views
             ViewId::Today => task.due_date == Some(today),

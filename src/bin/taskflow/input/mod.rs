@@ -14,10 +14,10 @@ use taskflow::config::Keybindings;
 use taskflow::ui::InputMode;
 
 pub use handlers::{
-    handle_calendar_view, handle_description_editor, handle_eisenhower_view, handle_habits_view,
-    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_network_view,
-    handle_reports_view, handle_template_picker, handle_time_log, handle_timeline_view,
-    handle_weekly_planner_view, handle_work_log,
+    handle_calendar_view, handle_description_editor, handle_eisenhower_view, handle_goals_view,
+    handle_habits_view, handle_kanban_view, handle_keybindings_editor, handle_macro_slot,
+    handle_network_view, handle_reports_view, handle_template_picker, handle_time_log,
+    handle_timeline_view, handle_weekly_planner_view, handle_work_log,
 };
 pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
@@ -173,6 +173,13 @@ pub fn handle_key_event(
     // In Network view, handle task navigation
     if model.current_view == taskflow::app::ViewId::Network {
         if let Some(msg) = handle_network_view(key) {
+            return msg;
+        }
+    }
+
+    // In Goals view, handle goal-specific actions
+    if model.current_view == taskflow::app::ViewId::Goals {
+        if let Some(msg) = handle_goals_view(key, model) {
             return msg;
         }
     }

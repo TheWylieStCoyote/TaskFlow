@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::domain::{Filter, SortSpec, TaskId};
+use crate::domain::{Filter, GoalId, Quarter, SortSpec, TaskId};
 use crate::ui::{InputMode, InputTarget};
 
 /// Application lifecycle state.
@@ -156,6 +156,21 @@ pub struct HabitViewState {
     pub show_analytics: bool,
     /// Whether to show archived habits
     pub show_archived: bool,
+}
+
+/// State for goal/OKR tracking view.
+#[derive(Debug, Clone, Default)]
+pub struct GoalViewState {
+    /// Index of selected goal in the list
+    pub selected_goal: usize,
+    /// Index of selected key result within expanded goal
+    pub selected_kr: usize,
+    /// Currently expanded goal (showing key results)
+    pub expanded_goal: Option<GoalId>,
+    /// Whether to show archived/completed goals
+    pub show_archived: bool,
+    /// Filter by specific quarter (year, quarter)
+    pub filter_quarter: Option<(i32, Quarter)>,
 }
 
 /// State for duplicate detection view.

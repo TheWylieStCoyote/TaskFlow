@@ -770,6 +770,21 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.habit_view.show_archived = !model.habit_view.show_archived;
             model.refresh_visible_habits();
         }
+
+        // Goal/OKR tracking UI
+        UiMessage::StartCreateGoal => {
+            start_input(model, InputTarget::GoalName, None);
+        }
+        UiMessage::StartEditGoal(goal_id) => {
+            let prefill = model.goals.get(&goal_id).map(|g| g.name.clone());
+            start_input(model, InputTarget::EditGoalName(goal_id), prefill);
+        }
+        UiMessage::StartCreateKeyResult => {
+            if let Some(&goal_id) = model.visible_goals.get(model.goal_view.selected_goal) {
+                start_input(model, InputTarget::KeyResultName(goal_id), None);
+            }
+        }
+
         UiMessage::TimelineToggleDependencies => {
             model.timeline_state.show_dependencies = !model.timeline_state.show_dependencies;
         }

@@ -36,6 +36,7 @@ impl<'a> EvalContext<'a> {
 
     /// Create an evaluation context with a specific date (for testing).
     #[cfg(test)]
+    #[must_use]
     pub fn with_date(projects: &'a HashMap<ProjectId, Project>, today: NaiveDate) -> Self {
         Self { projects, today }
     }

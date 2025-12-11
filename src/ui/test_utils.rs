@@ -33,6 +33,7 @@ use crate::config::Theme;
 /// # Returns
 ///
 /// A `Buffer` containing the rendered widget output
+#[must_use]
 pub fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
     let area = Rect::new(0, 0, width, height);
     let mut buffer = Buffer::empty(area);
@@ -54,6 +55,7 @@ pub fn render_widget<W: Widget>(widget: W, width: u16, height: u16) -> Buffer {
 /// # Returns
 ///
 /// A `String` containing the text content of the buffer
+#[must_use]
 pub fn buffer_content(buffer: &Buffer) -> String {
     let mut content = String::new();
     for y in 0..buffer.area.height {

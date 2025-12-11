@@ -731,7 +731,7 @@ mod tests {
             if let FilterExpr::Condition(cond) = expr {
                 assert_eq!(cond.value, FilterValue::Priority(expected));
             } else {
-                panic!("Expected Condition for {}", input);
+                panic!("Expected Condition for {input}");
             }
         }
     }
@@ -754,11 +754,10 @@ mod tests {
                 assert_eq!(
                     cond.value,
                     FilterValue::Status(expected),
-                    "Failed for {}",
-                    input
+                    "Failed for {input}"
                 );
             } else {
-                panic!("Expected Condition for {}", input);
+                panic!("Expected Condition for {input}");
             }
         }
     }
@@ -776,14 +775,9 @@ mod tests {
         ] {
             let expr = parse(input).unwrap();
             if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(
-                    cond.value,
-                    FilterValue::Due(expected),
-                    "Failed for {}",
-                    input
-                );
+                assert_eq!(cond.value, FilterValue::Due(expected), "Failed for {input}");
             } else {
-                panic!("Expected Condition for {}", input);
+                panic!("Expected Condition for {input}");
             }
         }
     }
@@ -834,14 +828,9 @@ mod tests {
         ] {
             let expr = parse(input).unwrap();
             if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(
-                    cond.value,
-                    FilterValue::Has(expected),
-                    "Failed for {}",
-                    input
-                );
+                assert_eq!(cond.value, FilterValue::Has(expected), "Failed for {input}");
             } else {
-                panic!("Expected Condition for {}", input);
+                panic!("Expected Condition for {input}");
             }
         }
     }
@@ -970,11 +959,10 @@ mod tests {
                 assert_eq!(
                     cond.value,
                     FilterValue::Created(expected),
-                    "Failed for {}",
-                    input
+                    "Failed for {input}"
                 );
             } else {
-                panic!("Expected Condition for {}", input);
+                panic!("Expected Condition for {input}");
             }
         }
     }

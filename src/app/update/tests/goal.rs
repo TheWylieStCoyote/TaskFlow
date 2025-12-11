@@ -159,8 +159,8 @@ fn test_key_result_set_target_and_value() {
     );
 
     let kr = model.key_results.get(&kr_id).unwrap();
-    assert_eq!(kr.target_value, 100.0);
-    assert_eq!(kr.current_value, 45.0);
+    assert!((kr.target_value - 100.0).abs() < f64::EPSILON);
+    assert!((kr.current_value - 45.0).abs() < f64::EPSILON);
     assert_eq!(kr.unit, Some("users".to_string()));
 }
 

@@ -353,8 +353,8 @@ mod tests {
         assert_eq!(kr.name, "Test KR");
         assert_eq!(kr.goal_id, goal_id);
         assert_eq!(kr.status, KeyResultStatus::NotStarted);
-        assert_eq!(kr.target_value, 0.0);
-        assert_eq!(kr.current_value, 0.0);
+        assert!((kr.target_value - 0.0).abs() < f64::EPSILON);
+        assert!((kr.current_value - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -363,8 +363,8 @@ mod tests {
             .with_target(100.0, Some("users"))
             .with_current_value(45.0);
 
-        assert_eq!(kr.target_value, 100.0);
-        assert_eq!(kr.current_value, 45.0);
+        assert!((kr.target_value - 100.0).abs() < f64::EPSILON);
+        assert!((kr.current_value - 45.0).abs() < f64::EPSILON);
         assert_eq!(kr.unit, Some("users".to_string()));
         assert_eq!(kr.progress_percent(), 45);
     }

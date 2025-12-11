@@ -12,9 +12,9 @@ fn test_burndown_empty_model() {
     let theme = Theme::default();
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
-    assert_eq!(data.total, 0.0);
-    assert_eq!(data.completed, 0.0);
-    assert_eq!(data.remaining, 0.0);
+    assert!((data.total - 0.0).abs() < f64::EPSILON);
+    assert!((data.completed - 0.0).abs() < f64::EPSILON);
+    assert!((data.remaining - 0.0).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -36,9 +36,9 @@ fn test_burndown_with_tasks() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 4.0);
-    assert_eq!(data.completed, 2.0);
-    assert_eq!(data.remaining, 2.0);
+    assert!((data.total - 4.0).abs() < f64::EPSILON);
+    assert!((data.completed - 2.0).abs() < f64::EPSILON);
+    assert!((data.remaining - 2.0).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -98,9 +98,9 @@ fn test_burndown_progress_calculation() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 4.0);
-    assert_eq!(data.completed, 2.0);
-    assert_eq!(data.remaining, 2.0);
+    assert!((data.total - 4.0).abs() < f64::EPSILON);
+    assert!((data.completed - 2.0).abs() < f64::EPSILON);
+    assert!((data.remaining - 2.0).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -131,9 +131,9 @@ fn test_burndown_with_project_filter() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(Some(project_id));
 
-    assert_eq!(data.total, 2.0);
-    assert_eq!(data.completed, 1.0);
-    assert_eq!(data.remaining, 1.0);
+    assert!((data.total - 2.0).abs() < f64::EPSILON);
+    assert!((data.completed - 1.0).abs() < f64::EPSILON);
+    assert!((data.remaining - 1.0).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -168,8 +168,8 @@ fn test_burndown_velocity_calculation() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 3.0);
-    assert_eq!(data.completed, 2.0);
+    assert!((data.total - 3.0).abs() < f64::EPSILON);
+    assert!((data.completed - 2.0).abs() < f64::EPSILON);
     assert!(!data.daily_points.is_empty());
 }
 
@@ -213,9 +213,9 @@ fn test_burndown_all_completed() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 2.0);
-    assert_eq!(data.completed, 2.0);
-    assert_eq!(data.remaining, 0.0);
+    assert!((data.total - 2.0).abs() < f64::EPSILON);
+    assert!((data.completed - 2.0).abs() < f64::EPSILON);
+    assert!((data.remaining - 0.0).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -300,16 +300,16 @@ fn test_burndown_mode_toggle() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
     assert_eq!(data.mode, BurndownMode::TaskCount);
-    assert_eq!(data.total, 2.0);
-    assert_eq!(data.completed, 1.0);
+    assert!((data.total - 2.0).abs() < f64::EPSILON);
+    assert!((data.completed - 1.0).abs() < f64::EPSILON);
 
     // Test time hours mode
     model.burndown_state.mode = BurndownMode::TimeHours;
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
     assert_eq!(data.mode, BurndownMode::TimeHours);
-    assert_eq!(data.total, 3.0); // 3 hours total
-    assert_eq!(data.completed, 1.0); // 1 hour completed
+    assert!((data.total - 3.0).abs() < f64::EPSILON); // 3 hours total
+    assert!((data.completed - 1.0).abs() < f64::EPSILON); // 1 hour completed
 }
 
 #[test]
@@ -329,5 +329,5 @@ fn test_burndown_scope_creep_tracking() {
 
     // scope_added should track tasks created in the period
     // Since task was created "now", it should be counted as scope added today
-    assert!(data.scope_added >= 0.0);
+    assert!(data.scope_added >= -f64::EPSILON);
 }

@@ -211,7 +211,7 @@ mod tests {
         let task1 = Task::new("Task 1").with_tags(vec!["@home".into(), "urgent".into()]);
         let task2 = Task::new("Task 2").with_tags(vec!["@work".into(), "@phone".into()]);
         let task3 = Task::new("Task 3").with_tags(vec!["bug".into()]);
-        let tasks = vec![task1, task2, task3];
+        let tasks = [task1, task2, task3];
 
         let contexts = extract_contexts(tasks.iter());
 
@@ -226,7 +226,7 @@ mod tests {
         let task1 = Task::new("Task 1").with_tags(vec!["@zebra".into()]);
         let task2 = Task::new("Task 2").with_tags(vec!["@apple".into()]);
         let task3 = Task::new("Task 3").with_tags(vec!["@middle".into()]);
-        let tasks = vec![task1, task2, task3];
+        let tasks = [task1, task2, task3];
 
         let contexts = extract_contexts(tasks.iter());
 
@@ -238,7 +238,7 @@ mod tests {
         let task1 = Task::new("Task 1").with_tags(vec!["@home".into()]);
         let task2 = Task::new("Task 2").with_tags(vec!["@home".into()]);
         let task3 = Task::new("Task 3").with_tags(vec!["@home".into(), "@work".into()]);
-        let tasks = vec![task1, task2, task3];
+        let tasks = [task1, task2, task3];
 
         let contexts = extract_contexts(tasks.iter());
 
@@ -249,7 +249,7 @@ mod tests {
     fn test_extract_contexts_empty() {
         let task1 = Task::new("Task 1").with_tags(vec!["regular".into()]);
         let task2 = Task::new("Task 2");
-        let tasks = vec![task1, task2];
+        let tasks = [task1, task2];
 
         let contexts = extract_contexts(tasks.iter());
 

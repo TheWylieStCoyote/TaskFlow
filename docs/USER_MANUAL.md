@@ -1301,11 +1301,14 @@ taskflow git-todos --priority high
 - Uses `git grep` for fast scanning
 - Smart parsing: only matches actual code comments (ignores false positives)
 - Supports common comment styles: `//`, `#`, `/*`, `--`, `<!--`, etc.
+- Handles annotated TODOs: `TODO(user): message` and `TODO[issue-123]: message`
 - Creates/updates tasks (deduplicates by file:line on rescan)
 - Tags tasks with `git-todo` + pattern name (e.g., `todo`, `fixme`)
 
 **TUI View:**
 - Navigate to "Git TODOs" in the sidebar to view all extracted TODOs
+- Or press `Alt+G` to jump directly to the Git TODOs view
+- Tasks are grouped by source file with line numbers
 - Tasks are filtered by the `git-todo` tag
 
 ---
@@ -1381,6 +1384,7 @@ taskflow git-todos --priority high
 | `b` | Toggle sidebar |
 | `c` | Toggle completed |
 | `f` | Toggle focus mode |
+| `Alt+G` | Git TODOs view |
 | `?` | Show help |
 
 #### Multi-Select

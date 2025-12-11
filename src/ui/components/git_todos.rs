@@ -61,7 +61,6 @@ impl Widget for GitTodos<'_> {
 
         // Build flat list with file headers and tasks
         let mut items: Vec<ListItem<'_>> = Vec::new();
-        let mut flat_index = 0;
         let selected_index = self.model.selected_index;
 
         for (file, tasks) in &grouped {
@@ -78,12 +77,12 @@ impl Widget for GitTodos<'_> {
                     .fg(theme.colors.accent.to_color())
                     .add_modifier(Modifier::BOLD),
             )])));
-            flat_index += 1;
 
             // Tasks under this file
             for (task_id, line_num) in tasks {
                 if let Some(task) = self.model.tasks.get(task_id) {
-                    let is_selected = self.model.selected_index == flat_index - 1; // -1 for header offset
+                    // Check if this task's position matches selected_index
+                    let is_selected = selected_index == items.len();
                     let is_completed = task.completed_at.is_some();
 
                     // Truncate title if needed
@@ -125,12 +124,10 @@ impl Widget for GitTodos<'_> {
                         Span::styled(title, title_style),
                     ])));
                 }
-                flat_index += 1;
             }
 
             // Add spacing between files
             items.push(ListItem::new(Line::from("")));
-            flat_index += 1;
         }
 
         // Render the list with selection

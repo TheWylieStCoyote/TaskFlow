@@ -281,6 +281,8 @@ fn get_comment_body(content: &str) -> &str {
 /// Extract a meaningful title from a TODO comment.
 /// Input: `    // TODO: Fix authentication bug`
 /// Output: `Fix authentication bug`
+///
+/// Also handles annotations like `TODO(user): message` → `message`
 fn extract_todo_title(content: &str, pattern: &str) -> String {
     let content = content.trim();
 
@@ -289,12 +291,23 @@ fn extract_todo_title(content: &str, pattern: &str) -> String {
     let content_upper = content.to_uppercase();
 
     if let Some(pos) = content_upper.find(&pattern_upper) {
-        let after_pattern = &content[pos + pattern.len()..];
+        let mut after_pattern = &content[pos + pattern.len()..];
 
-        // Skip common separators: :, -, (, [, whitespace
-        let title = after_pattern.trim_start_matches(|c: char| {
-            c == ':' || c == '-' || c == '(' || c == '[' || c.is_whitespace()
-        });
+        // Skip parenthesized annotations like (user) or [issue-123]
+        after_pattern = after_pattern.trim_start();
+        if after_pattern.starts_with('(') {
+            if let Some(close) = after_pattern.find(')') {
+                after_pattern = &after_pattern[close + 1..];
+            }
+        } else if after_pattern.starts_with('[') {
+            if let Some(close) = after_pattern.find(']') {
+                after_pattern = &after_pattern[close + 1..];
+            }
+        }
+
+        // Skip common separators: :, -, whitespace
+        let title =
+            after_pattern.trim_start_matches(|c: char| c == ':' || c == '-' || c.is_whitespace());
 
         // Clean up trailing comment markers
         let title = title.trim_end_matches("*/").trim_end_matches("-->").trim();
@@ -361,7 +374,7 @@ mod tests {
             ("file.rs:1:/* TODO: message */", "message"),
             ("file.rs:1:# TODO: message", "message"),
             ("file.rs:1:// TODO - message", "message"),
-            ("file.rs:1:// TODO(user): message", "user): message"),
+            ("file.rs:1:// TODO(user): message", "message"),
             ("file.rs:1:// todo: lowercase", "lowercase"),
         ];
 
@@ -404,6 +417,19 @@ mod tests {
         assert_eq!(
             extract_todo_title("# TODO: implement feature", "TODO"),
             "implement feature"
+        );
+        // Parenthesized annotations should be skipped
+        assert_eq!(
+            extract_todo_title("// TODO(user): message here", "TODO"),
+            "message here"
+        );
+        assert_eq!(
+            extract_todo_title("// TODO[issue-123]: fix the bug", "TODO"),
+            "fix the bug"
+        );
+        assert_eq!(
+            extract_todo_title("// FIXME(team) - urgent fix needed", "FIXME"),
+            "urgent fix needed"
         );
     }
 

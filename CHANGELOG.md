@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Doc Tests**: Converted ignored documentation tests to runnable examples
 - **Snapshot Tests**: Replaced environment-sensitive snapshots with assertion-based tests
 - **Clippy Warnings**: Resolved all linter warnings for cleaner codebase
+- **Git TODOs View**: Fixed selection highlighting (off-by-one error in index calculation)
+- **Git TODOs Parsing**: `TODO(user): message` now correctly extracts `message` (was extracting `user): message`)
+- **Sidebar Views**: Removed duplicate view entries from navigation array
+- **Habits View**: Fixed completion rate display (was showing 5000% instead of 50%)
 
 ### Performance
 

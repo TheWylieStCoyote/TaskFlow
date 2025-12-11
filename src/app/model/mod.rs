@@ -424,20 +424,42 @@ impl Model {
     /// Returns the total number of items in the sidebar.
     ///
     /// Uses [`SIDEBAR_FIRST_PROJECT_INDEX`] as the base count, plus projects,
-    /// plus the saved filters section.
+    /// plus contexts section, plus saved filters section.
     #[must_use]
     pub fn sidebar_item_count(&self) -> usize {
         // Base items (views + separator + Projects header) + project count
         let projects_section = SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1);
+        // +1 for separator, +1 for "Contexts" header, + contexts count (min 1 for hint message)
+        let contexts = self.all_contexts();
+        let contexts_section = projects_section + 2 + contexts.len().max(1);
         // +1 for separator, +1 for "Saved Filters" header, + filters count (min 1 for "Press F" message)
-        projects_section + 2 + self.saved_filters.len().max(1)
+        contexts_section + 2 + self.saved_filters.len().max(1)
+    }
+
+    /// Returns the index where the contexts section starts in the sidebar.
+    ///
+    /// This is after the projects section, accounting for the separator and header.
+    #[must_use]
+    pub fn sidebar_contexts_start(&self) -> usize {
+        // After projects section + separator + header
+        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1) + 2
     }
 
     /// Returns the index where saved filters start in the sidebar.
     #[must_use]
     pub fn sidebar_saved_filters_start(&self) -> usize {
-        // After projects section + separator + header
-        SIDEBAR_FIRST_PROJECT_INDEX + self.projects.len().max(1) + 2
+        // After contexts section + separator + header
+        let contexts = self.all_contexts();
+        self.sidebar_contexts_start() + contexts.len().max(1) + 2
+    }
+
+    /// Returns all unique context tags (@-prefixed) from tasks, sorted alphabetically.
+    ///
+    /// Context tags follow GTD (Getting Things Done) convention and represent
+    /// where or when a task can be done (e.g., @home, @work, @errands).
+    #[must_use]
+    pub fn all_contexts(&self) -> Vec<String> {
+        crate::domain::extract_contexts(self.tasks.values())
     }
 
     /// Returns all tasks due on a specific day.

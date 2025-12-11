@@ -475,12 +475,28 @@ fn handle_calendar_down(model: &mut Model) {
 /// Skip non-selectable items when navigating up in sidebar
 fn skip_sidebar_non_selectable_up(model: &mut Model) {
     let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
-    let filters_separator = projects_end;
-    let filters_header = projects_end + 1;
+    let contexts_separator = projects_end;
+    let contexts_header = projects_end + 1;
+    let contexts = model.all_contexts();
+    let contexts_end = model.sidebar_contexts_start() + contexts.len().max(1);
+    let filters_separator = contexts_end;
+    let filters_header = contexts_end + 1;
 
-    // Skip first separator
+    // Skip first separator (before Projects)
     if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX {
         model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX - 1;
+    }
+    // Skip contexts separator
+    else if model.sidebar_selected == contexts_separator {
+        model.sidebar_selected = contexts_separator - 1;
+    }
+    // Skip contexts header
+    else if model.sidebar_selected == contexts_header {
+        model.sidebar_selected = contexts_header - 1;
+        // Also skip the separator we just landed on
+        if model.sidebar_selected == contexts_separator {
+            model.sidebar_selected = contexts_separator - 1;
+        }
     }
     // Skip filters separator
     else if model.sidebar_selected == filters_separator {
@@ -499,12 +515,28 @@ fn skip_sidebar_non_selectable_up(model: &mut Model) {
 /// Skip non-selectable items when navigating down in sidebar
 fn skip_sidebar_non_selectable_down(model: &mut Model, max_index: usize) {
     let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
-    let filters_separator = projects_end;
-    let filters_header = projects_end + 1;
+    let contexts_separator = projects_end;
+    let contexts_header = projects_end + 1;
+    let contexts = model.all_contexts();
+    let contexts_end = model.sidebar_contexts_start() + contexts.len().max(1);
+    let filters_separator = contexts_end;
+    let filters_header = contexts_end + 1;
 
-    // Skip first separator
+    // Skip first separator (before Projects)
     if model.sidebar_selected == SIDEBAR_SEPARATOR_INDEX && model.sidebar_selected < max_index {
         model.sidebar_selected = SIDEBAR_SEPARATOR_INDEX + 1;
+    }
+    // Skip contexts separator
+    else if model.sidebar_selected == contexts_separator && model.sidebar_selected < max_index {
+        model.sidebar_selected = contexts_separator + 1;
+        // Also skip the header
+        if model.sidebar_selected == contexts_header && model.sidebar_selected < max_index {
+            model.sidebar_selected = contexts_header + 1;
+        }
+    }
+    // Skip contexts header
+    else if model.sidebar_selected == contexts_header && model.sidebar_selected < max_index {
+        model.sidebar_selected = contexts_header + 1;
     }
     // Skip filters separator
     else if model.sidebar_selected == filters_separator && model.sidebar_selected < max_index {
@@ -529,6 +561,7 @@ fn handle_sidebar_selection(model: &mut Model) {
     // SIDEBAR_SEPARATOR_INDEX: Separator (skip)
     // SIDEBAR_PROJECTS_HEADER_INDEX: "Projects" header
     // SIDEBAR_FIRST_PROJECT_INDEX+: Individual projects
+    // Then: Separator, "Contexts" header, individual contexts
     // Then: Separator, "Saved Filters" header, individual filters
 
     // Helper to activate a view
@@ -548,8 +581,13 @@ fn handle_sidebar_selection(model: &mut Model) {
 
     // Calculate indices for sections
     let projects_end = SIDEBAR_FIRST_PROJECT_INDEX + model.projects.len().max(1);
-    let filters_separator = projects_end;
-    let filters_header = projects_end + 1;
+    let contexts_separator = projects_end;
+    let contexts_header = projects_end + 1;
+    let contexts_start = model.sidebar_contexts_start();
+    let contexts = model.all_contexts();
+    let contexts_end = contexts_start + contexts.len().max(1);
+    let filters_separator = contexts_end;
+    let filters_header = contexts_end + 1;
     let filters_start = model.sidebar_saved_filters_start();
 
     // Handle special items after the views
@@ -569,6 +607,24 @@ fn handle_sidebar_selection(model: &mut Model) {
                 model.focus_pane = FocusPane::TaskList;
                 model.selected_index = 0;
                 model.refresh_visible_tasks();
+            }
+        }
+        n if n == contexts_separator => {} // Contexts separator, do nothing
+        n if n == contexts_header => {}    // Contexts header, do nothing
+        n if n >= contexts_start && n < contexts_end => {
+            // Select a specific context
+            let context_index = n - contexts_start;
+            if let Some(context) = contexts.get(context_index) {
+                // Apply filter for this context
+                model.filtering.filter.tags = Some(vec![context.clone()]);
+                model.filtering.filter.tags_mode = crate::domain::TagFilterMode::Any;
+                model.active_saved_filter = None; // Clear any active saved filter
+                model.current_view = ViewId::TaskList;
+                model.selected_project = None;
+                model.focus_pane = FocusPane::TaskList;
+                model.selected_index = 0;
+                model.refresh_visible_tasks();
+                model.alerts.status_message = Some(format!("Context: {context}"));
             }
         }
         n if n == filters_separator => {} // Filters separator, do nothing

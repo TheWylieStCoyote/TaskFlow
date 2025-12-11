@@ -4,6 +4,11 @@
 //! Unlike projects which are hierarchical, tags are flat labels that can be
 //! applied to any task.
 //!
+//! # Context Tags
+//!
+//! Tags starting with `@` are treated as context tags (GTD-style), representing
+//! where or when a task can be done: `@home`, `@work`, `@errands`, `@phone`.
+//!
 //! # Examples
 //!
 //! ```
@@ -13,7 +18,11 @@
 //! assert_eq!(tag.name, "urgent");
 //! ```
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
+
+use crate::domain::Task;
 
 /// Tag entity for categorizing tasks
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +53,61 @@ impl std::fmt::Display for Tag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
+}
+
+// ============================================================================
+// Context Tag Functions
+// ============================================================================
+
+/// Check if a tag is a context tag (starts with '@').
+///
+/// Context tags follow GTD (Getting Things Done) convention and represent
+/// where or when a task can be done.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::is_context_tag;
+///
+/// assert!(is_context_tag("@home"));
+/// assert!(is_context_tag("@work"));
+/// assert!(!is_context_tag("urgent"));
+/// assert!(!is_context_tag("#feature"));
+/// ```
+#[must_use]
+pub fn is_context_tag(tag: &str) -> bool {
+    tag.starts_with('@')
+}
+
+/// Extract all unique context tags from a collection of tasks, sorted alphabetically.
+///
+/// Scans through all tasks and collects tags that start with `@`.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::{Task, extract_contexts};
+///
+/// let task1 = Task::new("Work task").with_tags(vec!["@work".into(), "urgent".into()]);
+/// let task2 = Task::new("Home task").with_tags(vec!["@home".into(), "@phone".into()]);
+/// let tasks = vec![task1, task2];
+///
+/// let contexts = extract_contexts(tasks.iter());
+/// assert_eq!(contexts, vec!["@home", "@phone", "@work"]);
+/// ```
+#[must_use]
+pub fn extract_contexts<'a>(tasks: impl Iterator<Item = &'a Task>) -> Vec<String> {
+    let mut contexts: HashSet<String> = HashSet::new();
+    for task in tasks {
+        for tag in &task.tags {
+            if is_context_tag(tag) {
+                contexts.insert(tag.clone());
+            }
+        }
+    }
+    let mut result: Vec<String> = contexts.into_iter().collect();
+    result.sort();
+    result
 }
 
 #[cfg(test)]
@@ -121,5 +185,81 @@ mod tests {
         assert_eq!(tag1.name, "literal");
         assert_eq!(tag2.name, "owned");
         assert_eq!(tag3.name, "borrowed");
+    }
+
+    // Context tag tests
+    #[test]
+    fn test_is_context_tag_with_at_prefix() {
+        assert!(is_context_tag("@home"));
+        assert!(is_context_tag("@work"));
+        assert!(is_context_tag("@errands"));
+        assert!(is_context_tag("@phone"));
+        assert!(is_context_tag("@"));
+    }
+
+    #[test]
+    fn test_is_context_tag_without_at_prefix() {
+        assert!(!is_context_tag("home"));
+        assert!(!is_context_tag("work"));
+        assert!(!is_context_tag("#feature"));
+        assert!(!is_context_tag("urgent"));
+        assert!(!is_context_tag(""));
+    }
+
+    #[test]
+    fn test_extract_contexts_basic() {
+        let task1 = Task::new("Task 1").with_tags(vec!["@home".into(), "urgent".into()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["@work".into(), "@phone".into()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["bug".into()]);
+        let tasks = vec![task1, task2, task3];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        assert_eq!(contexts.len(), 3);
+        assert!(contexts.contains(&"@home".to_string()));
+        assert!(contexts.contains(&"@phone".to_string()));
+        assert!(contexts.contains(&"@work".to_string()));
+    }
+
+    #[test]
+    fn test_extract_contexts_sorted() {
+        let task1 = Task::new("Task 1").with_tags(vec!["@zebra".into()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["@apple".into()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["@middle".into()]);
+        let tasks = vec![task1, task2, task3];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        assert_eq!(contexts, vec!["@apple", "@middle", "@zebra"]);
+    }
+
+    #[test]
+    fn test_extract_contexts_deduplicates() {
+        let task1 = Task::new("Task 1").with_tags(vec!["@home".into()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["@home".into()]);
+        let task3 = Task::new("Task 3").with_tags(vec!["@home".into(), "@work".into()]);
+        let tasks = vec![task1, task2, task3];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        assert_eq!(contexts, vec!["@home", "@work"]);
+    }
+
+    #[test]
+    fn test_extract_contexts_empty() {
+        let task1 = Task::new("Task 1").with_tags(vec!["regular".into()]);
+        let task2 = Task::new("Task 2");
+        let tasks = vec![task1, task2];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        assert!(contexts.is_empty());
+    }
+
+    #[test]
+    fn test_extract_contexts_no_tasks() {
+        let tasks: Vec<Task> = vec![];
+        let contexts = extract_contexts(tasks.iter());
+        assert!(contexts.is_empty());
     }
 }

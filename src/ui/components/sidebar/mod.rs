@@ -317,6 +317,61 @@ impl Widget for Sidebar<'_> {
             ))));
         }
 
+        // Contexts section
+        items.push(ListItem::new(Line::from("───────────")));
+        items.push(ListItem::new(Line::from(Span::styled(
+            "Contexts",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ))));
+
+        let contexts = self.model.all_contexts();
+        for context in &contexts {
+            let task_count = self
+                .model
+                .tasks
+                .values()
+                .filter(|t| t.tags.contains(context))
+                .count();
+
+            // Check if this context is currently active (filtered)
+            let is_active = self
+                .model
+                .filtering
+                .filter
+                .tags
+                .as_ref()
+                .is_some_and(|tags| tags.len() == 1 && tags.contains(context));
+
+            let name_style = if is_active {
+                Style::default()
+                    .fg(theme.colors.accent.to_color())
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(theme.colors.foreground.to_color())
+            };
+
+            items.push(ListItem::new(Line::from(vec![
+                Span::styled("  📍 ", Style::default()),
+                Span::styled(context.clone(), name_style),
+                Span::styled(
+                    format!(" ({task_count})"),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                if is_active {
+                    Span::styled(" ✓", Style::default().fg(theme.colors.success.to_color()))
+                } else {
+                    Span::raw("")
+                },
+            ])));
+        }
+
+        if contexts.is_empty() {
+            items.push(ListItem::new(Line::from(Span::styled(
+                "  Use @tag for contexts",
+                Style::default().fg(theme.colors.muted.to_color()),
+            ))));
+        }
+
         // Saved Filters section
         items.push(ListItem::new(Line::from("───────────")));
         items.push(ListItem::new(Line::from(Span::styled(

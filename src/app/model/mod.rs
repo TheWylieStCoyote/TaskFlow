@@ -59,10 +59,10 @@ pub use editor::MultilineEditor;
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
-    DescriptionEditorState, FilterState, HabitViewState, ImportState, InputState,
-    KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState, SavedFilterPickerState,
-    StorageState, TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom,
-    ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
+    DescriptionEditorState, DuplicatesViewState, FilterState, HabitViewState, ImportState,
+    InputState, KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState,
+    SavedFilterPickerState, StorageState, TemplatePickerState, TimeLogEditorState, TimelineState,
+    TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
 
 use std::collections::HashMap;
@@ -117,6 +117,7 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::Forecast,         // 19: Forecast
     ViewId::Network,          // 20: Network
     ViewId::Burndown,         // 21: Burndown
+    ViewId::Duplicates,       // 22: Duplicates
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -319,6 +320,10 @@ pub struct Model {
     /// Habit view state (selection, analytics, archive filter)
     pub habit_view: HabitViewState,
 
+    // Duplicate detection
+    /// Duplicates view state (selection, pairs, threshold)
+    pub duplicates_view: DuplicatesViewState,
+
     // Performance caches
     /// Cached footer statistics (completed, overdue, due today counts)
     pub footer_stats: FooterStats,
@@ -399,6 +404,7 @@ impl Model {
             habits: HashMap::new(),
             visible_habits: Vec::new(),
             habit_view: HabitViewState::default(),
+            duplicates_view: DuplicatesViewState::default(),
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
             layout_cache: LayoutCache::default(),

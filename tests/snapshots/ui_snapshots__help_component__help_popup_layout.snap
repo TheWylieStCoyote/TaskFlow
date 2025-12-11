@@ -1,6 +1,6 @@
 ---
 source: tests/ui_snapshots.rs
-assertion_line: 100
+assertion_line: 101
 expression: output
 ---
 ┌─────────────────────── Help (press ? or Esc to close) ───────────────────────┐
@@ -18,8 +18,6 @@ expression: output
 │                                                                              │
 │Tasks                                                                         │
 │A         Create subtask                                                      │
-│D         Edit due date                                                       │
-│M         Reschedule to next Monday                                           │
 │N         Edit description (multi-line)                                       │
 │Q         Quick capture with hints                                            │
 │S         Edit scheduled date                                                 │
@@ -32,4 +30,6 @@ expression: output
 │Ctrl+↓    Move task down                                                      │
 │Ctrl+↑    Move task up                                                        │
 │d         Delete task                                                         │
+│e         Edit task title                                                     │
+│m         Move to project                                                     │
 └──────────────────────────────────────────────────────────────────────────────┘

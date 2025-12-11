@@ -31,6 +31,6 @@ pub use pomodoro::PomodoroState;
 pub use reviews::{DailyReviewState, WeeklyReviewState};
 pub use timeline::{TimelineState, TimelineZoom};
 pub use ui_state::{
-    AlertState, FilterState, HabitViewState, InputState, MultiSelectState, RunningState,
-    ViewSelectionState,
+    AlertState, DuplicatesViewState, FilterState, HabitViewState, InputState, MultiSelectState,
+    RunningState, ViewSelectionState,
 };

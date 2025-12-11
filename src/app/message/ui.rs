@@ -400,4 +400,12 @@ pub enum UiMessage {
     BurndownToggleMode,
     /// Toggle scope creep display
     BurndownToggleScopeCreep,
+
+    // Duplicate detection controls
+    /// Dismiss the selected duplicate pair from the list
+    DismissDuplicate,
+    /// Merge duplicates (delete second task, keep first)
+    MergeDuplicates,
+    /// Refresh the duplicate detection list
+    RefreshDuplicates,
 }

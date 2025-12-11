@@ -115,6 +115,7 @@
 //! ```
 
 pub mod analytics;
+pub mod duplicate_detector;
 mod filter;
 mod habit;
 mod pomodoro;

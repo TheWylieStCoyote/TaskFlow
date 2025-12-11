@@ -176,4 +176,6 @@ pub enum ViewId {
     Network,
     /// Burndown chart view (progress toward completion)
     Burndown,
+    /// Duplicate task detection view
+    Duplicates,
 }

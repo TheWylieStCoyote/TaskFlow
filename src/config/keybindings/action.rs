@@ -156,6 +156,11 @@ pub enum Action {
     BurndownCycleWindow,
     BurndownToggleMode,
     BurndownToggleScopeCreep,
+
+    // Duplicate detection controls
+    DismissDuplicate,
+    MergeDuplicates,
+    RefreshDuplicates,
 }
 
 /// Category for grouping actions in help display
@@ -174,6 +179,7 @@ pub enum ActionCategory {
     Calendar,
     Reports,
     Burndown,
+    Duplicates,
     Export,
     Import,
     Macros,
@@ -200,6 +206,7 @@ impl ActionCategory {
             Self::Calendar => "Calendar",
             Self::Reports => "Reports",
             Self::Burndown => "Burndown",
+            Self::Duplicates => "Duplicates",
             Self::Export => "Export",
             Self::Import => "Import",
             Self::Macros => "Macros",
@@ -226,12 +233,13 @@ impl ActionCategory {
             Self::Calendar => 10,
             Self::Reports => 11,
             Self::Burndown => 12,
-            Self::Export => 13,
-            Self::Import => 14,
-            Self::Macros => 15,
-            Self::Templates => 16,
-            Self::Pomodoro => 17,
-            Self::System => 18,
+            Self::Duplicates => 13,
+            Self::Export => 14,
+            Self::Import => 15,
+            Self::Macros => 16,
+            Self::Templates => 17,
+            Self::Pomodoro => 18,
+            Self::System => 19,
         }
     }
 }
@@ -372,6 +380,10 @@ impl Action {
             Self::BurndownCycleWindow => "Cycle time window",
             Self::BurndownToggleMode => "Toggle task/time mode",
             Self::BurndownToggleScopeCreep => "Toggle scope creep display",
+            // Duplicates
+            Self::DismissDuplicate => "Dismiss duplicate pair",
+            Self::MergeDuplicates => "Merge (delete second task)",
+            Self::RefreshDuplicates => "Refresh duplicate list",
         }
     }
 
@@ -497,6 +509,10 @@ impl Action {
             Self::BurndownCycleWindow
             | Self::BurndownToggleMode
             | Self::BurndownToggleScopeCreep => ActionCategory::Burndown,
+
+            Self::DismissDuplicate | Self::MergeDuplicates | Self::RefreshDuplicates => {
+                ActionCategory::Duplicates
+            }
         }
     }
 }

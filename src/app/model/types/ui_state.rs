@@ -158,6 +158,27 @@ pub struct HabitViewState {
     pub show_archived: bool,
 }
 
+/// State for duplicate detection view.
+#[derive(Debug, Clone)]
+pub struct DuplicatesViewState {
+    /// Index of selected duplicate pair in list
+    pub selected: usize,
+    /// List of detected duplicate pairs
+    pub pairs: Vec<crate::domain::duplicate_detector::DuplicatePair>,
+    /// Similarity threshold (0.0 to 1.0)
+    pub threshold: f64,
+}
+
+impl Default for DuplicatesViewState {
+    fn default() -> Self {
+        Self {
+            selected: 0,
+            pairs: Vec::new(),
+            threshold: crate::domain::duplicate_detector::DEFAULT_SIMILARITY_THRESHOLD,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

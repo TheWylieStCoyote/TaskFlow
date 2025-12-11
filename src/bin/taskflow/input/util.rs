@@ -163,5 +163,9 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::BurndownCycleWindow => Message::Ui(UiMessage::BurndownCycleWindow),
         Action::BurndownToggleMode => Message::Ui(UiMessage::BurndownToggleMode),
         Action::BurndownToggleScopeCreep => Message::Ui(UiMessage::BurndownToggleScopeCreep),
+        // Duplicates
+        Action::DismissDuplicate => Message::Ui(UiMessage::DismissDuplicate),
+        Action::MergeDuplicates => Message::Ui(UiMessage::MergeDuplicates),
+        Action::RefreshDuplicates => Message::Ui(UiMessage::RefreshDuplicates),
     }
 }

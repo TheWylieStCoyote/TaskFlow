@@ -863,6 +863,75 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             };
             model.alerts.status_message = Some(format!("Scope creep display: {status}"));
         }
+
+        // Duplicate detection controls
+        UiMessage::DismissDuplicate => {
+            if model.current_view == crate::app::ViewId::Duplicates
+                && !model.duplicates_view.pairs.is_empty()
+            {
+                let selected = model.duplicates_view.selected;
+                if selected < model.duplicates_view.pairs.len() {
+                    model.duplicates_view.pairs.remove(selected);
+                    // Clamp selection
+                    if !model.duplicates_view.pairs.is_empty() {
+                        model.duplicates_view.selected = model
+                            .duplicates_view
+                            .selected
+                            .min(model.duplicates_view.pairs.len() - 1);
+                    }
+                    model.alerts.status_message = Some("Duplicate pair dismissed".to_string());
+                }
+            }
+        }
+        UiMessage::MergeDuplicates => {
+            if model.current_view == crate::app::ViewId::Duplicates
+                && !model.duplicates_view.pairs.is_empty()
+            {
+                let selected = model.duplicates_view.selected;
+                if let Some(pair) = model.duplicates_view.pairs.get(selected).cloned() {
+                    // Collect time entries for the task being deleted
+                    let task_entries: Vec<_> = model
+                        .time_entries
+                        .values()
+                        .filter(|e| e.task_id == pair.task2_id)
+                        .cloned()
+                        .collect();
+
+                    // Delete the second task
+                    if let Some(task) = model.tasks.remove(&pair.task2_id) {
+                        model.undo_stack.push(crate::app::UndoAction::TaskDeleted {
+                            task: Box::new(task),
+                            time_entries: task_entries,
+                        });
+                        model.delete_task_from_storage(&pair.task2_id);
+                        // Remove the pair from the list
+                        model.duplicates_view.pairs.remove(selected);
+                        // Clamp selection
+                        if !model.duplicates_view.pairs.is_empty() {
+                            model.duplicates_view.selected = model
+                                .duplicates_view
+                                .selected
+                                .min(model.duplicates_view.pairs.len() - 1);
+                        }
+                        model.alerts.status_message =
+                            Some("Tasks merged (duplicate deleted)".to_string());
+                        model.refresh_visible_tasks();
+                    }
+                }
+            }
+        }
+        UiMessage::RefreshDuplicates => {
+            if model.current_view == crate::app::ViewId::Duplicates {
+                model.duplicates_view.pairs =
+                    crate::domain::duplicate_detector::find_all_duplicates(
+                        &model.tasks,
+                        model.duplicates_view.threshold,
+                    );
+                model.duplicates_view.selected = 0;
+                let count = model.duplicates_view.pairs.len();
+                model.alerts.status_message = Some(format!("Found {count} duplicate pairs"));
+            }
+        }
     }
 }
 

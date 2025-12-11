@@ -1,6 +1,7 @@
 //! Input submission handlers
 
 use crate::app::{parse_date, parse_quick_add, Model, UndoAction};
+use crate::domain::duplicate_detector::{find_similar_task, DEFAULT_SIMILARITY_THRESHOLD};
 use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
@@ -44,6 +45,22 @@ pub fn handle_submit_input(model: &mut Model) {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
                 let task_id = task.id;
+
+                // Check for similar existing tasks before inserting
+                if let Some((similar_task, similarity)) = find_similar_task(
+                    &task.title,
+                    task.project_id,
+                    &model.tasks,
+                    DEFAULT_SIMILARITY_THRESHOLD,
+                    None,
+                ) {
+                    model.alerts.status_message = Some(format!(
+                        "Warning: Similar task ({:.0}%): \"{}\"",
+                        similarity * 100.0,
+                        similar_task.title
+                    ));
+                }
+
                 // Insert first (moves task), then sync by id
                 model
                     .undo_stack
@@ -57,6 +74,23 @@ pub fn handle_submit_input(model: &mut Model) {
             if !input.is_empty() {
                 let task = create_task_from_quick_add(&input, model, None);
                 let task_id = task.id;
+
+                // Check for similar existing tasks before inserting
+                let duplicate_warning = find_similar_task(
+                    &task.title,
+                    task.project_id,
+                    &model.tasks,
+                    DEFAULT_SIMILARITY_THRESHOLD,
+                    None,
+                )
+                .map(|(similar_task, similarity)| {
+                    format!(
+                        "Warning: Similar task ({:.0}%): \"{}\"",
+                        similarity * 100.0,
+                        similar_task.title
+                    )
+                });
+
                 // Insert first (moves task), then sync by id
                 model
                     .undo_stack
@@ -66,8 +100,12 @@ pub fn handle_submit_input(model: &mut Model) {
                 model.refresh_visible_tasks();
                 // Show confirmation and stay ready for another capture
                 // Get title from HashMap to avoid extra clone
-                let title = model.tasks.get(&task_id).map(|t| t.title.as_str());
-                model.alerts.status_message = title.map(|t| format!("Task created: {t}"));
+                model.alerts.status_message = duplicate_warning.or_else(|| {
+                    model
+                        .tasks
+                        .get(&task_id)
+                        .map(|t| format!("Task created: {}", t.title))
+                });
                 model.input.buffer.clear();
                 model.input.cursor = 0;
                 // Don't reset input_mode - stay in QuickCapture mode

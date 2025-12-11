@@ -161,5 +161,13 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("o".to_string(), Action::BurndownToggleMode);
     bindings.insert("+".to_string(), Action::BurndownToggleScopeCreep);
 
+    // Duplicate detection controls (work in Duplicates view)
+    // D = dismiss selected duplicate pair
+    // M = merge duplicates (delete second task)
+    // r = refresh duplicate list
+    bindings.insert("D".to_string(), Action::DismissDuplicate);
+    bindings.insert("M".to_string(), Action::MergeDuplicates);
+    bindings.insert("r".to_string(), Action::RefreshDuplicates);
+
     bindings
 }

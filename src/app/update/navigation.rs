@@ -10,6 +10,7 @@ use crate::app::{
     FocusPane, Model, NavigationMessage, ViewId, SIDEBAR_FIRST_PROJECT_INDEX,
     SIDEBAR_PROJECTS_HEADER_INDEX, SIDEBAR_SEPARATOR_INDEX, SIDEBAR_VIEWS,
 };
+use crate::domain::duplicate_detector::find_all_duplicates;
 
 /// Handle navigation messages
 #[allow(clippy::too_many_lines)]
@@ -26,6 +27,11 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                     } else {
                         // In calendar grid, up moves to previous week (or wraps)
                         handle_calendar_up(model);
+                    }
+                } else if model.current_view == ViewId::Duplicates {
+                    // Navigate duplicate pairs
+                    if model.duplicates_view.selected > 0 {
+                        model.duplicates_view.selected -= 1;
                     }
                 } else if model.selected_index > 0 {
                     model.selected_index -= 1;
@@ -51,6 +57,12 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                     } else {
                         // In calendar grid, down moves to next week (or wraps)
                         handle_calendar_down(model);
+                    }
+                } else if model.current_view == ViewId::Duplicates {
+                    // Navigate duplicate pairs
+                    let max_index = model.duplicates_view.pairs.len().saturating_sub(1);
+                    if model.duplicates_view.selected < max_index {
+                        model.duplicates_view.selected += 1;
                     }
                 } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
@@ -108,6 +120,14 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             model.selected_project = None;
             model.focus_pane = FocusPane::TaskList;
             model.habit_view.show_analytics = false; // Clear modal state when switching views
+
+            // Special handling for Duplicates view - refresh duplicate pairs
+            if view_id == ViewId::Duplicates {
+                model.duplicates_view.pairs =
+                    find_all_duplicates(&model.tasks, model.duplicates_view.threshold);
+                model.duplicates_view.selected = 0;
+            }
+
             model.refresh_visible_tasks();
         }
         NavigationMessage::FocusSidebar => {

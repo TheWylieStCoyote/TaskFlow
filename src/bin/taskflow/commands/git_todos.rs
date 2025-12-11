@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
+use taskflow::app::extract_git_location;
 use taskflow::domain::{Priority, Task};
 
 use crate::cli::Cli;
@@ -72,8 +73,8 @@ pub fn extract_git_todos(
     for task in model.tasks.values() {
         if let Some(ref desc) = task.description {
             // Look for "git:<file>:<line>" marker in description
-            if let Some(loc) = extract_git_location(desc) {
-                existing_by_location.insert(loc, task.id);
+            if let Some((file, line)) = extract_git_location(desc) {
+                existing_by_location.insert(format!("{file}:{line}"), task.id);
             }
         }
     }
@@ -326,21 +327,6 @@ fn extract_todo_title(content: &str, pattern: &str) -> String {
     }
 }
 
-/// Extract git location marker from task description.
-/// Looks for "git:<file>:<line>" at the start of description.
-fn extract_git_location(description: &str) -> Option<String> {
-    let first_line = description.lines().next()?;
-    if first_line.starts_with("git:") {
-        // Format is "git:file:line"
-        let parts: Vec<&str> = first_line.splitn(3, ':').collect();
-        if parts.len() >= 3 {
-            // Return "file:line"
-            return Some(format!("{}:{}", parts[1], parts[2]));
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -438,7 +424,7 @@ mod tests {
         let desc = "git:src/auth.rs:42\n\nFile: src/auth.rs\nLine: 42";
         assert_eq!(
             extract_git_location(desc),
-            Some("src/auth.rs:42".to_string())
+            Some(("src/auth.rs".to_string(), 42))
         );
 
         let desc = "No git marker here";

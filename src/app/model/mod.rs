@@ -67,6 +67,7 @@ pub use types::{
     SavedFilterPickerState, StorageState, TemplatePickerState, TimeLogEditorState, TimelineState,
     TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
+pub use view_queries::extract_git_location;
 
 use std::collections::HashMap;
 

@@ -202,7 +202,7 @@ impl Model {
         for task_id in &self.visible_tasks {
             if let Some(task) = self.tasks.get(task_id) {
                 if let Some(ref desc) = task.description {
-                    if let Some((file, line)) = Self::extract_git_location(desc) {
+                    if let Some((file, line)) = extract_git_location(desc) {
                         if let Some(group) = grouped.iter_mut().find(|(f, _)| f == &file) {
                             group.1.push((*task_id, line));
                         } else {
@@ -223,20 +223,33 @@ impl Model {
 
         grouped
     }
+}
 
-    /// Extract file path and line number from a git-todo task description.
-    ///
-    /// Parses the `git:<file>:<line>` marker at the start of the description.
-    fn extract_git_location(description: &str) -> Option<(String, usize)> {
-        let first_line = description.lines().next()?;
-        if first_line.starts_with("git:") {
-            let parts: Vec<&str> = first_line.splitn(3, ':').collect();
-            if parts.len() >= 3 {
-                let file = parts[1].to_string();
-                let line = parts[2].parse().ok()?;
-                return Some((file, line));
-            }
+/// Extract file path and line number from a git-todo task description.
+///
+/// Parses the `git:<file>:<line>` marker at the start of the description.
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::app::extract_git_location;
+///
+/// let desc = "git:src/main.rs:42\n\nSome content";
+/// assert_eq!(extract_git_location(desc), Some(("src/main.rs".to_string(), 42)));
+///
+/// let desc = "No git marker";
+/// assert_eq!(extract_git_location(desc), None);
+/// ```
+#[must_use]
+pub fn extract_git_location(description: &str) -> Option<(String, usize)> {
+    let first_line = description.lines().next()?;
+    if first_line.starts_with("git:") {
+        let parts: Vec<&str> = first_line.splitn(3, ':').collect();
+        if parts.len() >= 3 {
+            let file = parts[1].to_string();
+            let line = parts[2].parse().ok()?;
+            return Some((file, line));
         }
-        None
     }
+    None
 }

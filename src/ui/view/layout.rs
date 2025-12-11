@@ -14,8 +14,8 @@ use crate::app::{Model, ViewId};
 use crate::config::Theme;
 
 use crate::ui::components::{
-    Burndown, Calendar, Dashboard, Eisenhower, FocusView, Forecast, HabitsView, Heatmap, Kanban,
-    Network, ReportsView, Sidebar, TaskList, Timeline, WeeklyPlanner,
+    Burndown, Calendar, Dashboard, Eisenhower, FocusView, Forecast, GitTodos, HabitsView, Heatmap,
+    Kanban, Network, ReportsView, Sidebar, TaskList, Timeline, WeeklyPlanner,
 };
 
 /// Renders the application header
@@ -196,6 +196,10 @@ pub(super) fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Re
         ViewId::Burndown => {
             let burndown = Burndown::new(model, theme);
             frame.render_widget(burndown, area);
+        }
+        ViewId::GitTodos => {
+            let git_todos = GitTodos::new(model, theme);
+            frame.render_widget(git_todos, area);
         }
         _ => {
             // Cache task list area with header offset (border + title row = 2)

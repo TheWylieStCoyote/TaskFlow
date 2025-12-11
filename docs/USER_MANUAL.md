@@ -1229,14 +1229,19 @@ TaskFlow maintains a history of your actions:
 ### CLI Options
 
 ```bash
-taskflow [OPTIONS]
+taskflow [OPTIONS] [COMMAND]
 
 Options:
     --data <PATH>       Path to data file/directory
     --backend <TYPE>    Storage backend (json, yaml, sqlite, markdown)
     --demo              Load sample data for exploration
+    --debug             Enable debug logging (writes to taskflow.log)
 
 Subcommands:
+    add <TASK>          Quick add a task from the command line
+    list                List tasks (without launching TUI)
+    done <QUERY>        Mark a task as done by searching for it
+    git-todos           Extract TODO/FIXME comments from git repository
     completion <SHELL>  Generate shell completions (bash, zsh, fish)
 ```
 
@@ -1251,9 +1256,57 @@ taskflow --backend sqlite --data ~/tasks.db
 # Try TaskFlow with demo data
 taskflow --demo
 
+# Quick add a task
+taskflow add "Review PR #123 #code !high due:tomorrow"
+
+# List tasks from command line
+taskflow list --view today
+taskflow list --tags bug,urgent --limit 10
+
+# Mark a task as done
+taskflow done "Review PR"
+
+# Extract TODOs from code (see Git Integration section)
+taskflow git-todos --dry-run
+
 # Generate completions
 taskflow completion bash > ~/.local/share/bash-completion/completions/taskflow
 ```
+
+### Git Integration
+
+TaskFlow can extract TODO and FIXME comments from your codebase and create tasks from them.
+
+```bash
+# Scan current directory for TODOs
+taskflow git-todos
+
+# Preview what would be created (dry run)
+taskflow git-todos --dry-run
+
+# Scan a specific repository
+taskflow git-todos --repo ~/projects/myapp
+
+# Custom patterns (comma-separated)
+taskflow git-todos --patterns "TODO,FIXME,HACK,BUG"
+
+# Assign to a project and add tags
+taskflow git-todos --project backend --tags "tech-debt,code-review"
+
+# Set priority for extracted tasks
+taskflow git-todos --priority high
+```
+
+**Features:**
+- Uses `git grep` for fast scanning
+- Smart parsing: only matches actual code comments (ignores false positives)
+- Supports common comment styles: `//`, `#`, `/*`, `--`, `<!--`, etc.
+- Creates/updates tasks (deduplicates by file:line on rescan)
+- Tags tasks with `git-todo` + pattern name (e.g., `todo`, `fixme`)
+
+**TUI View:**
+- Navigate to "Git TODOs" in the sidebar to view all extracted TODOs
+- Tasks are filtered by the `git-todo` tag
 
 ---
 

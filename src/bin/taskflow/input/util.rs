@@ -2,7 +2,9 @@
 
 use crossterm::event::{self, KeyCode, KeyModifiers};
 
-use taskflow::app::{Message, NavigationMessage, PomodoroMessage, SystemMessage, UiMessage};
+use taskflow::app::{
+    Message, NavigationMessage, PomodoroMessage, SystemMessage, UiMessage, ViewId,
+};
 use taskflow::config::Action;
 
 /// Convert a key event to the string format used in keybindings
@@ -159,5 +161,8 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowHabitAnalytics => Message::Ui(UiMessage::ShowHabitAnalytics),
         Action::HabitToggleShowArchived => Message::Ui(UiMessage::HabitToggleShowArchived),
         Action::HabitArchive => Message::Ui(UiMessage::HabitArchive),
+        // Git integration
+        Action::ViewGitTodos => Message::Navigation(NavigationMessage::GoToView(ViewId::GitTodos)),
+        Action::OpenInEditor => Message::Ui(UiMessage::OpenInEditor),
     }
 }

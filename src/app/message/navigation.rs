@@ -176,4 +176,6 @@ pub enum ViewId {
     Network,
     /// Burndown chart view (progress toward completion)
     Burndown,
+    /// Git TODOs view (tasks extracted from code comments)
+    GitTodos,
 }

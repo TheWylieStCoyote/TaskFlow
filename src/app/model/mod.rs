@@ -117,6 +117,7 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::Forecast,         // 19: Forecast
     ViewId::Network,          // 20: Network
     ViewId::Burndown,         // 21: Burndown
+    ViewId::GitTodos,         // 22: Git TODOs
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -326,6 +327,10 @@ pub struct Model {
     pub task_cache: TaskCache,
     /// Cached layout rectangles for mouse hit-testing
     pub layout_cache: LayoutCache,
+
+    // External command execution
+    /// Pending editor command to execute (editor, file, line)
+    pub pending_editor_command: Option<(String, String, String)>,
 }
 
 impl Model {
@@ -398,6 +403,7 @@ impl Model {
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
             layout_cache: LayoutCache::default(),
+            pending_editor_command: None,
         }
     }
 

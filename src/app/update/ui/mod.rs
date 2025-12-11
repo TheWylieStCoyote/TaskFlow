@@ -842,6 +842,42 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+        UiMessage::OpenInEditor => {
+            // Open selected task's source file in editor (for git TODOs)
+            // Extract data first to avoid borrow issues
+            let git_location = model.selected_task().and_then(|task| {
+                task.description.as_ref().and_then(|desc| {
+                    desc.lines().next().and_then(|first_line| {
+                        if first_line.starts_with("git:") {
+                            let parts: Vec<&str> = first_line.splitn(3, ':').collect();
+                            if parts.len() >= 3 {
+                                Some((parts[1].to_string(), parts[2].to_string()))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                })
+            });
+
+            match git_location {
+                Some((file, line)) => {
+                    if let Ok(editor) = std::env::var("EDITOR") {
+                        model.alerts.status_message =
+                            Some(format!("Opening {file}:{line} in {editor}..."));
+                        model.pending_editor_command = Some((editor, file, line));
+                    } else {
+                        model.alerts.status_message =
+                            Some("Set $EDITOR environment variable to open files".to_string());
+                    }
+                }
+                None => {
+                    model.alerts.status_message = Some("Task has no git location info".to_string());
+                }
+            }
+        }
     }
 }
 

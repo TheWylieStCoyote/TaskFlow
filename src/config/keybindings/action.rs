@@ -151,6 +151,10 @@ pub enum Action {
     ShowHabitAnalytics,
     HabitToggleShowArchived,
     HabitArchive,
+
+    // Git integration
+    ViewGitTodos,
+    OpenInEditor,
 }
 
 /// Category for grouping actions in help display
@@ -360,6 +364,9 @@ impl Action {
             Self::ShowHabitAnalytics => "Show habit analytics",
             Self::HabitToggleShowArchived => "Toggle show archived",
             Self::HabitArchive => "Archive habit",
+            // Git integration
+            Self::ViewGitTodos => "View Git TODOs",
+            Self::OpenInEditor => "Open in editor",
         }
     }
 
@@ -481,6 +488,8 @@ impl Action {
             | Self::ShowHabitAnalytics
             | Self::HabitToggleShowArchived
             | Self::HabitArchive => ActionCategory::Habits,
+
+            Self::ViewGitTodos | Self::OpenInEditor => ActionCategory::ViewFilter,
         }
     }
 }

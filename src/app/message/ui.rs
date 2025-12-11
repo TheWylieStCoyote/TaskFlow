@@ -392,4 +392,8 @@ pub enum UiMessage {
     ChainNext,
     /// Navigate to previous task in chain (in focus mode)
     ChainPrev,
+
+    // Git integration
+    /// Open the selected task's source file in the configured editor
+    OpenInEditor,
 }

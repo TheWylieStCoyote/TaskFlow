@@ -153,5 +153,9 @@ pub fn default_bindings() -> HashMap<String, Action> {
     // In Habits view: n=create, e=edit, d=delete, space/x=toggle, a=analytics
     // The habit-specific actions are mapped contextually in the key handler
 
+    // Git integration
+    bindings.insert("alt+g".to_string(), Action::ViewGitTodos);
+    bindings.insert("O".to_string(), Action::OpenInEditor);
+
     bindings
 }

@@ -78,6 +78,7 @@ mod tests {
 
         state.pending = Some(ImportResult {
             imported: Vec::new(),
+            imported_events: Vec::new(),
             skipped: Vec::new(),
             errors: Vec::new(),
         });
@@ -89,6 +90,7 @@ mod tests {
         let mut state = ImportState {
             pending: Some(ImportResult {
                 imported: Vec::new(),
+                imported_events: Vec::new(),
                 skipped: Vec::new(),
                 errors: Vec::new(),
             }),

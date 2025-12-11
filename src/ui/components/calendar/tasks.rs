@@ -1,4 +1,6 @@
 //! Calendar task list rendering.
+//!
+//! Displays tasks and calendar events for the selected day.
 
 use chrono::{Datelike, NaiveDate};
 use ratatui::{
@@ -24,8 +26,18 @@ impl Calendar<'_> {
             )
         });
 
+        // Get events for the selected day
+        let events = date
+            .map(|d| self.model.events_for_day(d))
+            .unwrap_or_default();
+        let event_count = events.len();
+
         let title = if let Some(d) = date {
-            format!(" Tasks for {}/{} ", d.month(), d.day())
+            if event_count > 0 {
+                format!(" {}/{} ({} events) ", d.month(), d.day(), event_count)
+            } else {
+                format!(" Tasks for {}/{} ", d.month(), d.day())
+            }
         } else {
             " Tasks ".to_string()
         };
@@ -61,9 +73,9 @@ impl Calendar<'_> {
             Vec::new()
         };
 
-        if tasks.is_empty() {
+        if tasks.is_empty() && events.is_empty() {
             let msg = if date.is_some() {
-                "No tasks due"
+                "No tasks or events"
             } else {
                 "Select a day"
             };
@@ -76,8 +88,8 @@ impl Calendar<'_> {
             return;
         }
 
-        // Render task items
-        let items: Vec<ListItem<'_>> = tasks
+        // Render task items first
+        let mut items: Vec<ListItem<'_>> = tasks
             .iter()
             .take(inner.height as usize)
             .map(|task| {
@@ -127,6 +139,50 @@ impl Calendar<'_> {
                 ]))
             })
             .collect();
+
+        // Add separator and events if there are any
+        if !events.is_empty() && !tasks.is_empty() {
+            // Add a visual separator between tasks and events
+            items.push(ListItem::new(Line::from(Span::styled(
+                "── Events ──",
+                Style::default().fg(theme.colors.muted.to_color()),
+            ))));
+        }
+
+        // Add event items
+        let remaining_slots = inner.height as usize - items.len();
+        for event in events.iter().take(remaining_slots) {
+            // Truncate title to fit
+            let max_title_len = inner.width.saturating_sub(12) as usize;
+            let title_display = if event.title.len() > max_title_len {
+                format!("{}…", &event.title[..max_title_len.saturating_sub(1)])
+            } else {
+                event.title.clone()
+            };
+
+            // Format time range
+            let time_range = event.formatted_time_range();
+
+            // Style based on event status
+            let event_style = match event.status {
+                crate::domain::CalendarEventStatus::Tentative => {
+                    Style::default().fg(theme.colors.muted.to_color())
+                }
+                crate::domain::CalendarEventStatus::Cancelled => Style::default()
+                    .fg(theme.colors.muted.to_color())
+                    .add_modifier(Modifier::CROSSED_OUT),
+                crate::domain::CalendarEventStatus::Confirmed => Style::default(),
+            };
+
+            items.push(ListItem::new(Line::from(vec![
+                Span::styled("📅 ", Style::default()),
+                Span::styled(
+                    format!("{time_range} "),
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::styled(title_display, event_style),
+            ])));
+        }
 
         let list = List::new(items).highlight_style(
             Style::default()

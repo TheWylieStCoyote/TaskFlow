@@ -70,8 +70,8 @@ use std::collections::HashMap;
 use chrono::{NaiveDate, Utc};
 
 use crate::domain::{
-    Habit, HabitId, Priority, Project, ProjectId, SavedFilter, SavedFilterId, Task, TaskId,
-    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    CalendarEvent, CalendarEventId, Habit, HabitId, Priority, Project, ProjectId, SavedFilter,
+    SavedFilterId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 use super::{FocusPane, MacroState, TemplateManager, UndoStack, ViewId};
@@ -185,6 +185,8 @@ pub struct Model {
     pub time_entries: HashMap<TimeEntryId, TimeEntry>,
     /// Currently active time tracking entry (if any)
     pub active_time_entry: Option<TimeEntryId>,
+    /// Imported calendar events indexed by ID
+    pub calendar_events: HashMap<CalendarEventId, CalendarEvent>,
 
     // Navigation
     /// Currently displayed view
@@ -363,6 +365,7 @@ impl Model {
             projects: HashMap::new(),
             time_entries: HashMap::new(),
             active_time_entry: None,
+            calendar_events: HashMap::new(),
             current_view: ViewId::default(),
             selected_index: 0,
             visible_tasks: Vec::new(),
@@ -571,6 +574,20 @@ impl Model {
     #[must_use]
     pub fn habits_for_export(&self) -> Vec<Habit> {
         self.habits.values().cloned().collect()
+    }
+
+    /// Returns calendar events occurring on a specific day.
+    ///
+    /// Events are sorted by start time.
+    #[must_use]
+    pub fn events_for_day(&self, date: NaiveDate) -> Vec<&CalendarEvent> {
+        let mut events: Vec<_> = self
+            .calendar_events
+            .values()
+            .filter(|e| e.occurs_on(date))
+            .collect();
+        events.sort_by_key(|e| e.start);
+        events
     }
 }
 

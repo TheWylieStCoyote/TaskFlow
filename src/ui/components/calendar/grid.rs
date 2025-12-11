@@ -88,6 +88,7 @@ impl Calendar<'_> {
                 );
 
                 let task_count = date.map_or(0, |d| self.model.task_count_for_day(d));
+                let event_count = date.map_or(0, |d| self.model.events_for_day(d).len());
                 let has_overdue = date.is_some_and(|d| self.model.has_overdue_on_day(d));
 
                 // Determine style
@@ -107,6 +108,8 @@ impl Calendar<'_> {
                     Style::default().fg(theme.colors.danger.to_color())
                 } else if task_count > 0 {
                     Style::default().fg(theme.colors.warning.to_color())
+                } else if event_count > 0 {
+                    Style::default().fg(theme.colors.accent_secondary.to_color())
                 } else {
                     Style::default().fg(theme.colors.foreground.to_color())
                 };
@@ -114,13 +117,23 @@ impl Calendar<'_> {
                 let day_str = format!("{day:2}");
                 buf.set_string(x, y, &day_str, style);
 
-                // Add task indicator
-                if task_count > 0 && x + 2 < inner.x + inner.width {
-                    let indicator = if task_count > 9 { "+" } else { "·" };
+                // Add indicator for tasks and/or events
+                let has_items = task_count > 0 || event_count > 0;
+                if has_items && x + 2 < inner.x + inner.width {
+                    // Use different indicators:
+                    // · = tasks only, ◆ = events only, ● = both
+                    let indicator = match (task_count > 0, event_count > 0) {
+                        (true, true) => "●",
+                        (true, false) => "·",
+                        (false, true) => "◆",
+                        (false, false) => " ",
+                    };
                     let indicator_style = if is_selected {
                         Style::default()
                             .bg(theme.colors.accent.to_color())
                             .fg(Color::Black)
+                    } else if event_count > 0 && task_count == 0 {
+                        Style::default().fg(theme.colors.accent_secondary.to_color())
                     } else {
                         Style::default().fg(theme.colors.muted.to_color())
                     };

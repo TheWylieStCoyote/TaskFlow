@@ -509,27 +509,46 @@ pub fn handle_execute_import(model: &mut Model) {
     model.input.target = InputTarget::Task;
     model.input.buffer.clear();
 
-    // If there are tasks to import, show preview
-    if result.imported.is_empty() && result.skipped.is_empty() && result.errors.is_empty() {
-        model.alerts.status_message = Some("No tasks found in file".to_string());
+    // If there are no items to import, show message and return
+    if result.imported.is_empty()
+        && result.imported_events.is_empty()
+        && result.skipped.is_empty()
+        && result.errors.is_empty()
+    {
+        model.alerts.status_message = Some("No items found in file".to_string());
         return;
     }
 
     // Store the result and show preview
-    let import_count = result.imported.len();
+    let task_count = result.imported.len();
+    let event_count = result.imported_events.len();
     let skip_count = result.skipped.len();
     let error_count = result.errors.len();
 
     model.import.pending = Some(result);
     model.import.show_preview = true;
+
+    // Build descriptive message
+    let items_part = match (task_count, event_count) {
+        (0, 0) => String::new(),
+        (t, 0) => format!("{t} task{}", if t == 1 { "" } else { "s" }),
+        (0, e) => format!("{e} event{}", if e == 1 { "" } else { "s" }),
+        (t, e) => format!(
+            "{t} task{}, {e} event{}",
+            if t == 1 { "" } else { "s" },
+            if e == 1 { "" } else { "s" }
+        ),
+    };
+
     model.alerts.status_message = Some(format!(
-        "Preview: {import_count} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
+        "Preview: {items_part} to import, {skip_count} skipped, {error_count} errors. Press Enter to confirm, Esc to cancel."
     ));
 }
 
 fn handle_confirm_import(model: &mut Model) {
     if let Some(result) = model.import.pending.take() {
-        let count = result.imported.len();
+        let task_count = result.imported.len();
+        let event_count = result.imported_events.len();
 
         // Add all imported tasks
         for task in result.imported {
@@ -537,10 +556,27 @@ fn handle_confirm_import(model: &mut Model) {
             model.tasks.insert(task.id, task);
         }
 
+        // Add all imported calendar events
+        for event in result.imported_events {
+            model.calendar_events.insert(event.id, event);
+        }
+
         model.storage.dirty = true;
         model.import.show_preview = false;
         model.refresh_visible_tasks();
-        model.alerts.status_message = Some(format!("Imported {count} tasks"));
+
+        // Update status message based on what was imported
+        let message = match (task_count, event_count) {
+            (0, 0) => "No items imported".to_string(),
+            (t, 0) => format!("Imported {t} task{}", if t == 1 { "" } else { "s" }),
+            (0, e) => format!("Imported {e} event{}", if e == 1 { "" } else { "s" }),
+            (t, e) => format!(
+                "Imported {t} task{} and {e} event{}",
+                if t == 1 { "" } else { "s" },
+                if e == 1 { "" } else { "s" }
+            ),
+        };
+        model.alerts.status_message = Some(message);
     }
 }
 

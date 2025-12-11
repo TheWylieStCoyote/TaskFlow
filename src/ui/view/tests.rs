@@ -1042,6 +1042,7 @@ fn test_view_renders_import_preview() {
     model.import.show_preview = true;
     model.import.pending = Some(ImportResult {
         imported: vec![],
+        imported_events: vec![],
         skipped: vec![],
         errors: vec![],
     });

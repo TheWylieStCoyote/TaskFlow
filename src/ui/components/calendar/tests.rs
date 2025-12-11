@@ -113,10 +113,10 @@ fn test_calendar_shows_no_tasks_message() {
     let buffer = render_widget(calendar, 60, 20);
     let content = buffer_content(&buffer);
 
-    // When no tasks, should show appropriate message
+    // When no tasks or events, should show appropriate message
     assert!(
-        content.contains("No tasks due") || content.contains("Select a day"),
-        "Should show message when no tasks"
+        content.contains("No tasks or events") || content.contains("Select a day"),
+        "Should show message when no tasks or events"
     );
 }
 

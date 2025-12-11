@@ -1,4 +1,7 @@
 //! ICS (iCalendar) import functionality.
+//!
+//! Parses both VTODO (tasks) and VEVENT (calendar events) components
+//! from iCalendar files.
 
 use std::collections::HashMap;
 use std::io::BufRead;
@@ -6,14 +9,23 @@ use std::io::BufRead;
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use uuid::Uuid;
 
-use crate::domain::{Priority, Task, TaskId, TaskStatus};
+use crate::domain::{CalendarEvent, CalendarEventStatus, Priority, Task, TaskId, TaskStatus};
 use crate::storage::StorageResult;
 
 use super::types::{ImportError, ImportOptions, ImportResult};
 
-/// Import tasks from ICS (iCalendar) format
+/// Tracks which component type is currently being parsed
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IcsComponent {
+    None,
+    Vtodo,
+    Vevent,
+}
+
+/// Import tasks and events from ICS (iCalendar) format
 ///
-/// Parses VTODO components from an iCalendar file.
+/// Parses both VTODO (tasks) and VEVENT (calendar events) components
+/// from an iCalendar file.
 ///
 /// # Errors
 ///
@@ -23,7 +35,8 @@ pub fn import_from_ics<R: BufRead>(
     options: &ImportOptions,
 ) -> StorageResult<ImportResult> {
     let mut result = ImportResult::default();
-    let mut current_vtodo: Option<HashMap<String, String>> = None;
+    let mut current_component = IcsComponent::None;
+    let mut current_props: HashMap<String, String> = HashMap::new();
     let mut line_num = 0;
     let mut unfolded_line = String::new();
 
@@ -52,7 +65,8 @@ pub fn import_from_ics<R: BufRead>(
         if !unfolded_line.is_empty() {
             process_ics_line(
                 &unfolded_line,
-                &mut current_vtodo,
+                &mut current_component,
+                &mut current_props,
                 &mut result,
                 line_num,
                 options,
@@ -66,7 +80,8 @@ pub fn import_from_ics<R: BufRead>(
     if !unfolded_line.is_empty() {
         process_ics_line(
             &unfolded_line,
-            &mut current_vtodo,
+            &mut current_component,
+            &mut current_props,
             &mut result,
             line_num,
             options,
@@ -79,38 +94,64 @@ pub fn import_from_ics<R: BufRead>(
 /// Process a single ICS line
 fn process_ics_line(
     line: &str,
-    current_vtodo: &mut Option<HashMap<String, String>>,
+    current_component: &mut IcsComponent,
+    current_props: &mut HashMap<String, String>,
     result: &mut ImportResult,
     line_num: usize,
     options: &ImportOptions,
 ) {
     let trimmed = line.trim();
 
+    // Handle component begin markers
     if trimmed == "BEGIN:VTODO" {
-        *current_vtodo = Some(HashMap::new());
+        *current_component = IcsComponent::Vtodo;
+        current_props.clear();
         return;
     }
 
-    if trimmed == "END:VTODO" {
-        if let Some(props) = current_vtodo.take() {
-            match parse_ics_vtodo(&props, options.validate) {
-                Ok(task) => result.imported.push(task),
-                Err(e) => {
-                    result.errors.push(ImportError {
-                        line: line_num,
-                        message: e,
-                        content: None,
-                    });
-                }
+    if trimmed == "BEGIN:VEVENT" {
+        *current_component = IcsComponent::Vevent;
+        current_props.clear();
+        return;
+    }
+
+    // Handle component end markers
+    if trimmed == "END:VTODO" && *current_component == IcsComponent::Vtodo {
+        match parse_ics_vtodo(current_props, options.validate) {
+            Ok(task) => result.imported.push(task),
+            Err(e) => {
+                result.errors.push(ImportError {
+                    line: line_num,
+                    message: e,
+                    content: None,
+                });
             }
         }
+        *current_component = IcsComponent::None;
+        current_props.clear();
         return;
     }
 
-    // Parse property if inside VTODO
-    if let Some(ref mut props) = current_vtodo {
+    if trimmed == "END:VEVENT" && *current_component == IcsComponent::Vevent {
+        match parse_ics_vevent(current_props, options.validate) {
+            Ok(event) => result.imported_events.push(event),
+            Err(e) => {
+                result.errors.push(ImportError {
+                    line: line_num,
+                    message: e,
+                    content: None,
+                });
+            }
+        }
+        *current_component = IcsComponent::None;
+        current_props.clear();
+        return;
+    }
+
+    // Parse property if inside a component
+    if *current_component != IcsComponent::None {
         if let Some((key, value)) = parse_ics_property(trimmed) {
-            props.insert(key, value);
+            current_props.insert(key, value);
         }
     }
 }
@@ -229,6 +270,121 @@ fn parse_ics_vtodo(props: &HashMap<String, String>, validate: bool) -> Result<Ta
     };
 
     Ok(task)
+}
+
+/// Parse a VEVENT component into a CalendarEvent
+fn parse_ics_vevent(
+    props: &HashMap<String, String>,
+    validate: bool,
+) -> Result<CalendarEvent, String> {
+    // SUMMARY (title) is required
+    let title = props
+        .get("SUMMARY")
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "Missing SUMMARY (title)".to_string())?;
+
+    if validate && title.trim().is_empty() {
+        return Err("SUMMARY cannot be whitespace only".to_string());
+    }
+
+    // DTSTART is required for events
+    let dtstart_raw = props
+        .get("DTSTART")
+        .ok_or_else(|| "Missing DTSTART (start time)".to_string())?;
+
+    // Detect if this is an all-day event (date-only format)
+    let all_day = is_date_only(dtstart_raw);
+
+    // Parse start time
+    let start = if all_day {
+        parse_ics_date(dtstart_raw)
+            .and_then(|d| d.and_hms_opt(0, 0, 0))
+            .map(|dt| Utc.from_utc_datetime(&dt))
+            .ok_or_else(|| "Invalid DTSTART date format".to_string())?
+    } else {
+        parse_ics_datetime(dtstart_raw)
+            .ok_or_else(|| "Invalid DTSTART datetime format".to_string())?
+    };
+
+    // Parse end time (optional)
+    let end = props.get("DTEND").and_then(|s| {
+        if is_date_only(s) {
+            parse_ics_date(s)
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .map(|dt| Utc.from_utc_datetime(&dt))
+        } else {
+            parse_ics_datetime(s)
+        }
+    });
+
+    // Parse UID or generate new
+    let uid = props
+        .get("UID")
+        .cloned()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    // Parse STATUS
+    let status = props
+        .get("STATUS")
+        .map_or(CalendarEventStatus::Confirmed, |s| {
+            match s.to_uppercase().as_str() {
+                "TENTATIVE" => CalendarEventStatus::Tentative,
+                "CONFIRMED" => CalendarEventStatus::Confirmed,
+                "CANCELLED" => CalendarEventStatus::Cancelled,
+                _ => CalendarEventStatus::Confirmed,
+            }
+        });
+
+    // Parse DESCRIPTION
+    let description = props.get("DESCRIPTION").filter(|s| !s.is_empty()).cloned();
+
+    // Parse LOCATION
+    let location = props.get("LOCATION").filter(|s| !s.is_empty()).cloned();
+
+    // Parse CREATED timestamp
+    let created_at = props
+        .get("CREATED")
+        .or_else(|| props.get("DTSTAMP"))
+        .and_then(|s| parse_ics_datetime(s))
+        .unwrap_or_else(Utc::now);
+
+    let event = CalendarEvent::new(title.clone())
+        .with_uid(uid)
+        .with_start(start)
+        .with_all_day(all_day)
+        .with_status(status);
+
+    let event = if let Some(end) = end {
+        event.with_end(end)
+    } else {
+        event
+    };
+
+    let event = if let Some(desc) = description {
+        event.with_description(desc)
+    } else {
+        event
+    };
+
+    let event = if let Some(loc) = location {
+        event.with_location(loc)
+    } else {
+        event
+    };
+
+    // Manually set created_at since we parsed it
+    let mut event = event;
+    event.created_at = created_at;
+
+    Ok(event)
+}
+
+/// Check if an ICS date/datetime string is date-only (all-day event)
+fn is_date_only(s: &str) -> bool {
+    // All-day events have format YYYYMMDD (8 chars) or VALUE=DATE:YYYYMMDD
+    // Datetime events have format YYYYMMDDTHHMMSSz (16+ chars with T separator)
+    let clean = s.trim_start_matches("VALUE=DATE:");
+    !clean.contains('T') && clean.len() == 8
 }
 
 /// Parse an ICS date (YYYYMMDD)
@@ -447,5 +603,184 @@ END:VCALENDAR
         assert_eq!(unescape_ics("a\\,b"), "a,b");
         assert_eq!(unescape_ics("a\\nb"), "a\nb");
         assert_eq!(unescape_ics("a\\\\b"), "a\\b");
+    }
+
+    // VEVENT tests
+
+    #[test]
+    fn test_import_vevent_basic() {
+        let ics = r"BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:event-123
+SUMMARY:Team Meeting
+DTSTART:20241215T100000Z
+DTEND:20241215T110000Z
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported.len(), 0);
+        assert_eq!(result.imported_events.len(), 1);
+        assert_eq!(result.imported_events[0].title, "Team Meeting");
+        assert_eq!(result.imported_events[0].uid, "event-123");
+        assert!(!result.imported_events[0].all_day);
+        assert!(result.imported_events[0].end.is_some());
+    }
+
+    #[test]
+    fn test_import_vevent_all_day() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Holiday
+DTSTART;VALUE=DATE:20241225
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported_events.len(), 1);
+        assert_eq!(result.imported_events[0].title, "Holiday");
+        assert!(result.imported_events[0].all_day);
+    }
+
+    #[test]
+    fn test_import_vevent_with_location_description() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Conference
+DTSTART:20241215T090000Z
+LOCATION:Main Hall Room A
+DESCRIPTION:Annual team conference
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported_events.len(), 1);
+        assert_eq!(
+            result.imported_events[0].location,
+            Some("Main Hall Room A".to_string())
+        );
+        assert_eq!(
+            result.imported_events[0].description,
+            Some("Annual team conference".to_string())
+        );
+    }
+
+    #[test]
+    fn test_import_vevent_status() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Maybe Meeting
+DTSTART:20241215T100000Z
+STATUS:TENTATIVE
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported_events.len(), 1);
+        assert_eq!(
+            result.imported_events[0].status,
+            CalendarEventStatus::Tentative
+        );
+    }
+
+    #[test]
+    fn test_import_mixed_vtodo_vevent() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VTODO
+SUMMARY:Buy groceries
+STATUS:NEEDS-ACTION
+END:VTODO
+BEGIN:VEVENT
+SUMMARY:Doctor appointment
+DTSTART:20241220T140000Z
+DTEND:20241220T150000Z
+END:VEVENT
+BEGIN:VTODO
+SUMMARY:Review code
+STATUS:IN-PROCESS
+END:VTODO
+BEGIN:VEVENT
+SUMMARY:Team lunch
+DTSTART:20241221T120000Z
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        // Should have 2 tasks and 2 events
+        assert_eq!(result.imported.len(), 2);
+        assert_eq!(result.imported_events.len(), 2);
+
+        // Verify tasks
+        assert_eq!(result.imported[0].title, "Buy groceries");
+        assert_eq!(result.imported[1].title, "Review code");
+
+        // Verify events
+        assert_eq!(result.imported_events[0].title, "Doctor appointment");
+        assert_eq!(result.imported_events[1].title, "Team lunch");
+    }
+
+    #[test]
+    fn test_import_vevent_missing_summary() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VEVENT
+DTSTART:20241215T100000Z
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported_events.len(), 0);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].message.contains("SUMMARY"));
+    }
+
+    #[test]
+    fn test_import_vevent_missing_dtstart() {
+        let ics = r"BEGIN:VCALENDAR
+BEGIN:VEVENT
+SUMMARY:Bad Event
+END:VEVENT
+END:VCALENDAR
+";
+        let reader = Cursor::new(ics);
+        let options = ImportOptions::default();
+
+        let result = import_from_ics(reader, &options).unwrap();
+
+        assert_eq!(result.imported_events.len(), 0);
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].message.contains("DTSTART"));
+    }
+
+    #[test]
+    fn test_is_date_only() {
+        assert!(is_date_only("20241225"));
+        assert!(is_date_only("VALUE=DATE:20241225"));
+        assert!(!is_date_only("20241225T100000Z"));
+        assert!(!is_date_only("20241225T100000"));
     }
 }

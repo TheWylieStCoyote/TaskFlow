@@ -42,6 +42,7 @@ fn test_cancel_import_resets_state() {
     model.import.show_preview = true;
     model.import.pending = Some(ImportResult {
         imported: vec![],
+        imported_events: vec![],
         skipped: vec![],
         errors: vec![],
     });
@@ -69,6 +70,7 @@ fn test_confirm_import_adds_tasks() {
     model.import.show_preview = true;
     model.import.pending = Some(ImportResult {
         imported: vec![task.clone()],
+        imported_events: vec![],
         skipped: vec![],
         errors: vec![],
     });
@@ -100,6 +102,7 @@ fn test_confirm_import_multiple_tasks() {
     model.import.show_preview = true;
     model.import.pending = Some(ImportResult {
         imported: vec![task1, task2, task3],
+        imported_events: vec![],
         skipped: vec![],
         errors: vec![],
     });

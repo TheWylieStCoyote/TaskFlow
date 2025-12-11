@@ -115,6 +115,7 @@
 //! ```
 
 pub mod analytics;
+mod calendar_event;
 pub mod duplicate_detector;
 mod filter;
 mod habit;
@@ -128,6 +129,7 @@ mod work_log;
 #[cfg(test)]
 mod proptest_tests;
 
+pub use calendar_event::*;
 pub use filter::*;
 pub use habit::*;
 pub use pomodoro::*;

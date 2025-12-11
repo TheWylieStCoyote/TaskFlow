@@ -2,14 +2,14 @@
 
 use chrono::NaiveDate;
 
-use crate::domain::{Task, TaskId};
+use crate::domain::{CalendarEvent, Task, TaskId};
 
 /// Import format types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportFormat {
     /// Comma-separated values
     Csv,
-    /// iCalendar format (VTODO components)
+    /// iCalendar format (VTODO and VEVENT components)
     Ics,
 }
 
@@ -122,8 +122,10 @@ impl std::fmt::Display for ImportError {
 /// Result of an import operation
 #[derive(Debug, Clone, Default)]
 pub struct ImportResult {
-    /// Successfully parsed tasks
+    /// Successfully parsed tasks (from VTODO)
     pub imported: Vec<Task>,
+    /// Successfully parsed calendar events (from VEVENT)
+    pub imported_events: Vec<CalendarEvent>,
     /// Tasks that were skipped (with reason)
     pub skipped: Vec<(Task, ImportSkipReason)>,
     /// Errors that occurred during parsing
@@ -131,10 +133,16 @@ pub struct ImportResult {
 }
 
 impl ImportResult {
-    /// Returns the total number of tasks processed
+    /// Returns the total number of items processed (tasks + events)
     #[must_use]
     pub fn total_processed(&self) -> usize {
-        self.imported.len() + self.skipped.len() + self.errors.len()
+        self.imported.len() + self.imported_events.len() + self.skipped.len() + self.errors.len()
+    }
+
+    /// Returns the total number of items successfully imported
+    #[must_use]
+    pub fn total_imported(&self) -> usize {
+        self.imported.len() + self.imported_events.len()
     }
 
     /// Returns true if there were any errors
@@ -147,6 +155,12 @@ impl ImportResult {
     #[must_use]
     pub fn has_imported(&self) -> bool {
         !self.imported.is_empty()
+    }
+
+    /// Returns true if any events were successfully imported
+    #[must_use]
+    pub fn has_imported_events(&self) -> bool {
+        !self.imported_events.is_empty()
     }
 }
 
@@ -168,12 +182,20 @@ mod tests {
         let mut result = ImportResult::default();
 
         assert_eq!(result.total_processed(), 0);
+        assert_eq!(result.total_imported(), 0);
         assert!(!result.has_errors());
         assert!(!result.has_imported());
+        assert!(!result.has_imported_events());
 
         result.imported.push(Task::new("Task 1"));
         assert_eq!(result.total_processed(), 1);
+        assert_eq!(result.total_imported(), 1);
         assert!(result.has_imported());
+
+        result.imported_events.push(CalendarEvent::new("Meeting"));
+        assert_eq!(result.total_processed(), 2);
+        assert_eq!(result.total_imported(), 2);
+        assert!(result.has_imported_events());
 
         result.errors.push(ImportError {
             line: 1,
@@ -181,7 +203,7 @@ mod tests {
             content: None,
         });
         assert!(result.has_errors());
-        assert_eq!(result.total_processed(), 2);
+        assert_eq!(result.total_processed(), 3);
     }
 
     #[test]

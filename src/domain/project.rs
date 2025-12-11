@@ -124,7 +124,7 @@ impl ProjectStatus {
 ///
 /// assert_eq!(child.parent_id, Some(parent.id));
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
@@ -150,6 +150,13 @@ pub struct Project {
     // Custom fields
     #[serde(default)]
     pub custom_fields: HashMap<String, serde_json::Value>,
+
+    /// Learned estimation multiplier based on historical accuracy.
+    ///
+    /// A value of 1.3 means tasks in this project typically take 30% longer
+    /// than initially estimated. This is used to adjust future estimates.
+    #[serde(default)]
+    pub estimation_multiplier: Option<f64>,
 }
 
 impl Project {
@@ -169,6 +176,7 @@ impl Project {
             due_date: None,
             default_tags: Vec::new(),
             custom_fields: HashMap::new(),
+            estimation_multiplier: None,
         }
     }
 
@@ -187,6 +195,47 @@ impl Project {
     #[must_use]
     pub fn is_active(&self) -> bool {
         self.status == ProjectStatus::Active
+    }
+
+    /// Returns an adjusted estimate based on the project's historical accuracy.
+    ///
+    /// If this project has an `estimation_multiplier` of 1.3 (meaning tasks
+    /// typically take 30% longer than estimated), a raw estimate of 60 minutes
+    /// would return 78 minutes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use taskflow::domain::Project;
+    ///
+    /// let mut project = Project::new("Backend API");
+    /// project.estimation_multiplier = Some(1.3);
+    ///
+    /// assert_eq!(project.suggested_estimate(60), 78);
+    /// ```
+    #[must_use]
+    pub fn suggested_estimate(&self, raw_estimate: u32) -> u32 {
+        self.estimation_multiplier.map_or(raw_estimate, |m| {
+            (f64::from(raw_estimate) * m).round() as u32
+        })
+    }
+
+    /// Builder method to set estimation multiplier.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use taskflow::domain::Project;
+    ///
+    /// let project = Project::new("Backend API")
+    ///     .with_estimation_multiplier(1.2);
+    ///
+    /// assert_eq!(project.suggested_estimate(100), 120);
+    /// ```
+    #[must_use]
+    pub fn with_estimation_multiplier(mut self, multiplier: f64) -> Self {
+        self.estimation_multiplier = Some(multiplier);
+        self
     }
 }
 
@@ -266,5 +315,35 @@ mod tests {
             ProjectStatus::Active
         );
         assert_eq!(ProjectStatus::from_str_lossy(""), ProjectStatus::Active);
+    }
+
+    #[test]
+    fn test_project_suggested_estimate_no_multiplier() {
+        let project = Project::new("Test");
+        // Without multiplier, returns raw estimate unchanged
+        assert_eq!(project.suggested_estimate(60), 60);
+        assert_eq!(project.suggested_estimate(120), 120);
+    }
+
+    #[test]
+    fn test_project_suggested_estimate_with_multiplier() {
+        let project = Project::new("Test").with_estimation_multiplier(1.3);
+        // 60 * 1.3 = 78
+        assert_eq!(project.suggested_estimate(60), 78);
+        // 100 * 1.3 = 130
+        assert_eq!(project.suggested_estimate(100), 130);
+    }
+
+    #[test]
+    fn test_project_suggested_estimate_under() {
+        let project = Project::new("Test").with_estimation_multiplier(0.8);
+        // 60 * 0.8 = 48
+        assert_eq!(project.suggested_estimate(60), 48);
+    }
+
+    #[test]
+    fn test_project_with_estimation_multiplier() {
+        let project = Project::new("Test").with_estimation_multiplier(1.5);
+        assert_eq!(project.estimation_multiplier, Some(1.5));
     }
 }

@@ -120,6 +120,8 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
     let due_date: Option<String> = row.get("due_date")?;
     let default_tags_json: String = row.get("default_tags")?;
     let custom_fields_json: String = row.get("custom_fields")?;
+    // Optional field - may not exist in older databases until migration runs
+    let estimation_multiplier: Option<f64> = row.get("estimation_multiplier").ok().flatten();
 
     Ok(Project {
         id: ProjectId(parse_uuid(&id, "project.id")),
@@ -135,6 +137,7 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
         due_date: parse_optional_date(due_date),
         default_tags: parse_json(&default_tags_json, "project.default_tags"),
         custom_fields: parse_json(&custom_fields_json, "project.custom_fields"),
+        estimation_multiplier,
     })
 }
 

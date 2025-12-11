@@ -14,6 +14,7 @@
 //! | `breakdowns` | Status, priority, and tag breakdowns |
 //! | `insights` | Productivity insights (streaks, best day, peak hour) |
 //! | `time` | Time tracking analytics and burndown charts |
+//! | `estimation` | Estimation accuracy analytics and suggestions |
 //!
 //! # Example
 //!
@@ -33,9 +34,12 @@
 //! ```
 
 mod breakdowns;
+mod estimation;
 mod insights;
 mod time;
 mod trends;
+
+pub use estimation::EstimationSuggestion;
 
 #[cfg(test)]
 mod tests;
@@ -106,6 +110,8 @@ impl<'a> AnalyticsEngine<'a> {
         } else {
             vec![]
         };
+        let estimation_analytics =
+            self.compute_estimation_analytics(config.start_date, config.end_date);
 
         AnalyticsReport {
             config: config.clone(),
@@ -117,6 +123,7 @@ impl<'a> AnalyticsEngine<'a> {
             status_breakdown,
             priority_breakdown,
             tag_stats,
+            estimation_analytics,
         }
     }
 }

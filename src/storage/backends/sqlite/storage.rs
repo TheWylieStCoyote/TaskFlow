@@ -121,8 +121,9 @@ impl StorageBackend for SqliteBackend {
         }
         self.inner.conn = Some(Connection::open(&self.inner.path)?);
         self.inner.create_tables()?;
-        // Migrate existing JSON tags to junction table (idempotent)
-        self.inner.migrate_tags_to_junction_table()
+        // Run migrations (all are idempotent)
+        self.inner.migrate_tags_to_junction_table()?;
+        self.inner.migrate_add_estimation_multiplier()
     }
 
     fn flush(&mut self) -> StorageResult<()> {

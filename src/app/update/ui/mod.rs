@@ -311,6 +311,26 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     .tasks
                     .get(&task_id)
                     .and_then(|t| t.estimated_minutes.map(format_duration_input));
+
+                // Show estimation suggestion if user has historical data and no current estimate
+                if prefill.is_none() {
+                    if let Some(task) = model.tasks.get(&task_id) {
+                        let engine = crate::app::analytics::AnalyticsEngine::new(model);
+                        // Try to suggest based on 60min default estimate
+                        if let Some(suggestion) =
+                            engine.suggest_estimate(60, task.project_id, &task.tags)
+                        {
+                            if suggestion.confidence >= 0.3 {
+                                model.alerts.status_message = Some(format!(
+                                    "Suggestion: {} ({})",
+                                    format_duration_input(suggestion.suggested_minutes),
+                                    suggestion.explanation
+                                ));
+                            }
+                        }
+                    }
+                }
+
                 start_input(model, InputTarget::EditEstimate(task_id), prefill);
             }
         }

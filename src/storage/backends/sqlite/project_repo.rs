@@ -14,8 +14,9 @@ impl ProjectRepository for SqliteBackend {
         conn.execute(
             r"INSERT INTO projects (
                 id, name, description, status, parent_id, color, icon,
-                created_at, updated_at, start_date, due_date, default_tags, custom_fields
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                created_at, updated_at, start_date, due_date, default_tags, custom_fields,
+                estimation_multiplier
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 project.id.0.to_string(),
                 project.name,
@@ -30,6 +31,7 @@ impl ProjectRepository for SqliteBackend {
                 project.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 serde_json::to_string(&project.default_tags).unwrap_or_default(),
                 serde_json::to_string(&project.custom_fields).unwrap_or_default(),
+                project.estimation_multiplier,
             ],
         )?;
         Ok(())
@@ -49,7 +51,8 @@ impl ProjectRepository for SqliteBackend {
         let rows = conn.execute(
             r"UPDATE projects SET
                 name = ?2, description = ?3, status = ?4, parent_id = ?5, color = ?6, icon = ?7,
-                updated_at = ?8, start_date = ?9, due_date = ?10, default_tags = ?11, custom_fields = ?12
+                updated_at = ?8, start_date = ?9, due_date = ?10, default_tags = ?11, custom_fields = ?12,
+                estimation_multiplier = ?13
             WHERE id = ?1",
             params![
                 project.id.0.to_string(),
@@ -64,6 +67,7 @@ impl ProjectRepository for SqliteBackend {
                 project.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 serde_json::to_string(&project.default_tags).unwrap_or_default(),
                 serde_json::to_string(&project.custom_fields).unwrap_or_default(),
+                project.estimation_multiplier,
             ],
         )?;
         if rows == 0 {

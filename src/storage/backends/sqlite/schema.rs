@@ -50,7 +50,8 @@ impl SqliteBackendInner {
                 start_date TEXT,
                 due_date TEXT,
                 default_tags TEXT NOT NULL DEFAULT '[]',
-                custom_fields TEXT NOT NULL DEFAULT '{}'
+                custom_fields TEXT NOT NULL DEFAULT '{}',
+                estimation_multiplier REAL
             );
 
             CREATE TABLE IF NOT EXISTS tags (
@@ -173,6 +174,27 @@ impl SqliteBackendInner {
             CREATE INDEX IF NOT EXISTS idx_key_results_status ON key_results(status);
             ",
         )?;
+
+        Ok(())
+    }
+
+    /// Migrate projects table to add estimation_multiplier column.
+    ///
+    /// This is idempotent - it checks if the column exists before adding.
+    pub(crate) fn migrate_add_estimation_multiplier(&self) -> StorageResult<()> {
+        let conn = self.conn()?;
+
+        // Check if column exists by trying to select it
+        let has_column = conn
+            .prepare("SELECT estimation_multiplier FROM projects LIMIT 1")
+            .is_ok();
+
+        if !has_column {
+            conn.execute(
+                "ALTER TABLE projects ADD COLUMN estimation_multiplier REAL",
+                [],
+            )?;
+        }
 
         Ok(())
     }

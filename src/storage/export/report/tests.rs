@@ -4,8 +4,8 @@ use super::html::escape_html;
 use super::{export_report_to_html_string, export_report_to_markdown_string};
 use crate::domain::analytics::AnalyticsReport;
 use crate::domain::analytics::{
-    BurnChart, CompletionTrend, PriorityBreakdown, ProductivityInsights, ReportConfig,
-    StatusBreakdown, TagStats, TimeAnalytics, TimeSeriesPoint, VelocityMetrics,
+    BurnChart, CompletionTrend, EstimationAnalytics, PriorityBreakdown, ProductivityInsights,
+    ReportConfig, StatusBreakdown, TagStats, TimeAnalytics, TimeSeriesPoint, VelocityMetrics,
 };
 use chrono::{NaiveDate, Weekday};
 
@@ -92,6 +92,7 @@ fn sample_report() -> AnalyticsReport {
                 completed: 8,
             },
         ],
+        estimation_analytics: EstimationAnalytics::default(),
     }
 }
 
@@ -110,6 +111,7 @@ fn empty_report() -> AnalyticsReport {
         status_breakdown: StatusBreakdown::default(),
         priority_breakdown: PriorityBreakdown::default(),
         tag_stats: vec![],
+        estimation_analytics: EstimationAnalytics::default(),
     }
 }
 

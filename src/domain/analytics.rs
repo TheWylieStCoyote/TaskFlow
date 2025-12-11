@@ -375,6 +375,101 @@ impl ReportConfig {
     }
 }
 
+/// Estimation accuracy analytics over time.
+///
+/// Tracks how accurate time estimates have been historically,
+/// broken down by project, tag, and time period. Used to suggest
+/// calibration adjustments for future estimates.
+///
+/// # Accuracy Calculation
+///
+/// Accuracy is calculated as `actual_minutes / estimated_minutes * 100`:
+/// - 100% = perfect estimate
+/// - 130% = task took 30% longer than estimated (overrun)
+/// - 80% = task took 20% less than estimated (under)
+///
+/// # On-Target Threshold
+///
+/// Tasks are considered "on target" if actual time is within 10% of estimate
+/// (90% - 110% accuracy range).
+///
+/// # Example
+///
+/// ```
+/// use taskflow::domain::analytics::EstimationAnalytics;
+///
+/// let mut analytics = EstimationAnalytics::default();
+/// analytics.tasks_with_estimates = 10;
+/// analytics.on_target_count = 6;
+/// analytics.over_count = 3;
+/// analytics.under_count = 1;
+/// analytics.avg_variance_minutes = 15;
+///
+/// assert_eq!(analytics.on_target_percentage(), 60.0);
+/// assert!(analytics.accuracy_summary().contains("over"));
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct EstimationAnalytics {
+    /// Accuracy trend points over time (date, accuracy percentage)
+    /// where 100% = perfect accuracy, >100% = overrun, <100% = under
+    pub accuracy_over_time: Vec<TimeSeriesPoint>,
+    /// Per-project accuracy: (project_id, average accuracy %, task count)
+    pub by_project: Vec<(Option<ProjectId>, f64, u32)>,
+    /// Per-tag accuracy: (tag name, average accuracy %, task count)
+    pub by_tag: Vec<(String, f64, u32)>,
+    /// Suggested global estimation multiplier based on historical data
+    /// (e.g., 1.3 means tasks typically take 30% longer than estimated)
+    pub suggested_multiplier: f64,
+    /// Total tasks with both estimates and actual times
+    pub tasks_with_estimates: u32,
+    /// Tasks that were on target (within 10% of estimate)
+    pub on_target_count: u32,
+    /// Tasks that went over estimate
+    pub over_count: u32,
+    /// Tasks that came in under estimate
+    pub under_count: u32,
+    /// Average variance in minutes (positive = overrun)
+    pub avg_variance_minutes: i32,
+}
+
+impl EstimationAnalytics {
+    /// Returns the percentage of tasks that were on target.
+    #[must_use]
+    pub fn on_target_percentage(&self) -> f64 {
+        if self.tasks_with_estimates == 0 {
+            return 0.0;
+        }
+        f64::from(self.on_target_count) / f64::from(self.tasks_with_estimates) * 100.0
+    }
+
+    /// Returns a human-readable summary of estimation accuracy.
+    #[must_use]
+    pub fn accuracy_summary(&self) -> String {
+        if self.tasks_with_estimates == 0 {
+            return "No tasks with estimates".to_string();
+        }
+        let direction = if self.avg_variance_minutes > 0 {
+            "over"
+        } else if self.avg_variance_minutes < 0 {
+            "under"
+        } else {
+            "on target"
+        };
+        if direction == "on target" {
+            "You estimate perfectly on average".to_string()
+        } else {
+            let abs_mins = self.avg_variance_minutes.abs();
+            let hours = abs_mins / 60;
+            let mins = abs_mins % 60;
+            if hours > 0 {
+                format!("You tend to estimate {hours}h {mins}m {direction}")
+            } else {
+                format!("You tend to estimate {mins}m {direction}")
+            }
+        }
+    }
+}
+
 /// Complete analytics report aggregating all metrics.
 #[derive(Debug, Clone)]
 pub struct AnalyticsReport {
@@ -396,6 +491,8 @@ pub struct AnalyticsReport {
     pub priority_breakdown: PriorityBreakdown,
     /// Tag statistics (sorted by count descending)
     pub tag_stats: Vec<TagStats>,
+    /// Estimation accuracy analytics
+    pub estimation_analytics: EstimationAnalytics,
 }
 
 #[cfg(test)]
@@ -628,5 +725,76 @@ mod tests {
         let config = ReportConfig::custom(start, end);
         assert_eq!(config.start_date, start);
         assert_eq!(config.end_date, end);
+    }
+
+    #[test]
+    fn test_estimation_analytics_default() {
+        let analytics = EstimationAnalytics::default();
+        assert_eq!(analytics.tasks_with_estimates, 0);
+        assert!((analytics.on_target_percentage() - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_estimation_analytics_on_target_percentage() {
+        let analytics = EstimationAnalytics {
+            tasks_with_estimates: 10,
+            on_target_count: 7,
+            over_count: 2,
+            under_count: 1,
+            ..Default::default()
+        };
+        assert!((analytics.on_target_percentage() - 70.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_estimation_analytics_accuracy_summary_over() {
+        let analytics = EstimationAnalytics {
+            tasks_with_estimates: 10,
+            avg_variance_minutes: 45, // 45 minutes over
+            ..Default::default()
+        };
+        assert_eq!(
+            analytics.accuracy_summary(),
+            "You tend to estimate 45m over"
+        );
+    }
+
+    #[test]
+    fn test_estimation_analytics_accuracy_summary_under() {
+        let analytics = EstimationAnalytics {
+            tasks_with_estimates: 10,
+            avg_variance_minutes: -30, // 30 minutes under
+            ..Default::default()
+        };
+        assert_eq!(
+            analytics.accuracy_summary(),
+            "You tend to estimate 30m under"
+        );
+    }
+
+    #[test]
+    fn test_estimation_analytics_accuracy_summary_perfect() {
+        let analytics = EstimationAnalytics {
+            tasks_with_estimates: 10,
+            avg_variance_minutes: 0,
+            ..Default::default()
+        };
+        assert_eq!(
+            analytics.accuracy_summary(),
+            "You estimate perfectly on average"
+        );
+    }
+
+    #[test]
+    fn test_estimation_analytics_accuracy_summary_hours() {
+        let analytics = EstimationAnalytics {
+            tasks_with_estimates: 10,
+            avg_variance_minutes: 90, // 1h 30m over
+            ..Default::default()
+        };
+        assert_eq!(
+            analytics.accuracy_summary(),
+            "You tend to estimate 1h 30m over"
+        );
     }
 }

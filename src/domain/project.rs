@@ -78,6 +78,17 @@ impl ProjectStatus {
             Self::Archived => "archived",
         }
     }
+
+    /// Parses a status from a string, returning `Active` for unknown values.
+    #[must_use]
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "on_hold" => Self::OnHold,
+            "completed" => Self::Completed,
+            "archived" => Self::Archived,
+            _ => Self::Active,
+        }
+    }
 }
 
 /// A project groups related tasks together.
@@ -229,5 +240,31 @@ mod tests {
         let mut archived = Project::new("Archived");
         archived.status = ProjectStatus::Archived;
         assert!(!archived.is_active());
+    }
+
+    #[test]
+    fn test_project_status_from_str_lossy() {
+        assert_eq!(
+            ProjectStatus::from_str_lossy("active"),
+            ProjectStatus::Active
+        );
+        assert_eq!(
+            ProjectStatus::from_str_lossy("on_hold"),
+            ProjectStatus::OnHold
+        );
+        assert_eq!(
+            ProjectStatus::from_str_lossy("completed"),
+            ProjectStatus::Completed
+        );
+        assert_eq!(
+            ProjectStatus::from_str_lossy("archived"),
+            ProjectStatus::Archived
+        );
+        // Unknown defaults to Active
+        assert_eq!(
+            ProjectStatus::from_str_lossy("invalid"),
+            ProjectStatus::Active
+        );
+        assert_eq!(ProjectStatus::from_str_lossy(""), ProjectStatus::Active);
     }
 }

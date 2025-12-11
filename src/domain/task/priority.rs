@@ -64,6 +64,18 @@ impl Priority {
         }
     }
 
+    /// Parses a priority from a string, returning `None` for unknown values.
+    #[must_use]
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "low" => Self::Low,
+            "medium" => Self::Medium,
+            "high" => Self::High,
+            "urgent" => Self::Urgent,
+            _ => Self::None,
+        }
+    }
+
     /// Returns the visual symbol for this priority level.
     ///
     /// Used in the UI to show priority at a glance.

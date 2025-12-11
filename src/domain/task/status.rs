@@ -47,6 +47,18 @@ impl TaskStatus {
         }
     }
 
+    /// Parses a status from a string, returning `Todo` for unknown values.
+    #[must_use]
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "in_progress" => Self::InProgress,
+            "blocked" => Self::Blocked,
+            "done" => Self::Done,
+            "cancelled" => Self::Cancelled,
+            _ => Self::Todo,
+        }
+    }
+
     /// Returns the visual symbol for this status.
     ///
     /// Used in the UI to show status at a glance.
@@ -132,5 +144,23 @@ mod tests {
         assert_eq!(TaskStatus::Todo, TaskStatus::Todo);
         assert_ne!(TaskStatus::Todo, TaskStatus::Done);
         assert_ne!(TaskStatus::InProgress, TaskStatus::Blocked);
+    }
+
+    #[test]
+    fn test_from_str_lossy() {
+        assert_eq!(TaskStatus::from_str_lossy("todo"), TaskStatus::Todo);
+        assert_eq!(
+            TaskStatus::from_str_lossy("in_progress"),
+            TaskStatus::InProgress
+        );
+        assert_eq!(TaskStatus::from_str_lossy("blocked"), TaskStatus::Blocked);
+        assert_eq!(TaskStatus::from_str_lossy("done"), TaskStatus::Done);
+        assert_eq!(
+            TaskStatus::from_str_lossy("cancelled"),
+            TaskStatus::Cancelled
+        );
+        // Unknown defaults to Todo
+        assert_eq!(TaskStatus::from_str_lossy("invalid"), TaskStatus::Todo);
+        assert_eq!(TaskStatus::from_str_lossy(""), TaskStatus::Todo);
     }
 }

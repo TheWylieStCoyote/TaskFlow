@@ -70,6 +70,28 @@ pub enum GoalStatus {
 }
 
 impl GoalStatus {
+    /// Returns the status as a lowercase string.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::OnHold => "on_hold",
+            Self::Completed => "completed",
+            Self::Archived => "archived",
+        }
+    }
+
+    /// Parses a status from a string, returning `Active` for unknown values.
+    #[must_use]
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "on_hold" => Self::OnHold,
+            "completed" => Self::Completed,
+            "archived" => Self::Archived,
+            _ => Self::Active,
+        }
+    }
+
     /// Returns true if the goal is active.
     #[must_use]
     pub const fn is_active(self) -> bool {

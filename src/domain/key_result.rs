@@ -65,6 +65,28 @@ pub enum KeyResultStatus {
 }
 
 impl KeyResultStatus {
+    /// Returns the status as a lowercase string.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::NotStarted => "not_started",
+            Self::InProgress => "in_progress",
+            Self::AtRisk => "at_risk",
+            Self::Completed => "completed",
+        }
+    }
+
+    /// Parses a status from a string, returning `NotStarted` for unknown values.
+    #[must_use]
+    pub fn from_str_lossy(s: &str) -> Self {
+        match s {
+            "in_progress" => Self::InProgress,
+            "at_risk" => Self::AtRisk,
+            "completed" => Self::Completed,
+            _ => Self::NotStarted,
+        }
+    }
+
     /// Returns true if in progress (not done, not failed).
     #[must_use]
     pub const fn is_in_progress(self) -> bool {

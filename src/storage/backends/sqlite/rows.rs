@@ -1,5 +1,10 @@
 //! Row parsing helpers for SQLite backend.
+//!
+//! This module provides utility functions for parsing values from SQLite rows
+//! into domain types. All parsing functions log warnings on failure rather
+//! than panicking.
 
+use chrono::{DateTime, NaiveDate, Utc};
 use tracing::warn;
 
 use crate::domain::{
@@ -7,6 +12,10 @@ use crate::domain::{
     KeyResultStatus, Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus,
     TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
+
+// ============================================================================
+// Generic Parsing Helpers
+// ============================================================================
 
 /// Parse a UUID string, logging a warning if invalid.
 fn parse_uuid(s: &str, field_name: &str) -> uuid::Uuid {
@@ -22,6 +31,30 @@ fn parse_json<T: serde::de::DeserializeOwned + Default>(s: &str, field_name: &st
         warn!(field = field_name, error = %e, "Invalid JSON in SQLite row");
         T::default()
     })
+}
+
+/// Parse an RFC3339 datetime string, defaulting to now on failure.
+fn parse_datetime(s: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(s).map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc))
+}
+
+/// Parse an optional RFC3339 datetime string.
+fn parse_optional_datetime(s: Option<String>) -> Option<DateTime<Utc>> {
+    s.and_then(|s| {
+        DateTime::parse_from_rfc3339(&s)
+            .map(|dt| dt.with_timezone(&Utc))
+            .ok()
+    })
+}
+
+/// Parse a date string in YYYY-MM-DD format.
+fn parse_date(s: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
+}
+
+/// Parse an optional date string in YYYY-MM-DD format.
+fn parse_optional_date(s: Option<String>) -> Option<NaiveDate> {
+    s.and_then(|s| parse_date(&s))
 }
 
 /// Parse a Task from a SQLite row.
@@ -45,20 +78,8 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         id: TaskId(parse_uuid(&id, "task.id")),
         title: row.get("title")?,
         description: row.get("description")?,
-        status: match status_str.as_str() {
-            "in_progress" => TaskStatus::InProgress,
-            "blocked" => TaskStatus::Blocked,
-            "done" => TaskStatus::Done,
-            "cancelled" => TaskStatus::Cancelled,
-            _ => TaskStatus::Todo,
-        },
-        priority: match priority_str.as_str() {
-            "low" => Priority::Low,
-            "medium" => Priority::Medium,
-            "high" => Priority::High,
-            "urgent" => Priority::Urgent,
-            _ => Priority::None,
-        },
+        status: TaskStatus::from_str_lossy(&status_str),
+        priority: Priority::from_str_lossy(&priority_str),
         project_id: project_id.map(|s| ProjectId(parse_uuid(&s, "task.project_id"))),
         parent_task_id: parent_task_id.map(|s| TaskId(parse_uuid(&s, "task.parent_task_id"))),
         tags: parse_json(&tags_json, "task.tags"),
@@ -66,18 +87,11 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
             .into_iter()
             .map(|s| TaskId(parse_uuid(&s, "task.dependencies[]")))
             .collect(),
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-        scheduled_date: scheduled_date
-            .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-        completed_at: completed_at.and_then(|s| {
-            chrono::DateTime::parse_from_rfc3339(&s)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-                .ok()
-        }),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
+        due_date: parse_optional_date(due_date),
+        scheduled_date: parse_optional_date(scheduled_date),
+        completed_at: parse_optional_datetime(completed_at),
         recurrence: recurrence_json.and_then(|s| serde_json::from_str(&s).ok()),
         estimated_minutes: row.get("estimated_minutes")?,
         actual_minutes: row.get::<_, i32>("actual_minutes")? as u32,
@@ -89,11 +103,9 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
             .and_then(|s| uuid::Uuid::parse_str(&s).ok())
             .map(TaskId),
         custom_fields: parse_json(&custom_fields_json, "task.custom_fields"),
-        snooze_until: row
-            .get::<_, Option<String>>("snooze_until")
-            .ok()
-            .flatten()
-            .and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        snooze_until: parse_optional_date(
+            row.get::<_, Option<String>>("snooze_until").ok().flatten(),
+        ),
     })
 }
 
@@ -113,21 +125,14 @@ pub(crate) fn project_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proj
         id: ProjectId(parse_uuid(&id, "project.id")),
         name: row.get("name")?,
         description: row.get("description")?,
-        status: match status_str.as_str() {
-            "on_hold" => ProjectStatus::OnHold,
-            "completed" => ProjectStatus::Completed,
-            "archived" => ProjectStatus::Archived,
-            _ => ProjectStatus::Active,
-        },
+        status: ProjectStatus::from_str_lossy(&status_str),
         parent_id: parent_id.map(|s| ProjectId(parse_uuid(&s, "project.parent_id"))),
         color: row.get("color")?,
         icon: row.get("icon")?,
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-        due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
+        start_date: parse_optional_date(start_date),
+        due_date: parse_optional_date(due_date),
         default_tags: parse_json(&default_tags_json, "project.default_tags"),
         custom_fields: parse_json(&custom_fields_json, "project.custom_fields"),
     })
@@ -144,13 +149,8 @@ pub(crate) fn time_entry_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<T
         id: TimeEntryId(parse_uuid(&id, "time_entry.id")),
         task_id: TaskId(parse_uuid(&task_id, "time_entry.task_id")),
         description: row.get("description")?,
-        started_at: chrono::DateTime::parse_from_rfc3339(&started_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        ended_at: ended_at.and_then(|s| {
-            chrono::DateTime::parse_from_rfc3339(&s)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-                .ok()
-        }),
+        started_at: parse_datetime(&started_at),
+        ended_at: parse_optional_datetime(ended_at),
         duration_minutes: row
             .get::<_, Option<i32>>("duration_minutes")?
             .map(|m| m as u32),
@@ -168,10 +168,8 @@ pub(crate) fn work_log_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Wor
         id: WorkLogEntryId(parse_uuid(&id, "work_log.id")),
         task_id: TaskId(parse_uuid(&task_id, "work_log.task_id")),
         content: row.get("content")?,
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
     })
 }
 
@@ -191,18 +189,15 @@ pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit>
         name: row.get("name")?,
         description: row.get("description")?,
         frequency: serde_json::from_str(&frequency_json).unwrap_or(HabitFrequency::Daily),
-        start_date: chrono::NaiveDate::parse_from_str(&start_date, "%Y-%m-%d")
-            .unwrap_or_else(|_| chrono::Utc::now().date_naive()),
-        end_date: end_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        start_date: parse_date(&start_date).unwrap_or_else(|| Utc::now().date_naive()),
+        end_date: parse_optional_date(end_date),
         check_ins: std::collections::HashMap::new(), // Populated separately
         color: row.get("color")?,
         icon: row.get("icon")?,
         tags: parse_json(&tags_json, "habit.tags"),
         archived: archived != 0,
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
     })
 }
 
@@ -221,22 +216,15 @@ pub(crate) fn goal_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
         id: GoalId(parse_uuid(&id, "goal.id")),
         name: row.get("name")?,
         description: row.get("description")?,
-        status: match status_str.as_str() {
-            "on_hold" => GoalStatus::OnHold,
-            "completed" => GoalStatus::Completed,
-            "archived" => GoalStatus::Archived,
-            _ => GoalStatus::Active,
-        },
-        start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
-        due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        status: GoalStatus::from_str_lossy(&status_str),
+        start_date: parse_optional_date(start_date),
+        due_date: parse_optional_date(due_date),
         quarter: quarter_json.and_then(|s| serde_json::from_str(&s).ok()),
         manual_progress: manual_progress.map(|p| p.clamp(0, 100) as u8),
         color: row.get("color")?,
         icon: row.get("icon")?,
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
     })
 }
 
@@ -256,12 +244,7 @@ pub(crate) fn key_result_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<K
         goal_id: GoalId(parse_uuid(&goal_id, "key_result.goal_id")),
         name: row.get("name")?,
         description: row.get("description")?,
-        status: match status_str.as_str() {
-            "in_progress" => KeyResultStatus::InProgress,
-            "at_risk" => KeyResultStatus::AtRisk,
-            "completed" => KeyResultStatus::Completed,
-            _ => KeyResultStatus::NotStarted,
-        },
+        status: KeyResultStatus::from_str_lossy(&status_str),
         target_value: row.get("target_value")?,
         current_value: row.get("current_value")?,
         unit: row.get("unit")?,
@@ -280,9 +263,7 @@ pub(crate) fn key_result_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<K
         .into_iter()
         .map(|s| TaskId(parse_uuid(&s, "key_result.linked_task_ids[]")))
         .collect(),
-        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
-            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        created_at: parse_datetime(&created_at),
+        updated_at: parse_datetime(&updated_at),
     })
 }

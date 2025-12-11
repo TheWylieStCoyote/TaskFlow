@@ -1,9 +1,9 @@
 //! Shared UI primitives for consistent widget styling.
 //!
 //! This module provides reusable building blocks for UI components:
-//! - [`blocks`] - Styled block builders with consistent theming
-//! - [`lists`] - List highlight configurations
-//! - [`modals`] - Modal/dialog wrapper widgets
+//! - Styled block builders with consistent theming
+//! - List highlight configurations
+//! - Modal/dialog wrapper widgets
 //!
 //! # Example
 //!

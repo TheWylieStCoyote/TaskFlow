@@ -204,3 +204,201 @@ pub fn parse_date(s: &str) -> Option<NaiveDate> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Duration, Utc};
+
+    // ========================================================================
+    // parse_priorities tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_priorities_all_levels() {
+        let input = vec![
+            "none".to_string(),
+            "low".to_string(),
+            "medium".to_string(),
+            "high".to_string(),
+            "urgent".to_string(),
+        ];
+        let result = parse_priorities(&input);
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], Priority::None);
+        assert_eq!(result[1], Priority::Low);
+        assert_eq!(result[2], Priority::Medium);
+        assert_eq!(result[3], Priority::High);
+        assert_eq!(result[4], Priority::Urgent);
+    }
+
+    #[test]
+    fn test_parse_priorities_case_insensitive() {
+        let input = vec!["HIGH".to_string(), "Low".to_string(), "URGENT".to_string()];
+        let result = parse_priorities(&input);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0], Priority::High);
+        assert_eq!(result[1], Priority::Low);
+        assert_eq!(result[2], Priority::Urgent);
+    }
+
+    #[test]
+    fn test_parse_priorities_med_alias() {
+        let input = vec!["med".to_string()];
+        let result = parse_priorities(&input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], Priority::Medium);
+    }
+
+    #[test]
+    fn test_parse_priorities_invalid() {
+        let input = vec![
+            "invalid".to_string(),
+            "high".to_string(),
+            "unknown".to_string(),
+        ];
+        let result = parse_priorities(&input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], Priority::High);
+    }
+
+    #[test]
+    fn test_parse_priorities_empty() {
+        let input: Vec<String> = vec![];
+        let result = parse_priorities(&input);
+        assert!(result.is_empty());
+    }
+
+    // ========================================================================
+    // parse_statuses tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_statuses_all_statuses() {
+        let input = vec![
+            "todo".to_string(),
+            "in-progress".to_string(),
+            "blocked".to_string(),
+            "done".to_string(),
+            "cancelled".to_string(),
+        ];
+        let result = parse_statuses(&input);
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], TaskStatus::Todo);
+        assert_eq!(result[1], TaskStatus::InProgress);
+        assert_eq!(result[2], TaskStatus::Blocked);
+        assert_eq!(result[3], TaskStatus::Done);
+        assert_eq!(result[4], TaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn test_parse_statuses_case_insensitive() {
+        let input = vec!["TODO".to_string(), "Done".to_string()];
+        let result = parse_statuses(&input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], TaskStatus::Todo);
+        assert_eq!(result[1], TaskStatus::Done);
+    }
+
+    #[test]
+    fn test_parse_statuses_aliases() {
+        let input = vec![
+            "in_progress".to_string(),
+            "inprogress".to_string(),
+            "progress".to_string(),
+            "completed".to_string(),
+            "canceled".to_string(),
+        ];
+        let result = parse_statuses(&input);
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[0], TaskStatus::InProgress);
+        assert_eq!(result[1], TaskStatus::InProgress);
+        assert_eq!(result[2], TaskStatus::InProgress);
+        assert_eq!(result[3], TaskStatus::Done);
+        assert_eq!(result[4], TaskStatus::Cancelled);
+    }
+
+    #[test]
+    fn test_parse_statuses_invalid() {
+        let input = vec!["invalid".to_string(), "todo".to_string()];
+        let result = parse_statuses(&input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], TaskStatus::Todo);
+    }
+
+    #[test]
+    fn test_parse_statuses_empty() {
+        let input: Vec<String> = vec![];
+        let result = parse_statuses(&input);
+        assert!(result.is_empty());
+    }
+
+    // ========================================================================
+    // parse_date tests
+    // ========================================================================
+
+    #[test]
+    fn test_parse_date_today() {
+        let today = Utc::now().date_naive();
+        assert_eq!(parse_date("today"), Some(today));
+        assert_eq!(parse_date("TODAY"), Some(today));
+        assert_eq!(parse_date("  today  "), Some(today));
+    }
+
+    #[test]
+    fn test_parse_date_tomorrow() {
+        let tomorrow = Utc::now().date_naive() + Duration::days(1);
+        assert_eq!(parse_date("tomorrow"), Some(tomorrow));
+        assert_eq!(parse_date("TOMORROW"), Some(tomorrow));
+    }
+
+    #[test]
+    fn test_parse_date_yesterday() {
+        let yesterday = Utc::now().date_naive() - Duration::days(1);
+        assert_eq!(parse_date("yesterday"), Some(yesterday));
+    }
+
+    #[test]
+    fn test_parse_date_plus_days() {
+        let today = Utc::now().date_naive();
+        assert_eq!(parse_date("+7d"), Some(today + Duration::days(7)));
+        assert_eq!(parse_date("+7"), Some(today + Duration::days(7)));
+        assert_eq!(parse_date("+30d"), Some(today + Duration::days(30)));
+    }
+
+    #[test]
+    fn test_parse_date_minus_days() {
+        let today = Utc::now().date_naive();
+        assert_eq!(parse_date("-3d"), Some(today - Duration::days(3)));
+        assert_eq!(parse_date("-3"), Some(today - Duration::days(3)));
+        assert_eq!(parse_date("-14d"), Some(today - Duration::days(14)));
+    }
+
+    #[test]
+    fn test_parse_date_iso_format() {
+        assert_eq!(
+            parse_date("2025-12-25"),
+            NaiveDate::from_ymd_opt(2025, 12, 25)
+        );
+        assert_eq!(
+            parse_date("2024-01-01"),
+            NaiveDate::from_ymd_opt(2024, 1, 1)
+        );
+    }
+
+    #[test]
+    fn test_parse_date_invalid() {
+        assert!(parse_date("invalid").is_none());
+        assert!(parse_date("not-a-date").is_none());
+        assert!(parse_date("2025/12/25").is_none()); // Wrong separator
+        assert!(parse_date("25-12-2025").is_none()); // Wrong order
+    }
+
+    #[test]
+    fn test_parse_date_edge_cases() {
+        let today = Utc::now().date_naive();
+        assert_eq!(parse_date("+0"), Some(today));
+        assert_eq!(parse_date("-0"), Some(today));
+        assert_eq!(parse_date("+1"), Some(today + Duration::days(1)));
+    }
+}

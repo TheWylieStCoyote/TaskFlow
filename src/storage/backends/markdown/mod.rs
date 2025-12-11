@@ -74,7 +74,7 @@ impl MarkdownBackend {
     ///
     /// # Errors
     ///
-    /// Returns a [`crate::storage::StorageError`] if the backend cannot be created.
+    /// Returns an error if the backend cannot be created.
     pub fn new(path: &Path) -> StorageResult<Self> {
         Ok(Self {
             base_path: path.to_path_buf(),

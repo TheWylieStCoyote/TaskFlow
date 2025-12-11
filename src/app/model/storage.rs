@@ -421,3 +421,175 @@ impl Model {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ========================================================================
+    // has_storage tests
+    // ========================================================================
+
+    #[test]
+    fn test_has_storage_default() {
+        let model = Model::new();
+        assert!(!model.has_storage());
+    }
+
+    // ========================================================================
+    // modify_task_with_undo tests
+    // ========================================================================
+
+    #[test]
+    fn test_modify_task_with_undo_changes_task() {
+        let mut model = Model::new();
+
+        let task = Task::new("Original title");
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+
+        let result = model.modify_task_with_undo(&task_id, |t| {
+            t.title = "Modified title".to_string();
+        });
+
+        assert!(result);
+        assert_eq!(model.tasks.get(&task_id).unwrap().title, "Modified title");
+    }
+
+    #[test]
+    fn test_modify_task_with_undo_updates_timestamp() {
+        let mut model = Model::new();
+
+        let task = Task::new("Test");
+        let task_id = task.id;
+        let original_updated_at = task.updated_at;
+        model.tasks.insert(task.id, task);
+
+        // Small delay to ensure timestamp changes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        model.modify_task_with_undo(&task_id, |t| {
+            t.title = "Modified".to_string();
+        });
+
+        let modified_task = model.tasks.get(&task_id).unwrap();
+        assert!(modified_task.updated_at > original_updated_at);
+    }
+
+    #[test]
+    fn test_modify_task_with_undo_pushes_undo_action() {
+        let mut model = Model::new();
+
+        let task = Task::new("Test");
+        let task_id = task.id;
+        model.tasks.insert(task.id, task);
+
+        assert!(model.undo_stack.is_empty());
+
+        model.modify_task_with_undo(&task_id, |t| {
+            t.title = "Modified".to_string();
+        });
+
+        assert_eq!(model.undo_stack.len(), 1);
+        match model.undo_stack.peek() {
+            Some(UndoAction::TaskModified { before, after }) => {
+                assert_eq!(before.title, "Test");
+                assert_eq!(after.title, "Modified");
+            }
+            _ => panic!("Expected TaskModified undo action"),
+        }
+    }
+
+    #[test]
+    fn test_modify_task_with_undo_nonexistent_returns_false() {
+        let mut model = Model::new();
+        let random_id = TaskId::new();
+
+        let result = model.modify_task_with_undo(&random_id, |t| {
+            t.title = "Modified".to_string();
+        });
+
+        assert!(!result);
+        assert!(model.undo_stack.is_empty());
+    }
+
+    // ========================================================================
+    // modify_project_with_undo tests
+    // ========================================================================
+
+    #[test]
+    fn test_modify_project_with_undo_changes_project() {
+        let mut model = Model::new();
+
+        let project = Project::new("Original name");
+        let project_id = project.id;
+        model.projects.insert(project.id, project);
+
+        let result = model.modify_project_with_undo(&project_id, |p| {
+            p.name = "Modified name".to_string();
+        });
+
+        assert!(result);
+        assert_eq!(
+            model.projects.get(&project_id).unwrap().name,
+            "Modified name"
+        );
+    }
+
+    #[test]
+    fn test_modify_project_with_undo_updates_timestamp() {
+        let mut model = Model::new();
+
+        let project = Project::new("Test");
+        let project_id = project.id;
+        let original_updated_at = project.updated_at;
+        model.projects.insert(project.id, project);
+
+        // Small delay to ensure timestamp changes
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        model.modify_project_with_undo(&project_id, |p| {
+            p.name = "Modified".to_string();
+        });
+
+        let modified_project = model.projects.get(&project_id).unwrap();
+        assert!(modified_project.updated_at > original_updated_at);
+    }
+
+    #[test]
+    fn test_modify_project_with_undo_pushes_undo_action() {
+        let mut model = Model::new();
+
+        let project = Project::new("Test");
+        let project_id = project.id;
+        model.projects.insert(project.id, project);
+
+        assert!(model.undo_stack.is_empty());
+
+        model.modify_project_with_undo(&project_id, |p| {
+            p.name = "Modified".to_string();
+        });
+
+        assert_eq!(model.undo_stack.len(), 1);
+        match model.undo_stack.peek() {
+            Some(UndoAction::ProjectModified { before, after }) => {
+                assert_eq!(before.name, "Test");
+                assert_eq!(after.name, "Modified");
+            }
+            _ => panic!("Expected ProjectModified undo action"),
+        }
+    }
+
+    #[test]
+    fn test_modify_project_with_undo_nonexistent_returns_false() {
+        let mut model = Model::new();
+        let random_id = ProjectId::new();
+
+        let result = model.modify_project_with_undo(&random_id, |p| {
+            p.name = "Modified".to_string();
+        });
+
+        assert!(!result);
+        assert!(model.undo_stack.is_empty());
+    }
+}

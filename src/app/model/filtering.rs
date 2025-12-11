@@ -1,6 +1,6 @@
 //! Task filtering and sorting methods for the Model.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Datelike, NaiveDate, Utc};
 
@@ -139,29 +139,33 @@ impl Model {
 
         // Build final list: parent followed by its subtasks (recursively)
         let mut result = Vec::new();
+        // Track seen IDs to avoid O(n²) contains() calls
+        let mut seen_ids: HashSet<TaskId> = HashSet::new();
 
         // Recursive helper to add a task and all its descendants
         fn add_with_descendants(
             task_id: &TaskId,
             subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
             result: &mut Vec<TaskId>,
+            seen_ids: &mut HashSet<TaskId>,
         ) {
             result.push(*task_id);
+            seen_ids.insert(*task_id);
             if let Some(children) = subtasks_by_parent.get(task_id) {
                 for child in children {
-                    add_with_descendants(&child.id, subtasks_by_parent, result);
+                    add_with_descendants(&child.id, subtasks_by_parent, result, seen_ids);
                 }
             }
         }
 
         for parent in parent_tasks {
-            add_with_descendants(&parent.id, &subtasks_by_parent, &mut result);
+            add_with_descendants(&parent.id, &subtasks_by_parent, &mut result, &mut seen_ids);
         }
 
         // Handle orphaned subtasks (subtasks whose parent is not visible)
-        // These are shown at the end
+        // These are shown at the end - O(1) lookup with HashSet
         for task in &filtered_tasks {
-            if task.parent_task_id.is_some() && !result.contains(&task.id) {
+            if task.parent_task_id.is_some() && !seen_ids.contains(&task.id) {
                 result.push(task.id);
             }
         }
@@ -200,22 +204,24 @@ impl Model {
 
         // Filter by tags (if set)
         if let Some(ref filter_tags) = self.filtering.filter.tags {
+            // Pre-compute lowercased filter tags to avoid repeated allocations
+            let filter_tags_lower: Vec<String> =
+                filter_tags.iter().map(|t| t.to_lowercase()).collect();
+            // Pre-compute lowercased task tags
+            let task_tags_lower: Vec<String> = task.tags.iter().map(|t| t.to_lowercase()).collect();
+
             let has_tags = match self.filtering.filter.tags_mode {
                 TagFilterMode::Any => {
                     // Task must have at least one of the filter tags
-                    filter_tags.iter().any(|ft| {
-                        task.tags
-                            .iter()
-                            .any(|t| t.to_lowercase() == ft.to_lowercase())
-                    })
+                    filter_tags_lower
+                        .iter()
+                        .any(|ft| task_tags_lower.iter().any(|t| t == ft))
                 }
                 TagFilterMode::All => {
                     // Task must have all of the filter tags
-                    filter_tags.iter().all(|ft| {
-                        task.tags
-                            .iter()
-                            .any(|t| t.to_lowercase() == ft.to_lowercase())
-                    })
+                    filter_tags_lower
+                        .iter()
+                        .all(|ft| task_tags_lower.iter().any(|t| t == ft))
                 }
             };
             if !has_tags {

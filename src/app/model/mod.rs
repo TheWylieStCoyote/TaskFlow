@@ -49,14 +49,17 @@ mod cache;
 mod editor;
 mod filtering;
 mod hierarchy;
+mod layout_cache;
 mod sample_data;
 mod storage;
 mod time_tracking;
 mod types;
+mod view_queries;
 
 pub use editor::MultilineEditor;
 
-pub use cache::{FooterStats, LayoutCache, TaskCache};
+pub use cache::{FooterStats, TaskCache};
+pub use layout_cache::LayoutCache;
 pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
     DescriptionEditorState, DuplicatesViewState, FilterState, GoalViewState, HabitViewState,

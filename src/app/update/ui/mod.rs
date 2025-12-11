@@ -64,17 +64,22 @@
 
 mod calendar;
 mod delete;
+mod duplicates;
 mod editors;
 mod filters;
+mod goals;
+mod habits;
 mod input;
 mod keybindings;
 mod macros;
 mod multi_select;
+mod reschedule;
 mod reviews;
 mod task_ops;
 mod templates;
 mod time_tracking;
 mod view_state;
+mod views;
 
 use std::fmt::Write as _;
 
@@ -82,15 +87,20 @@ use crate::app::{Model, UiMessage, UndoAction};
 use crate::ui::{InputMode, InputTarget};
 
 use calendar::handle_ui_calendar;
+use duplicates::handle_ui_duplicates;
 use editors::{handle_ui_description_editor, handle_ui_work_log};
 use filters::handle_ui_saved_filters;
-use input::{enter_focus_for_task, handle_submit_input, start_input};
+use goals::handle_ui_goals;
+use habits::handle_ui_habits;
+use input::{handle_submit_input, start_input};
 use keybindings::handle_ui_keybindings;
 use macros::handle_ui_macros;
+use reschedule::handle_ui_reschedule;
 use reviews::{handle_ui_daily_review, handle_ui_weekly_review};
 use task_ops::handle_move_task;
 use templates::handle_ui_templates;
 use time_tracking::handle_ui_time_log;
+use views::handle_ui_views;
 
 // Re-export for external use
 pub use input::create_task_from_quick_add;
@@ -650,212 +660,46 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             handle_ui_weekly_review(model, msg);
         }
 
-        // Task snooze
-        UiMessage::StartSnoozeTask => {
-            if let Some(task_id) = model.selected_task_id() {
-                start_input(model, InputTarget::SnoozeTask(task_id), None);
-            }
-        }
-        UiMessage::ClearSnooze => {
-            if let Some(task_id) = model.selected_task_id() {
-                if let Some(task) = model.tasks.get_mut(&task_id) {
-                    task.clear_snooze();
-                }
-                model.sync_task_by_id(&task_id);
-                model.alerts.status_message = Some("Snooze cleared".to_string());
-                model.refresh_visible_tasks();
-            }
+        // Task snooze and quick reschedule - delegated to helper
+        UiMessage::StartSnoozeTask
+        | UiMessage::ClearSnooze
+        | UiMessage::RescheduleTomorrow
+        | UiMessage::RescheduleNextWeek
+        | UiMessage::RescheduleNextMonday => {
+            handle_ui_reschedule(model, msg);
         }
 
-        // Quick reschedule
-        UiMessage::RescheduleTomorrow => {
-            if let Some(task_id) = model.selected_task_id() {
-                let tomorrow = chrono::Local::now().date_naive() + chrono::Duration::days(1);
-                model.modify_task_with_undo(&task_id, |task| {
-                    task.due_date = Some(tomorrow);
-                });
-                model.alerts.status_message =
-                    Some(format!("Rescheduled to {}", tomorrow.format("%b %d")));
-                model.refresh_visible_tasks();
-            }
-        }
-        UiMessage::RescheduleNextWeek => {
-            if let Some(task_id) = model.selected_task_id() {
-                let next_week = chrono::Local::now().date_naive() + chrono::Duration::days(7);
-                model.modify_task_with_undo(&task_id, |task| {
-                    task.due_date = Some(next_week);
-                });
-                model.alerts.status_message =
-                    Some(format!("Rescheduled to {}", next_week.format("%b %d")));
-                model.refresh_visible_tasks();
-            }
-        }
-        UiMessage::RescheduleNextMonday => {
-            if let Some(task_id) = model.selected_task_id() {
-                use chrono::Datelike;
-                let today = chrono::Local::now().date_naive();
-                // num_days_from_monday: Mon=0, Tue=1, ..., Sun=6
-                // To get next Monday: (7 - current_weekday) % 7, but if 0 use 7
-                let days_from_monday = today.weekday().num_days_from_monday();
-                let days_until_monday = (7 - days_from_monday) % 7;
-                let days_until_monday = if days_until_monday == 0 {
-                    7
-                } else {
-                    days_until_monday
-                };
-                let next_monday = today + chrono::Duration::days(days_until_monday.into());
-                model.modify_task_with_undo(&task_id, |task| {
-                    task.due_date = Some(next_monday);
-                });
-                model.alerts.status_message =
-                    Some(format!("Rescheduled to {}", next_monday.format("%b %d")));
-                model.refresh_visible_tasks();
-            }
+        // Habit tracking UI - delegated to helper
+        UiMessage::StartCreateHabit
+        | UiMessage::StartEditHabit(_)
+        | UiMessage::HabitUp
+        | UiMessage::HabitDown
+        | UiMessage::HabitToggleToday
+        | UiMessage::ShowHabitAnalytics
+        | UiMessage::HideHabitAnalytics
+        | UiMessage::HabitArchive
+        | UiMessage::HabitDelete
+        | UiMessage::HabitToggleShowArchived => {
+            handle_ui_habits(model, msg);
         }
 
-        // Habit tracking UI
-        UiMessage::StartCreateHabit => {
-            start_input(model, InputTarget::NewHabit, None);
-        }
-        UiMessage::StartEditHabit(habit_id) => {
-            let prefill = model.habits.get(&habit_id).map(|h| h.name.clone());
-            start_input(model, InputTarget::EditHabit(habit_id), prefill);
-        }
-        UiMessage::HabitUp => {
-            if model.habit_view.selected > 0 {
-                model.habit_view.selected -= 1;
-            }
-        }
-        UiMessage::HabitDown => {
-            if !model.visible_habits.is_empty()
-                && model.habit_view.selected < model.visible_habits.len() - 1
-            {
-                model.habit_view.selected += 1;
-            }
-        }
-        UiMessage::HabitToggleToday => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
-                let today = chrono::Utc::now().date_naive();
-                if let Some(habit) = model.habits.get_mut(&habit_id) {
-                    let currently_completed = habit.is_completed_on(today);
-                    habit.check_in(today, !currently_completed, None);
-                }
-                model.sync_habit_by_id(&habit_id);
-            }
-        }
-        UiMessage::ShowHabitAnalytics => {
-            model.habit_view.show_analytics = true;
-        }
-        UiMessage::HideHabitAnalytics => {
-            model.habit_view.show_analytics = false;
-        }
-        UiMessage::HabitArchive => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
-                if let Some(habit) = model.habits.get_mut(&habit_id) {
-                    habit.archived = true;
-                    habit.updated_at = chrono::Utc::now();
-                }
-                model.sync_habit_by_id(&habit_id);
-                model.refresh_visible_habits();
-            }
-        }
-        UiMessage::HabitDelete => {
-            if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
-                model.habits.remove(&habit_id);
-                model.delete_habit_from_storage(&habit_id);
-                model.refresh_visible_habits();
-            }
-        }
-        UiMessage::HabitToggleShowArchived => {
-            model.habit_view.show_archived = !model.habit_view.show_archived;
-            model.refresh_visible_habits();
+        // Goal/OKR tracking UI - delegated to helper
+        UiMessage::StartCreateGoal
+        | UiMessage::StartEditGoal(_)
+        | UiMessage::StartCreateKeyResult => {
+            handle_ui_goals(model, msg);
         }
 
-        // Goal/OKR tracking UI
-        UiMessage::StartCreateGoal => {
-            start_input(model, InputTarget::GoalName, None);
-        }
-        UiMessage::StartEditGoal(goal_id) => {
-            let prefill = model.goals.get(&goal_id).map(|g| g.name.clone());
-            start_input(model, InputTarget::EditGoalName(goal_id), prefill);
-        }
-        UiMessage::StartCreateKeyResult => {
-            if let Some(&goal_id) = model.visible_goals.get(model.goal_view.selected_goal) {
-                start_input(model, InputTarget::KeyResultName(goal_id), None);
-            }
-        }
-
-        UiMessage::TimelineToggleDependencies => {
-            model.timeline_state.show_dependencies = !model.timeline_state.show_dependencies;
-        }
-        UiMessage::TimelineViewSelected => {
-            // Get timeline tasks (filtered and sorted same as timeline widget)
-            let timeline_tasks: Vec<_> = model
-                .visible_tasks
-                .iter()
-                .filter_map(|id| model.tasks.get(id))
-                .filter(|t| t.scheduled_date.is_some() || t.due_date.is_some())
-                .collect();
-
-            if let Some(task) = timeline_tasks.get(model.timeline_state.selected_task_index) {
-                enter_focus_for_task(model, task.id);
-            }
-        }
-        UiMessage::KanbanViewSelected => {
-            let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
-            if let Some(&task_id) = column_tasks.get(model.view_selection.kanban_task_index) {
-                enter_focus_for_task(model, task_id);
-            }
-        }
-        UiMessage::EisenhowerViewSelected => {
-            let quadrant_tasks =
-                model.eisenhower_quadrant_tasks(model.view_selection.eisenhower_quadrant);
-            if let Some(&task_id) = quadrant_tasks.get(model.view_selection.eisenhower_task_index) {
-                enter_focus_for_task(model, task_id);
-            }
-        }
-        UiMessage::WeeklyPlannerViewSelected => {
-            let day_tasks = model.weekly_planner_day_tasks(model.view_selection.weekly_planner_day);
-            if let Some(&task_id) = day_tasks.get(model.view_selection.weekly_planner_task_index) {
-                enter_focus_for_task(model, task_id);
-            }
-        }
-        UiMessage::NetworkViewSelected => {
-            let network_tasks = model.network_tasks();
-            if let Some(&task_id) = network_tasks.get(model.view_selection.network_task_index) {
-                enter_focus_for_task(model, task_id);
-            }
-        }
-        UiMessage::ChainNext => {
-            // Navigate to next task in chain
-            if let Some(current_task) = model.selected_task() {
-                if let Some(next_id) = current_task.next_task_id {
-                    // Find this task's position in visible_tasks
-                    if let Some(pos) = model.visible_tasks.iter().position(|id| *id == next_id) {
-                        model.selected_index = pos;
-                        model.alerts.status_message = Some("→ Next in chain".to_string());
-                    }
-                }
-            }
-        }
-        UiMessage::ChainPrev => {
-            // Navigate to previous task in chain (the task that links to this one)
-            if let Some(current_task) = model.selected_task() {
-                let current_id = current_task.id;
-                // Find task that has next_task_id pointing to current task
-                if let Some(prev_task) = model
-                    .tasks
-                    .values()
-                    .find(|t| t.next_task_id == Some(current_id))
-                {
-                    let prev_id = prev_task.id;
-                    // Find this task's position in visible_tasks
-                    if let Some(pos) = model.visible_tasks.iter().position(|id| *id == prev_id) {
-                        model.selected_index = pos;
-                        model.alerts.status_message = Some("← Previous in chain".to_string());
-                    }
-                }
-            }
+        // View-specific selection - delegated to helper
+        UiMessage::TimelineToggleDependencies
+        | UiMessage::TimelineViewSelected
+        | UiMessage::KanbanViewSelected
+        | UiMessage::EisenhowerViewSelected
+        | UiMessage::WeeklyPlannerViewSelected
+        | UiMessage::NetworkViewSelected
+        | UiMessage::ChainNext
+        | UiMessage::ChainPrev => {
+            handle_ui_views(model, msg);
         }
 
         // Burndown chart controls
@@ -879,73 +723,9 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.alerts.status_message = Some(format!("Scope creep display: {status}"));
         }
 
-        // Duplicate detection controls
-        UiMessage::DismissDuplicate => {
-            if model.current_view == crate::app::ViewId::Duplicates
-                && !model.duplicates_view.pairs.is_empty()
-            {
-                let selected = model.duplicates_view.selected;
-                if selected < model.duplicates_view.pairs.len() {
-                    model.duplicates_view.pairs.remove(selected);
-                    // Clamp selection
-                    if !model.duplicates_view.pairs.is_empty() {
-                        model.duplicates_view.selected = model
-                            .duplicates_view
-                            .selected
-                            .min(model.duplicates_view.pairs.len() - 1);
-                    }
-                    model.alerts.status_message = Some("Duplicate pair dismissed".to_string());
-                }
-            }
-        }
-        UiMessage::MergeDuplicates => {
-            if model.current_view == crate::app::ViewId::Duplicates
-                && !model.duplicates_view.pairs.is_empty()
-            {
-                let selected = model.duplicates_view.selected;
-                if let Some(pair) = model.duplicates_view.pairs.get(selected).cloned() {
-                    // Collect time entries for the task being deleted
-                    let task_entries: Vec<_> = model
-                        .time_entries
-                        .values()
-                        .filter(|e| e.task_id == pair.task2_id)
-                        .cloned()
-                        .collect();
-
-                    // Delete the second task
-                    if let Some(task) = model.tasks.remove(&pair.task2_id) {
-                        model.undo_stack.push(crate::app::UndoAction::TaskDeleted {
-                            task: Box::new(task),
-                            time_entries: task_entries,
-                        });
-                        model.delete_task_from_storage(&pair.task2_id);
-                        // Remove the pair from the list
-                        model.duplicates_view.pairs.remove(selected);
-                        // Clamp selection
-                        if !model.duplicates_view.pairs.is_empty() {
-                            model.duplicates_view.selected = model
-                                .duplicates_view
-                                .selected
-                                .min(model.duplicates_view.pairs.len() - 1);
-                        }
-                        model.alerts.status_message =
-                            Some("Tasks merged (duplicate deleted)".to_string());
-                        model.refresh_visible_tasks();
-                    }
-                }
-            }
-        }
-        UiMessage::RefreshDuplicates => {
-            if model.current_view == crate::app::ViewId::Duplicates {
-                model.duplicates_view.pairs =
-                    crate::domain::duplicate_detector::find_all_duplicates(
-                        &model.tasks,
-                        model.duplicates_view.threshold,
-                    );
-                model.duplicates_view.selected = 0;
-                let count = model.duplicates_view.pairs.len();
-                model.alerts.status_message = Some(format!("Found {count} duplicate pairs"));
-            }
+        // Duplicate detection controls - delegated to helper
+        UiMessage::DismissDuplicate | UiMessage::MergeDuplicates | UiMessage::RefreshDuplicates => {
+            handle_ui_duplicates(model, msg);
         }
         UiMessage::OpenInEditor => {
             // Open selected task's source file in editor (for git TODOs)

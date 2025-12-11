@@ -58,11 +58,11 @@ pub use editor::MultilineEditor;
 
 pub use cache::{FooterStats, LayoutCache, TaskCache};
 pub use types::{
-    AlertState, CalendarState, DailyReviewState, DescriptionEditorState, FilterState,
-    HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
-    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TemplatePickerState,
-    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
-    WorkLogEditorState,
+    AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
+    DescriptionEditorState, FilterState, HabitViewState, ImportState, InputState,
+    KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState, SavedFilterPickerState,
+    StorageState, TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom,
+    ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
 
 use std::collections::HashMap;
@@ -326,6 +326,10 @@ pub struct Model {
     pub task_cache: TaskCache,
     /// Cached layout rectangles for mouse hit-testing
     pub layout_cache: LayoutCache,
+
+    // Burndown chart state
+    /// Burndown chart configuration (time window, mode, scope creep)
+    pub burndown_state: BurndownState,
 }
 
 impl Model {
@@ -398,6 +402,7 @@ impl Model {
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
             layout_cache: LayoutCache::default(),
+            burndown_state: BurndownState::default(),
         }
     }
 

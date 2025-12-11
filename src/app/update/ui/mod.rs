@@ -842,6 +842,27 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
+
+        // Burndown chart controls
+        UiMessage::BurndownCycleWindow => {
+            model.burndown_state.time_window = model.burndown_state.time_window.next();
+            let label = model.burndown_state.time_window.label();
+            model.alerts.status_message = Some(format!("Time window: {label}"));
+        }
+        UiMessage::BurndownToggleMode => {
+            model.burndown_state.mode = model.burndown_state.mode.toggle();
+            let label = model.burndown_state.mode.label();
+            model.alerts.status_message = Some(format!("Mode: {label}"));
+        }
+        UiMessage::BurndownToggleScopeCreep => {
+            model.burndown_state.show_scope_creep = !model.burndown_state.show_scope_creep;
+            let status = if model.burndown_state.show_scope_creep {
+                "enabled"
+            } else {
+                "disabled"
+            };
+            model.alerts.status_message = Some(format!("Scope creep display: {status}"));
+        }
     }
 }
 

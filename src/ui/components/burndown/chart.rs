@@ -18,17 +18,20 @@ impl Burndown<'_> {
 
         let chart_height = area.height.saturating_sub(2) as usize;
         let chart_width = area.width.saturating_sub(8) as usize;
+        let show_scope_creep = self.model.burndown_state.show_scope_creep;
 
-        // Scale values to fit chart
-        let max_value = data.total.max(1);
-        let scale = |v: usize| -> usize {
-            ((v as f64 / max_value as f64) * chart_height as f64).round() as usize
-        };
+        // Scale values to fit chart (use f64 for all calculations)
+        let max_value = data.total.max(1.0);
+        let scale = |v: f64| -> usize { ((v / max_value) * chart_height as f64).round() as usize };
 
-        // Draw Y-axis
+        // Draw Y-axis with appropriate labels
         for row in 0..chart_height {
-            let value = max_value - (row * max_value / chart_height.max(1));
-            let label = format!("{value:>4}│");
+            let value = max_value - (row as f64 * max_value / chart_height.max(1) as f64);
+            let label = if max_value >= 100.0 {
+                format!("{value:>4.0}│")
+            } else {
+                format!("{value:>4.1}│")
+            };
             buf.set_string(
                 area.x,
                 area.y + row as u16,
@@ -54,10 +57,10 @@ impl Burndown<'_> {
         }
 
         // Draw ideal line (from total to 0)
-        let points = data.daily_completions.len().min(chart_width);
+        let points = data.daily_points.len().min(chart_width);
         if points > 0 {
             for i in 0..points {
-                let ideal_remaining = data.total - (data.total * i / points.max(1));
+                let ideal_remaining = data.total - (data.total * i as f64 / points.max(1) as f64);
                 let ideal_y = chart_height - scale(ideal_remaining).min(chart_height);
 
                 let x = area.x + 5 + (i * chart_width / points) as u16;
@@ -69,20 +72,33 @@ impl Burndown<'_> {
             }
         }
 
+        // Draw scope creep indicators (tasks added) if enabled
+        if show_scope_creep {
+            for (i, point) in data.daily_points.iter().enumerate() {
+                if i >= chart_width || point.added <= 0.0 {
+                    continue;
+                }
+                // Draw a small marker at the top for days with scope additions
+                let x = area.x + 5 + (i * chart_width / points.max(1)) as u16;
+                buf.set_string(x, area.y, "+", Style::default().fg(Color::Magenta));
+            }
+        }
+
         // Draw actual line
-        for (i, &(_, remaining)) in data.daily_completions.iter().enumerate() {
+        for (i, point) in data.daily_points.iter().enumerate() {
             if i >= chart_width {
                 break;
             }
-            let actual_y = chart_height - scale(remaining).min(chart_height);
+            let actual_y = chart_height - scale(point.remaining).min(chart_height);
 
             let x = area.x + 5 + (i * chart_width / points.max(1)) as u16;
             let y = area.y + actual_y as u16;
 
             if y < area.y + chart_height as u16 {
-                let color = if remaining > data.total * 3 / 4 {
+                let ratio = point.remaining / data.total.max(1.0);
+                let color = if ratio > 0.75 {
                     Color::Red
-                } else if remaining > data.total / 2 {
+                } else if ratio > 0.5 {
                     Color::Yellow
                 } else {
                     Color::Green
@@ -92,12 +108,9 @@ impl Burndown<'_> {
         }
 
         // Date labels
-        if let (Some(first), Some(last)) = (
-            data.daily_completions.first(),
-            data.daily_completions.last(),
-        ) {
-            let start_label = format!("{}/{}", first.0.month(), first.0.day());
-            let end_label = format!("{}/{}", last.0.month(), last.0.day());
+        if let (Some(first), Some(last)) = (data.daily_points.first(), data.daily_points.last()) {
+            let start_label = format!("{}/{}", first.date.month(), first.date.day());
+            let end_label = format!("{}/{}", last.date.month(), last.date.day());
 
             buf.set_string(
                 area.x + 5,

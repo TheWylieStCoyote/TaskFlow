@@ -1,6 +1,7 @@
 //! Core types for the application model.
 //!
 //! This module is organized into submodules by functionality:
+//! - `burndown` - Burndown chart configuration state
 //! - `calendar` - Calendar view state
 //! - `timeline` - Timeline/Gantt view state
 //! - `reviews` - Daily and weekly review states
@@ -10,6 +11,7 @@
 //! - `pickers` - Modal picker states
 //! - `persistence` - Storage and import states
 
+mod burndown;
 mod calendar;
 mod editors;
 mod persistence;
@@ -20,6 +22,7 @@ mod timeline;
 mod ui_state;
 
 // Re-export all types for backwards compatibility
+pub use burndown::{BurndownMode, BurndownState, BurndownTimeWindow};
 pub use calendar::CalendarState;
 pub use editors::{DescriptionEditorState, TimeLogEditorState, WorkLogEditorState};
 pub use persistence::{ImportState, StorageState};

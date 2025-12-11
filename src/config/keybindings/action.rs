@@ -151,6 +151,11 @@ pub enum Action {
     ShowHabitAnalytics,
     HabitToggleShowArchived,
     HabitArchive,
+
+    // Burndown chart controls
+    BurndownCycleWindow,
+    BurndownToggleMode,
+    BurndownToggleScopeCreep,
 }
 
 /// Category for grouping actions in help display
@@ -168,6 +173,7 @@ pub enum ActionCategory {
     TaskChains,
     Calendar,
     Reports,
+    Burndown,
     Export,
     Import,
     Macros,
@@ -193,6 +199,7 @@ impl ActionCategory {
             Self::TaskChains => "Task Chains",
             Self::Calendar => "Calendar",
             Self::Reports => "Reports",
+            Self::Burndown => "Burndown",
             Self::Export => "Export",
             Self::Import => "Import",
             Self::Macros => "Macros",
@@ -218,12 +225,13 @@ impl ActionCategory {
             Self::TaskChains => 9,
             Self::Calendar => 10,
             Self::Reports => 11,
-            Self::Export => 12,
-            Self::Import => 13,
-            Self::Macros => 14,
-            Self::Templates => 15,
-            Self::Pomodoro => 16,
-            Self::System => 17,
+            Self::Burndown => 12,
+            Self::Export => 13,
+            Self::Import => 14,
+            Self::Macros => 15,
+            Self::Templates => 16,
+            Self::Pomodoro => 17,
+            Self::System => 18,
         }
     }
 }
@@ -360,6 +368,10 @@ impl Action {
             Self::ShowHabitAnalytics => "Show habit analytics",
             Self::HabitToggleShowArchived => "Toggle show archived",
             Self::HabitArchive => "Archive habit",
+            // Burndown
+            Self::BurndownCycleWindow => "Cycle time window",
+            Self::BurndownToggleMode => "Toggle task/time mode",
+            Self::BurndownToggleScopeCreep => "Toggle scope creep display",
         }
     }
 
@@ -481,6 +493,10 @@ impl Action {
             | Self::ShowHabitAnalytics
             | Self::HabitToggleShowArchived
             | Self::HabitArchive => ActionCategory::Habits,
+
+            Self::BurndownCycleWindow
+            | Self::BurndownToggleMode
+            | Self::BurndownToggleScopeCreep => ActionCategory::Burndown,
         }
     }
 }

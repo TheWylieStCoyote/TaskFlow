@@ -9,20 +9,22 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget},
 };
 
+use crate::app::BurndownMode;
+
 use super::{Burndown, BurndownData};
 
 impl Burndown<'_> {
     /// Render progress stats
     pub(crate) fn render_stats(&self, area: Rect, buf: &mut Buffer, data: &BurndownData) {
-        let progress_pct = if data.total > 0 {
-            data.completed * 100 / data.total
+        let progress_pct = if data.total > 0.0 {
+            ((data.completed / data.total) * 100.0) as usize
         } else {
             0
         };
 
         // Progress bar
         let bar_width = 20;
-        let filled = (bar_width * data.completed) / data.total.max(1);
+        let filled = ((bar_width as f64 * data.completed) / data.total.max(1.0)) as usize;
         let empty = bar_width - filled;
 
         let progress_bar = format!(
@@ -33,23 +35,40 @@ impl Burndown<'_> {
         );
 
         let today = Local::now().date_naive();
-        let days_elapsed = (today - data.start_date).num_days();
-        let _days_remaining = (data.end_date - today).num_days();
+        let days_elapsed = data.window_days;
 
         let velocity = if days_elapsed > 0 {
-            data.completed as f64 / days_elapsed as f64
+            data.completed / days_elapsed as f64
         } else {
             0.0
         };
 
         let projected_completion = if velocity > 0.0 {
-            let days_needed = (data.remaining as f64 / velocity).ceil() as i64;
+            let days_needed = (data.remaining / velocity).ceil() as i64;
             Some(today + Duration::days(days_needed))
         } else {
             None
         };
 
-        let lines = vec![
+        // Format values based on mode
+        let (total_label, total_str, completed_str, remaining_str, velocity_str) = match data.mode {
+            BurndownMode::TaskCount => (
+                "Total tasks: ",
+                format!("{:.0}", data.total),
+                format!("{:.0}", data.completed),
+                format!("{:.0}", data.remaining),
+                format!("{velocity:.1} tasks/day"),
+            ),
+            BurndownMode::TimeHours => (
+                "Total hours: ",
+                format!("{:.1}h", data.total),
+                format!("{:.1}h", data.completed),
+                format!("{:.1}h", data.remaining),
+                format!("{velocity:.1} hrs/day"),
+            ),
+        };
+
+        let mut lines = vec![
             Line::from(vec![
                 Span::styled(
                     "Progress: ",
@@ -69,11 +88,11 @@ impl Burndown<'_> {
             Line::from(""),
             Line::from(vec![
                 Span::styled(
-                    "Total tasks: ",
+                    total_label,
                     Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{}", data.total),
+                    total_str,
                     Style::default().fg(self.theme.colors.foreground.to_color()),
                 ),
             ]),
@@ -82,10 +101,7 @@ impl Burndown<'_> {
                     "Completed: ",
                     Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
-                Span::styled(
-                    format!("{}", data.completed),
-                    Style::default().fg(Color::Green),
-                ),
+                Span::styled(completed_str, Style::default().fg(Color::Green)),
             ]),
             Line::from(vec![
                 Span::styled(
@@ -93,14 +109,32 @@ impl Burndown<'_> {
                     Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{}", data.remaining),
-                    Style::default().fg(if data.remaining > 0 {
+                    remaining_str,
+                    Style::default().fg(if data.remaining > 0.0 {
                         Color::Yellow
                     } else {
                         Color::Green
                     }),
                 ),
             ]),
+        ];
+
+        // Add scope creep info if enabled and there's data
+        if self.model.burndown_state.show_scope_creep && data.scope_added > 0.0 {
+            let scope_str = match data.mode {
+                BurndownMode::TaskCount => format!("+{:.0} tasks", data.scope_added),
+                BurndownMode::TimeHours => format!("+{:.1}h", data.scope_added),
+            };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Scope added: ",
+                    Style::default().fg(self.theme.colors.muted.to_color()),
+                ),
+                Span::styled(scope_str, Style::default().fg(Color::Magenta)),
+            ]));
+        }
+
+        lines.extend([
             Line::from(""),
             Line::from(vec![
                 Span::styled(
@@ -108,7 +142,7 @@ impl Burndown<'_> {
                     Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
                 Span::styled(
-                    format!("{velocity:.1} tasks/day"),
+                    velocity_str,
                     Style::default().fg(self.theme.colors.foreground.to_color()),
                 ),
             ]),
@@ -149,7 +183,7 @@ impl Burndown<'_> {
                     Style::default().fg(self.theme.colors.foreground.to_color()),
                 ),
             ]),
-        ];
+        ]);
 
         let paragraph = Paragraph::new(lines).block(
             Block::default()

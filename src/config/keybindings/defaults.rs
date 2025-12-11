@@ -153,5 +153,13 @@ pub fn default_bindings() -> HashMap<String, Action> {
     // In Habits view: n=create, e=edit, d=delete, space/x=toggle, a=analytics
     // The habit-specific actions are mapped contextually in the key handler
 
+    // Burndown chart controls (work in Burndown view)
+    // w = cycle time window (7/14/30/90 days)
+    // o = toggle mode (tasks vs hours)
+    // + = toggle scope creep display
+    bindings.insert("w".to_string(), Action::BurndownCycleWindow);
+    bindings.insert("o".to_string(), Action::BurndownToggleMode);
+    bindings.insert("+".to_string(), Action::BurndownToggleScopeCreep);
+
     bindings
 }

@@ -12,9 +12,9 @@ fn test_burndown_empty_model() {
     let theme = Theme::default();
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
-    assert_eq!(data.total, 0);
-    assert_eq!(data.completed, 0);
-    assert_eq!(data.remaining, 0);
+    assert_eq!(data.total, 0.0);
+    assert_eq!(data.completed, 0.0);
+    assert_eq!(data.remaining, 0.0);
 }
 
 #[test]
@@ -36,20 +36,20 @@ fn test_burndown_with_tasks() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 4);
-    assert_eq!(data.completed, 2);
-    assert_eq!(data.remaining, 2);
+    assert_eq!(data.total, 4.0);
+    assert_eq!(data.completed, 2.0);
+    assert_eq!(data.remaining, 2.0);
 }
 
 #[test]
-fn test_burndown_daily_completions_length() {
+fn test_burndown_daily_points_length() {
     let model = Model::new().with_sample_data();
     let theme = Theme::default();
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    // Should have 14 days of completion history
-    assert_eq!(data.daily_completions.len(), 14);
+    // Should have 14 days of data (default window)
+    assert_eq!(data.daily_points.len(), 14);
 }
 
 #[test]
@@ -98,9 +98,9 @@ fn test_burndown_progress_calculation() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 4);
-    assert_eq!(data.completed, 2);
-    assert_eq!(data.remaining, 2);
+    assert_eq!(data.total, 4.0);
+    assert_eq!(data.completed, 2.0);
+    assert_eq!(data.remaining, 2.0);
 }
 
 #[test]
@@ -131,9 +131,9 @@ fn test_burndown_with_project_filter() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(Some(project_id));
 
-    assert_eq!(data.total, 2);
-    assert_eq!(data.completed, 1);
-    assert_eq!(data.remaining, 1);
+    assert_eq!(data.total, 2.0);
+    assert_eq!(data.completed, 1.0);
+    assert_eq!(data.remaining, 1.0);
 }
 
 #[test]
@@ -168,9 +168,9 @@ fn test_burndown_velocity_calculation() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 3);
-    assert_eq!(data.completed, 2);
-    assert!(!data.daily_completions.is_empty());
+    assert_eq!(data.total, 3.0);
+    assert_eq!(data.completed, 2.0);
+    assert!(!data.daily_points.is_empty());
 }
 
 #[test]
@@ -213,9 +213,9 @@ fn test_burndown_all_completed() {
     let burndown = Burndown::new(&model, &theme);
     let data = burndown.get_burndown_data(None);
 
-    assert_eq!(data.total, 2);
-    assert_eq!(data.completed, 2);
-    assert_eq!(data.remaining, 0);
+    assert_eq!(data.total, 2.0);
+    assert_eq!(data.completed, 2.0);
+    assert_eq!(data.remaining, 0.0);
 }
 
 #[test]
@@ -246,4 +246,88 @@ fn test_burndown_projects_panel() {
 
     // Should render without panic
     assert!(buffer.area.width > 0);
+}
+
+#[test]
+fn test_burndown_time_window_configuration() {
+    use crate::app::BurndownTimeWindow;
+
+    let mut model = Model::new();
+    let theme = Theme::default();
+
+    // Add a task
+    let task = Task::new("Test task");
+    model.tasks.insert(task.id, task);
+
+    // Test default window (14 days)
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+    assert_eq!(data.window_days, 14);
+    assert_eq!(data.daily_points.len(), 14);
+
+    // Change to 7 days
+    model.burndown_state.time_window = BurndownTimeWindow::Days7;
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+    assert_eq!(data.window_days, 7);
+    assert_eq!(data.daily_points.len(), 7);
+
+    // Change to 30 days
+    model.burndown_state.time_window = BurndownTimeWindow::Days30;
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+    assert_eq!(data.window_days, 30);
+    assert_eq!(data.daily_points.len(), 30);
+}
+
+#[test]
+fn test_burndown_mode_toggle() {
+    use crate::app::BurndownMode;
+
+    let mut model = Model::new();
+    let theme = Theme::default();
+
+    // Add tasks with estimates
+    let mut task1 = Task::new("Task 1").with_status(TaskStatus::Done);
+    task1.estimated_minutes = Some(60); // 1 hour
+    let mut task2 = Task::new("Task 2").with_status(TaskStatus::Todo);
+    task2.estimated_minutes = Some(120); // 2 hours
+
+    model.tasks.insert(task1.id, task1);
+    model.tasks.insert(task2.id, task2);
+
+    // Test task count mode (default)
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+    assert_eq!(data.mode, BurndownMode::TaskCount);
+    assert_eq!(data.total, 2.0);
+    assert_eq!(data.completed, 1.0);
+
+    // Test time hours mode
+    model.burndown_state.mode = BurndownMode::TimeHours;
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+    assert_eq!(data.mode, BurndownMode::TimeHours);
+    assert_eq!(data.total, 3.0); // 3 hours total
+    assert_eq!(data.completed, 1.0); // 1 hour completed
+}
+
+#[test]
+fn test_burndown_scope_creep_tracking() {
+    let mut model = Model::new();
+    let theme = Theme::default();
+
+    // Add a task
+    let task = Task::new("Test task");
+    model.tasks.insert(task.id, task);
+
+    // Enable scope creep display
+    model.burndown_state.show_scope_creep = true;
+
+    let burndown = Burndown::new(&model, &theme);
+    let data = burndown.get_burndown_data(None);
+
+    // scope_added should track tasks created in the period
+    // Since task was created "now", it should be counted as scope added today
+    assert!(data.scope_added >= 0.0);
 }

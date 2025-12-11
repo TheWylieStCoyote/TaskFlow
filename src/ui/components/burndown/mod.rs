@@ -38,8 +38,13 @@ impl<'a> Burndown<'a> {
 
 impl Widget for Burndown<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Build dynamic title with mode and window info
+        let mode_label = self.model.burndown_state.mode.label();
+        let window_label = self.model.burndown_state.time_window.label();
+        let title = format!(" Burndown - {mode_label} ({window_label}) ");
+
         let block = Block::default()
-            .title(" Burndown - Progress Chart ")
+            .title(title)
             .title_style(
                 Style::default()
                     .fg(self.theme.colors.accent.to_color())
@@ -65,12 +70,18 @@ impl Widget for Burndown<'_> {
 
         let right_panel = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(12), Constraint::Length(8)])
+            .constraints([Constraint::Min(14), Constraint::Length(8)])
             .split(chunks[1]);
 
-        // Chart area with border
+        // Chart area with border - show scope creep indicator if enabled
+        let scope_indicator = if self.model.burndown_state.show_scope_creep {
+            " [+scope] "
+        } else {
+            ""
+        };
+        let chart_title = format!(" Last {window_label}{scope_indicator}");
         let chart_block = Block::default()
-            .title(" Last 14 Days ")
+            .title(chart_title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.colors.border.to_color()));
         let chart_inner = chart_block.inner(chunks[0]);

@@ -392,4 +392,12 @@ pub enum UiMessage {
     ChainNext,
     /// Navigate to previous task in chain (in focus mode)
     ChainPrev,
+
+    // Burndown chart controls
+    /// Cycle burndown time window (7/14/30/90 days)
+    BurndownCycleWindow,
+    /// Toggle burndown mode between task count and time hours
+    BurndownToggleMode,
+    /// Toggle scope creep display
+    BurndownToggleScopeCreep,
 }

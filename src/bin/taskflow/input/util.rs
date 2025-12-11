@@ -159,5 +159,9 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowHabitAnalytics => Message::Ui(UiMessage::ShowHabitAnalytics),
         Action::HabitToggleShowArchived => Message::Ui(UiMessage::HabitToggleShowArchived),
         Action::HabitArchive => Message::Ui(UiMessage::HabitArchive),
+        // Burndown
+        Action::BurndownCycleWindow => Message::Ui(UiMessage::BurndownCycleWindow),
+        Action::BurndownToggleMode => Message::Ui(UiMessage::BurndownToggleMode),
+        Action::BurndownToggleScopeCreep => Message::Ui(UiMessage::BurndownToggleScopeCreep),
     }
 }

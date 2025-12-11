@@ -6,6 +6,35 @@ use crate::ui::{InputMode, InputTarget};
 
 use crate::app::update::system::handle_execute_import;
 
+/// Start input editing mode with the given target.
+///
+/// Sets the input mode to Editing, assigns the target, and optionally
+/// pre-fills the buffer. Cursor is placed at the end of the buffer.
+pub fn start_input(model: &mut Model, target: InputTarget, prefill: Option<String>) {
+    model.input.mode = InputMode::Editing;
+    model.input.target = target;
+    if let Some(text) = prefill {
+        model.input.buffer = text;
+        model.input.cursor = model.input.buffer.len();
+    } else {
+        model.input.buffer.clear();
+        model.input.cursor = 0;
+    }
+}
+
+/// Enter focus mode for a specific task, finding its position in visible_tasks.
+///
+/// Returns true if the task was found and focus mode was entered.
+pub fn enter_focus_for_task(model: &mut Model, task_id: TaskId) -> bool {
+    if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+        model.selected_index = pos;
+        model.focus_mode = true;
+        true
+    } else {
+        false
+    }
+}
+
 /// Handle input submission
 #[allow(clippy::too_many_lines)]
 pub fn handle_submit_input(model: &mut Model) {

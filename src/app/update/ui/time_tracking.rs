@@ -171,7 +171,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                         if let Some(removed) = model.time_entries.remove(&entry_id) {
                             model
                                 .undo_stack
-                                .push(UndoAction::TimeEntryDeleted(Box::new(removed.clone())));
+                                .push(UndoAction::TimeEntryDeleted(Box::new(removed)));
                             model.delete_time_entry(&entry_id);
 
                             // Adjust selection

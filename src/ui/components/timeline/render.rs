@@ -874,13 +874,13 @@ mod tests {
 
     #[test]
     fn test_task_span_no_dates() {
-        use chrono::Local;
+        use chrono::Utc;
 
         let task = Task::new("Test");
         let (start, end) = Timeline::task_span(&task);
 
-        // Should default to today
-        let today = Local::now().date_naive();
+        // Should default to today (UTC, matching task_span implementation)
+        let today = Utc::now().date_naive();
         assert_eq!(start, today);
         assert_eq!(end, today);
     }

@@ -94,11 +94,6 @@ impl MarkdownBackend {
         })
     }
 
-    #[allow(dead_code)]
-    pub(crate) const fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
     /// Refresh the cache by checking for external changes.
     /// Returns the total number of changes detected.
     pub fn refresh(&mut self) -> usize {

@@ -135,6 +135,42 @@ impl SqliteBackendInner {
                 sort_json TEXT NOT NULL,
                 icon TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS goals (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                start_date TEXT,
+                due_date TEXT,
+                quarter TEXT,
+                manual_progress INTEGER,
+                color TEXT,
+                icon TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+            CREATE INDEX IF NOT EXISTS idx_goals_quarter ON goals(quarter);
+
+            CREATE TABLE IF NOT EXISTS key_results (
+                id TEXT PRIMARY KEY,
+                goal_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'not_started',
+                target_value REAL NOT NULL DEFAULT 0.0,
+                current_value REAL NOT NULL DEFAULT 0.0,
+                unit TEXT,
+                manual_progress INTEGER,
+                linked_project_ids TEXT NOT NULL DEFAULT '[]',
+                linked_task_ids TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_key_results_goal ON key_results(goal_id);
+            CREATE INDEX IF NOT EXISTS idx_key_results_status ON key_results(status);
             ",
         )?;
 

@@ -3,7 +3,9 @@
 //! Best for larger datasets with complex queries. Provides ACID guarantees
 //! and efficient indexing.
 
+mod goal_repo;
 mod habit_repo;
+mod key_result_repo;
 mod project_repo;
 mod rows;
 mod schema;

@@ -160,6 +160,47 @@ impl MarkdownBackend {
         Ok(())
     }
 
+    /// Load goals from goals.yaml.
+    pub(crate) fn load_goals(&mut self) -> StorageResult<()> {
+        let goals_file = self.base_path.join("goals.yaml");
+        if goals_file.exists() {
+            let content =
+                fs::read_to_string(&goals_file).map_err(|e| StorageError::io(&goals_file, e))?;
+            self.goals = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// Save goals to goals.yaml.
+    pub(crate) fn save_goals(&self) -> StorageResult<()> {
+        let goals_file = self.base_path.join("goals.yaml");
+        let content = serde_yaml::to_string(&self.goals)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&goals_file, content).map_err(|e| StorageError::io(&goals_file, e))?;
+        Ok(())
+    }
+
+    /// Load key results from key_results.yaml.
+    pub(crate) fn load_key_results(&mut self) -> StorageResult<()> {
+        let key_results_file = self.base_path.join("key_results.yaml");
+        if key_results_file.exists() {
+            let content = fs::read_to_string(&key_results_file)
+                .map_err(|e| StorageError::io(&key_results_file, e))?;
+            self.key_results = serde_yaml::from_str(&content).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    /// Save key results to key_results.yaml.
+    pub(crate) fn save_key_results(&self) -> StorageResult<()> {
+        let key_results_file = self.base_path.join("key_results.yaml");
+        let content = serde_yaml::to_string(&self.key_results)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        fs::write(&key_results_file, content)
+            .map_err(|e| StorageError::io(&key_results_file, e))?;
+        Ok(())
+    }
+
     /// Load pomodoro state from pomodoro.yaml.
     pub(crate) fn load_pomodoro_state(&mut self) -> StorageResult<()> {
         let pomodoro_file = self.base_path.join("pomodoro.yaml");

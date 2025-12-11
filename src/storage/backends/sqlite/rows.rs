@@ -3,8 +3,9 @@
 use tracing::warn;
 
 use crate::domain::{
-    Habit, HabitFrequency, HabitId, Priority, Project, ProjectId, ProjectStatus, Task, TaskId,
-    TaskStatus, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Goal, GoalId, GoalStatus, Habit, HabitFrequency, HabitId, KeyResult, KeyResultId,
+    KeyResultStatus, Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus,
+    TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 /// Parse a UUID string, logging a warning if invalid.
@@ -198,6 +199,87 @@ pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit>
         icon: row.get("icon")?,
         tags: parse_json(&tags_json, "habit.tags"),
         archived: archived != 0,
+        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+    })
+}
+
+/// Parse a Goal from a SQLite row.
+pub(crate) fn goal_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
+    let id: String = row.get("id")?;
+    let status_str: String = row.get("status")?;
+    let start_date: Option<String> = row.get("start_date")?;
+    let due_date: Option<String> = row.get("due_date")?;
+    let quarter_json: Option<String> = row.get("quarter")?;
+    let manual_progress: Option<i32> = row.get("manual_progress")?;
+    let created_at: String = row.get("created_at")?;
+    let updated_at: String = row.get("updated_at")?;
+
+    Ok(Goal {
+        id: GoalId(parse_uuid(&id, "goal.id")),
+        name: row.get("name")?,
+        description: row.get("description")?,
+        status: match status_str.as_str() {
+            "on_hold" => GoalStatus::OnHold,
+            "completed" => GoalStatus::Completed,
+            "archived" => GoalStatus::Archived,
+            _ => GoalStatus::Active,
+        },
+        start_date: start_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        due_date: due_date.and_then(|s| chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+        quarter: quarter_json.and_then(|s| serde_json::from_str(&s).ok()),
+        manual_progress: manual_progress.map(|p| p.clamp(0, 100) as u8),
+        color: row.get("color")?,
+        icon: row.get("icon")?,
+        created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+        updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)
+            .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
+    })
+}
+
+/// Parse a KeyResult from a SQLite row.
+pub(crate) fn key_result_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<KeyResult> {
+    let id: String = row.get("id")?;
+    let goal_id: String = row.get("goal_id")?;
+    let status_str: String = row.get("status")?;
+    let manual_progress: Option<i32> = row.get("manual_progress")?;
+    let linked_project_ids_json: String = row.get("linked_project_ids")?;
+    let linked_task_ids_json: String = row.get("linked_task_ids")?;
+    let created_at: String = row.get("created_at")?;
+    let updated_at: String = row.get("updated_at")?;
+
+    Ok(KeyResult {
+        id: KeyResultId(parse_uuid(&id, "key_result.id")),
+        goal_id: GoalId(parse_uuid(&goal_id, "key_result.goal_id")),
+        name: row.get("name")?,
+        description: row.get("description")?,
+        status: match status_str.as_str() {
+            "in_progress" => KeyResultStatus::InProgress,
+            "at_risk" => KeyResultStatus::AtRisk,
+            "completed" => KeyResultStatus::Completed,
+            _ => KeyResultStatus::NotStarted,
+        },
+        target_value: row.get("target_value")?,
+        current_value: row.get("current_value")?,
+        unit: row.get("unit")?,
+        manual_progress: manual_progress.map(|p| p.clamp(0, 100) as u8),
+        linked_project_ids: parse_json::<Vec<String>>(
+            &linked_project_ids_json,
+            "key_result.linked_project_ids",
+        )
+        .into_iter()
+        .map(|s| ProjectId(parse_uuid(&s, "key_result.linked_project_ids[]")))
+        .collect(),
+        linked_task_ids: parse_json::<Vec<String>>(
+            &linked_task_ids_json,
+            "key_result.linked_task_ids",
+        )
+        .into_iter()
+        .map(|s| TaskId(parse_uuid(&s, "key_result.linked_task_ids[]")))
+        .collect(),
         created_at: chrono::DateTime::parse_from_rfc3339(&created_at)
             .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
         updated_at: chrono::DateTime::parse_from_rfc3339(&updated_at)

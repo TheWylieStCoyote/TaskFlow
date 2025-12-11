@@ -8,8 +8,9 @@ use crate::domain::{
     Filter, PomodoroConfig, PomodoroSession, PomodoroStats, SavedFilter, SavedFilterId, SortSpec,
 };
 use crate::storage::{
-    ExportData, HabitRepository, ProjectRepository, StorageBackend, StorageError, StorageResult,
-    TagRepository, TaskRepository, TimeEntryRepository, WorkLogRepository,
+    ExportData, GoalRepository, HabitRepository, KeyResultRepository, ProjectRepository,
+    StorageBackend, StorageError, StorageResult, TagRepository, TaskRepository,
+    TimeEntryRepository, WorkLogRepository,
 };
 
 use super::SqliteBackendInner;
@@ -137,6 +138,8 @@ impl StorageBackend for SqliteBackend {
             time_entries: self.list_all_time_entries()?,
             work_logs: self.list_work_logs()?,
             habits: self.list_habits()?,
+            goals: self.list_goals()?,
+            key_results: self.list_key_results()?,
             version: 1,
             pomodoro_session: self.get_pomodoro_value("session")?,
             pomodoro_config: self.get_pomodoro_value("config")?,
@@ -148,9 +151,9 @@ impl StorageBackend for SqliteBackend {
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
         let conn = self.inner.conn()?;
 
-        // Clear existing data (habits cascade to habit_check_ins)
+        // Clear existing data (habits cascade to habit_check_ins, goals cascade to key_results)
         conn.execute_batch(
-            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits; DELETE FROM saved_filters;",
+            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits; DELETE FROM key_results; DELETE FROM goals; DELETE FROM saved_filters;",
         )?;
 
         // Import data
@@ -171,6 +174,12 @@ impl StorageBackend for SqliteBackend {
         }
         for habit in &data.habits {
             self.create_habit(habit)?;
+        }
+        for goal in &data.goals {
+            self.create_goal(goal)?;
+        }
+        for kr in &data.key_results {
+            self.create_key_result(kr)?;
         }
         for filter in &data.saved_filters {
             self.create_saved_filter(filter)?;

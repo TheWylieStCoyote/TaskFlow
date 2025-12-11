@@ -20,8 +20,9 @@
 //! See [`super::backends`] for existing implementations.
 
 use crate::domain::{
-    Filter, Habit, HabitId, PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId,
-    SavedFilter, Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+    Filter, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, PomodoroConfig, PomodoroSession,
+    PomodoroStats, Project, ProjectId, SavedFilter, Tag, Task, TaskId, TimeEntry, TimeEntryId,
+    WorkLogEntry, WorkLogEntryId,
 };
 
 use super::error::StorageResult;
@@ -296,6 +297,96 @@ pub trait HabitRepository {
     fn list_active_habits(&self) -> StorageResult<Vec<Habit>>;
 }
 
+/// Repository trait for goal operations.
+pub trait GoalRepository {
+    /// Creates a new goal in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the goal cannot be persisted.
+    fn create_goal(&mut self, goal: &Goal) -> StorageResult<()>;
+
+    /// Retrieves a goal by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_goal(&self, id: &GoalId) -> StorageResult<Option<Goal>>;
+
+    /// Updates an existing goal.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the goal cannot be updated.
+    fn update_goal(&mut self, goal: &Goal) -> StorageResult<()>;
+
+    /// Deletes a goal by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the goal cannot be deleted.
+    fn delete_goal(&mut self, id: &GoalId) -> StorageResult<()>;
+
+    /// Lists all goals.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_goals(&self) -> StorageResult<Vec<Goal>>;
+
+    /// Lists all active (non-archived) goals.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_active_goals(&self) -> StorageResult<Vec<Goal>>;
+}
+
+/// Repository trait for key result operations.
+pub trait KeyResultRepository {
+    /// Creates a new key result in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the key result cannot be persisted.
+    fn create_key_result(&mut self, kr: &KeyResult) -> StorageResult<()>;
+
+    /// Retrieves a key result by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_key_result(&self, id: &KeyResultId) -> StorageResult<Option<KeyResult>>;
+
+    /// Updates an existing key result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the key result cannot be updated.
+    fn update_key_result(&mut self, kr: &KeyResult) -> StorageResult<()>;
+
+    /// Deletes a key result by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the key result cannot be deleted.
+    fn delete_key_result(&mut self, id: &KeyResultId) -> StorageResult<()>;
+
+    /// Lists all key results.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_key_results(&self) -> StorageResult<Vec<KeyResult>>;
+
+    /// Gets all key results for a specific goal.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_key_results_for_goal(&self, goal_id: &GoalId) -> StorageResult<Vec<KeyResult>>;
+}
+
 /// Data export structure for migration between backends
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportData {
@@ -309,6 +400,12 @@ pub struct ExportData {
     /// Habits with check-in history
     #[serde(default)]
     pub habits: Vec<Habit>,
+    /// Goals (OKR objectives)
+    #[serde(default)]
+    pub goals: Vec<Goal>,
+    /// Key results linked to goals
+    #[serde(default)]
+    pub key_results: Vec<KeyResult>,
     pub version: u32,
     /// Active Pomodoro session (if any)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -333,6 +430,8 @@ impl Default for ExportData {
             time_entries: Vec::new(),
             work_logs: Vec::new(),
             habits: Vec::new(),
+            goals: Vec::new(),
+            key_results: Vec::new(),
             version: 1,
             pomodoro_session: None,
             pomodoro_config: None,
@@ -350,6 +449,8 @@ pub trait StorageBackend:
     + TimeEntryRepository
     + WorkLogRepository
     + HabitRepository
+    + GoalRepository
+    + KeyResultRepository
 {
     /// Initializes the storage backend (creates files/tables, etc.).
     ///

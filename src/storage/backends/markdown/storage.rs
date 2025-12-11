@@ -2,7 +2,8 @@
 
 use crate::domain::{PomodoroConfig, PomodoroSession, PomodoroStats};
 use crate::storage::{
-    ExportData, ProjectRepository, StorageBackend, StorageResult, TagRepository, TaskRepository,
+    ExportData, GoalRepository, KeyResultRepository, ProjectRepository, StorageBackend,
+    StorageResult, TagRepository, TaskRepository,
 };
 
 use super::{MarkdownBackend, PomodoroState};
@@ -16,6 +17,8 @@ impl StorageBackend for MarkdownBackend {
         self.load_time_entries()?;
         self.load_work_logs()?;
         self.load_habits()?;
+        self.load_goals()?;
+        self.load_key_results()?;
         self.load_saved_filters()?;
         self.load_pomodoro_state()?;
         Ok(())
@@ -27,6 +30,8 @@ impl StorageBackend for MarkdownBackend {
         self.save_time_entries()?;
         self.save_work_logs()?;
         self.save_habits()?;
+        self.save_goals()?;
+        self.save_key_results()?;
         self.save_saved_filters()?;
         self.save_pomodoro_state()?;
         self.dirty = false;
@@ -41,6 +46,8 @@ impl StorageBackend for MarkdownBackend {
             time_entries: self.time_entries.clone(),
             work_logs: self.work_logs.clone(),
             habits: self.habits.clone(),
+            goals: self.goals.clone(),
+            key_results: self.key_results.clone(),
             version: 1,
             pomodoro_session: self.pomodoro_state.session.clone(),
             pomodoro_config: self.pomodoro_state.config.clone(),
@@ -65,6 +72,8 @@ impl StorageBackend for MarkdownBackend {
         self.time_entries.clear();
         self.work_logs.clear();
         self.habits.clear();
+        self.goals.clear();
+        self.key_results.clear();
         self.saved_filters.clear();
 
         // Import new data
@@ -93,6 +102,16 @@ impl StorageBackend for MarkdownBackend {
             self.habits.push(habit.clone());
         }
         self.save_habits()?;
+
+        // Import goals
+        for goal in &data.goals {
+            self.create_goal(goal)?;
+        }
+
+        // Import key results
+        for kr in &data.key_results {
+            self.create_key_result(kr)?;
+        }
 
         // Import saved filters
         for filter in &data.saved_filters {

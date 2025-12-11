@@ -6,9 +6,13 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::domain::{
-    Habit, HabitId, Project, ProjectId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId,
+    Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Project, ProjectId, Task, TaskId,
+    TimeEntry, WorkLogEntry, WorkLogEntryId,
 };
-use crate::storage::{self, BackendType, HabitRepository, ProjectRepository, WorkLogRepository};
+use crate::storage::{
+    self, BackendType, GoalRepository, HabitRepository, KeyResultRepository, ProjectRepository,
+    WorkLogRepository,
+};
 
 use super::{Model, UndoAction};
 
@@ -71,6 +75,15 @@ impl Model {
             self.habits.insert(habit.id, habit);
         }
         self.refresh_visible_habits();
+
+        // Load goals and key results from storage
+        for goal in export_data.goals {
+            self.goals.insert(goal.id, goal);
+        }
+        for kr in export_data.key_results {
+            self.key_results.insert(kr.id, kr);
+        }
+        self.refresh_visible_goals();
 
         // Load Pomodoro state
         if let Some(mut session) = export_data.pomodoro_session {
@@ -268,6 +281,106 @@ impl Model {
         }
     }
 
+    /// Syncs a goal to storage.
+    ///
+    /// Creates or updates the goal in the storage backend.
+    pub fn sync_goal(&mut self, goal: &Goal) {
+        if let Some(ref mut backend) = self.storage.backend {
+            // Try update first, if not found, create
+            if let Err(e) = GoalRepository::update_goal(backend.as_mut(), goal) {
+                if let Err(e2) = GoalRepository::create_goal(backend.as_mut(), goal) {
+                    warn!(
+                        "Failed to sync goal {}: update={}, create={}",
+                        goal.id, e, e2
+                    );
+                }
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Syncs a goal by ID to storage.
+    ///
+    /// Looks up the goal in the model and syncs it to the storage backend.
+    pub fn sync_goal_by_id(&mut self, goal_id: &GoalId) {
+        if let (Some(ref mut backend), Some(goal)) =
+            (&mut self.storage.backend, self.goals.get(goal_id))
+        {
+            // Try update first, if not found, create
+            if let Err(e) = GoalRepository::update_goal(backend.as_mut(), goal) {
+                if let Err(e2) = GoalRepository::create_goal(backend.as_mut(), goal) {
+                    warn!(
+                        "Failed to sync goal {}: update={}, create={}",
+                        goal_id, e, e2
+                    );
+                }
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Deletes a goal from storage.
+    ///
+    /// Removes the goal from the storage backend.
+    pub fn delete_goal_from_storage(&mut self, id: &GoalId) {
+        if let Some(ref mut backend) = self.storage.backend {
+            if let Err(e) = GoalRepository::delete_goal(backend.as_mut(), id) {
+                warn!("Failed to delete goal {} from storage: {}", id, e);
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Syncs a key result to storage.
+    ///
+    /// Creates or updates the key result in the storage backend.
+    pub fn sync_key_result(&mut self, kr: &KeyResult) {
+        if let Some(ref mut backend) = self.storage.backend {
+            // Try update first, if not found, create
+            if let Err(e) = KeyResultRepository::update_key_result(backend.as_mut(), kr) {
+                if let Err(e2) = KeyResultRepository::create_key_result(backend.as_mut(), kr) {
+                    warn!(
+                        "Failed to sync key result {}: update={}, create={}",
+                        kr.id, e, e2
+                    );
+                }
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Syncs a key result by ID to storage.
+    ///
+    /// Looks up the key result in the model and syncs it to the storage backend.
+    pub fn sync_key_result_by_id(&mut self, kr_id: &KeyResultId) {
+        if let (Some(ref mut backend), Some(kr)) =
+            (&mut self.storage.backend, self.key_results.get(kr_id))
+        {
+            // Try update first, if not found, create
+            if let Err(e) = KeyResultRepository::update_key_result(backend.as_mut(), kr) {
+                if let Err(e2) = KeyResultRepository::create_key_result(backend.as_mut(), kr) {
+                    warn!(
+                        "Failed to sync key result {}: update={}, create={}",
+                        kr_id, e, e2
+                    );
+                }
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Deletes a key result from storage.
+    ///
+    /// Removes the key result from the storage backend.
+    pub fn delete_key_result_from_storage(&mut self, id: &KeyResultId) {
+        if let Some(ref mut backend) = self.storage.backend {
+            if let Err(e) = KeyResultRepository::delete_key_result(backend.as_mut(), id) {
+                warn!("Failed to delete key result {} from storage: {}", id, e);
+            }
+            self.storage.dirty = true;
+        }
+    }
+
     /// Syncs a time entry to storage.
     ///
     /// Creates or updates the time entry in the storage backend.
@@ -294,7 +407,7 @@ impl Model {
     /// This is primarily useful for the markdown backend when files are edited
     /// externally (e.g., by a text editor or git operations).
     pub fn refresh_storage(&mut self) -> usize {
-        if let Some(ref mut backend) = self.storage.backend {
+        let changes = if let Some(ref mut backend) = self.storage.backend {
             let changes = backend.refresh();
             if changes > 0 {
                 // Reload all data from storage
@@ -315,14 +428,33 @@ impl Model {
                     for habit in habits {
                         self.habits.insert(habit.id, habit);
                     }
-                    self.refresh_visible_habits();
                 }
-                self.refresh_visible_tasks();
+                if let Ok(goals) = GoalRepository::list_goals(backend.as_mut()) {
+                    self.goals.clear();
+                    for goal in goals {
+                        self.goals.insert(goal.id, goal);
+                    }
+                }
+                if let Ok(key_results) = KeyResultRepository::list_key_results(backend.as_mut()) {
+                    self.key_results.clear();
+                    for kr in key_results {
+                        self.key_results.insert(kr.id, kr);
+                    }
+                }
             }
             changes
         } else {
             0
+        };
+
+        // Refresh visible lists outside the backend borrow
+        if changes > 0 {
+            self.refresh_visible_habits();
+            self.refresh_visible_goals();
+            self.refresh_visible_tasks();
         }
+
+        changes
     }
 
     /// Returns true if a storage backend is configured.

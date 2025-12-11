@@ -16,9 +16,9 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
         GoalMessage::Create(name) => {
             let goal = Goal::new(name);
             let id = goal.id;
-            model.goals.insert(id, goal);
+            model.goals.insert(id, goal.clone());
+            model.sync_goal(&goal);
             model.refresh_visible_goals();
-            model.storage.dirty = true;
             debug!(?id, "Created new goal");
         }
         GoalMessage::UpdateName { id, name } => {
@@ -26,8 +26,8 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.name = name;
                 goal.updated_at = Utc::now();
             }
+            model.sync_goal_by_id(&id);
             model.refresh_visible_goals();
-            model.storage.dirty = true;
             debug!(?id, "Updated goal name");
         }
         GoalMessage::UpdateDescription { id, description } => {
@@ -35,7 +35,7 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.description = description;
                 goal.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_goal_by_id(&id);
             debug!(?id, "Updated goal description");
         }
         GoalMessage::SetStatus { id, status } => {
@@ -43,8 +43,8 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.status = status;
                 goal.updated_at = Utc::now();
             }
+            model.sync_goal_by_id(&id);
             model.refresh_visible_goals();
-            model.storage.dirty = true;
             debug!(?id, ?status, "Updated goal status");
         }
         GoalMessage::SetDates { id, start, end } => {
@@ -53,7 +53,7 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.due_date = end;
                 goal.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_goal_by_id(&id);
             debug!(?id, ?start, ?end, "Updated goal dates");
         }
         GoalMessage::SetQuarter { id, quarter } => {
@@ -61,8 +61,8 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.quarter = quarter;
                 goal.updated_at = Utc::now();
             }
+            model.sync_goal_by_id(&id);
             model.refresh_visible_goals();
-            model.storage.dirty = true;
             debug!(?id, ?quarter, "Updated goal quarter");
         }
         GoalMessage::SetManualProgress { id, progress } => {
@@ -70,7 +70,7 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 goal.manual_progress = progress.map(|p| p.min(100));
                 goal.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_goal_by_id(&id);
             debug!(?id, ?progress, "Updated goal manual progress");
         }
         GoalMessage::Delete(id) => {
@@ -81,13 +81,14 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 .filter(|kr| kr.goal_id == id)
                 .map(|kr| kr.id)
                 .collect();
-            for kr_id in kr_ids {
-                model.key_results.remove(&kr_id);
+            for kr_id in &kr_ids {
+                model.key_results.remove(kr_id);
+                model.delete_key_result_from_storage(kr_id);
             }
             // Delete the goal
             if model.goals.remove(&id).is_some() {
+                model.delete_goal_from_storage(&id);
                 model.refresh_visible_goals();
-                model.storage.dirty = true;
                 debug!(?id, "Deleted goal");
             }
         }
@@ -96,8 +97,8 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
         GoalMessage::CreateKeyResult { goal_id, name } => {
             let kr = KeyResult::new(goal_id, name);
             let id = kr.id;
-            model.key_results.insert(id, kr);
-            model.storage.dirty = true;
+            model.key_results.insert(id, kr.clone());
+            model.sync_key_result(&kr);
             debug!(?id, ?goal_id, "Created new key result");
         }
         GoalMessage::UpdateKeyResultName { id, name } => {
@@ -105,7 +106,7 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 kr.name = name;
                 kr.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&id);
             debug!(?id, "Updated key result name");
         }
         GoalMessage::SetKeyResultStatus { id, status } => {
@@ -113,7 +114,7 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 kr.status = status;
                 kr.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&id);
             debug!(?id, ?status, "Updated key result status");
         }
         GoalMessage::SetKeyResultTarget { id, target, unit } => {
@@ -122,14 +123,14 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 kr.unit = unit;
                 kr.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&id);
             debug!(?id, target, "Updated key result target");
         }
         GoalMessage::SetKeyResultValue { id, value } => {
             if let Some(kr) = model.key_results.get_mut(&id) {
                 kr.set_value(value);
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&id);
             debug!(?id, value, "Updated key result value");
         }
         GoalMessage::SetKeyResultManualProgress { id, progress } => {
@@ -137,40 +138,40 @@ pub(crate) fn handle_goal(model: &mut Model, msg: GoalMessage) {
                 kr.manual_progress = progress.map(|p| p.min(100));
                 kr.updated_at = Utc::now();
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&id);
             debug!(?id, ?progress, "Updated key result manual progress");
         }
         GoalMessage::LinkProject { kr_id, project_id } => {
             if let Some(kr) = model.key_results.get_mut(&kr_id) {
                 kr.link_project(project_id);
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&kr_id);
             debug!(?kr_id, ?project_id, "Linked project to key result");
         }
         GoalMessage::UnlinkProject { kr_id, project_id } => {
             if let Some(kr) = model.key_results.get_mut(&kr_id) {
                 kr.unlink_project(&project_id);
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&kr_id);
             debug!(?kr_id, ?project_id, "Unlinked project from key result");
         }
         GoalMessage::LinkTask { kr_id, task_id } => {
             if let Some(kr) = model.key_results.get_mut(&kr_id) {
                 kr.link_task(task_id);
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&kr_id);
             debug!(?kr_id, ?task_id, "Linked task to key result");
         }
         GoalMessage::UnlinkTask { kr_id, task_id } => {
             if let Some(kr) = model.key_results.get_mut(&kr_id) {
                 kr.unlink_task(&task_id);
             }
-            model.storage.dirty = true;
+            model.sync_key_result_by_id(&kr_id);
             debug!(?kr_id, ?task_id, "Unlinked task from key result");
         }
         GoalMessage::DeleteKeyResult(id) => {
             if model.key_results.remove(&id).is_some() {
-                model.storage.dirty = true;
+                model.delete_key_result_from_storage(&id);
                 debug!(?id, "Deleted key result");
             }
         }

@@ -201,8 +201,8 @@ impl HabitsView<'_> {
                 Style::default().fg(theme.colors.muted.to_color()),
             ),
             Span::styled(
-                format!("{:.0}%", completion_rate * 100.0),
-                Style::default().fg(self.completion_rate_color(completion_rate)),
+                format!("{completion_rate:.0}%"),
+                Style::default().fg(self.completion_rate_color(completion_rate / 100.0)),
             ),
         ]));
 
@@ -221,7 +221,8 @@ impl HabitsView<'_> {
         let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
         for (i, day) in weekdays.iter().enumerate() {
             let rate = weekday_rates[i];
-            let bar_width = ((rate * 10.0) as usize).min(10);
+            // rate is 0-100 (percentage), convert to 0-10 bar width
+            let bar_width = ((rate / 10.0) as usize).min(10);
             let bar = "█".repeat(bar_width);
             let empty = "░".repeat(10 - bar_width);
 
@@ -230,10 +231,13 @@ impl HabitsView<'_> {
                     format!("{day}: "),
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
-                Span::styled(bar, Style::default().fg(self.completion_rate_color(rate))),
+                Span::styled(
+                    bar,
+                    Style::default().fg(self.completion_rate_color(rate / 100.0)),
+                ),
                 Span::styled(empty, Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    format!(" {:.0}%", rate * 100.0),
+                    format!(" {rate:.0}%"),
                     Style::default().fg(theme.colors.muted.to_color()),
                 ),
             ]));

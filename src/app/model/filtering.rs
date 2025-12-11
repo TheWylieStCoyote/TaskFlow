@@ -237,8 +237,7 @@ impl Model {
         // Filter by tags (if set) - uses pre-computed lowercase filter tags
         if let Some(ref filter_tags_lower) = cache.filter_tags_lower {
             // Lowercase task tags (must be done per task)
-            let task_tags_lower: Vec<String> =
-                task.tags.iter().map(|t| t.to_lowercase()).collect();
+            let task_tags_lower: Vec<String> = task.tags.iter().map(|t| t.to_lowercase()).collect();
 
             let has_tags = match self.filtering.filter.tags_mode {
                 TagFilterMode::Any => {

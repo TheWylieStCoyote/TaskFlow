@@ -8,6 +8,34 @@ use crate::domain::{ProjectId, SortField, SortOrder, TagFilterMode, Task, TaskId
 
 use super::{Model, ViewId};
 
+/// Pre-computed filter values to avoid repeated allocations during filtering.
+struct FilterCache {
+    /// Lowercased search text (if any)
+    search_lower: Option<String>,
+    /// Lowercased filter tags (if any)
+    filter_tags_lower: Option<Vec<String>>,
+}
+
+impl FilterCache {
+    /// Build cache from current filter settings.
+    fn new(model: &Model) -> Self {
+        Self {
+            search_lower: model
+                .filtering
+                .filter
+                .search_text
+                .as_ref()
+                .map(|s| s.to_lowercase()),
+            filter_tags_lower: model
+                .filtering
+                .filter
+                .tags
+                .as_ref()
+                .map(|tags| tags.iter().map(|t| t.to_lowercase()).collect()),
+        }
+    }
+}
+
 impl Model {
     // ========================================================================
     // Selection Helpers
@@ -49,11 +77,15 @@ impl Model {
     pub fn refresh_visible_tasks(&mut self) {
         // Rebuild caches when task list changes
         self.rebuild_caches();
+
+        // Pre-compute filter values once (avoids repeated allocations per task)
+        let cache = FilterCache::new(self);
+
         // Collect all tasks that pass the filter
         let filtered_tasks: Vec<_> = self
             .tasks
             .values()
-            .filter(|task| self.task_matches_filter(task))
+            .filter(|task| self.task_matches_filter_cached(task, &cache))
             .collect();
 
         // Separate into parent tasks and subtasks
@@ -178,7 +210,8 @@ impl Model {
         }
     }
 
-    fn task_matches_filter(&self, task: &Task) -> bool {
+    /// Check if a task matches the current filter using pre-computed cache.
+    fn task_matches_filter_cached(&self, task: &Task, cache: &FilterCache) -> bool {
         // Filter out completed tasks unless show_completed is true
         if !self.filtering.show_completed && task.status.is_complete() {
             return false;
@@ -190,25 +223,22 @@ impl Model {
         }
 
         // Filter by search text (case-insensitive, matches title or tags)
-        if let Some(ref search) = self.filtering.filter.search_text {
-            let search_lower = search.to_lowercase();
-            let title_matches = task.title.to_lowercase().contains(&search_lower);
+        if let Some(ref search_lower) = cache.search_lower {
+            let title_matches = task.title.to_lowercase().contains(search_lower);
             let tags_match = task
                 .tags
                 .iter()
-                .any(|t| t.to_lowercase().contains(&search_lower));
+                .any(|t| t.to_lowercase().contains(search_lower));
             if !title_matches && !tags_match {
                 return false;
             }
         }
 
-        // Filter by tags (if set)
-        if let Some(ref filter_tags) = self.filtering.filter.tags {
-            // Pre-compute lowercased filter tags to avoid repeated allocations
-            let filter_tags_lower: Vec<String> =
-                filter_tags.iter().map(|t| t.to_lowercase()).collect();
-            // Pre-compute lowercased task tags
-            let task_tags_lower: Vec<String> = task.tags.iter().map(|t| t.to_lowercase()).collect();
+        // Filter by tags (if set) - uses pre-computed lowercase filter tags
+        if let Some(ref filter_tags_lower) = cache.filter_tags_lower {
+            // Lowercase task tags (must be done per task)
+            let task_tags_lower: Vec<String> =
+                task.tags.iter().map(|t| t.to_lowercase()).collect();
 
             let has_tags = match self.filtering.filter.tags_mode {
                 TagFilterMode::Any => {
@@ -245,6 +275,16 @@ impl Model {
 
         // Filter by current view
         self.task_matches_view(task)
+    }
+
+    /// Check if a task matches the current filter (convenience wrapper).
+    ///
+    /// Note: For bulk filtering, use `task_matches_filter_cached` with a
+    /// pre-built `FilterCache` to avoid repeated string allocations.
+    #[allow(dead_code)]
+    fn task_matches_filter(&self, task: &Task) -> bool {
+        let cache = FilterCache::new(self);
+        self.task_matches_filter_cached(task, &cache)
     }
 
     /// Checks if a task matches the current view's criteria.

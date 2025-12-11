@@ -310,6 +310,8 @@ impl Model {
 
             // Non-task views - filter out all tasks (they use their own data)
             ViewId::Habits | ViewId::Goals | ViewId::Duplicates => false,
+            // Git TODOs view - tasks with git-todo tag
+            ViewId::GitTodos => task.tags.iter().any(|t| t == "git-todo"),
 
             // Date-based views
             ViewId::Today => task.due_date == Some(today),
@@ -555,6 +557,55 @@ impl Model {
         });
 
         result
+    }
+
+    /// Returns git-todo tasks grouped by source file path.
+    ///
+    /// Parses the `git:<file>:<line>` marker from task descriptions
+    /// and groups tasks by file. Returns `Vec<(file_path, line_num, Vec<TaskId>)>`.
+    #[must_use]
+    pub fn get_git_tasks_grouped_by_file(&self) -> Vec<(String, Vec<(TaskId, usize)>)> {
+        let mut grouped: Vec<(String, Vec<(TaskId, usize)>)> = Vec::new();
+
+        for task_id in &self.visible_tasks {
+            if let Some(task) = self.tasks.get(task_id) {
+                if let Some(ref desc) = task.description {
+                    if let Some((file, line)) = Self::extract_git_location(desc) {
+                        if let Some(group) = grouped.iter_mut().find(|(f, _)| f == &file) {
+                            group.1.push((*task_id, line));
+                        } else {
+                            grouped.push((file, vec![(*task_id, line)]));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by file path
+        grouped.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // Sort tasks within each group by line number
+        for (_, tasks) in &mut grouped {
+            tasks.sort_by_key(|(_, line)| *line);
+        }
+
+        grouped
+    }
+
+    /// Extract file path and line number from a git-todo task description.
+    ///
+    /// Parses the `git:<file>:<line>` marker at the start of the description.
+    fn extract_git_location(description: &str) -> Option<(String, usize)> {
+        let first_line = description.lines().next()?;
+        if first_line.starts_with("git:") {
+            let parts: Vec<&str> = first_line.splitn(3, ':').collect();
+            if parts.len() >= 3 {
+                let file = parts[1].to_string();
+                let line = parts[2].parse().ok()?;
+                return Some((file, line));
+            }
+        }
+        None
     }
 }
 

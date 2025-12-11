@@ -18,6 +18,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer; persists across restarts
+- **Git Integration**: Extract TODO/FIXME comments from code and create tasks automatically
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
 - **Sorting**: Sort tasks by priority, due date, title, status, or creation date
 - **Multiple Views**: Calendar, Timeline, Kanban, Eisenhower Matrix, Heatmap, Burndown charts, and more

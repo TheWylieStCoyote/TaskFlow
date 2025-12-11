@@ -416,4 +416,7 @@ pub enum UiMessage {
     MergeDuplicates,
     /// Refresh the duplicate detection list
     RefreshDuplicates,
+    // Git integration
+    /// Open the selected task's source file in the configured editor
+    OpenInEditor,
 }

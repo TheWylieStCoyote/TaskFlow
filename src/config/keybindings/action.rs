@@ -161,6 +161,9 @@ pub enum Action {
     DismissDuplicate,
     MergeDuplicates,
     RefreshDuplicates,
+    // Git integration
+    ViewGitTodos,
+    OpenInEditor,
 }
 
 /// Category for grouping actions in help display
@@ -384,6 +387,9 @@ impl Action {
             Self::DismissDuplicate => "Dismiss duplicate pair",
             Self::MergeDuplicates => "Merge (delete second task)",
             Self::RefreshDuplicates => "Refresh duplicate list",
+            // Git integration
+            Self::ViewGitTodos => "View Git TODOs",
+            Self::OpenInEditor => "Open in editor",
         }
     }
 
@@ -513,6 +519,7 @@ impl Action {
             Self::DismissDuplicate | Self::MergeDuplicates | Self::RefreshDuplicates => {
                 ActionCategory::Duplicates
             }
+            Self::ViewGitTodos | Self::OpenInEditor => ActionCategory::ViewFilter,
         }
     }
 }

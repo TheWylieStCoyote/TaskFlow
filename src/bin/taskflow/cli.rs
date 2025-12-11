@@ -135,6 +135,28 @@ pub enum Commands {
         #[arg(short, long, value_delimiter = ',')]
         tags: Option<Vec<String>>,
     },
+    /// Extract TODO/FIXME comments from a git repository
+    #[command(alias = "gt")]
+    GitTodos {
+        /// Repository path (defaults to current directory)
+        #[arg(short, long, default_value = ".", value_hint = ValueHint::DirPath)]
+        repo: PathBuf,
+        /// Patterns to search for (comma-separated)
+        #[arg(short, long, value_delimiter = ',', default_value = "TODO,FIXME")]
+        patterns: Vec<String>,
+        /// Project name to assign created tasks to
+        #[arg(short = 'P', long)]
+        project: Option<String>,
+        /// Tags to add to created tasks (comma-separated)
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+        /// Priority for extracted tasks (none, low, medium, high, urgent)
+        #[arg(long, default_value = "medium")]
+        priority: String,
+        /// Preview what would be created without saving
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 /// Parse priority strings into Priority enum values

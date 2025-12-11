@@ -168,6 +168,9 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("D".to_string(), Action::DismissDuplicate);
     bindings.insert("M".to_string(), Action::MergeDuplicates);
     bindings.insert("r".to_string(), Action::RefreshDuplicates);
+    // Git integration
+    bindings.insert("alt+g".to_string(), Action::ViewGitTodos);
+    bindings.insert("O".to_string(), Action::OpenInEditor);
 
     bindings
 }

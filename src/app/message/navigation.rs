@@ -180,4 +180,6 @@ pub enum ViewId {
     Burndown,
     /// Duplicate task detection view
     Duplicates,
+    /// Git TODOs view (tasks extracted from code comments)
+    GitTodos,
 }

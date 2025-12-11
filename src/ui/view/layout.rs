@@ -14,8 +14,9 @@ use crate::app::{Model, ViewId};
 use crate::config::Theme;
 
 use crate::ui::components::{
-    Burndown, Calendar, Dashboard, Duplicates, Eisenhower, FocusView, Forecast, GoalsView,
-    HabitsView, Heatmap, Kanban, Network, ReportsView, Sidebar, TaskList, Timeline, WeeklyPlanner,
+    Burndown, Calendar, Dashboard, Duplicates, Eisenhower, FocusView, Forecast, GitTodos,
+    GoalsView, HabitsView, Heatmap, Kanban, Network, ReportsView, Sidebar, TaskList, Timeline,
+    WeeklyPlanner,
 };
 
 /// Renders the application header
@@ -204,6 +205,10 @@ pub(super) fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Re
         ViewId::Duplicates => {
             let duplicates = Duplicates::new(model, theme);
             frame.render_widget(duplicates, area);
+        }
+        ViewId::GitTodos => {
+            let git_todos = GitTodos::new(model, theme);
+            frame.render_widget(git_todos, area);
         }
         _ => {
             // Cache task list area with header offset (border + title row = 2)

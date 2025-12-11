@@ -120,6 +120,20 @@ pub const SIDEBAR_VIEWS: &[ViewId] = &[
     ViewId::Network,          // 21: Network
     ViewId::Burndown,         // 22: Burndown
     ViewId::Duplicates,       // 23: Duplicates
+    ViewId::Blocked,          // 9: Blocked
+    ViewId::Untagged,         // 10: Untagged
+    ViewId::NoProject,        // 11: No Project
+    ViewId::RecentlyModified, // 12: Recent
+    ViewId::Kanban,           // 13: Kanban
+    ViewId::Eisenhower,       // 14: Eisenhower
+    ViewId::WeeklyPlanner,    // 15: Weekly Planner
+    ViewId::Timeline,         // 16: Timeline
+    ViewId::Snoozed,          // 17: Snoozed
+    ViewId::Heatmap,          // 18: Heatmap
+    ViewId::Forecast,         // 19: Forecast
+    ViewId::Network,          // 20: Network
+    ViewId::Burndown,         // 21: Burndown
+    ViewId::GitTodos,         // 22: Git TODOs
 ];
 
 /// Number of view items in the sidebar (before the separator).
@@ -349,6 +363,9 @@ pub struct Model {
     // Burndown chart state
     /// Burndown chart configuration (time window, mode, scope creep)
     pub burndown_state: BurndownState,
+    // External command execution
+    /// Pending editor command to execute (editor, file, line)
+    pub pending_editor_command: Option<(String, String, String)>,
 }
 
 impl Model {
@@ -428,6 +445,7 @@ impl Model {
             task_cache: TaskCache::new(),
             layout_cache: LayoutCache::default(),
             burndown_state: BurndownState::default(),
+            pending_editor_command: None,
         }
     }
 

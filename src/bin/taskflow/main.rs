@@ -17,7 +17,7 @@ use taskflow::config::Settings;
 use taskflow::storage::BackendType;
 
 use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, ListFilters};
-use commands::{list_tasks, mark_task_done, quick_add_task};
+use commands::{extract_git_todos, list_tasks, mark_task_done, quick_add_task};
 use tui::run_tui;
 
 /// Initialize the tracing/logging subsystem.
@@ -139,6 +139,24 @@ fn main() -> anyhow::Result<()> {
             tags,
         }) => {
             return mark_task_done(&cli, query, project.as_deref(), tags.as_deref());
+        }
+        Some(Commands::GitTodos {
+            repo,
+            patterns,
+            project,
+            tags,
+            priority,
+            dry_run,
+        }) => {
+            return extract_git_todos(
+                &cli,
+                repo,
+                patterns,
+                project.as_deref(),
+                tags.as_deref(),
+                priority,
+                *dry_run,
+            );
         }
         None => {}
     }

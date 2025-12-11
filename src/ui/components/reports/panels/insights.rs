@@ -15,8 +15,15 @@ use super::super::ReportsView;
 
 impl ReportsView<'_> {
     pub(crate) fn render_insights(&self, area: Rect, buf: &mut Buffer) {
-        let engine = AnalyticsEngine::new(self.model);
-        let report = engine.generate_report(&ReportConfig::last_n_days(90));
+        // Use cached 90-day report if available, otherwise generate on-the-fly
+        let fallback_report;
+        let report = if let Some(ref cached) = self.model.report_cache.report_90d {
+            cached
+        } else {
+            let engine = AnalyticsEngine::new(self.model);
+            fallback_report = engine.generate_report(&ReportConfig::last_n_days(90));
+            &fallback_report
+        };
 
         // Split into sections
         let chunks = Layout::default()

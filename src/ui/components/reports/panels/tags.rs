@@ -16,9 +16,16 @@ use super::super::ReportsView;
 
 impl ReportsView<'_> {
     pub(crate) fn render_tags(&self, area: Rect, buf: &mut Buffer) {
-        let engine = AnalyticsEngine::new(self.model);
-        let config = ReportConfig::last_n_days(30);
-        let report = engine.generate_report(&config);
+        // Use cached 30-day report if available, otherwise generate on-the-fly
+        let fallback_report;
+        let report = if let Some(ref cached) = self.model.report_cache.report_30d {
+            cached
+        } else {
+            let engine = AnalyticsEngine::new(self.model);
+            let config = ReportConfig::last_n_days(30);
+            fallback_report = engine.generate_report(&config);
+            &fallback_report
+        };
 
         // Split into header and chart
         let chunks = Layout::default()

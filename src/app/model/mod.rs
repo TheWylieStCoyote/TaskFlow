@@ -58,7 +58,7 @@ mod view_queries;
 
 pub use editor::MultilineEditor;
 
-pub use cache::{FooterStats, TaskCache};
+pub use cache::{FooterStats, ReportCache, TaskCache};
 pub use layout_cache::LayoutCache;
 pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
@@ -350,6 +350,8 @@ pub struct Model {
     pub task_cache: TaskCache,
     /// Cached layout rectangles for mouse hit-testing
     pub layout_cache: LayoutCache,
+    /// Cached analytics reports for different time windows
+    pub report_cache: ReportCache,
 
     // Burndown chart state
     /// Burndown chart configuration (time window, mode, scope creep)
@@ -435,6 +437,7 @@ impl Model {
             footer_stats: FooterStats::default(),
             task_cache: TaskCache::new(),
             layout_cache: LayoutCache::default(),
+            report_cache: ReportCache::new(),
             burndown_state: BurndownState::default(),
             pending_editor_command: None,
         }
@@ -764,6 +767,51 @@ impl Model {
 impl Default for Model {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// Report Cache Methods
+// ============================================================================
+
+impl Model {
+    /// Ensure the report cache is populated with analytics reports.
+    ///
+    /// This should be called before rendering the Reports view to avoid
+    /// regenerating reports on every frame. Reports are only generated
+    /// if the cache is empty.
+    pub fn ensure_report_cache_populated(&mut self) {
+        use crate::app::analytics::AnalyticsEngine;
+        use crate::domain::analytics::ReportConfig;
+
+        // Generate 30-day report if missing (used by overview, tags, time panels)
+        if self.report_cache.report_30d.is_none() {
+            let engine = AnalyticsEngine::new(self);
+            let config = ReportConfig::last_n_days(30);
+            self.report_cache.report_30d = Some(engine.generate_report(&config));
+        }
+
+        // Generate 60-day report if missing (used by velocity panel)
+        if self.report_cache.report_60d.is_none() {
+            let engine = AnalyticsEngine::new(self);
+            let config = ReportConfig::last_n_days(60);
+            self.report_cache.report_60d = Some(engine.generate_report(&config));
+        }
+
+        // Generate 90-day report if missing (used by insights panel)
+        if self.report_cache.report_90d.is_none() {
+            let engine = AnalyticsEngine::new(self);
+            let config = ReportConfig::last_n_days(90);
+            self.report_cache.report_90d = Some(engine.generate_report(&config));
+        }
+    }
+
+    /// Invalidate the report cache.
+    ///
+    /// Call this when tasks or time entries are modified to ensure
+    /// fresh reports are generated on the next Reports view render.
+    pub fn invalidate_report_cache(&mut self) {
+        self.report_cache.clear();
     }
 }
 

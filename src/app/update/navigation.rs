@@ -128,6 +128,11 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.duplicates_view.selected = 0;
             }
 
+            // Special handling for Reports view - ensure cache is populated
+            if view_id == ViewId::Reports {
+                model.ensure_report_cache_populated();
+            }
+
             model.refresh_visible_tasks();
         }
         NavigationMessage::FocusSidebar => {

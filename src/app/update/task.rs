@@ -250,6 +250,9 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             }
         }
     }
+
+    // Invalidate report cache since task data has changed
+    model.invalidate_report_cache();
 }
 
 /// Create the next occurrence of a recurring task

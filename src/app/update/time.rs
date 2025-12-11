@@ -69,6 +69,9 @@ pub fn handle_time(model: &mut Model, msg: TimeMessage) {
             }
         }
     }
+
+    // Invalidate report cache since time tracking data has changed
+    model.invalidate_report_cache();
 }
 
 /// Handle Pomodoro timer messages

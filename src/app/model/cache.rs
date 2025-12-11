@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::domain::analytics::AnalyticsReport;
 use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId};
 
 use super::hierarchy::traverse_ancestors;
@@ -185,6 +186,44 @@ impl TaskCache {
             .get(&task_id)
             .copied()
             .unwrap_or((0, 0))
+    }
+}
+
+/// Cached analytics reports for different time windows.
+///
+/// Reports are expensive to compute as they iterate through all tasks
+/// and time entries. This cache stores pre-computed reports for common
+/// time windows (30, 60, 90 days).
+#[derive(Debug, Clone, Default)]
+pub struct ReportCache {
+    /// Report for 30-day window (used by overview, tags, time panels)
+    pub report_30d: Option<AnalyticsReport>,
+    /// Report for 60-day window (used by velocity panel)
+    pub report_60d: Option<AnalyticsReport>,
+    /// Report for 90-day window (used by insights panel)
+    pub report_90d: Option<AnalyticsReport>,
+}
+
+impl ReportCache {
+    /// Create a new empty cache.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Clear all cached reports.
+    ///
+    /// Call this when tasks or time entries are modified.
+    pub fn clear(&mut self) {
+        self.report_30d = None;
+        self.report_60d = None;
+        self.report_90d = None;
+    }
+
+    /// Check if any reports are cached.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.report_30d.is_none() && self.report_60d.is_none() && self.report_90d.is_none()
     }
 }
 

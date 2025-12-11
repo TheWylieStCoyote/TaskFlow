@@ -1247,3 +1247,288 @@ proptest! {
         prop_assert!(model.visible_tasks.is_empty());
     }
 }
+
+// ============================================================================
+// Filter DSL Fuzz Tests
+// ============================================================================
+//
+// These tests verify that the filter DSL parser and evaluator never panic
+// on any input, returning errors gracefully instead.
+
+mod filter_dsl_fuzz {
+    use super::*;
+    use std::collections::HashMap;
+    use taskflow::domain::filter_dsl::{evaluate, parse, EvalContext};
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10000))]
+
+        /// Property: Parser never panics on any arbitrary string input
+        #[test]
+        fn parse_never_panics(input in ".*") {
+            // Should return Ok or Err, never panic
+            let _ = parse(&input);
+        }
+
+        /// Property: Parser handles filter-like strings without panic
+        #[test]
+        fn parse_filter_like_strings(
+            field in "(priority|status|tags|tag|due|project|title|search|has|created|scheduled|completed|modified|estimate|actual)",
+            value in "[a-zA-Z0-9_-]{0,30}"
+        ) {
+            let input = format!("{}:{}", field, value);
+            let _ = parse(&input);
+        }
+
+        /// Property: Parser handles boolean expressions without panic
+        #[test]
+        fn parse_boolean_expressions(
+            left_field in "(priority|status)",
+            left_value in "(high|low|medium|todo|done|urgent)",
+            op in "(AND|OR|and|or)",
+            right_field in "(priority|status)",
+            right_value in "(high|low|medium|todo|done|urgent)"
+        ) {
+            let input = format!("{}:{} {} {}:{}", left_field, left_value, op, right_field, right_value);
+            let _ = parse(&input);
+        }
+
+        /// Property: Parser handles negation without panic
+        #[test]
+        fn parse_negation(
+            field in "(priority|status|tags)",
+            value in "(high|low|todo|done|bug|feature)"
+        ) {
+            let inputs = [
+                format!("!{}:{}", field, value),
+                format!("NOT {}:{}", field, value),
+                format!("!!{}:{}", field, value),
+            ];
+            for input in inputs {
+                let _ = parse(&input);
+            }
+        }
+
+        /// Property: Parser handles parentheses without panic
+        #[test]
+        fn parse_parentheses(
+            field in "(priority|status)",
+            value in "(high|low|todo|done)"
+        ) {
+            let inputs = [
+                format!("({}:{})", field, value),
+                format!("(({}:{}))", field, value),
+                format!("({}:{}) AND ({}:{})", field, value, field, value),
+            ];
+            for input in inputs {
+                let _ = parse(&input);
+            }
+        }
+
+        /// Property: Parser handles date-like values without panic
+        #[test]
+        fn parse_date_values(
+            year in 1900u32..2100,
+            month in 1u32..13,
+            day in 1u32..32
+        ) {
+            let date_str = format!("{:04}-{:02}-{:02}", year, month, day);
+            let inputs = [
+                format!("due:{}", date_str),
+                format!("due:<{}", date_str),
+                format!("due:>{}", date_str),
+                format!("created:{}", date_str),
+            ];
+            for input in inputs {
+                let _ = parse(&input);
+            }
+        }
+
+        /// Property: Parser handles range syntax without panic
+        #[test]
+        fn parse_range_syntax(
+            start in 0u32..1000,
+            end in 0u32..1000
+        ) {
+            let inputs = [
+                format!("estimate:{}..{}", start, end),
+                format!("estimate:{}..", start),
+                format!("estimate:..{}", end),
+                format!("actual:{}..{}", start, end),
+            ];
+            for input in inputs {
+                let _ = parse(&input);
+            }
+        }
+
+        /// Property: Parser handles quoted strings without panic
+        #[test]
+        fn parse_quoted_strings(
+            content in "[a-zA-Z0-9 ]{0,50}"
+        ) {
+            let inputs = [
+                format!("search:\"{}\"", content),
+                format!("title:\"{}\"", content),
+            ];
+            for input in inputs {
+                let _ = parse(&input);
+            }
+        }
+
+        /// Property: Valid expressions evaluate without panic
+        #[test]
+        fn valid_exprs_evaluate_safely(
+            field in "(priority|status)",
+            value in "(high|low|medium|todo|done|urgent|in_progress|blocked)"
+        ) {
+            let input = format!("{}:{}", field, value);
+            if let Ok(expr) = parse(&input) {
+                let task = Task::new("test task");
+                let projects = HashMap::new();
+                let ctx = EvalContext::new(&projects);
+                // Should not panic during evaluation
+                let _ = evaluate(&expr, &task, &ctx);
+            }
+        }
+
+        /// Property: Complex expressions evaluate without panic
+        #[test]
+        fn complex_exprs_evaluate_safely(
+            title in "[a-zA-Z0-9 ]{1,50}",
+            priority in priority_strategy(),
+            status in status_strategy()
+        ) {
+            let task = Task::new(&title)
+                .with_priority(priority);
+            let mut task = task;
+            task.status = status;
+
+            let expressions = [
+                "priority:high AND !status:done",
+                "priority:low OR priority:medium",
+                "(status:todo OR status:in_progress) AND !priority:none",
+                "has:due",
+                "!has:tags",
+            ];
+
+            let projects = HashMap::new();
+            let ctx = EvalContext::new(&projects);
+
+            for expr_str in expressions {
+                if let Ok(expr) = parse(expr_str) {
+                    let _ = evaluate(&expr, &task, &ctx);
+                }
+            }
+        }
+    }
+
+    /// Non-proptest: Specific edge cases that might cause issues
+    #[test]
+    fn edge_case_inputs_dont_panic() {
+        let edge_cases = [
+            // Empty and whitespace
+            "",
+            "   ",
+            "\t\n",
+            "\r\n",
+            // Unmatched delimiters
+            "(",
+            ")",
+            "(((",
+            ")))",
+            "()()",
+            "\"",
+            "\"\"",
+            "\"unterminated",
+            // Operators alone
+            "AND",
+            "OR",
+            "NOT",
+            "!",
+            "AND AND",
+            "OR OR",
+            // Colons
+            ":",
+            "::",
+            ":::",
+            "a:",
+            ":b",
+            "::value",
+            // Range edge cases
+            "..",
+            "...",
+            "a..b..c",
+            "due:..",
+            "due:...",
+            "estimate:..",
+            // Invalid field names
+            "invalid:value",
+            "123:value",
+            "_:value",
+            // Unicode
+            "priority:高",
+            "tags:🏷️",
+            "title:日本語",
+            "search:émoji",
+            // Very long inputs
+            &"a".repeat(10000),
+            &format!("priority:{}", "x".repeat(1000)),
+            // Deeply nested
+            &"(".repeat(100),
+            &format!("{}priority:high{}", "(".repeat(50), ")".repeat(50)),
+            // Mixed valid/invalid
+            "priority:high AND",
+            "AND priority:high",
+            "priority:high OR",
+            "priority:high AND AND status:done",
+            // Date edge cases
+            "due:0000-00-00",
+            "due:9999-99-99",
+            "due:2025-13-45",
+            "due:today..",
+            "due:..tomorrow",
+            // Numeric edge cases
+            "estimate:-1",
+            "estimate:999999999999",
+            "estimate:abc",
+            // Special characters
+            "priority:high\0",
+            "status:done\x00",
+            "tags:test\ttab",
+        ];
+
+        for input in edge_cases {
+            // None of these should panic - they should return Ok or Err
+            let _ = parse(input);
+        }
+    }
+
+    /// Test that serialization roundtrip works for valid expressions
+    #[test]
+    fn valid_expressions_serialize_roundtrip() {
+        let valid_expressions = [
+            "priority:high",
+            "status:todo",
+            "priority:high AND status:todo",
+            "priority:high OR priority:urgent",
+            "!status:done",
+            "(priority:high OR priority:urgent) AND !status:done",
+            "tags:bug",
+            "has:due",
+            "due:today",
+            "estimate:>60",
+        ];
+
+        for expr_str in valid_expressions {
+            if let Ok(expr) = parse(expr_str) {
+                // Serialize to JSON
+                let json = serde_json::to_string(&expr).expect("serialization should work");
+                // Deserialize back
+                let restored: taskflow::domain::filter_dsl::FilterExpr =
+                    serde_json::from_str(&json).expect("deserialization should work");
+                // Should be equal
+                assert_eq!(expr, restored, "roundtrip failed for: {}", expr_str);
+            }
+        }
+    }
+}

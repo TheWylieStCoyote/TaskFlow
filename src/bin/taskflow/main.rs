@@ -119,6 +119,7 @@ fn main() -> anyhow::Result<()> {
             due_after,
             estimate_min,
             estimate_max,
+            dsl_filter,
         }) => {
             let filters = ListFilters {
                 project: project.clone(),
@@ -133,6 +134,7 @@ fn main() -> anyhow::Result<()> {
                 due_after: due_after.as_ref().and_then(|s| parse_date(s)),
                 estimate_min: *estimate_min,
                 estimate_max: *estimate_max,
+                dsl_filter: dsl_filter.clone(),
             };
             return list_tasks(&cli, view, *completed, *limit, &filters);
         }

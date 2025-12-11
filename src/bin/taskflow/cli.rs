@@ -24,6 +24,8 @@ pub struct ListFilters {
     pub due_after: Option<NaiveDate>,
     pub estimate_min: Option<u32>,
     pub estimate_max: Option<u32>,
+    /// Advanced DSL filter expression (takes precedence over other filters)
+    pub dsl_filter: Option<String>,
 }
 
 /// `TaskFlow` - A TUI project management application
@@ -121,6 +123,15 @@ pub enum Commands {
         /// Only show tasks with estimate <= this many minutes
         #[arg(long)]
         estimate_max: Option<u32>,
+        /// Advanced filter expression (DSL syntax)
+        /// Examples:
+        ///   "priority:high AND !status:done"
+        ///   "tags:bug OR tags:urgent"
+        ///   "(priority:high OR priority:urgent) AND project:backend"
+        /// Fields: priority, status, tags, project, due, search, has, title
+        /// Operators: AND, OR, ! (NOT), ()
+        #[arg(short = 'f', long = "filter")]
+        dsl_filter: Option<String>,
     },
     /// Mark a task as done by searching for it
     #[command(alias = "d")]

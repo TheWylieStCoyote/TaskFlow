@@ -120,6 +120,7 @@ pub mod analytics;
 mod calendar_event;
 pub mod duplicate_detector;
 mod filter;
+pub mod filter_dsl;
 mod goal;
 mod habit;
 mod key_result;

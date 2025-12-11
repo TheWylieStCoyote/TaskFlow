@@ -2,6 +2,7 @@
 
 use chrono::Utc;
 
+use taskflow::domain::filter_dsl::{evaluate, parse, EvalContext};
 use taskflow::domain::{Priority, Task, TaskStatus};
 
 use crate::cli::{Cli, ListFilters};
@@ -19,6 +20,22 @@ pub fn list_tasks(
     let model = load_model_for_cli(cli)?;
 
     let today = Utc::now().date_naive();
+
+    // Parse DSL filter if provided
+    let dsl_expr = if let Some(ref dsl_str) = filters.dsl_filter {
+        match parse(dsl_str) {
+            Ok(expr) => Some(expr),
+            Err(e) => {
+                eprintln!("Filter parse error: {e}");
+                return Err(anyhow::anyhow!("Invalid filter expression: {e}"));
+            }
+        }
+    } else {
+        None
+    };
+
+    // Create evaluation context for DSL filter
+    let eval_ctx = EvalContext::new(&model.projects);
 
     // Helper: check if task has incomplete dependencies (blocked)
     let is_blocked = |task: &Task| -> bool {
@@ -70,6 +87,11 @@ pub fn list_tasks(
             };
             if !view_match {
                 return false;
+            }
+
+            // If DSL filter is provided, use it exclusively for remaining filtering
+            if let Some(ref expr) = dsl_expr {
+                return evaluate(expr, t, &eval_ctx);
             }
 
             // Filter by project
@@ -212,6 +234,12 @@ pub fn list_tasks(
         _ => "All Tasks",
     };
     println!("{} ({} shown)", view_name, tasks.len());
+
+    // Show active filter if set
+    if let Some(ref dsl_str) = filters.dsl_filter {
+        println!("Filter: {}", dsl_str);
+    }
+
     println!("{}", "-".repeat(60));
 
     // Print tasks

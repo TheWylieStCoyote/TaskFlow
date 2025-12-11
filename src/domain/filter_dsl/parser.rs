@@ -1,0 +1,889 @@
+//! Recursive descent parser for the filter DSL.
+//!
+//! Parses token streams into an AST representation.
+
+use chrono::NaiveDate;
+
+use crate::domain::{Priority, TaskStatus};
+
+use super::ast::{
+    Condition, CreatedFilter, DueFilter, FilterExpr, FilterField, FilterValue, HasField,
+    NumericFilter, ScheduledFilter,
+};
+use super::error::{ParseError, ParseResult};
+use super::lexer::{tokenize, Token, TokenWithSpan};
+
+/// Parser for filter DSL expressions.
+pub struct Parser {
+    tokens: Vec<TokenWithSpan>,
+    position: usize,
+}
+
+impl Parser {
+    /// Create a new parser from a token stream.
+    pub fn new(tokens: Vec<TokenWithSpan>) -> Self {
+        Self {
+            tokens,
+            position: 0,
+        }
+    }
+
+    /// Parse the token stream into a filter expression.
+    pub fn parse(&mut self) -> ParseResult<FilterExpr> {
+        if self.check(&Token::Eof) {
+            return Err(ParseError::EmptyExpression);
+        }
+
+        let expr = self.parse_or_expr()?;
+        self.expect_eof()?;
+        Ok(expr)
+    }
+
+    /// Parse an OR expression (lowest precedence).
+    fn parse_or_expr(&mut self) -> ParseResult<FilterExpr> {
+        let mut left = self.parse_and_expr()?;
+
+        while self.check(&Token::Or) {
+            self.advance();
+            let right = self.parse_and_expr()?;
+            left = FilterExpr::Or(Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    /// Parse an AND expression.
+    fn parse_and_expr(&mut self) -> ParseResult<FilterExpr> {
+        let mut left = self.parse_unary_expr()?;
+
+        while self.check(&Token::And) {
+            self.advance();
+            let right = self.parse_unary_expr()?;
+            left = FilterExpr::And(Box::new(left), Box::new(right));
+        }
+
+        Ok(left)
+    }
+
+    /// Parse a unary (NOT) expression.
+    fn parse_unary_expr(&mut self) -> ParseResult<FilterExpr> {
+        if self.check(&Token::Not) {
+            self.advance();
+            let expr = self.parse_unary_expr()?;
+            return Ok(FilterExpr::Not(Box::new(expr)));
+        }
+
+        self.parse_primary()
+    }
+
+    /// Parse a primary expression (parenthesized or condition).
+    fn parse_primary(&mut self) -> ParseResult<FilterExpr> {
+        if self.check(&Token::LParen) {
+            self.advance();
+            let expr = self.parse_or_expr()?;
+            self.expect(&Token::RParen)?;
+            return Ok(expr);
+        }
+
+        let condition = self.parse_condition()?;
+        Ok(FilterExpr::Condition(condition))
+    }
+
+    /// Parse a single condition (field:value).
+    fn parse_condition(&mut self) -> ParseResult<Condition> {
+        let (field_name, field_pos) = self.expect_identifier()?;
+        self.expect(&Token::Colon)?;
+        let (value_str, value_pos) = self.expect_value()?;
+
+        let field = parse_field(&field_name, field_pos)?;
+        let value = parse_value(field, &value_str, value_pos)?;
+
+        Ok(Condition { field, value })
+    }
+
+    // ========================================================================
+    // Helper methods
+    // ========================================================================
+
+    /// Check if the current token matches the expected type.
+    fn check(&self, expected: &Token) -> bool {
+        self.current()
+            .is_some_and(|t| std::mem::discriminant(&t.token) == std::mem::discriminant(expected))
+    }
+
+    /// Get the current token.
+    fn current(&self) -> Option<&TokenWithSpan> {
+        self.tokens.get(self.position)
+    }
+
+    /// Advance to the next token.
+    fn advance(&mut self) {
+        if self.position < self.tokens.len() {
+            self.position += 1;
+        }
+    }
+
+    /// Expect a specific token type and advance.
+    fn expect(&mut self, expected: &Token) -> ParseResult<()> {
+        let current = self
+            .current()
+            .ok_or_else(|| ParseError::unexpected_eof(expected.display_name()))?;
+
+        if std::mem::discriminant(&current.token) != std::mem::discriminant(expected) {
+            return Err(ParseError::unexpected_token(
+                expected.display_name(),
+                current.token.display_name(),
+                current.start,
+            ));
+        }
+
+        self.advance();
+        Ok(())
+    }
+
+    /// Expect end of input.
+    fn expect_eof(&self) -> ParseResult<()> {
+        if let Some(current) = self.current() {
+            if !matches!(current.token, Token::Eof) {
+                return Err(ParseError::unexpected_token(
+                    "end of input",
+                    current.token.display_name(),
+                    current.start,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Expect an identifier and return its value.
+    fn expect_identifier(&mut self) -> ParseResult<(String, usize)> {
+        let current = self
+            .current()
+            .ok_or_else(|| ParseError::unexpected_eof("field name"))?;
+
+        match &current.token {
+            Token::Identifier(name) => {
+                let name = name.clone();
+                let pos = current.start;
+                self.advance();
+                Ok((name, pos))
+            }
+            _ => Err(ParseError::unexpected_token(
+                "field name",
+                current.token.display_name(),
+                current.start,
+            )),
+        }
+    }
+
+    /// Expect a value (identifier or quoted string) and return its value.
+    fn expect_value(&mut self) -> ParseResult<(String, usize)> {
+        let current = self
+            .current()
+            .ok_or_else(|| ParseError::unexpected_eof("value"))?;
+
+        match &current.token {
+            Token::Identifier(value) => {
+                let value = value.clone();
+                let pos = current.start;
+                self.advance();
+                Ok((value, pos))
+            }
+            Token::QuotedString(value) => {
+                let value = value.clone();
+                let pos = current.start;
+                self.advance();
+                Ok((value, pos))
+            }
+            _ => Err(ParseError::unexpected_token(
+                "value",
+                current.token.display_name(),
+                current.start,
+            )),
+        }
+    }
+}
+
+// ============================================================================
+// Field and value parsing helpers
+// ============================================================================
+
+/// Parse a field name into a FilterField.
+fn parse_field(name: &str, position: usize) -> ParseResult<FilterField> {
+    match name.to_lowercase().as_str() {
+        "priority" => Ok(FilterField::Priority),
+        "status" => Ok(FilterField::Status),
+        "tags" | "tag" => Ok(FilterField::Tags),
+        "project" => Ok(FilterField::Project),
+        "due" => Ok(FilterField::Due),
+        "search" => Ok(FilterField::Search),
+        "has" => Ok(FilterField::Has),
+        "title" => Ok(FilterField::Title),
+        "created" => Ok(FilterField::Created),
+        "scheduled" => Ok(FilterField::Scheduled),
+        "completed" => Ok(FilterField::Completed),
+        "modified" | "updated" => Ok(FilterField::Modified),
+        "estimate" | "est" => Ok(FilterField::Estimate),
+        "actual" | "tracked" => Ok(FilterField::Actual),
+        _ => Err(ParseError::unknown_field(name, position)),
+    }
+}
+
+/// Parse a value string into a FilterValue based on the field type.
+fn parse_value(field: FilterField, value: &str, position: usize) -> ParseResult<FilterValue> {
+    match field {
+        FilterField::Priority => {
+            let priority = parse_priority(value).ok_or_else(|| {
+                ParseError::invalid_value(
+                    "priority",
+                    value,
+                    Some("Valid values: none, low, medium, high, urgent".to_string()),
+                    position,
+                )
+            })?;
+            Ok(FilterValue::Priority(priority))
+        }
+        FilterField::Status => {
+            let status = parse_status(value).ok_or_else(|| {
+                ParseError::invalid_value(
+                    "status",
+                    value,
+                    Some("Valid values: todo, in_progress, blocked, done, cancelled".to_string()),
+                    position,
+                )
+            })?;
+            Ok(FilterValue::Status(status))
+        }
+        FilterField::Tags => Ok(FilterValue::Tag(value.to_string())),
+        FilterField::Project => Ok(FilterValue::ProjectName(value.to_string())),
+        FilterField::Due => {
+            let due = parse_due(value, position)?;
+            Ok(FilterValue::Due(due))
+        }
+        FilterField::Search => Ok(FilterValue::SearchText(value.to_string())),
+        FilterField::Has => {
+            let has = parse_has_field(value).ok_or_else(|| {
+                ParseError::invalid_value(
+                    "has",
+                    value,
+                    Some("Valid values: due, project, tags, estimate, description, recurrence, scheduled, dependencies, parent, tracked".to_string()),
+                    position,
+                )
+            })?;
+            Ok(FilterValue::Has(has))
+        }
+        FilterField::Title => Ok(FilterValue::TitleText(value.to_string())),
+        FilterField::Created => {
+            let created = parse_created(value, position)?;
+            Ok(FilterValue::Created(created))
+        }
+        FilterField::Scheduled => {
+            let scheduled = parse_scheduled(value, position)?;
+            Ok(FilterValue::Scheduled(scheduled))
+        }
+        FilterField::Completed => {
+            let completed = parse_created(value, position)?;
+            Ok(FilterValue::Completed(completed))
+        }
+        FilterField::Modified => {
+            let modified = parse_created(value, position)?;
+            Ok(FilterValue::Modified(modified))
+        }
+        FilterField::Estimate => {
+            let numeric = parse_numeric(value, position, "estimate")?;
+            Ok(FilterValue::Estimate(numeric))
+        }
+        FilterField::Actual => {
+            let numeric = parse_numeric(value, position, "actual")?;
+            Ok(FilterValue::Actual(numeric))
+        }
+    }
+}
+
+/// Parse a priority value.
+fn parse_priority(s: &str) -> Option<Priority> {
+    match s.to_lowercase().as_str() {
+        "none" => Some(Priority::None),
+        "low" => Some(Priority::Low),
+        "medium" | "med" => Some(Priority::Medium),
+        "high" => Some(Priority::High),
+        "urgent" => Some(Priority::Urgent),
+        _ => None,
+    }
+}
+
+/// Parse a status value.
+fn parse_status(s: &str) -> Option<TaskStatus> {
+    match s.to_lowercase().replace(['-', '_'], "").as_str() {
+        "todo" => Some(TaskStatus::Todo),
+        "inprogress" => Some(TaskStatus::InProgress),
+        "blocked" => Some(TaskStatus::Blocked),
+        "done" | "completed" => Some(TaskStatus::Done),
+        "cancelled" | "canceled" => Some(TaskStatus::Cancelled),
+        _ => None,
+    }
+}
+
+/// Parse a due date filter value.
+fn parse_due(s: &str, position: usize) -> ParseResult<DueFilter> {
+    match s.to_lowercase().as_str() {
+        "today" => Ok(DueFilter::Today),
+        "tomorrow" => Ok(DueFilter::Tomorrow),
+        "thisweek" | "this-week" | "this_week" => Ok(DueFilter::ThisWeek),
+        "nextweek" | "next-week" | "next_week" => Ok(DueFilter::NextWeek),
+        "overdue" => Ok(DueFilter::Overdue),
+        "none" => Ok(DueFilter::None),
+        _ => {
+            // Try before date: <YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('<') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(DueFilter::Before(date));
+                }
+            }
+            // Try after date: >YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('>') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(DueFilter::After(date));
+                }
+            }
+            // Try exact date: YYYY-MM-DD
+            if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                return Ok(DueFilter::On(date));
+            }
+            Err(ParseError::invalid_value(
+                "due",
+                s,
+                Some("Valid values: today, tomorrow, thisweek, nextweek, overdue, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                position,
+            ))
+        }
+    }
+}
+
+/// Parse a has field value.
+fn parse_has_field(s: &str) -> Option<HasField> {
+    match s.to_lowercase().as_str() {
+        "due" => Some(HasField::Due),
+        "project" => Some(HasField::Project),
+        "tags" | "tag" => Some(HasField::Tags),
+        "estimate" | "est" => Some(HasField::Estimate),
+        "description" | "desc" => Some(HasField::Description),
+        "recurrence" | "recurring" => Some(HasField::Recurrence),
+        "scheduled" => Some(HasField::Scheduled),
+        "dependencies" | "deps" | "blocked" => Some(HasField::Dependencies),
+        "parent" | "subtask" => Some(HasField::Parent),
+        "tracked" | "time" => Some(HasField::Tracked),
+        _ => None,
+    }
+}
+
+/// Parse a created date filter value.
+fn parse_created(s: &str, position: usize) -> ParseResult<CreatedFilter> {
+    match s.to_lowercase().as_str() {
+        "today" => Ok(CreatedFilter::Today),
+        "yesterday" => Ok(CreatedFilter::Yesterday),
+        "thisweek" | "this-week" | "this_week" => Ok(CreatedFilter::ThisWeek),
+        "lastweek" | "last-week" | "last_week" => Ok(CreatedFilter::LastWeek),
+        _ => {
+            // Try before date: <YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('<') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(CreatedFilter::Before(date));
+                }
+            }
+            // Try after date: >YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('>') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(CreatedFilter::After(date));
+                }
+            }
+            // Try exact date: YYYY-MM-DD
+            if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                return Ok(CreatedFilter::On(date));
+            }
+            Err(ParseError::invalid_value(
+                "created",
+                s,
+                Some("Valid values: today, yesterday, thisweek, lastweek, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                position,
+            ))
+        }
+    }
+}
+
+/// Parse a scheduled date filter value.
+fn parse_scheduled(s: &str, position: usize) -> ParseResult<ScheduledFilter> {
+    match s.to_lowercase().as_str() {
+        "today" => Ok(ScheduledFilter::Today),
+        "tomorrow" => Ok(ScheduledFilter::Tomorrow),
+        "thisweek" | "this-week" | "this_week" => Ok(ScheduledFilter::ThisWeek),
+        "nextweek" | "next-week" | "next_week" => Ok(ScheduledFilter::NextWeek),
+        "none" => Ok(ScheduledFilter::None),
+        _ => {
+            // Try before date: <YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('<') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(ScheduledFilter::Before(date));
+                }
+            }
+            // Try after date: >YYYY-MM-DD
+            if let Some(date_str) = s.strip_prefix('>') {
+                if let Ok(date) = NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                    return Ok(ScheduledFilter::After(date));
+                }
+            }
+            // Try exact date: YYYY-MM-DD
+            if let Ok(date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                return Ok(ScheduledFilter::On(date));
+            }
+            Err(ParseError::invalid_value(
+                "scheduled",
+                s,
+                Some("Valid values: today, tomorrow, thisweek, nextweek, none, YYYY-MM-DD, <YYYY-MM-DD, >YYYY-MM-DD".to_string()),
+                position,
+            ))
+        }
+    }
+}
+
+/// Parse a numeric filter value (for estimate/actual).
+fn parse_numeric(s: &str, position: usize, field_name: &str) -> ParseResult<NumericFilter> {
+    let s_lower = s.to_lowercase();
+
+    // Handle "none" keyword
+    if s_lower == "none" {
+        return Ok(NumericFilter::None);
+    }
+
+    // Try comparison operators: >=, <=, >, <
+    if let Some(num_str) = s.strip_prefix(">=") {
+        if let Ok(num) = num_str.parse::<u32>() {
+            return Ok(NumericFilter::GreaterOrEqual(num));
+        }
+    }
+    if let Some(num_str) = s.strip_prefix("<=") {
+        if let Ok(num) = num_str.parse::<u32>() {
+            return Ok(NumericFilter::LessOrEqual(num));
+        }
+    }
+    if let Some(num_str) = s.strip_prefix('>') {
+        if let Ok(num) = num_str.parse::<u32>() {
+            return Ok(NumericFilter::GreaterThan(num));
+        }
+    }
+    if let Some(num_str) = s.strip_prefix('<') {
+        if let Ok(num) = num_str.parse::<u32>() {
+            return Ok(NumericFilter::LessThan(num));
+        }
+    }
+
+    // Try plain number (equals)
+    if let Ok(num) = s.parse::<u32>() {
+        return Ok(NumericFilter::Equals(num));
+    }
+
+    Err(ParseError::invalid_value(
+        field_name,
+        s,
+        Some("Valid values: number, >number, <number, >=number, <=number, none".to_string()),
+        position,
+    ))
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Parse a filter DSL string into an expression AST.
+///
+/// # Errors
+///
+/// Returns a [`ParseError`] if the input cannot be parsed:
+/// - [`ParseError::EmptyExpression`] if the input is empty
+/// - [`ParseError::UnknownField`] for unrecognized field names
+/// - [`ParseError::InvalidValue`] for invalid field values
+/// - [`ParseError::UnexpectedToken`] for syntax errors
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::filter_dsl::{parse, FilterExpr};
+///
+/// let expr = parse("priority:high AND !status:done").unwrap();
+/// assert!(matches!(expr, FilterExpr::And(_, _)));
+/// ```
+#[must_use = "parsing returns a Result that should be used"]
+pub fn parse(input: &str) -> ParseResult<FilterExpr> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(ParseError::EmptyExpression);
+    }
+
+    let tokens = tokenize(input)?;
+    let mut parser = Parser::new(tokens);
+    parser.parse()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_condition() {
+        let expr = parse("priority:high").unwrap();
+        assert!(matches!(expr, FilterExpr::Condition(_)));
+    }
+
+    #[test]
+    fn test_parse_and_expression() {
+        let expr = parse("priority:high AND status:todo").unwrap();
+        assert!(matches!(expr, FilterExpr::And(_, _)));
+    }
+
+    #[test]
+    fn test_parse_or_expression() {
+        let expr = parse("status:todo OR status:in_progress").unwrap();
+        assert!(matches!(expr, FilterExpr::Or(_, _)));
+    }
+
+    #[test]
+    fn test_parse_not_expression() {
+        let expr = parse("!status:done").unwrap();
+        assert!(matches!(expr, FilterExpr::Not(_)));
+    }
+
+    #[test]
+    fn test_parse_parentheses() {
+        let expr = parse("(priority:high OR priority:urgent) AND tags:bug").unwrap();
+        if let FilterExpr::And(left, _) = expr {
+            assert!(matches!(*left, FilterExpr::Or(_, _)));
+        } else {
+            panic!("Expected And expression");
+        }
+    }
+
+    #[test]
+    fn test_precedence_and_over_or() {
+        // a OR b AND c should parse as a OR (b AND c)
+        let expr = parse("status:todo OR priority:high AND tags:bug").unwrap();
+        if let FilterExpr::Or(_, right) = expr {
+            assert!(matches!(*right, FilterExpr::And(_, _)));
+        } else {
+            panic!("Expected Or expression with And on right");
+        }
+    }
+
+    #[test]
+    fn test_parse_quoted_string() {
+        let expr = parse(r#"search:"hello world""#).unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert!(matches!(cond.value, FilterValue::SearchText(s) if s == "hello world"));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_all_priorities() {
+        for (input, expected) in [
+            ("priority:none", Priority::None),
+            ("priority:low", Priority::Low),
+            ("priority:medium", Priority::Medium),
+            ("priority:med", Priority::Medium),
+            ("priority:high", Priority::High),
+            ("priority:urgent", Priority::Urgent),
+        ] {
+            let expr = parse(input).unwrap();
+            if let FilterExpr::Condition(cond) = expr {
+                assert_eq!(cond.value, FilterValue::Priority(expected));
+            } else {
+                panic!("Expected Condition for {}", input);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_all_statuses() {
+        for (input, expected) in [
+            ("status:todo", TaskStatus::Todo),
+            ("status:in_progress", TaskStatus::InProgress),
+            ("status:in-progress", TaskStatus::InProgress),
+            ("status:inprogress", TaskStatus::InProgress),
+            ("status:blocked", TaskStatus::Blocked),
+            ("status:done", TaskStatus::Done),
+            ("status:completed", TaskStatus::Done),
+            ("status:cancelled", TaskStatus::Cancelled),
+            ("status:canceled", TaskStatus::Cancelled),
+        ] {
+            let expr = parse(input).unwrap();
+            if let FilterExpr::Condition(cond) = expr {
+                assert_eq!(
+                    cond.value,
+                    FilterValue::Status(expected),
+                    "Failed for {}",
+                    input
+                );
+            } else {
+                panic!("Expected Condition for {}", input);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_due_filters() {
+        for (input, expected) in [
+            ("due:today", DueFilter::Today),
+            ("due:tomorrow", DueFilter::Tomorrow),
+            ("due:thisweek", DueFilter::ThisWeek),
+            ("due:this-week", DueFilter::ThisWeek),
+            ("due:nextweek", DueFilter::NextWeek),
+            ("due:overdue", DueFilter::Overdue),
+            ("due:none", DueFilter::None),
+        ] {
+            let expr = parse(input).unwrap();
+            if let FilterExpr::Condition(cond) = expr {
+                assert_eq!(
+                    cond.value,
+                    FilterValue::Due(expected),
+                    "Failed for {}",
+                    input
+                );
+            } else {
+                panic!("Expected Condition for {}", input);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_due_specific_date() {
+        let expr = parse("due:2025-12-25").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::On(expected)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_due_before_date() {
+        let expr = parse("due:<2025-12-25").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::Before(expected)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_due_after_date() {
+        let expr = parse("due:>2025-12-25").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+            assert_eq!(cond.value, FilterValue::Due(DueFilter::After(expected)));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_has_fields() {
+        for (input, expected) in [
+            ("has:due", HasField::Due),
+            ("has:project", HasField::Project),
+            ("has:tags", HasField::Tags),
+            ("has:tag", HasField::Tags),
+            ("has:estimate", HasField::Estimate),
+            ("has:description", HasField::Description),
+            ("has:desc", HasField::Description),
+        ] {
+            let expr = parse(input).unwrap();
+            if let FilterExpr::Condition(cond) = expr {
+                assert_eq!(
+                    cond.value,
+                    FilterValue::Has(expected),
+                    "Failed for {}",
+                    input
+                );
+            } else {
+                panic!("Expected Condition for {}", input);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_tag_alias() {
+        let expr1 = parse("tags:bug").unwrap();
+        let expr2 = parse("tag:bug").unwrap();
+        assert_eq!(expr1, expr2);
+    }
+
+    #[test]
+    fn test_parse_project_partial_match() {
+        let expr = parse("project:backend").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(cond.field, FilterField::Project);
+            assert_eq!(cond.value, FilterValue::ProjectName("backend".to_string()));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_title_search() {
+        let expr = parse("title:refactor").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert_eq!(cond.field, FilterField::Title);
+            assert_eq!(cond.value, FilterValue::TitleText("refactor".to_string()));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_complex_expression() {
+        let expr =
+            parse("(priority:high OR priority:urgent) AND !status:done AND tags:work").unwrap();
+        // Should be: ((priority:high OR priority:urgent) AND !status:done) AND tags:work
+        assert!(matches!(expr, FilterExpr::And(_, _)));
+    }
+
+    #[test]
+    fn test_parse_empty_string() {
+        let result = parse("");
+        assert!(matches!(result, Err(ParseError::EmptyExpression)));
+    }
+
+    #[test]
+    fn test_parse_whitespace_only() {
+        let result = parse("   ");
+        assert!(matches!(result, Err(ParseError::EmptyExpression)));
+    }
+
+    #[test]
+    fn test_parse_unknown_field() {
+        let result = parse("unknown:value");
+        assert!(matches!(result, Err(ParseError::UnknownField { .. })));
+    }
+
+    #[test]
+    fn test_parse_invalid_priority() {
+        let result = parse("priority:extreme");
+        assert!(
+            matches!(result, Err(ParseError::InvalidValue { field, .. }) if field == "priority")
+        );
+    }
+
+    #[test]
+    fn test_parse_invalid_status() {
+        let result = parse("status:running");
+        assert!(matches!(result, Err(ParseError::InvalidValue { field, .. }) if field == "status"));
+    }
+
+    #[test]
+    fn test_parse_invalid_due() {
+        let result = parse("due:sometime");
+        assert!(matches!(result, Err(ParseError::InvalidValue { field, .. }) if field == "due"));
+    }
+
+    #[test]
+    fn test_parse_case_insensitive_fields() {
+        let expr1 = parse("PRIORITY:high").unwrap();
+        let expr2 = parse("Priority:high").unwrap();
+        let expr3 = parse("priority:high").unwrap();
+        assert_eq!(expr1, expr2);
+        assert_eq!(expr2, expr3);
+    }
+
+    #[test]
+    fn test_parse_case_insensitive_values() {
+        let expr1 = parse("priority:HIGH").unwrap();
+        let expr2 = parse("priority:High").unwrap();
+        let expr3 = parse("priority:high").unwrap();
+        assert_eq!(expr1, expr2);
+        assert_eq!(expr2, expr3);
+    }
+
+    #[test]
+    fn test_double_negation() {
+        let expr = parse("!!status:done").unwrap();
+        if let FilterExpr::Not(inner) = expr {
+            assert!(matches!(*inner, FilterExpr::Not(_)));
+        } else {
+            panic!("Expected Not expression");
+        }
+    }
+
+    #[test]
+    fn test_nested_parentheses() {
+        let expr = parse("((priority:high))").unwrap();
+        assert!(matches!(expr, FilterExpr::Condition(_)));
+    }
+
+    #[test]
+    fn test_parse_created_filters() {
+        for (input, expected) in [
+            ("created:today", CreatedFilter::Today),
+            ("created:yesterday", CreatedFilter::Yesterday),
+            ("created:thisweek", CreatedFilter::ThisWeek),
+            ("created:this-week", CreatedFilter::ThisWeek),
+            ("created:lastweek", CreatedFilter::LastWeek),
+            ("created:last-week", CreatedFilter::LastWeek),
+        ] {
+            let expr = parse(input).unwrap();
+            if let FilterExpr::Condition(cond) = expr {
+                assert_eq!(
+                    cond.value,
+                    FilterValue::Created(expected),
+                    "Failed for {}",
+                    input
+                );
+            } else {
+                panic!("Expected Condition for {}", input);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_created_specific_date() {
+        let expr = parse("created:2025-01-15").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::On(expected))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_created_before_date() {
+        let expr = parse("created:<2025-01-15").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::Before(expected))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_parse_created_after_date() {
+        let expr = parse("created:>2025-01-15").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(CreatedFilter::After(expected))
+            );
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+}

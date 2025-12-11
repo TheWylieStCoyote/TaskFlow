@@ -1,6 +1,7 @@
 //! List tasks command.
 
 use chrono::Utc;
+use tracing::error;
 
 use taskflow::domain::filter_dsl::{evaluate, parse, EvalContext};
 use taskflow::domain::{Priority, Task, TaskStatus};
@@ -26,6 +27,7 @@ pub fn list_tasks(
         match parse(dsl_str) {
             Ok(expr) => Some(expr),
             Err(e) => {
+                error!(error = %e, "Filter parse error");
                 eprintln!("Filter parse error: {e}");
                 return Err(anyhow::anyhow!("Invalid filter expression: {e}"));
             }

@@ -19,6 +19,8 @@
 
 use std::path::PathBuf;
 
+use tracing::warn;
+
 use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 
@@ -222,9 +224,9 @@ impl Theme {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(theme) => return theme,
-                    Err(e) => eprintln!("Warning: Failed to parse theme: {e}"),
+                    Err(e) => warn!("Failed to parse theme: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read theme: {e}"),
+                Err(e) => warn!("Failed to read theme: {e}"),
             }
         }
         Self::default()

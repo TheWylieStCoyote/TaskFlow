@@ -23,6 +23,8 @@ pub mod types;
 
 use std::io::{BufRead, Write};
 
+use tracing::warn;
+
 use crate::cli::Cli;
 use crate::load_model_for_cli;
 
@@ -38,7 +40,7 @@ pub fn run_pipe(cli: &Cli, format_str: &str) -> anyhow::Result<()> {
         "yaml" | "yml" => OutputFormat::Yaml,
         "csv" => OutputFormat::Csv,
         _ => {
-            eprintln!("Warning: Unknown format '{}', using JSON", format_str);
+            warn!(format = %format_str, "Unknown output format, using JSON");
             OutputFormat::Json
         }
     };
@@ -83,7 +85,7 @@ pub fn run_pipe(cli: &Cli, format_str: &str) -> anyhow::Result<()> {
 
     // Save any changes
     if let Err(e) = model.save() {
-        eprintln!("Warning: Failed to save model: {e}");
+        warn!(error = %e, "Failed to save model after pipe operations");
     }
 
     Ok(())

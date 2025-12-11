@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 
+use tracing::warn;
+
 use taskflow::app::extract_git_location;
 use taskflow::domain::{Priority, Task};
 
@@ -135,6 +137,7 @@ pub fn extract_git_todos(
 
     // Save to disk
     if let Err(e) = model.save() {
+        warn!(error = %e, "Could not save git TODOs to disk");
         eprintln!("Warning: Could not save to disk: {e}");
     }
 
@@ -147,6 +150,7 @@ pub fn extract_git_todos(
         if project_id.is_some() {
             println!("  Project: @{}", name);
         } else {
+            warn!(project = %name, "Referenced project not found for git TODOs");
             eprintln!("  Project: @{} (not found)", name);
         }
     }

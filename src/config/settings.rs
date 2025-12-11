@@ -22,6 +22,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::warn;
 
 use crate::domain::Priority;
 use crate::storage::BackendType;
@@ -110,7 +111,7 @@ impl Settings {
             Ok(Some(settings)) => settings,
             Ok(None) => Self::default(),
             Err(e) => {
-                eprintln!("Warning: {e}");
+                warn!("Settings file error: {e}");
                 Self::default()
             }
         }

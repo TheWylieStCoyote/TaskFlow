@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use super::Settings;
 
@@ -47,9 +48,9 @@ impl Keybindings {
             match std::fs::read_to_string(&path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(keybindings) => return keybindings,
-                    Err(e) => eprintln!("Warning: Failed to parse keybindings: {e}"),
+                    Err(e) => warn!("Failed to parse keybindings: {e}"),
                 },
-                Err(e) => eprintln!("Warning: Failed to read keybindings: {e}"),
+                Err(e) => warn!("Failed to read keybindings: {e}"),
             }
         }
         Self::default()

@@ -1,5 +1,7 @@
 //! Mark task done command.
 
+use tracing::warn;
+
 use taskflow::domain::TaskStatus;
 
 use crate::cli::Cli;
@@ -14,6 +16,7 @@ pub fn mark_task_done(
 ) -> anyhow::Result<()> {
     let query = query_words.join(" ").to_lowercase();
     if query.trim().is_empty() {
+        warn!("Empty search query provided for done command");
         eprintln!("Error: Search query cannot be empty");
         eprintln!("Usage: taskflow done <search query>");
         std::process::exit(1);
@@ -69,6 +72,7 @@ pub fn mark_task_done(
 
     match matches.len() {
         0 => {
+            warn!(query = %query, "No matching tasks found for done command");
             eprintln!("No matching incomplete tasks found for: \"{}\"", query);
             eprintln!();
             eprintln!("Tips:");
@@ -90,6 +94,7 @@ pub fn mark_task_done(
             }
             model.sync_task_by_id(&task_id);
             if let Err(e) = model.save() {
+                warn!(error = %e, "Could not save after marking task done");
                 eprintln!("Warning: Could not save: {e}");
             }
 

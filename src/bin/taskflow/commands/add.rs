@@ -1,5 +1,7 @@
 //! Quick add task command.
 
+use tracing::warn;
+
 use taskflow::app::quick_add::parse_quick_add;
 use taskflow::domain::Task;
 
@@ -11,6 +13,7 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
     // Join all words into a single task string
     let task_input = task_words.join(" ");
     if task_input.trim().is_empty() {
+        warn!("Empty task description provided");
         eprintln!("Error: Task description cannot be empty");
         eprintln!("Usage: taskflow add <task description>");
         eprintln!("Example: taskflow add \"Buy milk #shopping !high due:tomorrow\"");
@@ -59,6 +62,7 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
     // Sync to storage
     model.sync_task(&task);
     if let Err(e) = model.save() {
+        warn!(error = %e, "Task added but could not save to disk");
         eprintln!("Warning: Task added to session but could not save to disk: {e}");
         eprintln!("  The task will be available until you close the TUI.");
         eprintln!("  Check disk space and file permissions, then try again.");
@@ -87,6 +91,7 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
         if task.project_id.is_some() {
             println!("  Project: @{project_name}");
         } else {
+            warn!(project = %project_name, "Referenced project not found");
             eprintln!("  Project: @{project_name} (not found - create it in the TUI with 'P')");
         }
     }

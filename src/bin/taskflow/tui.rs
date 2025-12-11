@@ -9,7 +9,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use taskflow::app::{update, Message, Model, PomodoroMessage, RunningState, SystemMessage};
 use taskflow::config::{Keybindings, Settings, Theme};
@@ -116,6 +116,7 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     terminal.show_cursor()?;
 
     if let Err(err) = result {
+        error!(error = ?err, "TUI error");
         eprintln!("Error: {err:?}");
     }
 

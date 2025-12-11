@@ -96,7 +96,7 @@ use input::{handle_submit_input, start_input};
 use keybindings::handle_ui_keybindings;
 use macros::handle_ui_macros;
 use reschedule::handle_ui_reschedule;
-use reviews::{handle_ui_daily_review, handle_ui_weekly_review};
+use reviews::{handle_ui_daily_review, handle_ui_evening_review, handle_ui_weekly_review};
 use task_ops::handle_move_task;
 use templates::handle_ui_templates;
 use time_tracking::handle_ui_time_log;
@@ -682,6 +682,18 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::WeeklyReviewUp
         | UiMessage::WeeklyReviewDown => {
             handle_ui_weekly_review(model, msg);
+        }
+        // Evening review - delegated to helper
+        UiMessage::ShowEveningReview
+        | UiMessage::HideEveningReview
+        | UiMessage::EveningReviewNext
+        | UiMessage::EveningReviewPrev
+        | UiMessage::EveningReviewUp
+        | UiMessage::EveningReviewDown
+        | UiMessage::EveningReviewReschedule
+        | UiMessage::EveningReviewSnooze
+        | UiMessage::EveningReviewComplete => {
+            handle_ui_evening_review(model, msg);
         }
 
         // Task snooze and quick reschedule - delegated to helper

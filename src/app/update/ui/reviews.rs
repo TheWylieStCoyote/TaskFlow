@@ -1,7 +1,9 @@
-//! Daily and weekly review handlers
+//! Daily, weekly, and evening review handlers
+
+use chrono::Duration;
 
 use crate::app::{Model, UiMessage};
-use crate::ui::{DailyReviewPhase, WeeklyReviewPhase};
+use crate::ui::{DailyReviewPhase, EveningReviewPhase, WeeklyReviewPhase};
 
 /// Handle daily review UI messages
 pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
@@ -180,6 +182,169 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
 
             if count > 0 && model.weekly_review.selected < count - 1 {
                 model.weekly_review.selected += 1;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Handle evening review UI messages
+pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
+    match msg {
+        UiMessage::ShowEveningReview => {
+            model.evening_review.visible = true;
+            model.evening_review.phase = EveningReviewPhase::Welcome;
+            model.evening_review.selected = 0;
+        }
+        UiMessage::HideEveningReview => {
+            model.evening_review.visible = false;
+        }
+        UiMessage::EveningReviewNext => {
+            let next_phase = model.evening_review.phase.next();
+
+            // Auto-skip TimeReview if no time entries today
+            let today = chrono::Utc::now().date_naive();
+            let has_time_entries = model
+                .time_entries
+                .values()
+                .any(|e| e.started_at.date_naive() == today);
+
+            if next_phase == EveningReviewPhase::TimeReview && !has_time_entries {
+                // Skip to Summary
+                model.evening_review.phase = EveningReviewPhase::Summary;
+            } else {
+                model.evening_review.phase = next_phase;
+            }
+            model.evening_review.selected = 0;
+        }
+        UiMessage::EveningReviewPrev => {
+            let prev_phase = model.evening_review.phase.prev();
+
+            // Auto-skip TimeReview when going back if no time entries today
+            let today = chrono::Utc::now().date_naive();
+            let has_time_entries = model
+                .time_entries
+                .values()
+                .any(|e| e.started_at.date_naive() == today);
+
+            if prev_phase == EveningReviewPhase::TimeReview && !has_time_entries {
+                // Skip back to TomorrowPreview
+                model.evening_review.phase = EveningReviewPhase::TomorrowPreview;
+            } else {
+                model.evening_review.phase = prev_phase;
+            }
+            model.evening_review.selected = 0;
+        }
+        UiMessage::EveningReviewUp => {
+            if model.evening_review.selected > 0 {
+                model.evening_review.selected -= 1;
+            }
+        }
+        UiMessage::EveningReviewDown => {
+            // Get the task count for incomplete tasks phase
+            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
+                let today = chrono::Utc::now().date_naive();
+                let count = model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && (t.due_date == Some(today) || t.scheduled_date == Some(today))
+                    })
+                    .count();
+                if count > 0 && model.evening_review.selected < count - 1 {
+                    model.evening_review.selected += 1;
+                }
+            }
+        }
+        UiMessage::EveningReviewReschedule => {
+            // Reschedule selected task to tomorrow
+            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
+                let today = chrono::Utc::now().date_naive();
+                let tomorrow = today + Duration::days(1);
+
+                let task_ids: Vec<_> = model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && (t.due_date == Some(today) || t.scheduled_date == Some(today))
+                    })
+                    .map(|t| t.id)
+                    .collect();
+
+                if let Some(task_id) = task_ids.get(model.evening_review.selected).copied() {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        // Clear today's scheduled_date and set to tomorrow
+                        task.scheduled_date = Some(tomorrow);
+                    });
+                    model.alerts.status_message = Some("Task rescheduled to tomorrow".to_string());
+
+                    // Adjust selection
+                    let new_count = task_ids.len().saturating_sub(1);
+                    if model.evening_review.selected >= new_count && new_count > 0 {
+                        model.evening_review.selected = new_count - 1;
+                    }
+                }
+            }
+        }
+        UiMessage::EveningReviewSnooze => {
+            // Snooze selected task until tomorrow
+            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
+                let today = chrono::Utc::now().date_naive();
+                let tomorrow = today + Duration::days(1);
+
+                let task_ids: Vec<_> = model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && (t.due_date == Some(today) || t.scheduled_date == Some(today))
+                    })
+                    .map(|t| t.id)
+                    .collect();
+
+                if let Some(task_id) = task_ids.get(model.evening_review.selected).copied() {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.snooze_until = Some(tomorrow);
+                    });
+                    model.alerts.status_message = Some("Task snoozed until tomorrow".to_string());
+
+                    // Adjust selection
+                    let new_count = task_ids.len().saturating_sub(1);
+                    if model.evening_review.selected >= new_count && new_count > 0 {
+                        model.evening_review.selected = new_count - 1;
+                    }
+                }
+            }
+        }
+        UiMessage::EveningReviewComplete => {
+            // Mark selected task as complete
+            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
+                let today = chrono::Utc::now().date_naive();
+
+                let task_ids: Vec<_> = model
+                    .tasks
+                    .values()
+                    .filter(|t| {
+                        !t.status.is_complete()
+                            && (t.due_date == Some(today) || t.scheduled_date == Some(today))
+                    })
+                    .map(|t| t.id)
+                    .collect();
+
+                if let Some(task_id) = task_ids.get(model.evening_review.selected).copied() {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.toggle_complete();
+                    });
+                    model.alerts.status_message = Some("Task completed!".to_string());
+
+                    // Adjust selection
+                    let new_count = task_ids.len().saturating_sub(1);
+                    if model.evening_review.selected >= new_count && new_count > 0 {
+                        model.evening_review.selected = new_count - 1;
+                    }
+                }
             }
         }
         _ => {}

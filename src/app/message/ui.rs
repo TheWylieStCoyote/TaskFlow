@@ -355,6 +355,26 @@ pub enum UiMessage {
     /// Navigate down in weekly review list
     WeeklyReviewDown,
 
+    // Evening review mode
+    /// Show evening review mode
+    ShowEveningReview,
+    /// Hide evening review mode
+    HideEveningReview,
+    /// Move to next phase in evening review
+    EveningReviewNext,
+    /// Move to previous phase in evening review
+    EveningReviewPrev,
+    /// Navigate up in evening review list
+    EveningReviewUp,
+    /// Navigate down in evening review list
+    EveningReviewDown,
+    /// Reschedule selected task to tomorrow
+    EveningReviewReschedule,
+    /// Snooze selected task until tomorrow
+    EveningReviewSnooze,
+    /// Mark selected task as complete
+    EveningReviewComplete,
+
     // Task snooze
     /// Start editing snooze date for selected task
     StartSnoozeTask,

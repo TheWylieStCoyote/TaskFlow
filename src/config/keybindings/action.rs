@@ -168,6 +168,11 @@ pub enum Action {
     // Git integration
     ViewGitTodos,
     OpenInEditor,
+
+    // Review modes
+    ShowDailyReview,
+    ShowWeeklyReview,
+    ShowEveningReview,
 }
 
 /// Category for grouping actions in help display
@@ -398,6 +403,10 @@ impl Action {
             // Git integration
             Self::ViewGitTodos => "View Git TODOs",
             Self::OpenInEditor => "Open in editor",
+            // Reviews
+            Self::ShowDailyReview => "Daily review",
+            Self::ShowWeeklyReview => "Weekly review",
+            Self::ShowEveningReview => "Evening review",
         }
     }
 
@@ -532,6 +541,10 @@ impl Action {
                 ActionCategory::Duplicates
             }
             Self::ViewGitTodos | Self::OpenInEditor => ActionCategory::ViewFilter,
+
+            Self::ShowDailyReview | Self::ShowWeeklyReview | Self::ShowEveningReview => {
+                ActionCategory::ViewFilter
+            }
         }
     }
 }

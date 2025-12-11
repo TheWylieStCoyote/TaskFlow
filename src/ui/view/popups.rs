@@ -10,9 +10,9 @@ use crate::config::Theme;
 
 use crate::ui::components::{
     centered_rect, centered_rect_fixed_height, ConfirmDialog, DailyReview, DescriptionEditor,
-    HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode, InputTarget, KeybindingsEditor,
-    OverdueAlert, QuickCaptureDialog, SavedFilterPicker, StorageErrorAlert, TemplatePicker,
-    TimeLogEditor, WeeklyReview, WorkLogEditor,
+    EveningReview, HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode, InputTarget,
+    KeybindingsEditor, OverdueAlert, QuickCaptureDialog, SavedFilterPicker, StorageErrorAlert,
+    TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
 };
 
 /// Renders all popup dialogs and overlays based on model state
@@ -291,6 +291,13 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
             ),
             review_area,
         );
+    }
+
+    // Render evening review mode (full screen overlay)
+    if model.evening_review.visible {
+        // Use centered area for the review dialog
+        let review_area = centered_rect(70, 70, area);
+        frame.render_widget(EveningReview::new(model, theme), review_area);
     }
 
     // Render habit analytics popup

@@ -28,7 +28,7 @@ pub use editors::{DescriptionEditorState, TimeLogEditorState, WorkLogEditorState
 pub use persistence::{ImportState, StorageState};
 pub use pickers::{KeybindingsEditorState, SavedFilterPickerState, TemplatePickerState};
 pub use pomodoro::PomodoroState;
-pub use reviews::{DailyReviewState, WeeklyReviewState};
+pub use reviews::{DailyReviewState, EveningReviewState, WeeklyReviewState};
 pub use timeline::{TimelineState, TimelineZoom};
 pub use ui_state::{
     AlertState, DuplicatesViewState, FilterState, GoalViewState, HabitViewState, InputState,

@@ -174,5 +174,10 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("alt+g".to_string(), Action::ViewGitTodos);
     bindings.insert("O".to_string(), Action::OpenInEditor);
 
+    // Reviews
+    bindings.insert("alt+d".to_string(), Action::ShowDailyReview);
+    bindings.insert("alt+w".to_string(), Action::ShowWeeklyReview);
+    bindings.insert("alt+e".to_string(), Action::ShowEveningReview);
+
     bindings
 }

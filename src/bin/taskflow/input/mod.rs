@@ -14,10 +14,11 @@ use taskflow::config::Keybindings;
 use taskflow::ui::InputMode;
 
 pub use handlers::{
-    handle_calendar_view, handle_description_editor, handle_eisenhower_view, handle_goals_view,
-    handle_habits_view, handle_kanban_view, handle_keybindings_editor, handle_macro_slot,
-    handle_network_view, handle_reports_view, handle_template_picker, handle_time_log,
-    handle_timeline_view, handle_weekly_planner_view, handle_work_log,
+    handle_calendar_view, handle_daily_review, handle_description_editor, handle_eisenhower_view,
+    handle_evening_review, handle_goals_view, handle_habits_view, handle_kanban_view,
+    handle_keybindings_editor, handle_macro_slot, handle_network_view, handle_reports_view,
+    handle_template_picker, handle_time_log, handle_timeline_view, handle_weekly_planner_view,
+    handle_weekly_review, handle_work_log,
 };
 pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
@@ -192,6 +193,21 @@ pub fn handle_key_event(
             }
             _ => Message::None,
         };
+    }
+
+    // If daily review is showing, handle navigation
+    if model.daily_review.visible {
+        return handle_daily_review(key);
+    }
+
+    // If weekly review is showing, handle navigation
+    if model.weekly_review.visible {
+        return handle_weekly_review(key);
+    }
+
+    // If evening review is showing, handle navigation
+    if model.evening_review.visible {
+        return handle_evening_review(key);
     }
 
     // Handle macro slot selection if pending

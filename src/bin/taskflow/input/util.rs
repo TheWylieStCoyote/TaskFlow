@@ -176,5 +176,9 @@ pub const fn action_to_message(action: &Action) -> Message {
         // Git integration
         Action::ViewGitTodos => Message::Navigation(NavigationMessage::GoToView(ViewId::GitTodos)),
         Action::OpenInEditor => Message::Ui(UiMessage::OpenInEditor),
+        // Reviews
+        Action::ShowDailyReview => Message::Ui(UiMessage::ShowDailyReview),
+        Action::ShowWeeklyReview => Message::Ui(UiMessage::ShowWeeklyReview),
+        Action::ShowEveningReview => Message::Ui(UiMessage::ShowEveningReview),
     }
 }

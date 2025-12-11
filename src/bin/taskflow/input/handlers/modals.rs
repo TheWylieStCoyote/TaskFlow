@@ -205,6 +205,52 @@ pub fn handle_description_editor(key: event::KeyEvent) -> Message {
     }
 }
 
+/// Handle daily review input
+pub fn handle_daily_review(key: event::KeyEvent) -> Message {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideDailyReview),
+        KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+            Message::Ui(UiMessage::DailyReviewNext)
+        }
+        KeyCode::Left | KeyCode::Char('h') => Message::Ui(UiMessage::DailyReviewPrev),
+        KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::DailyReviewUp),
+        KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::DailyReviewDown),
+        KeyCode::Char('x') | KeyCode::Char(' ') => Message::Ui(UiMessage::DailyReviewComplete),
+        _ => Message::None,
+    }
+}
+
+/// Handle weekly review input
+pub fn handle_weekly_review(key: event::KeyEvent) -> Message {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideWeeklyReview),
+        KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+            Message::Ui(UiMessage::WeeklyReviewNext)
+        }
+        KeyCode::Left | KeyCode::Char('h') => Message::Ui(UiMessage::WeeklyReviewPrev),
+        KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::WeeklyReviewUp),
+        KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::WeeklyReviewDown),
+        _ => Message::None,
+    }
+}
+
+/// Handle evening review input
+pub fn handle_evening_review(key: event::KeyEvent) -> Message {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideEveningReview),
+        KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+            Message::Ui(UiMessage::EveningReviewNext)
+        }
+        KeyCode::Left | KeyCode::Char('h') => Message::Ui(UiMessage::EveningReviewPrev),
+        KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::EveningReviewUp),
+        KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::EveningReviewDown),
+        KeyCode::Char('r') => Message::Ui(UiMessage::EveningReviewReschedule),
+        KeyCode::Char('s') => Message::Ui(UiMessage::EveningReviewSnooze),
+        KeyCode::Char('x') | KeyCode::Char(' ') => Message::Ui(UiMessage::EveningReviewComplete),
+        _ => Message::None,
+    }
+}
+
 /// Handle macro slot selection
 pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     if let KeyCode::Char(c) = key.code {

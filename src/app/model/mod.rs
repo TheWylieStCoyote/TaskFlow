@@ -62,10 +62,11 @@ pub use cache::{FooterStats, ReportCache, TaskCache};
 pub use layout_cache::LayoutCache;
 pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
-    DescriptionEditorState, DuplicatesViewState, FilterState, GoalViewState, HabitViewState,
-    ImportState, InputState, KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState,
-    SavedFilterPickerState, StorageState, TemplatePickerState, TimeLogEditorState, TimelineState,
-    TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
+    DescriptionEditorState, DuplicatesViewState, EveningReviewState, FilterState, GoalViewState,
+    HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
+    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TemplatePickerState,
+    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
+    WorkLogEditorState,
 };
 pub use view_queries::extract_git_location;
 
@@ -313,6 +314,10 @@ pub struct Model {
     /// Weekly review state
     pub weekly_review: WeeklyReviewState,
 
+    // Evening review mode
+    /// Evening review state (end-of-day reflection)
+    pub evening_review: EveningReviewState,
+
     // Timeline state
     /// State for the timeline/Gantt view
     pub timeline_state: TimelineState,
@@ -424,6 +429,7 @@ impl Model {
             saved_filter_picker: SavedFilterPickerState::default(),
             daily_review: DailyReviewState::default(),
             weekly_review: WeeklyReviewState::default(),
+            evening_review: EveningReviewState::default(),
             timeline_state: TimelineState::default(),
             view_selection: ViewSelectionState::default(),
             habits: HashMap::new(),

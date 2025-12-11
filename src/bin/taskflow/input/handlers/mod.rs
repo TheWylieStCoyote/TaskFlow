@@ -4,8 +4,9 @@ mod modals;
 mod views;
 
 pub use modals::{
-    handle_description_editor, handle_keybindings_editor, handle_macro_slot,
-    handle_template_picker, handle_time_log, handle_work_log,
+    handle_daily_review, handle_description_editor, handle_evening_review,
+    handle_keybindings_editor, handle_macro_slot, handle_template_picker, handle_time_log,
+    handle_weekly_review, handle_work_log,
 };
 pub use views::{
     handle_calendar_view, handle_eisenhower_view, handle_goals_view, handle_habits_view,

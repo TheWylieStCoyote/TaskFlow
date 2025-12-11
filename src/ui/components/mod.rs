@@ -38,6 +38,7 @@
 //! ## Reviews
 //! - [`DailyReview`] - Daily task review workflow
 //! - [`WeeklyReview`] - Weekly planning review
+//! - [`EveningReview`] - End-of-day reflection workflow
 //!
 //! ## Utilities
 //! - [`Help`] - Keybinding help popup
@@ -52,6 +53,7 @@ mod dashboard;
 mod description_editor;
 mod duplicates;
 mod eisenhower;
+mod evening_review;
 mod focus_view;
 mod forecast;
 mod git_todos;
@@ -81,6 +83,7 @@ pub use dashboard::*;
 pub use description_editor::*;
 pub use duplicates::*;
 pub use eisenhower::*;
+pub use evening_review::*;
 pub use focus_view::*;
 pub use forecast::*;
 pub use git_todos::*;

@@ -7,7 +7,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        StatefulWidget, Widget,
+    },
 };
 
 use crate::app::Model;
@@ -72,29 +75,35 @@ impl Widget for Kanban<'_> {
             } else {
                 None
             };
+            let scroll_offset = self.model.view_selection.kanban_scroll_offsets[i];
             self.render_column(
                 chunks[i],
                 buf,
+                i,
                 *status,
                 title,
                 *color,
                 is_selected_column,
                 task_index,
+                scroll_offset,
             );
         }
     }
 }
 
 impl Kanban<'_> {
+    #[allow(clippy::too_many_arguments)]
     fn render_column(
         &self,
         area: Rect,
         buf: &mut Buffer,
+        _column_index: usize,
         status: TaskStatus,
         title: &str,
         title_color: Color,
         is_selected_column: bool,
         selected_task_index: Option<usize>,
+        scroll_offset: usize,
     ) {
         let theme = self.theme;
 
@@ -137,10 +146,16 @@ impl Kanban<'_> {
             return;
         }
 
-        // Create list items for each task
+        // Calculate viewport and apply scroll offset
+        let viewport_height = inner.height as usize;
+        let scroll_offset = scroll_offset.min(count.saturating_sub(viewport_height));
+
+        // Create list items for visible tasks only
         let items: Vec<ListItem<'_>> = tasks
             .iter()
             .enumerate()
+            .skip(scroll_offset)
+            .take(viewport_height)
             .map(|(idx, task)| {
                 let is_selected_task = selected_task_index == Some(idx);
                 // Check if task is blocked by incomplete dependencies
@@ -226,7 +241,24 @@ impl Kanban<'_> {
             .collect();
 
         let list = List::new(items);
-        list.render(inner, buf);
+        Widget::render(list, inner, buf);
+
+        // Render scrollbar if content exceeds viewport
+        if count > viewport_height {
+            let position = selected_task_index.unwrap_or(scroll_offset);
+            let mut scrollbar_state =
+                ScrollbarState::new(count.saturating_sub(1)).position(position);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, area, buf, &mut scrollbar_state);
+        }
     }
 }
 

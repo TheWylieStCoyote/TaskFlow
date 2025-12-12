@@ -12,7 +12,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        StatefulWidget, Widget,
+    },
 };
 
 use crate::app::Model;
@@ -108,11 +111,13 @@ impl Widget for Eisenhower<'_> {
         // Render quadrants (0=TL, 1=TR, 2=BL, 3=BR)
         let selected_quadrant = self.model.view_selection.eisenhower_quadrant;
         let selected_task_index = self.model.view_selection.eisenhower_task_index;
+        let scroll_offsets = self.model.view_selection.eisenhower_scroll_offsets;
 
         // Top-left: Urgent + Important (DO FIRST)
         self.render_quadrant(
             top_cols[0],
             buf,
+            0,
             "🔥 DO FIRST",
             "Urgent & Important",
             &urgent_important,
@@ -123,12 +128,14 @@ impl Widget for Eisenhower<'_> {
             } else {
                 None
             },
+            scroll_offsets[0],
         );
 
         // Top-right: Not Urgent + Important (SCHEDULE)
         self.render_quadrant(
             top_cols[1],
             buf,
+            1,
             "📅 SCHEDULE",
             "Important, Not Urgent",
             &not_urgent_important,
@@ -139,12 +146,14 @@ impl Widget for Eisenhower<'_> {
             } else {
                 None
             },
+            scroll_offsets[1],
         );
 
         // Bottom-left: Urgent + Not Important (DELEGATE)
         self.render_quadrant(
             bottom_cols[0],
             buf,
+            2,
             "👋 DELEGATE",
             "Urgent, Not Important",
             &urgent_not_important,
@@ -155,12 +164,14 @@ impl Widget for Eisenhower<'_> {
             } else {
                 None
             },
+            scroll_offsets[2],
         );
 
         // Bottom-right: Not Urgent + Not Important (ELIMINATE)
         self.render_quadrant(
             bottom_cols[1],
             buf,
+            3,
             "🗑️  ELIMINATE",
             "Not Urgent or Important",
             &not_urgent_not_important,
@@ -171,6 +182,7 @@ impl Widget for Eisenhower<'_> {
             } else {
                 None
             },
+            scroll_offsets[3],
         );
     }
 }
@@ -181,12 +193,14 @@ impl Eisenhower<'_> {
         &self,
         area: Rect,
         buf: &mut Buffer,
+        _quadrant_index: usize,
         title: &str,
         subtitle: &str,
         tasks: &[&Task],
         title_color: Color,
         is_selected: bool,
         selected_task_index: Option<usize>,
+        scroll_offset: usize,
     ) {
         let theme = self.theme;
 
@@ -234,11 +248,17 @@ impl Eisenhower<'_> {
             return;
         }
 
-        // Create list items
+        // Calculate viewport and apply scroll offset
+        let total_tasks = tasks.len();
+        let viewport_height = tasks_area.height as usize;
+        let scroll_offset = scroll_offset.min(total_tasks.saturating_sub(viewport_height));
+
+        // Create list items for visible tasks only
         let items: Vec<ListItem<'_>> = tasks
             .iter()
             .enumerate()
-            .take(tasks_area.height as usize) // Limit to visible area
+            .skip(scroll_offset)
+            .take(viewport_height)
             .map(|(idx, task)| {
                 let is_selected_task = selected_task_index == Some(idx);
                 // Check if task is blocked by incomplete dependencies
@@ -310,7 +330,24 @@ impl Eisenhower<'_> {
             .collect();
 
         let list = List::new(items);
-        list.render(tasks_area, buf);
+        Widget::render(list, tasks_area, buf);
+
+        // Render scrollbar if content exceeds viewport
+        if total_tasks > viewport_height {
+            let position = selected_task_index.unwrap_or(scroll_offset);
+            let mut scrollbar_state =
+                ScrollbarState::new(total_tasks.saturating_sub(1)).position(position);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, area, buf, &mut scrollbar_state);
+        }
     }
 }
 

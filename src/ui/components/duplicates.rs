@@ -8,7 +8,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        StatefulWidget, Widget,
+    },
 };
 
 use crate::app::Model;
@@ -55,6 +58,7 @@ impl<'a> Duplicates<'a> {
     fn render_list(&self, area: Rect, buf: &mut Buffer) {
         let pairs = &self.model.duplicates_view.pairs;
         let selected = self.model.duplicates_view.selected;
+        let scroll_offset = self.model.duplicates_view.scroll_offset;
 
         if pairs.is_empty() {
             let empty_msg = Paragraph::new(Line::from(vec![Span::styled(
@@ -68,9 +72,15 @@ impl<'a> Duplicates<'a> {
             return;
         }
 
+        let total_pairs = pairs.len();
+        let viewport_height = area.height as usize;
+        let scroll_offset = scroll_offset.min(total_pairs.saturating_sub(viewport_height));
+
         let items: Vec<ListItem<'_>> = pairs
             .iter()
             .enumerate()
+            .skip(scroll_offset)
+            .take(viewport_height)
             .map(|(i, pair)| {
                 let task1 = self.model.tasks.get(&pair.task1_id);
                 let task2 = self.model.tasks.get(&pair.task2_id);
@@ -145,6 +155,22 @@ impl<'a> Duplicates<'a> {
 
         let list = List::new(items);
         Widget::render(list, area, buf);
+
+        // Render scrollbar if content exceeds viewport
+        if total_pairs > viewport_height {
+            let mut scrollbar_state =
+                ScrollbarState::new(total_pairs.saturating_sub(1)).position(selected);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(self.theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(self.theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, area, buf, &mut scrollbar_state);
+        }
     }
 
     /// Render the detail panel for selected pair

@@ -6,7 +6,10 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Widget},
+    widgets::{
+        Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget,
+        Widget,
+    },
 };
 
 use crate::app::TimelineZoom;
@@ -288,6 +291,23 @@ impl Timeline<'_> {
                 visible_rows,
                 col_width,
             );
+        }
+
+        // Render scrollbar if content exceeds viewport
+        let total_tasks = tasks.len();
+        if total_tasks > visible_rows {
+            let mut scrollbar_state = ScrollbarState::new(total_tasks.saturating_sub(1))
+                .position(state.selected_task_index);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, area, buf, &mut scrollbar_state);
         }
     }
 

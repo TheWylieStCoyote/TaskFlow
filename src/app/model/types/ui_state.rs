@@ -56,10 +56,14 @@ pub struct ViewSelectionState {
     pub kanban_column: usize,
     /// Selected task index within the current Kanban column
     pub kanban_task_index: usize,
+    /// Scroll offset for each Kanban column (0-3)
+    pub kanban_scroll_offsets: [usize; 4],
     /// Selected quadrant in Eisenhower view (0-3: TL, TR, BL, BR)
     pub eisenhower_quadrant: usize,
     /// Selected task index within the current Eisenhower quadrant
     pub eisenhower_task_index: usize,
+    /// Scroll offset for each Eisenhower quadrant (0-3)
+    pub eisenhower_scroll_offsets: [usize; 4],
     /// Selected day in WeeklyPlanner view (0-6: Mon-Sun)
     pub weekly_planner_day: usize,
     /// Selected task index within the current WeeklyPlanner day
@@ -193,6 +197,8 @@ pub struct DuplicatesViewState {
     pub pairs: Vec<crate::domain::duplicate_detector::DuplicatePair>,
     /// Similarity threshold (0.0 to 1.0)
     pub threshold: f64,
+    /// Scroll offset for list viewport
+    pub scroll_offset: usize,
 }
 
 impl Default for DuplicatesViewState {
@@ -201,6 +207,7 @@ impl Default for DuplicatesViewState {
             selected: 0,
             pairs: Vec::new(),
             threshold: crate::domain::duplicate_detector::DEFAULT_SIMILARITY_THRESHOLD,
+            scroll_offset: 0,
         }
     }
 }

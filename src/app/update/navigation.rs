@@ -32,6 +32,10 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                     // Navigate duplicate pairs
                     if model.duplicates_view.selected > 0 {
                         model.duplicates_view.selected -= 1;
+                        // Adjust scroll offset to keep selection visible
+                        if model.duplicates_view.selected < model.duplicates_view.scroll_offset {
+                            model.duplicates_view.scroll_offset = model.duplicates_view.selected;
+                        }
                     }
                 } else if model.selected_index > 0 {
                     model.selected_index -= 1;
@@ -63,6 +67,15 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                     let max_index = model.duplicates_view.pairs.len().saturating_sub(1);
                     if model.duplicates_view.selected < max_index {
                         model.duplicates_view.selected += 1;
+                        // Adjust scroll offset to keep selection visible (estimate viewport ~5 rows)
+                        const ESTIMATED_VIEWPORT: usize = 5;
+                        let scroll = model.duplicates_view.scroll_offset;
+                        if model.duplicates_view.selected >= scroll + ESTIMATED_VIEWPORT {
+                            model.duplicates_view.scroll_offset = model
+                                .duplicates_view
+                                .selected
+                                .saturating_sub(ESTIMATED_VIEWPORT - 1);
+                        }
                     }
                 } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;
@@ -129,6 +142,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.duplicates_view.pairs =
                     find_all_duplicates(&model.tasks, model.duplicates_view.threshold);
                 model.duplicates_view.selected = 0;
+                model.duplicates_view.scroll_offset = 0;
             }
 
             // Special handling for Reports view - ensure cache is populated
@@ -250,6 +264,11 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 && model.timeline_state.selected_task_index > 0
             {
                 model.timeline_state.selected_task_index -= 1;
+                // Adjust scroll offset to keep selection visible
+                let idx = model.timeline_state.selected_task_index;
+                if idx < model.timeline_state.task_scroll_offset {
+                    model.timeline_state.task_scroll_offset = idx;
+                }
             }
         }
         NavigationMessage::TimelineDown => {
@@ -257,6 +276,14 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let max_index = model.visible_tasks.len().saturating_sub(1);
                 if model.timeline_state.selected_task_index < max_index {
                     model.timeline_state.selected_task_index += 1;
+                    // Adjust scroll offset to keep selection visible (estimate viewport ~15 rows)
+                    let idx = model.timeline_state.selected_task_index;
+                    let scroll = model.timeline_state.task_scroll_offset;
+                    const ESTIMATED_VIEWPORT: usize = 15;
+                    if idx >= scroll + ESTIMATED_VIEWPORT {
+                        model.timeline_state.task_scroll_offset =
+                            idx.saturating_sub(ESTIMATED_VIEWPORT - 1);
+                    }
                 }
             }
         }
@@ -264,17 +291,27 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column > 0 {
                 model.view_selection.kanban_column -= 1;
                 model.view_selection.kanban_task_index = 0; // Reset task selection
+                                                            // Reset scroll offset for new column
+                model.view_selection.kanban_scroll_offsets[model.view_selection.kanban_column] = 0;
             }
         }
         NavigationMessage::KanbanRight => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_column < 3 {
                 model.view_selection.kanban_column += 1;
                 model.view_selection.kanban_task_index = 0; // Reset task selection
+                                                            // Reset scroll offset for new column
+                model.view_selection.kanban_scroll_offsets[model.view_selection.kanban_column] = 0;
             }
         }
         NavigationMessage::KanbanUp => {
             if model.current_view == ViewId::Kanban && model.view_selection.kanban_task_index > 0 {
                 model.view_selection.kanban_task_index -= 1;
+                // Adjust scroll offset to keep selection visible
+                let col = model.view_selection.kanban_column;
+                let idx = model.view_selection.kanban_task_index;
+                if idx < model.view_selection.kanban_scroll_offsets[col] {
+                    model.view_selection.kanban_scroll_offsets[col] = idx;
+                }
             }
         }
         NavigationMessage::KanbanDown => {
@@ -282,6 +319,15 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 let column_tasks = model.kanban_column_tasks(model.view_selection.kanban_column);
                 if model.view_selection.kanban_task_index + 1 < column_tasks.len() {
                     model.view_selection.kanban_task_index += 1;
+                    // Adjust scroll offset to keep selection visible (estimate viewport ~10 rows)
+                    let col = model.view_selection.kanban_column;
+                    let idx = model.view_selection.kanban_task_index;
+                    let scroll = model.view_selection.kanban_scroll_offsets[col];
+                    const ESTIMATED_VIEWPORT: usize = 10;
+                    if idx >= scroll + ESTIMATED_VIEWPORT {
+                        model.view_selection.kanban_scroll_offsets[col] =
+                            idx.saturating_sub(ESTIMATED_VIEWPORT - 1);
+                    }
                 }
             }
         }
@@ -290,10 +336,19 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 // First try to navigate tasks within the quadrant
                 if model.view_selection.eisenhower_task_index > 0 {
                     model.view_selection.eisenhower_task_index -= 1;
+                    // Adjust scroll offset to keep selection visible
+                    let quad = model.view_selection.eisenhower_quadrant;
+                    let idx = model.view_selection.eisenhower_task_index;
+                    if idx < model.view_selection.eisenhower_scroll_offsets[quad] {
+                        model.view_selection.eisenhower_scroll_offsets[quad] = idx;
+                    }
                 } else if model.view_selection.eisenhower_quadrant >= 2 {
                     // At top of task list, move to upper quadrant
                     model.view_selection.eisenhower_quadrant -= 2;
                     model.view_selection.eisenhower_task_index = 0;
+                    // Reset scroll offset for new quadrant
+                    model.view_selection.eisenhower_scroll_offsets
+                        [model.view_selection.eisenhower_quadrant] = 0;
                 }
             }
         }
@@ -304,10 +359,22 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
                 // First try to navigate tasks within the quadrant
                 if model.view_selection.eisenhower_task_index + 1 < quadrant_tasks.len() {
                     model.view_selection.eisenhower_task_index += 1;
+                    // Adjust scroll offset to keep selection visible (estimate viewport ~8 rows)
+                    let quad = model.view_selection.eisenhower_quadrant;
+                    let idx = model.view_selection.eisenhower_task_index;
+                    let scroll = model.view_selection.eisenhower_scroll_offsets[quad];
+                    const ESTIMATED_VIEWPORT: usize = 8;
+                    if idx >= scroll + ESTIMATED_VIEWPORT {
+                        model.view_selection.eisenhower_scroll_offsets[quad] =
+                            idx.saturating_sub(ESTIMATED_VIEWPORT - 1);
+                    }
                 } else if model.view_selection.eisenhower_quadrant < 2 {
                     // At bottom of task list, move to lower quadrant
                     model.view_selection.eisenhower_quadrant += 2;
                     model.view_selection.eisenhower_task_index = 0;
+                    // Reset scroll offset for new quadrant
+                    model.view_selection.eisenhower_scroll_offsets
+                        [model.view_selection.eisenhower_quadrant] = 0;
                 }
             }
         }
@@ -317,6 +384,9 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             {
                 model.view_selection.eisenhower_quadrant -= 1;
                 model.view_selection.eisenhower_task_index = 0; // Reset task selection
+                                                                // Reset scroll offset for new quadrant
+                model.view_selection.eisenhower_scroll_offsets
+                    [model.view_selection.eisenhower_quadrant] = 0;
             }
         }
         NavigationMessage::EisenhowerRight => {
@@ -325,6 +395,9 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             {
                 model.view_selection.eisenhower_quadrant += 1;
                 model.view_selection.eisenhower_task_index = 0; // Reset task selection
+                                                                // Reset scroll offset for new quadrant
+                model.view_selection.eisenhower_scroll_offsets
+                    [model.view_selection.eisenhower_quadrant] = 0;
             }
         }
         NavigationMessage::WeeklyPlannerLeft => {
@@ -385,6 +458,8 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::KanbanSelectColumn(column) => {
             if model.current_view == ViewId::Kanban && column < 4 {
                 model.view_selection.kanban_column = column;
+                model.view_selection.kanban_task_index = 0; // Reset task selection
+                model.view_selection.kanban_scroll_offsets[column] = 0; // Reset scroll
                 model.selected_index = 0;
             }
         }
@@ -392,6 +467,7 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             if model.current_view == ViewId::Eisenhower && quadrant < 4 {
                 model.view_selection.eisenhower_quadrant = quadrant;
                 model.view_selection.eisenhower_task_index = 0; // Reset task selection
+                model.view_selection.eisenhower_scroll_offsets[quadrant] = 0; // Reset scroll
                 model.selected_index = 0;
             }
         }

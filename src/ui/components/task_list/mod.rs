@@ -243,8 +243,8 @@ impl StatefulWidget for TaskList<'_> {
             // Use selected_row for position to show where cursor is in the list
             let position = selected_row.unwrap_or(state.offset());
 
-            let mut scrollbar_state = ScrollbarState::new(total_items.saturating_sub(1))
-                .position(position);
+            let mut scrollbar_state =
+                ScrollbarState::new(total_items.saturating_sub(1)).position(position);
 
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(Some("▲"))

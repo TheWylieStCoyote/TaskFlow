@@ -373,6 +373,11 @@ pub struct Model {
     /// Ratatui ListState for task list scrolling (persists scroll offset).
     /// Uses RefCell for interior mutability during rendering.
     pub task_list_state: std::cell::RefCell<ratatui::widgets::ListState>,
+
+    // Sidebar scroll state
+    /// Ratatui ListState for sidebar scrolling (persists scroll offset).
+    /// Uses RefCell for interior mutability during rendering.
+    pub sidebar_list_state: std::cell::RefCell<ratatui::widgets::ListState>,
 }
 
 impl Model {
@@ -457,6 +462,7 @@ impl Model {
             pending_editor_command: None,
             task_detail: TaskDetailState::default(),
             task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
+            sidebar_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }
     }
 

@@ -2,14 +2,14 @@
 source: tests/ui_snapshots.rs
 expression: output
 ---
-┌ Navigation ───────────┐
-│📋  All Tasks           │
-│📅  Today               │
-│📆  Upcoming            │
-│⚠️   Overdue            │
-│📋  Scheduled           │
-│🗓️   Calendar           │
-│📊  Dashboard           │
+┌ Navigation ───────────▲
+│📋  All Tasks           █
+│📅  Today               █
+│📆  Upcoming            █
+│⚠️   Overdue            █
+│📋  Scheduled           █
+│🗓️   Calendar           █
+│📊  Dashboard           █
 │📈  Reports             │
 │🔄  Habits              │
 │🎯  Goals               │
@@ -21,4 +21,4 @@ expression: output
 │⚡  Eisenhower          │
 │📅  Week                │
 │📊  Timeline            │
-└───────────────────────┘
+└───────────────────────▼

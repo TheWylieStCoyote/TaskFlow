@@ -16,7 +16,10 @@ use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
+    widgets::{
+        Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        StatefulWidget, Widget,
+    },
 };
 
 use crate::app::{FocusPane, Model, ViewId};
@@ -438,6 +441,8 @@ impl Widget for Sidebar<'_> {
             theme.colors.border.to_color()
         };
 
+        let total_items = items.len();
+
         let list = List::new(items)
             .block(
                 Block::default()
@@ -451,12 +456,26 @@ impl Widget for Sidebar<'_> {
                     .add_modifier(Modifier::BOLD),
             );
 
-        if is_focused {
-            let mut state = ListState::default();
-            state.select(Some(self.model.sidebar_selected));
-            StatefulWidget::render(list, area, buf, &mut state);
-        } else {
-            Widget::render(list, area, buf);
+        // Use persisted state for scroll offset
+        let mut state = self.model.sidebar_list_state.borrow_mut();
+        state.select(Some(self.model.sidebar_selected));
+        StatefulWidget::render(list, area, buf, &mut state);
+
+        // Render scrollbar if content exceeds viewport
+        let viewport_height = area.height.saturating_sub(2) as usize; // Account for borders
+        if total_items > viewport_height {
+            let mut scrollbar_state = ScrollbarState::new(total_items.saturating_sub(1))
+                .position(self.model.sidebar_selected);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, area, buf, &mut scrollbar_state);
         }
     }
 }

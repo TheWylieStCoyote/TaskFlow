@@ -14,7 +14,10 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::Style,
     text::Line,
-    widgets::{Block, Borders, Clear, Paragraph, Widget, Wrap},
+    widgets::{
+        Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        StatefulWidget, Widget, Wrap,
+    },
 };
 
 use crate::app::Model;
@@ -80,7 +83,8 @@ impl Widget for TaskDetail<'_> {
 
         // Render scrollable content
         let content_height = inner.height as usize;
-        let max_scroll = content_lines.len().saturating_sub(content_height);
+        let total_lines = content_lines.len();
+        let max_scroll = total_lines.saturating_sub(content_height);
         let scroll = self.scroll.min(max_scroll);
 
         let visible_lines: Vec<Line<'_>> = content_lines
@@ -92,6 +96,22 @@ impl Widget for TaskDetail<'_> {
         let paragraph = Paragraph::new(visible_lines).wrap(Wrap { trim: false });
 
         paragraph.render(inner, buf);
+
+        // Render scrollbar if content exceeds viewport
+        if total_lines > content_height {
+            let mut scrollbar_state =
+                ScrollbarState::new(total_lines.saturating_sub(1)).position(scroll);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            StatefulWidget::render(scrollbar, inner, buf, &mut scrollbar_state);
+        }
     }
 }
 

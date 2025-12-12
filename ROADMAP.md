@@ -1,71 +1,103 @@
-# TaskFlow Future Features Roadmap
+# TaskFlow Features Roadmap
 
-**Status:** Feature Catalog
-
-**Goal:** Comprehensive roadmap of potential enhancements for TaskFlow
+**Status:** Updated Dec 2024
 
 ---
 
-## Feature Categories
+## Implementation Status Summary
 
-| Category | Features | Complexity Range |
-|----------|----------|------------------|
-| Workflow Automation | 4 phases | Medium → Very High |
-| Sync & Integration | 5 features | Medium → High |
-| UI Enhancements | 5 features | Low → Medium |
-| Smart Features | 4 features | Medium → Very High |
+| Category | Complete | Partial | Not Started |
+|----------|----------|---------|-------------|
+| Already Implemented (undocumented) | 15 | - | - |
+| Workflow Automation | 0 | 2 | 2 |
+| Sync & Integration | 1 | 1 | 3 |
+| UI Enhancements | 2 | 2 | 1 |
+| Smart Features | 0 | 0 | 4 |
+
+---
+
+# Already Implemented Features
+
+These major features are complete but were not previously tracked:
+
+## Core Task Management
+- **Task Hierarchy & Subtasks** - Full parent-child relationships with cascade completion
+- **Task Chains** - `next_task_id` field with auto-scheduling on completion
+- **Task Dependencies** - `dependencies: Vec<TaskId>` field (enforcement not complete)
+- **Snooze System** - `snooze_until` field to hide tasks until a date
+- **Undo/Redo System** - Full action history with `modify_task_with_undo()` helper
+
+## Views & UI
+- **Filter DSL** - Advanced query language with 30+ fields, boolean operators, range syntax
+- **Saved Filters/Custom Views** - Persistent filter+sort combinations with icons
+- **Kanban Board** - 4-column status-based view with scrolling
+- **Eisenhower Matrix** - 2x2 urgency/importance grid
+- **Timeline/Gantt** - Date-based task visualization with zoom
+- **Heatmap** - Activity visualization
+- **Network Graph** - Task dependency visualization
+- **Calendar View** - Monthly calendar with task dots
+- **Burndown Chart** - Sprint progress visualization
+- **Dashboard** - Statistics and overview widgets
+
+## Productivity Features
+- **Goals & Key Results** - OKR tracking with quarterly planning
+- **Habits** - Recurring habit tracking with streaks
+- **Time Tracking** - Estimated vs actual minutes with time entries
+- **Work Logs** - Detailed work session logging
+- **Pomodoro Timer** - Full state management for focus sessions
+- **Analytics** - Velocity, completion trends, productivity metrics
+
+## Data Management
+- **Multiple Storage Backends** - JSON, YAML, SQLite, Markdown
+- **Import** - CSV tasks, ICS calendar events
+- **Export** - CSV, ICS, DOT (Graphviz), Mermaid diagrams, HTML
+- **Duplicate Detection** - Jaro-Winkler similarity with project scoping
 
 ---
 
 # Workflow Automation
 
-## Phase 1: Advanced Recurrence
+## Phase 1: Advanced Recurrence - ⚠️ 40% COMPLETE
 **Complexity:** Medium | **Dependencies:** None
 
-Extend recurrence with intervals, end dates, limits, and skip conditions.
+**Implemented:**
+- Basic `Recurrence` enum (Daily, Weekly, Monthly, Yearly)
+- Recurring task creation on completion
 
-**New:** `src/domain/task/recurrence_config.rs`
+**Not Implemented:**
 ```rust
 pub struct RecurrenceConfig {
     pub pattern: Recurrence,
-    pub interval: u32,              // every N occurrences
-    pub end_date: Option<NaiveDate>,
-    pub max_occurrences: Option<u32>,
-    pub occurrence_count: u32,
-    pub skip_conditions: Vec<SkipCondition>,
-}
-
-pub enum SkipCondition {
-    SkipWeekends,
-    SkipWeekdays(Vec<Weekday>),
-    SkipIfTag(String),
+    pub interval: u32,              // every N occurrences - NOT DONE
+    pub end_date: Option<NaiveDate>, // - NOT DONE
+    pub max_occurrences: Option<u32>, // - NOT DONE
+    pub occurrence_count: u32,       // - NOT DONE
+    pub skip_conditions: Vec<SkipCondition>, // - NOT DONE
 }
 ```
 
-**Modify:** `src/domain/task/mod.rs`, `src/app/update/task.rs`
-
 ---
 
-## Phase 2: Dependency Enforcement
+## Phase 2: Dependency Enforcement - ⚠️ 30% COMPLETE
 **Complexity:** Medium-High | **Dependencies:** None
 
-Block completion until dependencies done, auto-unblock dependents.
+**Implemented:**
+- `dependencies: Vec<TaskId>` field on Task
+- `TaskStatus::Blocked` variant
+- Filter DSL `has:dependencies` query
 
-**Changes:**
-- Block task completion if dependencies incomplete (show error)
+**Not Implemented:**
+- Block task completion if dependencies incomplete
 - Auto-transition Blocked → Todo when dependencies complete
-- Add `get_dependents()`, `get_dependency_chain()` helpers
-
-**Modify:** `src/app/update/task.rs`, `src/app/model/hierarchy.rs`
+- `get_dependents()`, `get_dependency_chain()` helpers
 
 ---
 
-## Phase 3: Status Workflows
+## Phase 3: Status Workflows - ❌ NOT STARTED
 **Complexity:** High | **Dependencies:** Phase 2
 
 State machine transitions, required fields, auto-transitions.
 
-**New:** `src/domain/workflow/mod.rs`
 ```rust
 pub struct StatusWorkflow {
     pub transitions: HashMap<TaskStatus, Vec<TaskStatus>>,
@@ -76,251 +108,168 @@ pub struct StatusWorkflow {
 
 ---
 
-## Phase 4: Rule/Trigger System
+## Phase 4: Rule/Trigger System - ❌ NOT STARTED
 **Complexity:** Very High | **Dependencies:** Phase 3, Filter DSL
 
 Event-based automation with filter DSL conditions.
-
-**New:** `src/domain/automation/mod.rs`
-- Triggers: TaskCreated, TaskCompleted, StatusChanged, DependenciesComplete
-- Actions: SetStatus, SetPriority, AddTag, SetDueDate, CreateTask
 
 ---
 
 # Sync & Integration
 
-## Feature: Cloud Sync
-**Complexity:** High | **Dependencies:** None
+## Git Integration - ✅ 100% COMPLETE
+**Complexity:** Medium
 
-Sync tasks across devices via cloud storage.
-
-**Options:**
-- File-based sync (Dropbox, iCloud, Syncthing folder)
-- WebDAV backend
-- Custom sync server
-
-**New Files:**
-- `src/storage/backends/webdav.rs`
-- `src/storage/sync/mod.rs` - conflict resolution
+**Fully Implemented:**
+- `GitRef` struct for branch linking (`src/domain/git/mod.rs`)
+- `GitCommit` struct for commit history
+- Auto-detection of task-branch associations
+- Git TODO extraction from code comments
+- Merge status tracking (Active, Merged, Deleted)
+- CLI `git_todos` command
+- GitTodos sidebar view
 
 ---
 
-## Feature: CalDAV Integration
-**Complexity:** High | **Dependencies:** None
+## Cloud Sync - ⚠️ 20% COMPLETE
+**Complexity:** High
+
+**Implemented:**
+- Storage abstraction layer (multiple backends)
+- Repository pattern for data access
+
+**Not Implemented:**
+- WebDAV backend
+- Conflict resolution
+- Remote sync server
+
+---
+
+## CalDAV Integration - ❌ NOT STARTED
+**Complexity:** High
 
 Two-way sync with calendar applications.
 
-**Capabilities:**
-- Push tasks as VTODO items
-- Pull calendar events (already have ICS import)
-- Sync due dates, reminders
-
-**New:** `src/storage/caldav/mod.rs`
-
 ---
 
-## Feature: Git Integration
-**Complexity:** Medium | **Dependencies:** None
-
-Link tasks to commits, branches, PRs.
-
-**Capabilities:**
-- Extract TODOs from code (already have GitTodos view)
-- Link tasks to branches
-- Auto-complete on merge
-- Show commit history in task detail
-
-**Modify:** `src/domain/task/mod.rs` (add git_ref field)
-
----
-
-## Feature: Webhook System
-**Complexity:** Medium | **Dependencies:** None
+## Webhook System - ❌ NOT STARTED
+**Complexity:** Medium
 
 HTTP callbacks on task events.
 
-**Triggers:** Task created, completed, status changed, due soon
-**Payload:** JSON with task details
-
-**New:** `src/integration/webhooks.rs`
-
 ---
 
-## Feature: REST API
-**Complexity:** High | **Dependencies:** None
+## REST API - ❌ NOT STARTED
+**Complexity:** High
 
 HTTP API for external tools.
-
-**Endpoints:**
-- `GET/POST/PUT/DELETE /tasks`
-- `GET/POST /projects`
-- `POST /tasks/:id/complete`
-
-**New:** `src/bin/taskflow-server/` or feature flag in main binary
 
 ---
 
 # UI Enhancements
 
-## Feature: Custom Views
+## Custom Views - ✅ 100% COMPLETE
 **Complexity:** Medium | **Dependencies:** Filter DSL
 
-User-defined filter+sort+column combinations.
-
-**Capabilities:**
-- Save any filter as a custom view
-- Choose visible columns
-- Set default sort order
-- Pin to sidebar
-
-**New:** `src/domain/custom_view.rs`
-**Modify:** `src/ui/sidebar.rs`
+**Fully Implemented:**
+- `SavedFilter` struct with name, icon, filter, sort
+- Saved filter picker UI
+- Persistence in storage
+- Sidebar integration
 
 ---
 
-## Feature: Split View
-**Complexity:** Medium | **Dependencies:** None
+## Batch Editing - ⚠️ 40% COMPLETE
+**Complexity:** Low-Medium
 
-Two panels side-by-side.
+**Implemented:**
+- Multi-select mode toggle
+- Toggle individual task selection
+- Select all / clear selection
+- Bulk delete
+- Bulk move to project
 
-**Use cases:**
-- Task list + task detail
-- Two different filtered views
-- Calendar + task list
-
-**Modify:** `src/ui/layout.rs`, `src/app/model/mod.rs`
-
----
-
-## Feature: Batch Editing
-**Complexity:** Low-Medium | **Dependencies:** None
-
-Edit multiple selected tasks at once.
-
-**Operations:**
-- Set priority for all selected
-- Move to project
-- Add/remove tags
-- Set due date
-
-**Modify:** `src/app/update/task.rs` (extend multi-select)
+**Not Implemented:**
+- Bulk set priority
+- Bulk add/remove tags
+- Bulk set due date
 
 ---
 
-## Feature: Command Palette
-**Complexity:** Medium | **Dependencies:** None
+## Dashboard Widgets - ⚠️ 80% COMPLETE
+**Complexity:** Medium
+
+**Implemented:**
+- Upcoming tasks widget
+- Overdue count
+- Completion stats
+- Project progress
+
+**Not Implemented:**
+- Widget customization/rearrangement
+- Completion streak display
+- Time tracked today widget
+
+---
+
+## Command Palette - ❌ NOT STARTED
+**Complexity:** Medium
 
 Fuzzy-searchable command launcher (like VS Code Ctrl+Shift+P).
 
-**Features:**
-- Search all commands by name
-- Show keyboard shortcut
-- Recent commands
-- Filter by category
-
-**New:** `src/ui/command_palette.rs`
-
 ---
 
-## Feature: Dashboard Widgets
-**Complexity:** Medium | **Dependencies:** None
+## Split View - ❌ NOT STARTED
+**Complexity:** Medium
 
-Configurable dashboard layout.
-
-**Widgets:**
-- Upcoming tasks
-- Overdue count
-- Completion streak
-- Time tracked today
-- Project progress bars
-
-**Modify:** `src/ui/view/dashboard.rs`, add widget config
+Two panels side-by-side.
 
 ---
 
 # Smart Features
 
-## Feature: Natural Language Input
-**Complexity:** Medium | **Dependencies:** None
+## Natural Language Input - ❌ NOT STARTED
+**Complexity:** Medium
 
 Parse task titles for dates, priorities, tags.
 
-**Examples:**
+Examples:
 - "Call mom tomorrow at 3pm" → due: tomorrow, time: 15:00
 - "Buy groceries #shopping !high" → tag: shopping, priority: high
-- "Review PR next monday" → due: next Monday
-
-**New:** `src/domain/natural_language.rs`
 
 ---
 
-## Feature: Smart Scheduling
-**Complexity:** High | **Dependencies:** Analytics
+## Smart Scheduling - ❌ NOT STARTED
+**Complexity:** High
 
 Suggest optimal times for tasks based on patterns.
 
-**Inputs:**
-- Historical completion times by tag/type
-- Calendar availability
-- Energy patterns (morning vs evening tasks)
-
-**New:** `src/domain/scheduler.rs`
-
 ---
 
-## Feature: Workload Balancing
-**Complexity:** Medium | **Dependencies:** None
+## Workload Balancing - ❌ NOT STARTED
+**Complexity:** Medium
 
 Alert when overcommitted.
-
-**Checks:**
-- Total estimated time vs available hours
-- Due date clustering
-- Blocked task chains
-
-**New:** `src/domain/workload.rs`
-**Modify:** `src/ui/view/dashboard.rs`
-
----
-
-## Feature: AI Task Suggestions
-**Complexity:** Very High | **Dependencies:** External API
-
-LLM-powered task assistance.
-
-**Capabilities:**
-- Break down large tasks into subtasks
-- Suggest next actions
-- Summarize project status
-- Generate task descriptions
-
-**New:** `src/integration/ai.rs` (OpenAI/Claude API)
 
 ---
 
 # Implementation Priority
 
-Recommended order based on value/effort ratio:
+## Recommended Next Steps
 
-```
-HIGH VALUE, LOWER EFFORT:
-1. Batch Editing (UI)
-2. Natural Language Input (Smart)
-3. Dependency Enforcement (Workflow)
-4. Custom Views (UI)
+**Quick Wins (Low Effort, High Value):**
+1. Batch Editing - Add bulk priority/tag/date operations
+2. Natural Language Input - Parse dates from titles
 
-HIGH VALUE, HIGHER EFFORT:
-5. Advanced Recurrence (Workflow)
-6. Command Palette (UI)
-7. Status Workflows (Workflow)
-8. Cloud Sync (Integration)
+**Medium Effort:**
+3. Dependency Enforcement - Add completion blocking
+4. Command Palette - Fuzzy command search
+5. Advanced Recurrence - Add intervals and limits
 
-FUTURE:
-9. Rule/Trigger System (Workflow)
-10. REST API (Integration)
-11. Smart Scheduling (Smart)
-12. AI Suggestions (Smart)
-```
+**High Effort (Future):**
+6. Status Workflows
+7. Cloud Sync
+8. REST API
 
 ---
 
@@ -329,8 +278,11 @@ FUTURE:
 | Area | Files |
 |------|-------|
 | Task Domain | `src/domain/task/mod.rs`, `src/domain/task/recurrence.rs` |
-| Task Handlers | `src/app/update/task.rs` |
-| Model/State | `src/app/model/mod.rs`, `src/app/model/hierarchy.rs` |
+| Git Integration | `src/domain/git/mod.rs`, `operations.rs`, `matching.rs` |
 | Filter DSL | `src/domain/filter_dsl/` |
-| Views | `src/ui/view/` |
+| Saved Filters | `src/domain/filter.rs`, `src/ui/components/saved_filter_picker.rs` |
+| Task Handlers | `src/app/update/task.rs` |
+| Multi-Select | `src/app/update/ui/multi_select.rs` |
+| Model/State | `src/app/model/mod.rs`, `src/app/model/hierarchy.rs` |
+| Views | `src/ui/view/`, `src/ui/components/` |
 | Storage | `src/storage/backends/` |

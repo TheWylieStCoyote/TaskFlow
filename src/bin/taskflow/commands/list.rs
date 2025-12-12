@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use chrono::Utc;
 use tracing::error;
 
-use taskflow::domain::filter_dsl::{evaluate, parse, EvalContext};
+use taskflow::domain::filter_dsl::{evaluate_with_cache, parse, EvalContext, TaskLowerCache};
 use taskflow::domain::{Priority, Task, TaskStatus};
 
 use crate::cli::{Cli, ListFilters};
@@ -101,7 +101,8 @@ pub fn list_tasks(
 
             // If DSL filter is provided, use it exclusively for remaining filtering
             if let Some(ref expr) = dsl_expr {
-                return evaluate(expr, t, &eval_ctx);
+                let cache = TaskLowerCache::new(t);
+                return evaluate_with_cache(expr, &cache, &eval_ctx);
             }
 
             // Filter by project

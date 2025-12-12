@@ -268,7 +268,7 @@ pub use ast::{
     NumericFilter, ScheduledFilter,
 };
 pub use error::{ParseError, ParseResult};
-pub use eval::{evaluate, EvalContext};
+pub use eval::{evaluate, evaluate_with_cache, EvalContext, TaskLowerCache};
 pub use parser::parse;
 
 #[cfg(test)]

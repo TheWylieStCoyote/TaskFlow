@@ -87,6 +87,50 @@ use super::ast::{
     ScheduledFilter,
 };
 
+/// Pre-computed lowercase task data for efficient filtering.
+///
+/// Avoids repeated `to_lowercase()` allocations during filter evaluation.
+/// Create once per task and reuse across multiple filter condition evaluations.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use taskflow::domain::Task;
+/// use taskflow::domain::filter_dsl::{parse, evaluate_with_cache, EvalContext, TaskLowerCache};
+///
+/// let task = Task::new("Fix Login Bug");
+/// let cache = TaskLowerCache::new(&task);
+/// let expr = parse("title:login").unwrap();
+/// let projects = HashMap::new();
+/// let ctx = EvalContext::new(&projects);
+///
+/// assert!(evaluate_with_cache(&expr, &cache, &ctx));
+/// ```
+pub struct TaskLowerCache<'a> {
+    /// Pre-computed lowercase title.
+    pub title_lower: String,
+    /// Pre-computed lowercase description (if present).
+    pub description_lower: Option<String>,
+    /// Pre-computed lowercase tags.
+    pub tags_lower: Vec<String>,
+    /// Reference to the original task for non-text fields.
+    pub task: &'a Task,
+}
+
+impl<'a> TaskLowerCache<'a> {
+    /// Create a new lowercase cache for a task.
+    #[must_use]
+    pub fn new(task: &'a Task) -> Self {
+        Self {
+            title_lower: task.title.to_lowercase(),
+            description_lower: task.description.as_ref().map(|d| d.to_lowercase()),
+            tags_lower: task.tags.iter().map(|t| t.to_lowercase()).collect(),
+            task,
+        }
+    }
+}
+
 /// Context for evaluating filter expressions.
 ///
 /// Provides access to projects for name lookups and the current date
@@ -141,6 +185,45 @@ pub fn evaluate(expr: &FilterExpr, task: &Task, ctx: &EvalContext<'_>) -> bool {
         FilterExpr::Or(left, right) => evaluate(left, task, ctx) || evaluate(right, task, ctx),
         FilterExpr::Not(inner) => !evaluate(inner, task, ctx),
         FilterExpr::Condition(cond) => evaluate_condition(cond, task, ctx),
+    }
+}
+
+/// Evaluate a filter expression against a task with pre-computed lowercase cache.
+///
+/// More efficient than [`evaluate()`] when the filter contains text-matching
+/// conditions (tags, search, title). The cache avoids repeated `to_lowercase()`
+/// allocations during evaluation.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use taskflow::domain::{Task, Priority};
+/// use taskflow::domain::filter_dsl::{parse, evaluate_with_cache, EvalContext, TaskLowerCache};
+///
+/// let task = Task::new("Bug fix").with_priority(Priority::High);
+/// let cache = TaskLowerCache::new(&task);
+/// let expr = parse("priority:high AND title:bug").unwrap();
+/// let projects = HashMap::new();
+/// let ctx = EvalContext::new(&projects);
+///
+/// assert!(evaluate_with_cache(&expr, &cache, &ctx));
+/// ```
+#[must_use]
+pub fn evaluate_with_cache(
+    expr: &FilterExpr,
+    cache: &TaskLowerCache<'_>,
+    ctx: &EvalContext<'_>,
+) -> bool {
+    match expr {
+        FilterExpr::And(left, right) => {
+            evaluate_with_cache(left, cache, ctx) && evaluate_with_cache(right, cache, ctx)
+        }
+        FilterExpr::Or(left, right) => {
+            evaluate_with_cache(left, cache, ctx) || evaluate_with_cache(right, cache, ctx)
+        }
+        FilterExpr::Not(inner) => !evaluate_with_cache(inner, cache, ctx),
+        FilterExpr::Condition(cond) => evaluate_condition_cached(cond, cache, ctx),
     }
 }
 
@@ -201,6 +284,69 @@ fn evaluate_condition(cond: &Condition, task: &Task, ctx: &EvalContext<'_>) -> b
 
         FilterValue::Actual(numeric_filter) => {
             evaluate_numeric(numeric_filter, Some(task.actual_minutes))
+        }
+    }
+}
+
+/// Evaluate a single condition using cached lowercase data.
+///
+/// Uses pre-computed lowercase strings from the cache for text fields,
+/// avoiding repeated allocations.
+fn evaluate_condition_cached(
+    cond: &Condition,
+    cache: &TaskLowerCache<'_>,
+    ctx: &EvalContext<'_>,
+) -> bool {
+    let task = cache.task;
+
+    match &cond.value {
+        // Non-text fields: delegate directly to task
+        FilterValue::Priority(priority) => task.priority == *priority,
+        FilterValue::Status(status) => task.status == *status,
+        FilterValue::Due(due_filter) => evaluate_due(due_filter, task, ctx.today),
+        FilterValue::Has(has_field) => evaluate_has(*has_field, task),
+        FilterValue::Created(created_filter) => evaluate_created(created_filter, task, ctx.today),
+        FilterValue::Scheduled(scheduled_filter) => {
+            evaluate_scheduled(scheduled_filter, task, ctx.today)
+        }
+        FilterValue::Completed(completed_filter) => {
+            evaluate_completed(completed_filter, task, ctx.today)
+        }
+        FilterValue::Modified(modified_filter) => {
+            evaluate_modified(modified_filter, task, ctx.today)
+        }
+        FilterValue::Estimate(numeric_filter) => {
+            evaluate_numeric(numeric_filter, task.estimated_minutes)
+        }
+        FilterValue::Actual(numeric_filter) => {
+            evaluate_numeric(numeric_filter, Some(task.actual_minutes))
+        }
+
+        // Text fields: use cached lowercase values
+        FilterValue::Tag(tag) => {
+            let tag_lower = tag.to_lowercase();
+            cache.tags_lower.iter().any(|t| t == &tag_lower)
+        }
+
+        FilterValue::SearchText(query) => {
+            let query_lower = query.to_lowercase();
+            cache.title_lower.contains(&query_lower)
+                || cache
+                    .description_lower
+                    .as_ref()
+                    .is_some_and(|d| d.contains(&query_lower))
+        }
+
+        FilterValue::TitleText(text) => {
+            let text_lower = text.to_lowercase();
+            cache.title_lower.contains(&text_lower)
+        }
+
+        FilterValue::ProjectName(name) => {
+            let name_lower = name.to_lowercase();
+            task.project_id
+                .and_then(|pid| ctx.projects.get(&pid))
+                .is_some_and(|p| p.name.to_lowercase().contains(&name_lower))
         }
     }
 }
@@ -1212,5 +1358,101 @@ mod tests {
         // Range syntax: ..end is inclusive (OnOrBefore)
         let expr_until = crate::domain::filter_dsl::parse("due:..2025-06-10").unwrap();
         assert!(evaluate(&expr_until, &task_on_boundary, &ctx));
+    }
+
+    // ========================================================================
+    // Cached evaluation tests (ensure parity with non-cached)
+    // ========================================================================
+
+    #[test]
+    fn test_cached_eval_produces_same_results() {
+        let task = Task::new("Fix Login Bug")
+            .with_priority(Priority::High)
+            .with_tags(vec!["bug".to_string(), "urgent".to_string()])
+            .with_description("Users cannot log in".to_string());
+
+        let ctx = empty_ctx();
+
+        // Test various filter expressions
+        let test_cases = [
+            "priority:high",
+            "tags:bug",
+            "tags:BUG",
+            "title:login",
+            r#"search:"login""#,
+            r#"search:"users""#,
+            "priority:high AND tags:bug",
+            "tags:urgent OR tags:feature",
+            "!status:done",
+            "(priority:high OR priority:urgent) AND tags:bug",
+        ];
+
+        for query in test_cases {
+            let expr = crate::domain::filter_dsl::parse(query).unwrap();
+            let cache = TaskLowerCache::new(&task);
+
+            let result_uncached = evaluate(&expr, &task, &ctx);
+            let result_cached = evaluate_with_cache(&expr, &cache, &ctx);
+
+            assert_eq!(
+                result_uncached, result_cached,
+                "Results differ for query: {query}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_cached_eval_text_fields() {
+        let task = Task::new("Refactor Authentication Module")
+            .with_tags(vec!["backend".to_string(), "Security".to_string()])
+            .with_description("Improve the auth system".to_string());
+
+        let ctx = empty_ctx();
+        let cache = TaskLowerCache::new(&task);
+
+        // Tag matching (case-insensitive)
+        let expr = crate::domain::filter_dsl::parse("tags:BACKEND").unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        let expr = crate::domain::filter_dsl::parse("tags:security").unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        // Title matching (case-insensitive substring)
+        let expr = crate::domain::filter_dsl::parse("title:refactor").unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        let expr = crate::domain::filter_dsl::parse("title:AUTH").unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        // Search (title OR description, case-insensitive)
+        let expr = crate::domain::filter_dsl::parse(r#"search:"improve""#).unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        let expr = crate::domain::filter_dsl::parse(r#"search:"MODULE""#).unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+    }
+
+    #[test]
+    fn test_cached_eval_complex_boolean() {
+        let task = Task::new("Urgent Bug Fix")
+            .with_priority(Priority::Urgent)
+            .with_tags(vec!["bug".to_string(), "production".to_string()]);
+
+        let ctx = empty_ctx();
+        let cache = TaskLowerCache::new(&task);
+
+        // Complex nested expression
+        let expr = crate::domain::filter_dsl::parse(
+            "((priority:high OR priority:urgent) AND tags:bug) AND !status:done",
+        )
+        .unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
+
+        // Mix of text and non-text conditions
+        let expr = crate::domain::filter_dsl::parse(
+            "title:urgent AND tags:production AND priority:urgent",
+        )
+        .unwrap();
+        assert!(evaluate_with_cache(&expr, &cache, &ctx));
     }
 }

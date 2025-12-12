@@ -9,7 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::domain::analytics::AnalyticsReport;
-use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId};
 
 use super::hierarchy::traverse_ancestors;
 
@@ -64,6 +64,10 @@ pub struct TaskCache {
     pub subtask_progress: HashMap<TaskId, (usize, usize)>,
     /// Child task IDs per parent task
     pub children: HashMap<TaskId, Vec<TaskId>>,
+    /// Time entry IDs per task (for O(1) lookup by task)
+    pub time_entries_by_task: HashMap<TaskId, Vec<TimeEntryId>>,
+    /// Work log IDs per task (for O(1) lookup by task)
+    pub work_logs_by_task: HashMap<TaskId, Vec<WorkLogEntryId>>,
 }
 
 impl TaskCache {
@@ -79,17 +83,38 @@ impl TaskCache {
         self.depths.clear();
         self.subtask_progress.clear();
         self.children.clear();
+        self.time_entries_by_task.clear();
+        self.work_logs_by_task.clear();
     }
 
-    /// Rebuild time sum cache from time entries.
+    /// Rebuild time sum cache and time entry index from time entries.
     ///
-    /// Groups time entries by task_id and sums durations in a single pass.
+    /// Groups time entries by task_id, sums durations, and builds a lookup index.
     pub fn rebuild_time_sums(&mut self, time_entries: &HashMap<TimeEntryId, TimeEntry>) {
         self.time_sums.clear();
+        self.time_entries_by_task.clear();
 
-        for entry in time_entries.values() {
+        for (id, entry) in time_entries {
             *self.time_sums.entry(entry.task_id).or_insert(0) +=
                 entry.calculated_duration_minutes();
+            self.time_entries_by_task
+                .entry(entry.task_id)
+                .or_default()
+                .push(*id);
+        }
+    }
+
+    /// Rebuild work log index from work logs.
+    ///
+    /// Groups work logs by task_id for O(1) lookup.
+    pub fn rebuild_work_logs_index(&mut self, work_logs: &HashMap<WorkLogEntryId, WorkLogEntry>) {
+        self.work_logs_by_task.clear();
+
+        for (id, entry) in work_logs {
+            self.work_logs_by_task
+                .entry(entry.task_id)
+                .or_default()
+                .push(*id);
         }
     }
 

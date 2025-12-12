@@ -69,8 +69,8 @@ fn get_work_log(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .work_logs
         .get(&log_id)
-        .map(|l| serde_json::to_value(l).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Work log not found: {id}")))
+        .and_then(|l| serde_json::to_value(l).map_err(PipeError::serialization))
 }
 
 fn create_work_log(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -105,7 +105,7 @@ fn create_work_log(model: &mut Model, data: Option<&serde_json::Value>) -> Handl
     model.work_logs.insert(log_id, log.clone());
     model.sync_work_log(&log);
 
-    Ok(serde_json::to_value(&log).unwrap())
+    serde_json::to_value(&log).map_err(PipeError::serialization)
 }
 
 fn update_work_log(
@@ -134,7 +134,7 @@ fn update_work_log(
     let updated_log = log.clone();
     model.sync_work_log(&updated_log);
 
-    Ok(serde_json::to_value(&updated_log).unwrap())
+    serde_json::to_value(&updated_log).map_err(PipeError::serialization)
 }
 
 fn delete_work_log(model: &mut Model, id: Option<&str>) -> HandlerResult {

@@ -13,7 +13,6 @@ fn create_model_with_time_entries() -> Model {
     let task = Task::new("Test task");
     let task_id = task.id;
     model.tasks.insert(task_id, task);
-    model.refresh_visible_tasks();
     model.selected_index = 0;
 
     // Create some time entries
@@ -35,6 +34,9 @@ fn create_model_with_time_entries() -> Model {
         e
     };
     model.time_entries.insert(entry2.id, entry2);
+
+    // Refresh after all data is inserted so caches are populated
+    model.refresh_visible_tasks();
 
     model
 }

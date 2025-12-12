@@ -82,8 +82,8 @@ fn get_project(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .projects
         .get(&project_id)
-        .map(|p| serde_json::to_value(p).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Project not found: {id}")))
+        .and_then(|p| serde_json::to_value(p).map_err(PipeError::serialization))
 }
 
 fn create_project(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -120,7 +120,7 @@ fn create_project(model: &mut Model, data: Option<&serde_json::Value>) -> Handle
     model.projects.insert(project_id, project.clone());
     model.sync_project(&project);
 
-    Ok(serde_json::to_value(&project).unwrap())
+    serde_json::to_value(&project).map_err(PipeError::serialization)
 }
 
 fn update_project(
@@ -177,7 +177,7 @@ fn update_project(
     let updated_project = project.clone();
     model.sync_project(&updated_project);
 
-    Ok(serde_json::to_value(&updated_project).unwrap())
+    serde_json::to_value(&updated_project).map_err(PipeError::serialization)
 }
 
 fn delete_project(model: &mut Model, id: Option<&str>) -> HandlerResult {

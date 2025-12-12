@@ -215,4 +215,44 @@ mod tests {
         // Should return 0, not negative
         assert_eq!(entry.calculated_duration_minutes(), 0);
     }
+
+    #[test]
+    fn test_time_entry_formatted_zero_minutes() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+        entry.duration_minutes = Some(0);
+
+        assert_eq!(entry.formatted_duration(), "0m");
+    }
+
+    #[test]
+    fn test_time_entry_formatted_exact_hour() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+        entry.duration_minutes = Some(60); // Exactly 1 hour
+
+        assert_eq!(entry.formatted_duration(), "1h 0m");
+    }
+
+    #[test]
+    fn test_time_entry_formatted_24_hours() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+        entry.duration_minutes = Some(24 * 60); // 24 hours
+
+        assert_eq!(entry.formatted_duration(), "24h 0m");
+    }
+
+    #[test]
+    fn test_time_entry_manual_override_priority() {
+        let task_id = TaskId::new();
+        let mut entry = TimeEntry::start(task_id);
+
+        // Set both ended_at (which would calculate 30 mins) and manual duration
+        entry.ended_at = Some(entry.started_at + chrono::Duration::minutes(30));
+        entry.duration_minutes = Some(45); // Manual override
+
+        // Manual duration should take priority
+        assert_eq!(entry.calculated_duration_minutes(), 45);
+    }
 }

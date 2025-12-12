@@ -146,8 +146,35 @@ impl Model {
         if task_id == new_parent_id {
             return true;
         }
-        // Check if new_parent is a descendant of task_id
-        self.get_all_descendants(task_id).contains(new_parent_id)
+        // Check if new_parent is a descendant of task_id (with early exit)
+        self.has_descendant(task_id, new_parent_id)
+    }
+
+    /// Checks if `target_id` is a descendant of `task_id`.
+    ///
+    /// Uses early exit traversal - returns as soon as target is found.
+    /// O(1) best case, O(d) worst case where d = number of descendants.
+    #[must_use]
+    fn has_descendant(&self, task_id: &TaskId, target_id: &TaskId) -> bool {
+        let mut stack = vec![*task_id];
+        let mut visited = HashSet::new();
+
+        while let Some(current_id) = stack.pop() {
+            if visited.contains(&current_id) {
+                continue; // Prevent cycles
+            }
+            visited.insert(current_id);
+
+            if let Some(children) = self.task_cache.children.get(&current_id) {
+                for child_id in children {
+                    if child_id == target_id {
+                        return true; // Early exit!
+                    }
+                    stack.push(*child_id);
+                }
+            }
+        }
+        false
     }
 
     /// Returns true if the task has any subtasks (direct children).

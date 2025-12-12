@@ -1,5 +1,7 @@
 //! List tasks command.
 
+use std::collections::HashSet;
+
 use chrono::Utc;
 use tracing::error;
 
@@ -64,6 +66,12 @@ pub fn list_tasks(
         .as_ref()
         .and_then(|name| find_project_id(name));
 
+    // Pre-compute lowercase filter tags ONCE (outside the filter closure)
+    let filter_tags_lower: Option<HashSet<String>> = filters
+        .tags
+        .as_ref()
+        .map(|tags| tags.iter().map(|tag| tag.to_lowercase()).collect());
+
     // Filter tasks based on all criteria
     let mut tasks: Vec<_> = model
         .tasks
@@ -103,23 +111,18 @@ pub fn list_tasks(
                 }
             }
 
-            // Filter by tags
-            if let Some(ref filter_tags) = filters.tags {
-                let task_tags_lower: Vec<String> =
+            // Filter by tags (using pre-computed filter_tags_lower)
+            if let Some(ref ftl) = filter_tags_lower {
+                // Use HashSet for O(1) contains lookup
+                let task_tags_lower: HashSet<String> =
                     t.tags.iter().map(|tag| tag.to_lowercase()).collect();
-                let filter_tags_lower: Vec<String> =
-                    filter_tags.iter().map(|tag| tag.to_lowercase()).collect();
 
                 let matches = if filters.tags_any {
                     // ANY mode: task has at least one of the filter tags
-                    filter_tags_lower
-                        .iter()
-                        .any(|ft| task_tags_lower.contains(ft))
+                    ftl.iter().any(|ft| task_tags_lower.contains(ft))
                 } else {
                     // ALL mode: task has all of the filter tags
-                    filter_tags_lower
-                        .iter()
-                        .all(|ft| task_tags_lower.contains(ft))
+                    ftl.iter().all(|ft| task_tags_lower.contains(ft))
                 };
                 if !matches {
                     return false;
@@ -194,27 +197,39 @@ pub fn list_tasks(
         Priority::None => 4,
     };
 
-    tasks.sort_by(|a, b| {
-        let cmp = match filters.sort.to_lowercase().as_str() {
-            "priority" => priority_order(&a.priority).cmp(&priority_order(&b.priority)),
-            "title" => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
-            "created" => a.created_at.cmp(&b.created_at),
-            _ => {
-                // Default: due-date, then priority
-                match (&a.due_date, &b.due_date) {
-                    (Some(da), Some(db)) => da.cmp(db),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => priority_order(&a.priority).cmp(&priority_order(&b.priority)),
-                }
-            }
-        };
+    // Pre-compute sort field ONCE (not per-comparison)
+    let sort_field = filters.sort.to_lowercase();
+
+    // Use sort_by_cached_key for title to avoid repeated to_lowercase() calls
+    if sort_field == "title" {
+        tasks.sort_by_cached_key(|t| t.title.to_lowercase());
         if filters.reverse {
-            cmp.reverse()
-        } else {
-            cmp
+            tasks.reverse();
         }
-    });
+    } else {
+        tasks.sort_by(|a, b| {
+            let cmp = match sort_field.as_str() {
+                "priority" => priority_order(&a.priority).cmp(&priority_order(&b.priority)),
+                "created" => a.created_at.cmp(&b.created_at),
+                _ => {
+                    // Default: due-date, then priority
+                    match (&a.due_date, &b.due_date) {
+                        (Some(da), Some(db)) => da.cmp(db),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => {
+                            priority_order(&a.priority).cmp(&priority_order(&b.priority))
+                        }
+                    }
+                }
+            };
+            if filters.reverse {
+                cmp.reverse()
+            } else {
+                cmp
+            }
+        });
+    }
 
     // Limit output
     let tasks: Vec<_> = tasks.into_iter().take(limit).collect();

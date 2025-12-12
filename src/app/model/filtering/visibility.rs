@@ -13,10 +13,12 @@ impl Model {
     /// Should be called when:
     /// - Tasks are added, removed, or modified
     /// - Time entries change
+    /// - Work logs change
     /// - Task hierarchy changes
     pub fn rebuild_caches(&mut self) {
         self.footer_stats.rebuild(&self.tasks);
         self.task_cache.rebuild_time_sums(&self.time_entries);
+        self.task_cache.rebuild_work_logs_index(&self.work_logs);
         self.task_cache.rebuild_hierarchy(&self.tasks);
     }
 

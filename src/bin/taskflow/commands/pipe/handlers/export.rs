@@ -9,7 +9,7 @@ use taskflow::domain::Tag;
 use taskflow::storage::ExportData;
 
 use super::HandlerResult;
-use crate::commands::pipe::types::PipeRequest;
+use crate::commands::pipe::types::{PipeError, PipeRequest};
 
 /// Handle export operation.
 pub fn handle_export(model: &Model, _request: &PipeRequest) -> HandlerResult {
@@ -39,5 +39,5 @@ pub fn handle_export(model: &Model, _request: &PipeRequest) -> HandlerResult {
         saved_filters: model.saved_filters.values().cloned().collect(),
     };
 
-    Ok(serde_json::to_value(&export_data).unwrap())
+    serde_json::to_value(&export_data).map_err(PipeError::serialization)
 }

@@ -95,8 +95,8 @@ fn get_habit(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .habits
         .get(&habit_id)
-        .map(|h| serde_json::to_value(h).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Habit not found: {id}")))
+        .and_then(|h| serde_json::to_value(h).map_err(PipeError::serialization))
 }
 
 fn create_habit(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -129,7 +129,7 @@ fn create_habit(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerR
     model.habits.insert(habit_id, habit.clone());
     model.sync_habit(&habit);
 
-    Ok(serde_json::to_value(&habit).unwrap())
+    serde_json::to_value(&habit).map_err(PipeError::serialization)
 }
 
 fn update_habit(
@@ -198,7 +198,7 @@ fn update_habit(
     let updated_habit = habit.clone();
     model.sync_habit(&updated_habit);
 
-    Ok(serde_json::to_value(&updated_habit).unwrap())
+    serde_json::to_value(&updated_habit).map_err(PipeError::serialization)
 }
 
 fn delete_habit(model: &mut Model, id: Option<&str>) -> HandlerResult {

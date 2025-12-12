@@ -109,8 +109,8 @@ fn get_goal(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .goals
         .get(&goal_id)
-        .map(|g| serde_json::to_value(g).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Goal not found: {id}")))
+        .and_then(|g| serde_json::to_value(g).map_err(PipeError::serialization))
 }
 
 fn create_goal(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -136,7 +136,7 @@ fn create_goal(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerRe
     model.goals.insert(goal_id, goal.clone());
     model.sync_goal(&goal);
 
-    Ok(serde_json::to_value(&goal).unwrap())
+    serde_json::to_value(&goal).map_err(PipeError::serialization)
 }
 
 fn update_goal(
@@ -227,7 +227,7 @@ fn update_goal(
     let updated_goal = goal.clone();
     model.sync_goal(&updated_goal);
 
-    Ok(serde_json::to_value(&updated_goal).unwrap())
+    serde_json::to_value(&updated_goal).map_err(PipeError::serialization)
 }
 
 fn delete_goal(model: &mut Model, id: Option<&str>) -> HandlerResult {
@@ -324,8 +324,8 @@ fn get_key_result(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .key_results
         .get(&kr_id)
-        .map(|kr| serde_json::to_value(kr).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Key result not found: {id}")))
+        .and_then(|kr| serde_json::to_value(kr).map_err(PipeError::serialization))
 }
 
 fn create_key_result(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -370,7 +370,7 @@ fn create_key_result(model: &mut Model, data: Option<&serde_json::Value>) -> Han
     model.key_results.insert(kr_id, kr.clone());
     model.sync_key_result(&kr);
 
-    Ok(serde_json::to_value(&kr).unwrap())
+    serde_json::to_value(&kr).map_err(PipeError::serialization)
 }
 
 fn update_key_result(
@@ -426,7 +426,7 @@ fn update_key_result(
     let updated_kr = kr.clone();
     model.sync_key_result(&updated_kr);
 
-    Ok(serde_json::to_value(&updated_kr).unwrap())
+    serde_json::to_value(&updated_kr).map_err(PipeError::serialization)
 }
 
 fn delete_key_result(model: &mut Model, id: Option<&str>) -> HandlerResult {

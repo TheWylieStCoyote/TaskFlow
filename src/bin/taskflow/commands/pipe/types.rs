@@ -212,6 +212,15 @@ impl PipeError {
             details: None,
         }
     }
+
+    /// Create a serialization error.
+    pub fn serialization(err: impl std::fmt::Display) -> Self {
+        Self {
+            code: "SERIALIZATION_ERROR".to_string(),
+            message: format!("Failed to serialize response: {err}"),
+            details: None,
+        }
+    }
 }
 
 impl std::fmt::Display for PipeError {

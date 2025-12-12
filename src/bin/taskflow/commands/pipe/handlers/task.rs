@@ -200,8 +200,8 @@ fn get_task(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .tasks
         .get(&task_id)
-        .map(|t| serde_json::to_value(t).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Task not found: {id}")))
+        .and_then(|t| serde_json::to_value(t).map_err(PipeError::serialization))
 }
 
 /// Create a new task.
@@ -263,7 +263,7 @@ fn create_task(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerRe
     model.tasks.insert(task_id, task.clone());
     model.sync_task(&task);
 
-    Ok(serde_json::to_value(&task).unwrap())
+    serde_json::to_value(&task).map_err(PipeError::serialization)
 }
 
 /// Update an existing task.
@@ -363,7 +363,7 @@ fn update_task(
     let updated_task = task.clone();
     model.sync_task(&updated_task);
 
-    Ok(serde_json::to_value(&updated_task).unwrap())
+    serde_json::to_value(&updated_task).map_err(PipeError::serialization)
 }
 
 /// Delete a task.

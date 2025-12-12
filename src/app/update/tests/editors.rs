@@ -11,7 +11,6 @@ fn create_model_with_work_logs() -> Model {
     let task = Task::new("Test task");
     let task_id = task.id;
     model.tasks.insert(task_id, task);
-    model.refresh_visible_tasks();
     model.selected_index = 0;
 
     // Create work log entries
@@ -20,6 +19,9 @@ fn create_model_with_work_logs() -> Model {
 
     let entry2 = WorkLogEntry::new(task_id, "Second work log entry");
     model.work_logs.insert(entry2.id, entry2);
+
+    // Refresh after all data is inserted so caches are populated
+    model.refresh_visible_tasks();
 
     model
 }

@@ -71,8 +71,8 @@ fn get_time_entry(model: &Model, id: Option<&str>) -> HandlerResult {
     model
         .time_entries
         .get(&entry_id)
-        .map(|e| serde_json::to_value(e).unwrap())
         .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Time entry not found: {id}")))
+        .and_then(|e| serde_json::to_value(e).map_err(PipeError::serialization))
 }
 
 fn create_time_entry(model: &mut Model, data: Option<&serde_json::Value>) -> HandlerResult {
@@ -132,7 +132,7 @@ fn create_time_entry(model: &mut Model, data: Option<&serde_json::Value>) -> Han
     model.time_entries.insert(entry_id, entry.clone());
     model.sync_time_entry(&entry);
 
-    Ok(serde_json::to_value(&entry).unwrap())
+    serde_json::to_value(&entry).map_err(PipeError::serialization)
 }
 
 fn update_time_entry(
@@ -187,7 +187,7 @@ fn update_time_entry(
     let updated_entry = entry.clone();
     model.sync_time_entry(&updated_entry);
 
-    Ok(serde_json::to_value(&updated_entry).unwrap())
+    serde_json::to_value(&updated_entry).map_err(PipeError::serialization)
 }
 
 fn delete_time_entry(model: &mut Model, id: Option<&str>) -> HandlerResult {

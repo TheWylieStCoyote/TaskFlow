@@ -551,24 +551,29 @@ impl Model {
     }
 
     /// Returns work log entries for a specific task, ordered by creation time (newest first).
+    ///
+    /// Uses cached task→log index for O(k) lookup where k = logs for task.
     #[must_use]
     pub fn work_logs_for_task(&self, task_id: &TaskId) -> Vec<&WorkLogEntry> {
         let mut logs: Vec<_> = self
-            .work_logs
-            .values()
-            .filter(|e| &e.task_id == task_id)
-            .collect();
+            .task_cache
+            .work_logs_by_task
+            .get(task_id)
+            .map(|ids| ids.iter().filter_map(|id| self.work_logs.get(id)).collect())
+            .unwrap_or_default();
         logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         logs
     }
 
     /// Returns the count of work log entries for a specific task.
+    ///
+    /// Uses cached task→log index for O(1) lookup.
     #[must_use]
     pub fn work_log_count_for_task(&self, task_id: &TaskId) -> usize {
-        self.work_logs
-            .values()
-            .filter(|e| &e.task_id == task_id)
-            .count()
+        self.task_cache
+            .work_logs_by_task
+            .get(task_id)
+            .map_or(0, Vec::len)
     }
 
     /// Refresh the visible habits list based on archive status filter.

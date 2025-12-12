@@ -81,22 +81,7 @@ impl TimeEntryRepository for SqliteBackend {
     fn get_active_entry(&self) -> StorageResult<Option<TimeEntry>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM time_entries WHERE ended_at IS NULL LIMIT 1")?;
-        let entry = stmt
-            .query_row([], |row| {
-                let id: String = row.get("id")?;
-                let task_id: String = row.get("task_id")?;
-                let started_at: String = row.get("started_at")?;
-                Ok(TimeEntry {
-                    id: TimeEntryId(uuid::Uuid::parse_str(&id).unwrap_or_default()),
-                    task_id: TaskId(uuid::Uuid::parse_str(&task_id).unwrap_or_default()),
-                    description: row.get("description")?,
-                    started_at: chrono::DateTime::parse_from_rfc3339(&started_at)
-                        .map_or_else(|_| chrono::Utc::now(), |dt| dt.with_timezone(&chrono::Utc)),
-                    ended_at: None,
-                    duration_minutes: None,
-                })
-            })
-            .optional()?;
+        let entry = stmt.query_row([], time_entry_from_row).optional()?;
         Ok(entry)
     }
 }

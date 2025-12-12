@@ -109,13 +109,20 @@ impl Model {
     }
 
     /// Returns all time entries for a task, sorted by start time (newest first).
+    ///
+    /// Uses cached task→entry index for O(k) lookup where k = entries for task.
     #[must_use]
     pub fn time_entries_for_task(&self, task_id: &TaskId) -> Vec<&TimeEntry> {
         let mut entries: Vec<_> = self
-            .time_entries
-            .values()
-            .filter(|e| &e.task_id == task_id)
-            .collect();
+            .task_cache
+            .time_entries_by_task
+            .get(task_id)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| self.time_entries.get(id))
+                    .collect()
+            })
+            .unwrap_or_default();
         entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
         entries
     }

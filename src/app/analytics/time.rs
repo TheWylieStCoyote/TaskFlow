@@ -27,10 +27,7 @@ impl AnalyticsEngine<'_> {
             // Use actual_minutes from task if available
             if task.actual_minutes > 0 {
                 // Attribute to completion date or created date
-                let date = task
-                    .completed_at
-                    .map_or_else(|| task.created_at, |c| c)
-                    .date_naive();
+                let date = task.completed_at.unwrap_or(task.created_at).date_naive();
 
                 if date >= start && date <= end {
                     let minutes = task.actual_minutes;

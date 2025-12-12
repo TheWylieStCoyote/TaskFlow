@@ -180,5 +180,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowDailyReview => Message::Ui(UiMessage::ShowDailyReview),
         Action::ShowWeeklyReview => Message::Ui(UiMessage::ShowWeeklyReview),
         Action::ShowEveningReview => Message::Ui(UiMessage::ShowEveningReview),
+        // Task detail
+        Action::ShowTaskDetail => Message::Ui(UiMessage::ShowTaskDetail),
     }
 }

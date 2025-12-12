@@ -251,6 +251,22 @@ pub fn handle_evening_review(key: event::KeyEvent) -> Message {
     }
 }
 
+/// Handle task detail modal input
+pub fn handle_task_detail(key: event::KeyEvent) -> Message {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideTaskDetail),
+        KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::TaskDetailScrollUp),
+        KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::TaskDetailScrollDown),
+        KeyCode::PageUp => Message::Ui(UiMessage::TaskDetailPageUp),
+        KeyCode::PageDown => Message::Ui(UiMessage::TaskDetailPageDown),
+        KeyCode::Char('g') => Message::Ui(UiMessage::TaskDetailScrollTop),
+        KeyCode::Char('G') => Message::Ui(UiMessage::TaskDetailScrollBottom),
+        KeyCode::Home => Message::Ui(UiMessage::TaskDetailScrollTop),
+        KeyCode::End => Message::Ui(UiMessage::TaskDetailScrollBottom),
+        _ => Message::None,
+    }
+}
+
 /// Handle macro slot selection
 pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     if let KeyCode::Char(c) = key.code {

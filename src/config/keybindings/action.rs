@@ -173,6 +173,9 @@ pub enum Action {
     ShowDailyReview,
     ShowWeeklyReview,
     ShowEveningReview,
+
+    // Task detail
+    ShowTaskDetail,
 }
 
 /// Category for grouping actions in help display
@@ -407,6 +410,8 @@ impl Action {
             Self::ShowDailyReview => "Daily review",
             Self::ShowWeeklyReview => "Weekly review",
             Self::ShowEveningReview => "Evening review",
+            // Task detail
+            Self::ShowTaskDetail => "Show task details",
         }
     }
 
@@ -545,6 +550,8 @@ impl Action {
             Self::ShowDailyReview | Self::ShowWeeklyReview | Self::ShowEveningReview => {
                 ActionCategory::ViewFilter
             }
+
+            Self::ShowTaskDetail => ActionCategory::Tasks,
         }
     }
 }

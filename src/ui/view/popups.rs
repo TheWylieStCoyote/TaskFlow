@@ -12,7 +12,7 @@ use crate::ui::components::{
     centered_rect, centered_rect_fixed_height, ConfirmDialog, DailyReview, DescriptionEditor,
     EveningReview, HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode, InputTarget,
     KeybindingsEditor, OverdueAlert, QuickCaptureDialog, SavedFilterPicker, StorageErrorAlert,
-    TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
+    TaskDetail, TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
 };
 
 /// Renders all popup dialogs and overlays based on model state
@@ -304,5 +304,14 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
     if model.habit_view.show_analytics {
         let popup_area = centered_rect_fixed_height(50, 12, area);
         frame.render_widget(HabitAnalyticsPopup::new(model, theme), popup_area);
+    }
+
+    // Render task detail modal
+    if model.task_detail.visible {
+        let popup_area = centered_rect(80, 80, area);
+        frame.render_widget(
+            TaskDetail::new(model, theme, model.task_detail.scroll),
+            popup_area,
+        );
     }
 }

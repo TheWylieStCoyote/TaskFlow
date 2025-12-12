@@ -179,5 +179,8 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("alt+w".to_string(), Action::ShowWeeklyReview);
     bindings.insert("alt+e".to_string(), Action::ShowEveningReview);
 
+    // Task detail
+    bindings.insert("i".to_string(), Action::ShowTaskDetail);
+
     bindings
 }

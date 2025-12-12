@@ -64,9 +64,9 @@ pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
     DescriptionEditorState, DuplicatesViewState, EveningReviewState, FilterState, GoalViewState,
     HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
-    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TemplatePickerState,
-    TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
-    WorkLogEditorState,
+    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TaskDetailState,
+    TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState,
+    WeeklyReviewState, WorkLogEditorState,
 };
 pub use view_queries::extract_git_location;
 
@@ -364,6 +364,10 @@ pub struct Model {
     // External command execution
     /// Pending editor command to execute (editor, file, line)
     pub pending_editor_command: Option<(String, String, String)>,
+
+    // Task detail modal
+    /// Task detail modal state (visibility, scroll)
+    pub task_detail: TaskDetailState,
 }
 
 impl Model {
@@ -446,6 +450,7 @@ impl Model {
             report_cache: ReportCache::new(),
             burndown_state: BurndownState::default(),
             pending_editor_command: None,
+            task_detail: TaskDetailState::default(),
         }
     }
 

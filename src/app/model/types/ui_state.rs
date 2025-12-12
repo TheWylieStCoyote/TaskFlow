@@ -173,6 +173,17 @@ pub struct GoalViewState {
     pub filter_quarter: Option<(i32, Quarter)>,
 }
 
+/// State for task detail modal.
+///
+/// Tracks visibility and scroll position for the read-only task detail popup.
+#[derive(Debug, Clone, Default)]
+pub struct TaskDetailState {
+    /// Whether the task detail modal is visible
+    pub visible: bool,
+    /// Current scroll position (line offset)
+    pub scroll: usize,
+}
+
 /// State for duplicate detection view.
 #[derive(Debug, Clone)]
 pub struct DuplicatesViewState {

@@ -32,5 +32,5 @@ pub use reviews::{DailyReviewState, EveningReviewState, WeeklyReviewState};
 pub use timeline::{TimelineState, TimelineZoom};
 pub use ui_state::{
     AlertState, DuplicatesViewState, FilterState, GoalViewState, HabitViewState, InputState,
-    MultiSelectState, RunningState, ViewSelectionState,
+    MultiSelectState, RunningState, TaskDetailState, ViewSelectionState,
 };

@@ -29,6 +29,6 @@ expression: output
 │Ctrl+↑    Move task up                                                        │
 │d         Delete task                                                         │
 │e         Edit task title                                                     │
+│i         Show task details                                                   │
 │m         Move to project                                                     │
-│n         Edit description                                                    │
 └──────────────────────────────────────────────────────────────────────────────┘

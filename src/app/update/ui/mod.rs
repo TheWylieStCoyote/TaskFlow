@@ -75,6 +75,7 @@ mod macros;
 mod multi_select;
 mod reschedule;
 mod reviews;
+mod task_detail;
 mod task_ops;
 mod templates;
 mod time_tracking;
@@ -97,6 +98,7 @@ use keybindings::handle_ui_keybindings;
 use macros::handle_ui_macros;
 use reschedule::handle_ui_reschedule;
 use reviews::{handle_ui_daily_review, handle_ui_evening_review, handle_ui_weekly_review};
+use task_detail::handle_ui_task_detail;
 use task_ops::handle_move_task;
 use templates::handle_ui_templates;
 use time_tracking::handle_ui_time_log;
@@ -798,6 +800,18 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     model.alerts.status_message = Some("Task has no git location info".to_string());
                 }
             }
+        }
+
+        // Task detail modal - delegated to helper
+        UiMessage::ShowTaskDetail
+        | UiMessage::HideTaskDetail
+        | UiMessage::TaskDetailScrollUp
+        | UiMessage::TaskDetailScrollDown
+        | UiMessage::TaskDetailPageUp
+        | UiMessage::TaskDetailPageDown
+        | UiMessage::TaskDetailScrollTop
+        | UiMessage::TaskDetailScrollBottom => {
+            handle_ui_task_detail(model, msg);
         }
     }
 }

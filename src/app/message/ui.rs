@@ -447,4 +447,22 @@ pub enum UiMessage {
     // Git integration
     /// Open the selected task's source file in the configured editor
     OpenInEditor,
+
+    // Task detail modal
+    /// Show the task detail modal for the selected task
+    ShowTaskDetail,
+    /// Hide the task detail modal
+    HideTaskDetail,
+    /// Scroll up in task detail modal
+    TaskDetailScrollUp,
+    /// Scroll down in task detail modal
+    TaskDetailScrollDown,
+    /// Page up in task detail modal
+    TaskDetailPageUp,
+    /// Page down in task detail modal
+    TaskDetailPageDown,
+    /// Jump to top in task detail modal
+    TaskDetailScrollTop,
+    /// Jump to bottom in task detail modal
+    TaskDetailScrollBottom,
 }

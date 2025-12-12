@@ -24,16 +24,23 @@ TaskFlow is a TUI project management application built with Rust using the Elm A
 
 ### Module Structure
 
-- `src/domain/` - Core entities: Task, Project, Tag, TimeEntry, Filter
+- `src/domain/` - Core entities: Task, Project, Tag, TimeEntry, Filter, Goal, Habit, WorkLog
+  - `src/domain/filter_dsl/` - Advanced filter query language (lexer, parser, AST, evaluator)
+  - `src/domain/git/` - Git integration for branch linking and TODO extraction
 - `src/app/` - TEA architecture: Model (state), Message (events), Update (state transitions)
 - `src/ui/` - View rendering and UI components
+  - `src/ui/components/` - Reusable widgets (task_detail, daily_review, evening_review, etc.)
 - `src/storage/` - Storage abstraction with 4 backends (JSON, YAML, SQLite, Markdown), plus import/export (CSV, ICS, DOT, Mermaid, HTML)
 - `src/config/` - Configuration system: settings, keybindings (70+ actions), and themes
+- `src/bin/taskflow/` - CLI binary with pipe interface for scripting
 
 ### Key Keybindings (in the TUI)
 
 - `j/k` or arrows - Navigate up/down
 - `x` or Space - Toggle task complete
+- `i` or Enter - View task details
 - `c` - Toggle show completed tasks
+- `f` / `F` - Focus mode / Full-screen focus
+- `Alt+d/w/e` - Daily/Weekly/Evening review
 - `?` - Show help
 - `q` or Esc - Quit

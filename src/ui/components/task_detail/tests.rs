@@ -81,7 +81,7 @@ fn buffer_to_string(buffer: &Buffer) -> String {
     let mut result = String::new();
     for y in 0..buffer.area.height {
         for x in 0..buffer.area.width {
-            let cell = buffer.get(x, y);
+            let cell = &buffer[(x, y)];
             result.push_str(cell.symbol());
         }
         result.push('\n');

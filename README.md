@@ -13,6 +13,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 ## Features
 
 - **Task Management**: Create, edit, and track tasks with priorities, due dates, status, and subtasks
+- **Task Detail Modal**: View comprehensive task information including description, time entries, work logs, and dependencies
 - **Project Organization**: Group related tasks under projects with sidebar navigation
 - **Goal/OKR Tracking**: Set objectives and key results with progress tracking and quarterly filtering
 - **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics
@@ -20,8 +21,12 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Time Tracking**: Track time spent on tasks with start/stop timer; persists across restarts
 - **Git Integration**: Extract TODO/FIXME comments from code and create tasks automatically
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
+- **Filter DSL**: Advanced query language for complex task filtering (see [FILTER_SYNTAX.md](docs/FILTER_SYNTAX.md))
 - **Sorting**: Sort tasks by priority, due date, title, status, or creation date
 - **Multiple Views**: Calendar, Timeline, Kanban, Eisenhower Matrix, Heatmap, Burndown charts, and more
+- **Review Modes**: Daily, Weekly, and Evening review workflows for task planning and reflection
+- **Focus Mode**: Distraction-free single-task view with full-screen option and focus queue
+- **Pipe Interface**: JSON input/output for scripting and external tool integration
 - **Undo Support**: Undo task, project, and time tracking operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
 - **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown
@@ -152,6 +157,8 @@ Each task shows:
 | `a` | Add new task |
 | `A` | Add subtask under selected task |
 | `e` | Edit task title |
+| `i` | View task details |
+| `Enter` | View task details (task list) / Select (sidebar) |
 | `d` | Delete task (with confirmation) |
 | `x` or `Space` | Toggle task completion |
 | `p` | Cycle priority (None → Low → Medium → High → Urgent) |

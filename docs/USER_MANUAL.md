@@ -1311,6 +1311,108 @@ taskflow git-todos --priority high
 - Tasks are grouped by source file with line numbers
 - Tasks are filtered by the `git-todo` tag
 
+### Task Detail Modal
+
+View comprehensive information about any task in a scrollable popup:
+
+**Opening the Modal:**
+- Press `i` on any task to open the detail view
+- Or press `Enter` when the task list is focused
+
+**Modal Contents:**
+- **Header**: Title, status, and priority indicators
+- **Metadata**: Project, tags, and task ID
+- **Dates**: Created, updated, due, scheduled, completed, snooze, and recurrence info
+- **Description**: Full task description with word wrap
+- **Time Tracking**: Estimated vs actual time with variance display
+- **Subtasks**: List with completion status and progress bar
+- **Dependencies**: Tasks that block this one, with their status
+- **Task Chain**: Previous/next linked tasks in a sequence
+- **Time Entries**: Recent time tracking sessions (last 5)
+- **Work Logs**: Recent notes with timestamps (last 3)
+
+**Navigation in Modal:**
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Scroll down |
+| `k` / `↑` | Scroll up |
+| `g` | Jump to top |
+| `G` | Jump to bottom |
+| `PgUp` | Page up |
+| `PgDn` | Page down |
+| `Esc` / `q` | Close modal |
+
+### Review Modes
+
+TaskFlow includes three review workflows for planning and reflection:
+
+#### Daily Review (`Alt+d`)
+
+Morning planning workflow:
+1. **Overdue Tasks**: Review and reschedule or complete overdue items
+2. **Today's Tasks**: See what's scheduled for today
+3. **Quick Capture**: Add any new tasks that come to mind
+
+#### Weekly Review (`Alt+w`)
+
+Weekly planning workflow:
+1. **Last Week**: Review completed tasks from the past week
+2. **This Week**: Plan tasks for the current week
+3. **Upcoming**: Look ahead at future deadlines
+
+#### Evening Review (`Alt+e`)
+
+End-of-day reflection workflow:
+1. **Today's Progress**: Review what was accomplished
+2. **Incomplete Tasks**: Decide what to carry forward
+3. **Tomorrow Planning**: Set priorities for the next day
+
+**Navigation in Reviews:**
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move down |
+| `k` / `↑` | Move up |
+| `Enter` / `l` | Next phase |
+| `h` | Previous phase |
+| `x` / `Space` | Complete task |
+| `Esc` / `q` | Exit review |
+
+### Focus Queue
+
+Build a queue of tasks for focused work sessions:
+
+| Key | Action |
+|-----|--------|
+| `f` | Toggle focus mode (single task view) |
+| `F` | Toggle full-screen focus mode |
+| `Q` | Add current task to focus queue |
+| `Alt+Q` | Clear the focus queue |
+| `Alt+J` | Advance to next task in queue |
+
+**Workflow:**
+1. Navigate through your tasks and press `Q` to add important ones to the queue
+2. Press `F` to enter full-screen focus mode
+3. Work on the current task
+4. Press `Alt+J` to advance to the next queued task
+5. Press `Esc` to exit focus mode
+
+### Pipe Interface
+
+TaskFlow supports JSON input/output for scripting and external tool integration:
+
+```bash
+# Pipe JSON commands to TaskFlow
+echo '{"command": "add", "title": "New task"}' | taskflow pipe
+
+# Get task list as JSON
+taskflow pipe --list
+
+# Filter and export
+taskflow pipe --filter "status:todo AND priority:high"
+```
+
+See `taskflow pipe --help` for full documentation.
+
 ---
 
 ## Appendices
@@ -1337,6 +1439,8 @@ taskflow git-todos --priority high
 | `a` | Add new task |
 | `A` | Add subtask |
 | `e` | Edit task title |
+| `i` | View task details |
+| `Enter` | View task details / Select |
 | `d` | Delete task |
 | `x` / `Space` | Toggle complete |
 | `p` | Cycle priority |
@@ -1384,7 +1488,14 @@ taskflow git-todos --priority high
 | `b` | Toggle sidebar |
 | `c` | Toggle completed |
 | `f` | Toggle focus mode |
-| `Alt+G` | Git TODOs view |
+| `F` | Toggle full-screen focus |
+| `Q` | Add to focus queue |
+| `Alt+Q` | Clear focus queue |
+| `Alt+J` | Advance focus queue |
+| `Alt+d` | Daily Review |
+| `Alt+w` | Weekly Review |
+| `Alt+e` | Evening Review |
+| `Alt+g` | Git TODOs view |
 | `?` | Show help |
 
 #### Multi-Select

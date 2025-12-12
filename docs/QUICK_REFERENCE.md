@@ -25,6 +25,8 @@ A one-page cheat sheet for TaskFlow. For detailed documentation, see [USER_MANUA
 | `a` | Add task |
 | `A` | Add subtask |
 | `e` | Edit title |
+| `i` | View task details |
+| `Enter` | View task details / Select |
 | `d` | Delete |
 | `x` | Toggle complete |
 | `p` | Cycle priority |
@@ -73,9 +75,21 @@ Fix bug #backend !high due:tomorrow @Work
 | `t` | Start/stop timer |
 | `L` | Time log |
 | `f` | Focus mode |
+| `F` | Full-screen focus |
+| `Q` | Add to focus queue |
 | `F5` | Start Pomodoro |
 | `F6` | Pause/Resume |
 | `F8` | Stop Pomodoro |
+
+---
+
+## Reviews
+
+| Key | Action |
+|-----|--------|
+| `Alt+d` | Daily Review |
+| `Alt+w` | Weekly Review |
+| `Alt+e` | Evening Review |
 
 ---
 
@@ -214,16 +228,30 @@ Visual graph of task dependencies and chains.
 
 ---
 
-## Focus Mode (f)
+## Focus Mode (f/F)
 
 | Key | Action |
 |-----|--------|
+| `f` | Toggle focus mode |
+| `F` | Toggle full-screen focus |
+| `Q` | Add to focus queue |
+| `Alt+Q` | Clear focus queue |
+| `Alt+J` | Advance focus queue |
 | `[` / `]` | Navigate chain (prev/next) |
 | `t` | Start/stop timer |
 | `x` | Toggle complete |
-| `f` / `Esc` | Exit focus mode |
+| `Esc` | Exit focus mode |
 
-Distraction-free view for working on a single task.
+Distraction-free view for working on a single task. Full-screen focus removes all UI chrome.
+
+---
+
+## Git Integration
+
+| Key | Action |
+|-----|--------|
+| `Alt+g` | View Git TODOs |
+| `O` | Open file in editor |
 
 ---
 

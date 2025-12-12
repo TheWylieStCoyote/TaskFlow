@@ -758,6 +758,40 @@ pub fn parse(input: &str) -> ParseResult<FilterExpr> {
 mod tests {
     use super::*;
 
+    // Helper functions for cleaner test assertions
+
+    /// Extract the condition from a FilterExpr, panicking with context if not a Condition.
+    fn expect_condition(expr: FilterExpr, context: &str) -> Condition {
+        match expr {
+            FilterExpr::Condition(c) => c,
+            other => panic!("Expected Condition for '{context}', got {other:?}"),
+        }
+    }
+
+    /// Extract the left and right from an And expression.
+    fn expect_and(expr: FilterExpr, context: &str) -> (Box<FilterExpr>, Box<FilterExpr>) {
+        match expr {
+            FilterExpr::And(l, r) => (l, r),
+            other => panic!("Expected And for '{context}', got {other:?}"),
+        }
+    }
+
+    /// Extract the left and right from an Or expression.
+    fn expect_or(expr: FilterExpr, context: &str) -> (Box<FilterExpr>, Box<FilterExpr>) {
+        match expr {
+            FilterExpr::Or(l, r) => (l, r),
+            other => panic!("Expected Or for '{context}', got {other:?}"),
+        }
+    }
+
+    /// Extract the inner expression from a Not expression.
+    fn expect_not(expr: FilterExpr, context: &str) -> FilterExpr {
+        match expr {
+            FilterExpr::Not(inner) => *inner,
+            other => panic!("Expected Not for '{context}', got {other:?}"),
+        }
+    }
+
     #[test]
     fn test_parse_simple_condition() {
         let expr = parse("priority:high").unwrap();
@@ -785,32 +819,23 @@ mod tests {
     #[test]
     fn test_parse_parentheses() {
         let expr = parse("(priority:high OR priority:urgent) AND tags:bug").unwrap();
-        if let FilterExpr::And(left, _) = expr {
-            assert!(matches!(*left, FilterExpr::Or(_, _)));
-        } else {
-            panic!("Expected And expression");
-        }
+        let (left, _) = expect_and(expr, "(p:high OR p:urgent) AND tags:bug");
+        assert!(matches!(*left, FilterExpr::Or(_, _)));
     }
 
     #[test]
     fn test_precedence_and_over_or() {
         // a OR b AND c should parse as a OR (b AND c)
         let expr = parse("status:todo OR priority:high AND tags:bug").unwrap();
-        if let FilterExpr::Or(_, right) = expr {
-            assert!(matches!(*right, FilterExpr::And(_, _)));
-        } else {
-            panic!("Expected Or expression with And on right");
-        }
+        let (_, right) = expect_or(expr, "status:todo OR priority:high AND tags:bug");
+        assert!(matches!(*right, FilterExpr::And(_, _)));
     }
 
     #[test]
     fn test_parse_quoted_string() {
         let expr = parse(r#"search:"hello world""#).unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert!(matches!(cond.value, FilterValue::SearchText(s) if s == "hello world"));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, r#"search:"hello world""#);
+        assert!(matches!(cond.value, FilterValue::SearchText(s) if s == "hello world"));
     }
 
     #[test]
@@ -824,11 +849,8 @@ mod tests {
             ("priority:urgent", Priority::Urgent),
         ] {
             let expr = parse(input).unwrap();
-            if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(cond.value, FilterValue::Priority(expected));
-            } else {
-                panic!("Expected Condition for {input}");
-            }
+            let cond = expect_condition(expr, input);
+            assert_eq!(cond.value, FilterValue::Priority(expected));
         }
     }
 
@@ -846,15 +868,12 @@ mod tests {
             ("status:canceled", TaskStatus::Cancelled),
         ] {
             let expr = parse(input).unwrap();
-            if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(
-                    cond.value,
-                    FilterValue::Status(expected),
-                    "Failed for {input}"
-                );
-            } else {
-                panic!("Expected Condition for {input}");
-            }
+            let cond = expect_condition(expr, input);
+            assert_eq!(
+                cond.value,
+                FilterValue::Status(expected),
+                "Failed for {input}"
+            );
         }
     }
 
@@ -870,45 +889,33 @@ mod tests {
             ("due:none", DueFilter::None),
         ] {
             let expr = parse(input).unwrap();
-            if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(cond.value, FilterValue::Due(expected), "Failed for {input}");
-            } else {
-                panic!("Expected Condition for {input}");
-            }
+            let cond = expect_condition(expr, input);
+            assert_eq!(cond.value, FilterValue::Due(expected), "Failed for {input}");
         }
     }
 
     #[test]
     fn test_parse_due_specific_date() {
         let expr = parse("due:2025-12-25").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::On(expected)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:2025-12-25");
+        let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::On(expected)));
     }
 
     #[test]
     fn test_parse_due_before_date() {
         let expr = parse("due:<2025-12-25").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::Before(expected)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:<2025-12-25");
+        let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::Before(expected)));
     }
 
     #[test]
     fn test_parse_due_after_date() {
         let expr = parse("due:>2025-12-25").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::After(expected)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:>2025-12-25");
+        let expected = NaiveDate::from_ymd_opt(2025, 12, 25).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::After(expected)));
     }
 
     #[test]
@@ -923,11 +930,8 @@ mod tests {
             ("has:desc", HasField::Description),
         ] {
             let expr = parse(input).unwrap();
-            if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(cond.value, FilterValue::Has(expected), "Failed for {input}");
-            } else {
-                panic!("Expected Condition for {input}");
-            }
+            let cond = expect_condition(expr, input);
+            assert_eq!(cond.value, FilterValue::Has(expected), "Failed for {input}");
         }
     }
 
@@ -941,23 +945,17 @@ mod tests {
     #[test]
     fn test_parse_project_partial_match() {
         let expr = parse("project:backend").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(cond.field, FilterField::Project);
-            assert_eq!(cond.value, FilterValue::ProjectName("backend".to_string()));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "project:backend");
+        assert_eq!(cond.field, FilterField::Project);
+        assert_eq!(cond.value, FilterValue::ProjectName("backend".to_string()));
     }
 
     #[test]
     fn test_parse_title_search() {
         let expr = parse("title:refactor").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(cond.field, FilterField::Title);
-            assert_eq!(cond.value, FilterValue::TitleText("refactor".to_string()));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "title:refactor");
+        assert_eq!(cond.field, FilterField::Title);
+        assert_eq!(cond.value, FilterValue::TitleText("refactor".to_string()));
     }
 
     #[test]
@@ -1027,11 +1025,8 @@ mod tests {
     #[test]
     fn test_double_negation() {
         let expr = parse("!!status:done").unwrap();
-        if let FilterExpr::Not(inner) = expr {
-            assert!(matches!(*inner, FilterExpr::Not(_)));
-        } else {
-            panic!("Expected Not expression");
-        }
+        let inner = expect_not(expr, "!!status:done");
+        assert!(matches!(inner, FilterExpr::Not(_)));
     }
 
     #[test]
@@ -1051,58 +1046,46 @@ mod tests {
             ("created:last-week", CreatedFilter::LastWeek),
         ] {
             let expr = parse(input).unwrap();
-            if let FilterExpr::Condition(cond) = expr {
-                assert_eq!(
-                    cond.value,
-                    FilterValue::Created(expected),
-                    "Failed for {input}"
-                );
-            } else {
-                panic!("Expected Condition for {input}");
-            }
+            let cond = expect_condition(expr, input);
+            assert_eq!(
+                cond.value,
+                FilterValue::Created(expected),
+                "Failed for {input}"
+            );
         }
     }
 
     #[test]
     fn test_parse_created_specific_date() {
         let expr = parse("created:2025-01-15").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::On(expected))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:2025-01-15");
+        let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::On(expected))
+        );
     }
 
     #[test]
     fn test_parse_created_before_date() {
         let expr = parse("created:<2025-01-15").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::Before(expected))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:<2025-01-15");
+        let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::Before(expected))
+        );
     }
 
     #[test]
     fn test_parse_created_after_date() {
         let expr = parse("created:>2025-01-15").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::After(expected))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:>2025-01-15");
+        let expected = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::After(expected))
+        );
     }
 
     // ========================================================================
@@ -1112,35 +1095,26 @@ mod tests {
     #[test]
     fn test_parse_due_date_range() {
         let expr = parse("due:2025-01-01..2025-01-31").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-            let end = NaiveDate::from_ymd_opt(2025, 1, 31).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(start, end)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:2025-01-01..2025-01-31");
+        let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 1, 31).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(start, end)));
     }
 
     #[test]
     fn test_parse_due_open_start_range() {
         let expr = parse("due:2025-06-01..").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrAfter(date)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:2025-06-01..");
+        let date = NaiveDate::from_ymd_opt(2025, 6, 1).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrAfter(date)));
     }
 
     #[test]
     fn test_parse_due_open_end_range() {
         let expr = parse("due:..2025-12-31").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 12, 31).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrBefore(date)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:..2025-12-31");
+        let date = NaiveDate::from_ymd_opt(2025, 12, 31).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::OnOrBefore(date)));
     }
 
     #[test]
@@ -1152,139 +1126,109 @@ mod tests {
     #[test]
     fn test_parse_created_date_range() {
         let expr = parse("created:2025-01-01..2025-03-31").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-            let end = NaiveDate::from_ymd_opt(2025, 3, 31).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::Between(start, end))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:2025-01-01..2025-03-31");
+        let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 3, 31).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::Between(start, end))
+        );
     }
 
     #[test]
     fn test_parse_created_open_start_range() {
         let expr = parse("created:2025-01-01..").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::OnOrAfter(date))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:2025-01-01..");
+        let date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::OnOrAfter(date))
+        );
     }
 
     #[test]
     fn test_parse_created_open_end_range() {
         let expr = parse("created:..2025-06-30").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Created(CreatedFilter::OnOrBefore(date))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "created:..2025-06-30");
+        let date = NaiveDate::from_ymd_opt(2025, 6, 30).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Created(CreatedFilter::OnOrBefore(date))
+        );
     }
 
     #[test]
     fn test_parse_scheduled_date_range() {
         let expr = parse("scheduled:2025-02-01..2025-02-28").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let start = NaiveDate::from_ymd_opt(2025, 2, 1).unwrap();
-            let end = NaiveDate::from_ymd_opt(2025, 2, 28).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Scheduled(ScheduledFilter::Between(start, end))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "scheduled:2025-02-01..2025-02-28");
+        let start = NaiveDate::from_ymd_opt(2025, 2, 1).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 2, 28).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Scheduled(ScheduledFilter::Between(start, end))
+        );
     }
 
     #[test]
     fn test_parse_scheduled_open_start_range() {
         let expr = parse("scheduled:2025-03-01..").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 3, 1).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Scheduled(ScheduledFilter::OnOrAfter(date))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "scheduled:2025-03-01..");
+        let date = NaiveDate::from_ymd_opt(2025, 3, 1).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Scheduled(ScheduledFilter::OnOrAfter(date))
+        );
     }
 
     #[test]
     fn test_parse_scheduled_open_end_range() {
         let expr = parse("scheduled:..2025-04-30").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 4, 30).unwrap();
-            assert_eq!(
-                cond.value,
-                FilterValue::Scheduled(ScheduledFilter::OnOrBefore(date))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "scheduled:..2025-04-30");
+        let date = NaiveDate::from_ymd_opt(2025, 4, 30).unwrap();
+        assert_eq!(
+            cond.value,
+            FilterValue::Scheduled(ScheduledFilter::OnOrBefore(date))
+        );
     }
 
     #[test]
     fn test_parse_estimate_numeric_range() {
         let expr = parse("estimate:30..120").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(
-                cond.value,
-                FilterValue::Estimate(NumericFilter::Between(30, 120))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "estimate:30..120");
+        assert_eq!(
+            cond.value,
+            FilterValue::Estimate(NumericFilter::Between(30, 120))
+        );
     }
 
     #[test]
     fn test_parse_estimate_open_start_range() {
         let expr = parse("estimate:60..").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(
-                cond.value,
-                FilterValue::Estimate(NumericFilter::GreaterOrEqual(60))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "estimate:60..");
+        assert_eq!(
+            cond.value,
+            FilterValue::Estimate(NumericFilter::GreaterOrEqual(60))
+        );
     }
 
     #[test]
     fn test_parse_estimate_open_end_range() {
         let expr = parse("estimate:..30").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(
-                cond.value,
-                FilterValue::Estimate(NumericFilter::LessOrEqual(30))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "estimate:..30");
+        assert_eq!(
+            cond.value,
+            FilterValue::Estimate(NumericFilter::LessOrEqual(30))
+        );
     }
 
     #[test]
     fn test_parse_actual_numeric_range() {
         let expr = parse("actual:15..90").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(
-                cond.value,
-                FilterValue::Actual(NumericFilter::Between(15, 90))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "actual:15..90");
+        assert_eq!(
+            cond.value,
+            FilterValue::Actual(NumericFilter::Between(15, 90))
+        );
     }
 
     #[test]
@@ -1318,26 +1262,20 @@ mod tests {
     fn test_parse_range_same_date() {
         // Same start and end should be allowed (single day range)
         let expr = parse("due:2025-06-15..2025-06-15").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            let date = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
-            assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(date, date)));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:2025-06-15..2025-06-15");
+        let date = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+        assert_eq!(cond.value, FilterValue::Due(DueFilter::Between(date, date)));
     }
 
     #[test]
     fn test_parse_range_same_number() {
         // Same start and end should be allowed
         let expr = parse("estimate:60..60").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert_eq!(
-                cond.value,
-                FilterValue::Estimate(NumericFilter::Between(60, 60))
-            );
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "estimate:60..60");
+        assert_eq!(
+            cond.value,
+            FilterValue::Estimate(NumericFilter::Between(60, 60))
+        );
     }
 
     // === Edge case tests for Phase 5 improvements ===
@@ -1348,14 +1286,11 @@ mod tests {
         let expr = parse("status:todo AND priority:high OR status:done").unwrap();
 
         // The result should be Or(And(todo, high), done)
-        if let FilterExpr::Or(left, right) = expr {
-            // Left side should be an And expression
-            assert!(matches!(*left, FilterExpr::And(_, _)));
-            // Right side should be a Condition (status:done)
-            assert!(matches!(*right, FilterExpr::Condition(_)));
-        } else {
-            panic!("Expected Or at top level for AND/OR precedence");
-        }
+        let (left, right) = expect_or(expr, "AND/OR precedence");
+        // Left side should be an And expression
+        assert!(matches!(*left, FilterExpr::And(_, _)));
+        // Right side should be a Condition (status:done)
+        assert!(matches!(*right, FilterExpr::Condition(_)));
     }
 
     #[test]
@@ -1387,27 +1322,21 @@ mod tests {
     fn test_date_range_open_start() {
         // "..2025-12-31" should parse as OnOrBefore (less than or equal)
         let expr = parse("due:..2025-12-31").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert!(matches!(
-                cond.value,
-                FilterValue::Due(DueFilter::OnOrBefore(_))
-            ));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:..2025-12-31");
+        assert!(matches!(
+            cond.value,
+            FilterValue::Due(DueFilter::OnOrBefore(_))
+        ));
     }
 
     #[test]
     fn test_date_range_open_end() {
         // "2025-01-01.." should parse as OnOrAfter (greater than or equal)
         let expr = parse("due:2025-01-01..").unwrap();
-        if let FilterExpr::Condition(cond) = expr {
-            assert!(matches!(
-                cond.value,
-                FilterValue::Due(DueFilter::OnOrAfter(_))
-            ));
-        } else {
-            panic!("Expected Condition");
-        }
+        let cond = expect_condition(expr, "due:2025-01-01..");
+        assert!(matches!(
+            cond.value,
+            FilterValue::Due(DueFilter::OnOrAfter(_))
+        ));
     }
 }

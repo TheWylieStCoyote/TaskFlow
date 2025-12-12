@@ -1,17 +1,14 @@
 //! TaskRepository implementation for SQLite backend.
 
 use rusqlite::params;
-use tracing::warn;
 
 use crate::domain::{Filter, ProjectId, Task, TaskId};
 use crate::storage::{StorageError, StorageResult, TaskRepository};
 
-/// Helper to serialize a value to JSON with warning on failure.
-fn json_or_empty<T: serde::Serialize>(value: &T, context: &str) -> String {
-    serde_json::to_string(value).unwrap_or_else(|e| {
-        warn!("Failed to serialize {}: {}", context, e);
-        String::new()
-    })
+/// Helper to serialize a value to JSON, propagating errors.
+fn json_serialize<T: serde::Serialize>(value: &T) -> StorageResult<String> {
+    serde_json::to_string(value)
+        .map_err(|e| StorageError::serialization(format!("JSON serialization failed: {e}")))
 }
 
 use super::rows::task_from_row;
@@ -20,6 +17,19 @@ use super::SqliteBackend;
 impl TaskRepository for SqliteBackend {
     fn create_task(&mut self, task: &Task) -> StorageResult<()> {
         let conn = self.inner.conn()?;
+
+        // Serialize JSON fields, propagating errors
+        let tags_json = json_serialize(&task.tags)?;
+        let deps_json = json_serialize(
+            &task
+                .dependencies
+                .iter()
+                .map(|d| d.0.to_string())
+                .collect::<Vec<_>>(),
+        )?;
+        let custom_fields_json = json_serialize(&task.custom_fields)?;
+        let recurrence_json = task.recurrence.as_ref().map(json_serialize).transpose()?;
+
         conn.execute(
             r"INSERT INTO tasks (
                 id, title, description, status, priority, project_id, parent_task_id,
@@ -34,19 +44,19 @@ impl TaskRepository for SqliteBackend {
                 task.priority.as_str(),
                 task.project_id.as_ref().map(|p| p.0.to_string()),
                 task.parent_task_id.as_ref().map(|t| t.0.to_string()),
-                json_or_empty(&task.tags, "task.tags"),
-                json_or_empty(&task.dependencies.iter().map(|d| d.0.to_string()).collect::<Vec<_>>(), "task.dependencies"),
+                tags_json,
+                deps_json,
                 task.created_at.to_rfc3339(),
                 task.updated_at.to_rfc3339(),
                 task.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 task.scheduled_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 task.completed_at.map(|d| d.to_rfc3339()),
-                task.recurrence.as_ref().and_then(|r| serde_json::to_string(r).ok()),
+                recurrence_json,
                 task.estimated_minutes.map(|m| m as i32),
                 task.actual_minutes as i32,
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
-                json_or_empty(&task.custom_fields, "task.custom_fields"),
+                custom_fields_json,
             ],
         )?;
         // Sync tags to junction table
@@ -65,6 +75,19 @@ impl TaskRepository for SqliteBackend {
 
     fn update_task(&mut self, task: &Task) -> StorageResult<()> {
         let conn = self.inner.conn()?;
+
+        // Serialize JSON fields, propagating errors
+        let tags_json = json_serialize(&task.tags)?;
+        let deps_json = json_serialize(
+            &task
+                .dependencies
+                .iter()
+                .map(|d| d.0.to_string())
+                .collect::<Vec<_>>(),
+        )?;
+        let custom_fields_json = json_serialize(&task.custom_fields)?;
+        let recurrence_json = task.recurrence.as_ref().map(json_serialize).transpose()?;
+
         let rows = conn.execute(
             r"UPDATE tasks SET
                 title = ?2, description = ?3, status = ?4, priority = ?5,
@@ -81,28 +104,19 @@ impl TaskRepository for SqliteBackend {
                 task.priority.as_str(),
                 task.project_id.as_ref().map(|p| p.0.to_string()),
                 task.parent_task_id.as_ref().map(|t| t.0.to_string()),
-                json_or_empty(&task.tags, "task.tags"),
-                json_or_empty(
-                    &task
-                        .dependencies
-                        .iter()
-                        .map(|d| d.0.to_string())
-                        .collect::<Vec<_>>(),
-                    "task.dependencies"
-                ),
+                tags_json,
+                deps_json,
                 task.updated_at.to_rfc3339(),
                 task.due_date.map(|d| d.format("%Y-%m-%d").to_string()),
                 task.scheduled_date
                     .map(|d| d.format("%Y-%m-%d").to_string()),
                 task.completed_at.map(|d| d.to_rfc3339()),
-                task.recurrence
-                    .as_ref()
-                    .and_then(|r| serde_json::to_string(r).ok()),
+                recurrence_json,
                 task.estimated_minutes.map(|m| m as i32),
                 task.actual_minutes as i32,
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
-                json_or_empty(&task.custom_fields, "task.custom_fields"),
+                custom_fields_json,
             ],
         )?;
         if rows == 0 {

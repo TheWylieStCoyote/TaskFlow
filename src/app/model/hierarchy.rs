@@ -1,4 +1,48 @@
 //! Task hierarchy (subtask) methods for the Model.
+//!
+//! This module provides methods for navigating and querying task relationships:
+//!
+//! - **Parent-child relationships**: Tasks can have a `parent_task_id`, creating a tree structure
+//! - **Subtask progress**: Track completion of descendant tasks
+//! - **Dependency tracking**: Tasks can depend on other tasks (blocking relationships)
+//!
+//! # Cycle Detection
+//!
+//! All traversal methods include cycle detection to handle corrupted or malformed data
+//! gracefully. This prevents infinite loops when:
+//! - A task is its own ancestor (direct or indirect)
+//! - Setting a parent that would create a circular reference
+//!
+//! # Performance
+//!
+//! - Ancestor traversal: O(d) where d = depth of task
+//! - Descendant traversal: O(n) where n = number of descendants
+//! - Cycle checks use `HashSet` for O(1) visited lookups
+//! - Child lookups use cached `children` map for O(1) access
+//!
+//! # Example
+//!
+//! ```
+//! use taskflow::app::Model;
+//! use taskflow::domain::Task;
+//!
+//! let mut model = Model::new();
+//!
+//! // Create a task hierarchy
+//! let parent = Task::new("Project");
+//! let parent_id = parent.id;
+//! model.tasks.insert(parent.id, parent);
+//!
+//! let subtask = Task::new("Subtask").with_parent(parent_id);
+//! model.tasks.insert(subtask.id, subtask);
+//!
+//! // Rebuild caches to index the hierarchy
+//! model.rebuild_caches();
+//!
+//! // Query hierarchy
+//! assert_eq!(model.task_depth(&parent_id), 0); // Root task
+//! assert!(model.has_subtasks(&parent_id));
+//! ```
 
 use std::collections::HashSet;
 

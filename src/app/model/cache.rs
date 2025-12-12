@@ -4,6 +4,32 @@
 //! O(n) or O(n²) operations during rendering. Caches are invalidated
 //! when the underlying data changes.
 //!
+//! # Cache Types
+//!
+//! | Cache | Purpose | Rebuild Trigger |
+//! |-------|---------|-----------------|
+//! | [`FooterStats`] | Task counts for status bar | Task created/modified/deleted |
+//! | [`TaskCache`] | Per-task metadata (depth, children, time sums) | Task/time entry changes |
+//! | [`ReportCache`] | Analytics reports for dashboards | Task/time entry changes |
+//!
+//! # Invalidation Strategy
+//!
+//! Caches use a **full rebuild** strategy rather than incremental updates:
+//!
+//! - **Simplicity**: No complex delta tracking or partial invalidation
+//! - **Correctness**: Avoids subtle bugs from stale partial state
+//! - **Performance**: Rebuilds are fast (single pass over data) and infrequent
+//!
+//! Call [`Model::rebuild_caches()`](super::Model::rebuild_caches) after any data modification.
+//!
+//! # When to Invalidate
+//!
+//! Caches should be rebuilt after:
+//! - Creating, updating, or deleting tasks
+//! - Adding or modifying time entries
+//! - Changing task parent relationships (affects hierarchy caches)
+//! - Loading data from storage
+//!
 //! See also [`super::layout_cache::LayoutCache`] for UI layout caching.
 
 use std::collections::{HashMap, HashSet};

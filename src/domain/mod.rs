@@ -121,6 +121,7 @@ mod calendar_event;
 pub mod duplicate_detector;
 mod filter;
 pub mod filter_dsl;
+pub mod git;
 mod goal;
 mod habit;
 mod key_result;

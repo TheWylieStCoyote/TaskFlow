@@ -122,6 +122,10 @@ pub struct Task {
     // Custom fields for extensibility
     #[serde(default)]
     pub custom_fields: HashMap<String, serde_json::Value>,
+
+    // Git integration - linked branch
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_ref: Option<super::git::GitRef>,
 }
 
 impl Task {
@@ -149,6 +153,7 @@ impl Task {
             next_task_id: None,
             snooze_until: None,
             custom_fields: HashMap::new(),
+            git_ref: None,
         }
     }
 
@@ -229,6 +234,13 @@ impl Task {
     #[must_use]
     pub const fn with_estimated_minutes(mut self, minutes: u32) -> Self {
         self.estimated_minutes = Some(minutes);
+        self
+    }
+
+    /// Links the task to a git branch.
+    #[must_use]
+    pub fn with_git_ref(mut self, git_ref: super::git::GitRef) -> Self {
+        self.git_ref = Some(git_ref);
         self
     }
 

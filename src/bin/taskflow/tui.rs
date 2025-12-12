@@ -139,6 +139,8 @@ fn run_app(
     };
     let mut last_save = Instant::now();
     let mut last_pomodoro_tick = Instant::now();
+    let mut last_git_check = Instant::now();
+    let git_check_interval = Duration::from_secs(60); // Check every 60 seconds
 
     loop {
         // Draw UI
@@ -167,6 +169,12 @@ fn run_app(
                 }
             }
             last_pomodoro_tick = Instant::now();
+        }
+
+        // Check for merged git branches periodically
+        if last_git_check.elapsed() >= git_check_interval {
+            update(model, Message::System(SystemMessage::CheckMergedBranches));
+            last_git_check = Instant::now();
         }
 
         // Handle events with timeout for potential async operations

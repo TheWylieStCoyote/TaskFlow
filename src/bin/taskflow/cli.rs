@@ -188,6 +188,50 @@ pub enum Commands {
         #[arg(short, long, default_value = "json")]
         format: String,
     },
+    /// Git integration commands (link tasks to branches, auto-complete on merge)
+    #[command(alias = "g")]
+    #[command(subcommand)]
+    Git(GitCommands),
+}
+
+/// Git integration subcommands
+#[derive(Subcommand, Debug)]
+pub enum GitCommands {
+    /// Link a task to a git branch
+    Link {
+        /// Search query to find the task (matches title)
+        task: String,
+        /// Branch to link to (defaults to current branch)
+        #[arg(long)]
+        branch: Option<String>,
+    },
+    /// Unlink a task from its git branch
+    Unlink {
+        /// Search query to find the task (matches title)
+        task: String,
+    },
+    /// Show commit history for a linked task
+    Commits {
+        /// Search query to find the task (matches title)
+        task: String,
+        /// Maximum number of commits to show
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+    /// Show status of all git-linked tasks
+    Status,
+    /// Auto-detect and link tasks to branches based on naming conventions
+    Sync {
+        /// Preview what would be linked without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Check for merged branches and auto-complete linked tasks
+    CheckMerged {
+        /// Preview what would be completed without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 /// Parse priority strings into Priority enum values

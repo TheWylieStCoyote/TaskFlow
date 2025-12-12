@@ -1,6 +1,63 @@
 //! Lexer (tokenizer) for the filter DSL.
 //!
 //! Converts input strings into a stream of tokens for the parser.
+//!
+//! # Tokenization Rules
+//!
+//! The lexer recognizes these token types:
+//!
+//! | Token | Pattern | Examples |
+//! |-------|---------|----------|
+//! | Identifier | `[a-zA-Z0-9_][a-zA-Z0-9_.-]*` | `priority`, `in-progress`, `2025-01-01` |
+//! | QuotedString | `"..."` | `"hello world"`, `"fix login"` |
+//! | And | `AND` (case-insensitive) | `AND`, `and`, `And` |
+//! | Or | `OR` (case-insensitive) | `OR`, `or`, `Or` |
+//! | Not | `!` | `!` |
+//! | Colon | `:` | `:` |
+//! | LParen | `(` | `(` |
+//! | RParen | `)` | `)` |
+//!
+//! # Special Character Handling
+//!
+//! - **Whitespace**: Skipped between tokens (spaces, tabs, newlines)
+//! - **Hyphens/underscores**: Allowed in identifiers for values like `in-progress` or `in_progress`
+//! - **Dots**: Allowed for date values (`2025-01-01`) and range syntax (`2025-01-01..2025-12-31`)
+//! - **Comparison prefixes**: `<` and `>` are part of identifiers when followed by a value (e.g., `<2025-01-01`)
+//!
+//! # Quoted Strings
+//!
+//! Quoted strings allow spaces and special characters in values:
+//!
+//! ```text
+//! search:"hello world"     -> QuotedString("hello world")
+//! project:"My Project"     -> QuotedString("My Project")
+//! ```
+//!
+//! Note: Escape sequences are **not** supported. Quotes cannot appear inside quoted strings.
+//!
+//! # Range Syntax
+//!
+//! The lexer handles range syntax as single identifiers:
+//!
+//! ```text
+//! 2025-01-01..2025-12-31   -> Identifier("2025-01-01..2025-12-31")
+//! 2025-01-01..             -> Identifier("2025-01-01..")
+//! ..2025-12-31             -> Identifier("..2025-12-31")
+//! ```
+//!
+//! # Example
+//!
+//! ```ignore
+//! // Internal usage (lexer is not public):
+//! use taskflow::domain::filter_dsl::lexer::tokenize;
+//!
+//! let tokens = tokenize("priority:high AND !status:done").unwrap();
+//! // Produces: [Identifier("priority"), Colon, Identifier("high"), And,
+//! //            Not, Identifier("status"), Colon, Identifier("done"), Eof]
+//! ```
+//!
+//! For public usage, use the [`parse`](super::parse) function which handles
+//! both tokenization and parsing.
 
 use std::sync::LazyLock;
 

@@ -1,6 +1,102 @@
 //! Recursive descent parser for the filter DSL.
 //!
-//! Parses token streams into an AST representation.
+//! Parses token streams into an AST (Abstract Syntax Tree) representation
+//! that can be evaluated against tasks.
+//!
+//! # Parsing Algorithm
+//!
+//! This parser uses a **recursive descent** approach with explicit precedence handling.
+//! Each grammar rule maps to a parsing function:
+//!
+//! ```text
+//! Expression  ::= OrExpr
+//! OrExpr      ::= AndExpr ("OR" AndExpr)*
+//! AndExpr     ::= UnaryExpr ("AND" UnaryExpr)*
+//! UnaryExpr   ::= "!" UnaryExpr | Primary
+//! Primary     ::= "(" Expression ")" | Condition
+//! Condition   ::= Identifier ":" Value
+//! ```
+//!
+//! # Operator Precedence
+//!
+//! Operators are parsed with the following precedence (highest to lowest):
+//!
+//! | Precedence | Operator | Description | Associativity |
+//! |------------|----------|-------------|---------------|
+//! | 1 (highest) | `!` | NOT (negation) | Right |
+//! | 2 | `AND` | Logical AND | Left |
+//! | 3 (lowest) | `OR` | Logical OR | Left |
+//!
+//! Parentheses `()` override precedence.
+//!
+//! ## Precedence Examples
+//!
+//! ```text
+//! Input: priority:high AND status:todo OR tags:bug
+//! Parsed as: (priority:high AND status:todo) OR tags:bug
+//!
+//! Input: status:todo OR priority:high AND tags:bug
+//! Parsed as: status:todo OR (priority:high AND tags:bug)
+//!
+//! Input: !status:done AND tags:bug
+//! Parsed as: (!status:done) AND tags:bug
+//!
+//! Input: !(status:done OR status:cancelled)
+//! Parsed as: !(status:done OR status:cancelled)
+//! ```
+//!
+//! # Value Parsing
+//!
+//! Field values are parsed based on their type:
+//!
+//! | Field Type | Parsing Rules |
+//! |------------|---------------|
+//! | Priority | `none`, `low`, `medium`/`med`, `high`, `urgent` |
+//! | Status | `todo`, `in_progress`/`in-progress`/`inprogress`, `blocked`, `done`/`completed`, `cancelled`/`canceled` |
+//! | Date | Keywords (`today`, `tomorrow`), exact (`YYYY-MM-DD`), comparison (`<`/`>`), range (`..`) |
+//! | Numeric | Exact number, comparison (`<`/`>`/`<=`/`>=`), range (`start..end`) |
+//! | Text | Any string (quoted or unquoted) |
+//!
+//! # Range Syntax
+//!
+//! Date and numeric fields support range syntax:
+//!
+//! ```text
+//! Full range:   2025-01-01..2025-12-31  (start to end, inclusive)
+//! Open start:   2025-06-01..            (from date onward)
+//! Open end:     ..2025-12-31            (up to date)
+//! ```
+//!
+//! Ranges are **inclusive** on both ends.
+//!
+//! # Error Handling
+//!
+//! The parser produces detailed error messages with position information:
+//!
+//! - [`ParseError::EmptyExpression`] - No filter provided
+//! - [`ParseError::UnknownField`] - Unrecognized field name
+//! - [`ParseError::InvalidValue`] - Invalid value for field type
+//! - [`ParseError::UnexpectedToken`] - Syntax error (wrong token)
+//! - [`ParseError::UnexpectedEof`] - Premature end of input
+//!
+//! # Example
+//!
+//! ```
+//! use taskflow::domain::filter_dsl::{parse, FilterExpr};
+//!
+//! // Simple condition
+//! let expr = parse("priority:high").unwrap();
+//!
+//! // Boolean operators with precedence
+//! let expr = parse("priority:high AND !status:done OR tags:urgent").unwrap();
+//! // Parsed as: (priority:high AND (!status:done)) OR tags:urgent
+//!
+//! // Parentheses for grouping
+//! let expr = parse("(status:todo OR status:in_progress) AND priority:high").unwrap();
+//!
+//! // Date range
+//! let expr = parse("due:2025-01-01..2025-12-31").unwrap();
+//! ```
 
 use chrono::NaiveDate;
 

@@ -1,6 +1,48 @@
 //! Layout rendering for the view module.
 //!
 //! Contains header, content area, and main content rendering functions.
+//! This module handles the top-level layout structure and delegates to
+//! view-specific components for detailed rendering.
+//!
+//! # Layout Structure
+//!
+//! The application layout follows a three-tier structure:
+//!
+//! ```text
+//! ┌──────────────────────────────────────────┐
+//! │ Header (render_header)                   │  <- 3 rows
+//! ├────────────┬─────────────────────────────┤
+//! │ Sidebar    │ Main Content                │
+//! │ (optional) │ (render_main_content)       │  <- Remaining height
+//! │            │                             │
+//! ├────────────┴─────────────────────────────┤
+//! │ Footer (render_footer in footer.rs)      │  <- 1 row
+//! └──────────────────────────────────────────┘
+//! ```
+//!
+//! # Layout Caching
+//!
+//! This module populates the [`LayoutCache`] for mouse event handling.
+//! Each view-specific render function caches its clickable regions:
+//!
+//! - **Sidebar**: Left panel area (25 columns wide)
+//! - **Task List**: Row positions for click-to-select
+//! - **Calendar**: Day cell positions for date selection
+//! - **Kanban**: Column boundaries for drag-and-drop
+//! - **Eisenhower**: Quadrant boundaries
+//! - **Weekly Planner**: Day column positions
+//! - **Reports**: Tab positions for panel switching
+//!
+//! The cache is cleared at the start of each render cycle via
+//! [`LayoutCache::clear()`] to ensure stale data doesn't persist.
+//!
+//! # Focus Mode
+//!
+//! When `model.focus_mode` is enabled, [`render_content`] bypasses the
+//! normal sidebar + content layout and renders [`FocusView`] full-screen.
+//!
+//! [`LayoutCache`]: crate::app::LayoutCache
+//! [`FocusView`]: crate::ui::components::FocusView
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -19,7 +61,14 @@ use crate::ui::components::{
     WeeklyPlanner,
 };
 
-/// Renders the application header
+/// Renders the application header with title and border.
+///
+/// The header displays "TaskFlow - Project Management TUI" in a bordered box.
+/// The "TaskFlow" portion is highlighted with the accent color from the theme.
+///
+/// # Layout
+///
+/// The header occupies the full width of `area` (typically 3 rows).
 pub(super) fn render_header(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     let title = Paragraph::new(Line::from(vec![
         Span::styled(
@@ -37,7 +86,24 @@ pub(super) fn render_header(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     frame.render_widget(title, area);
 }
 
-/// Renders the main content area (sidebar + main content)
+/// Renders the main content area (sidebar + main content).
+///
+/// This function orchestrates the content layout based on application state:
+///
+/// 1. **Focus mode**: If enabled, renders [`FocusView`] full-screen
+/// 2. **Sidebar visible**: Splits into 25-column sidebar + remaining content
+/// 3. **Sidebar hidden**: Renders content full-width
+///
+/// # Layout Caching
+///
+/// Clears the layout cache at the start of each render, then populates:
+/// - `sidebar_area`: The sidebar rectangle (if visible)
+/// - `main_area`: The main content rectangle
+///
+/// These cached areas are used by mouse event handlers in [`handle_mouse_event`].
+///
+/// [`FocusView`]: crate::ui::components::FocusView
+/// [`handle_mouse_event`]: crate::app::update::handle_mouse_event
 pub(super) fn render_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Clear layout cache at start of render
     model.layout_cache.clear();
@@ -75,7 +141,45 @@ pub(super) fn render_content(model: &Model, frame: &mut Frame<'_>, area: Rect, t
     }
 }
 
-/// Renders the main content view based on current view type
+/// Renders the main content view based on current view type.
+///
+/// Dispatches to the appropriate view component based on `model.current_view`:
+///
+/// | View | Component | Layout Caching |
+/// |------|-----------|----------------|
+/// | Calendar | [`Calendar`] | Day cells for click selection |
+/// | Dashboard | [`Dashboard`] | None |
+/// | Reports | [`ReportsView`] | Tab positions |
+/// | Habits | [`HabitsView`] | None |
+/// | Goals | [`GoalsView`] | None |
+/// | Kanban | [`Kanban`] | Column boundaries (4 columns) |
+/// | Eisenhower | [`Eisenhower`] | Quadrant boundaries (2×2 grid) |
+/// | WeeklyPlanner | [`WeeklyPlanner`] | Day columns (7 columns) |
+/// | Timeline | [`Timeline`] | None |
+/// | Heatmap | [`Heatmap`] | None |
+/// | Forecast | [`Forecast`] | None |
+/// | Network | [`Network`] | None |
+/// | Burndown | [`Burndown`] | None |
+/// | Duplicates | [`Duplicates`] | None |
+/// | GitTodos | [`GitTodos`] | None |
+/// | Default | [`TaskList`] | Row positions with header offset |
+///
+/// [`Calendar`]: crate::ui::components::Calendar
+/// [`Dashboard`]: crate::ui::components::Dashboard
+/// [`ReportsView`]: crate::ui::components::ReportsView
+/// [`HabitsView`]: crate::ui::components::HabitsView
+/// [`GoalsView`]: crate::ui::components::GoalsView
+/// [`Kanban`]: crate::ui::components::Kanban
+/// [`Eisenhower`]: crate::ui::components::Eisenhower
+/// [`WeeklyPlanner`]: crate::ui::components::WeeklyPlanner
+/// [`Timeline`]: crate::ui::components::Timeline
+/// [`Heatmap`]: crate::ui::components::Heatmap
+/// [`Forecast`]: crate::ui::components::Forecast
+/// [`Network`]: crate::ui::components::Network
+/// [`Burndown`]: crate::ui::components::Burndown
+/// [`Duplicates`]: crate::ui::components::Duplicates
+/// [`GitTodos`]: crate::ui::components::GitTodos
+/// [`TaskList`]: crate::ui::components::TaskList
 pub(super) fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     match model.current_view {
         ViewId::Calendar => {

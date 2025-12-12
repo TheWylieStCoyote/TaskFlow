@@ -1,6 +1,80 @@
 //! Evaluator for filter DSL expressions.
 //!
-//! Evaluates parsed filter expressions against tasks.
+//! Evaluates parsed filter expressions against tasks to determine matches.
+//!
+//! # Date and Time Handling
+//!
+//! ## Timezone Behavior
+//!
+//! The evaluator uses **UTC** for determining "today" via [`Utc::now()`]:
+//!
+//! - `today`, `tomorrow`, `yesterday` - Based on UTC date
+//! - Task timestamps (`created_at`, `completed_at`, `updated_at`) are stored in UTC
+//! - Due dates and scheduled dates are stored as [`NaiveDate`] (no timezone)
+//!
+//! **Note:** Users in timezones far from UTC may see unexpected behavior near midnight.
+//! For example, at 11 PM EST (4 AM UTC next day), `due:today` uses the UTC date.
+//!
+//! ## Week Boundaries
+//!
+//! Week-based filters use **Monday as the start of the week**:
+//!
+//! | Keyword | Definition |
+//! |---------|------------|
+//! | `thisweek` | Monday through Sunday of the current week |
+//! | `nextweek` | Monday through Sunday of next week |
+//! | `lastweek` | Monday through Sunday of last week |
+//!
+//! Week boundaries are calculated using [`chrono::Weekday::num_days_from_monday()`].
+//!
+//! ### Week Calculation Example
+//!
+//! If today is Wednesday, June 18, 2025:
+//!
+//! ```text
+//! thisweek: Mon Jun 16 - Sun Jun 22 (includes today)
+//! nextweek: Mon Jun 23 - Sun Jun 29
+//! lastweek: Mon Jun  9 - Sun Jun 15
+//! ```
+//!
+//! # Range Semantics
+//!
+//! All range boundaries are **inclusive**:
+//!
+//! | Syntax | Meaning | Boundary Behavior |
+//! |--------|---------|-------------------|
+//! | `2025-01-01..2025-12-31` | Between dates | Both inclusive |
+//! | `2025-06-01..` | On or after | Start inclusive |
+//! | `..2025-12-31` | On or before | End inclusive |
+//! | `>2025-01-01` | Strictly after | Exclusive |
+//! | `<2025-12-31` | Strictly before | Exclusive |
+//!
+//! **Key distinction:** Range syntax (`..`) is always inclusive, while comparison
+//! operators (`<`, `>`) are exclusive. Use `<=` or `>=` for inclusive comparisons.
+//!
+//! # Text Matching
+//!
+//! Text fields use **case-insensitive substring matching**:
+//!
+//! - `search:` - Matches against title OR description
+//! - `title:` - Matches against title only
+//! - `tags:` - Exact tag name match (case-insensitive)
+//! - `project:` - Partial project name match (case-insensitive)
+//!
+//! # Example
+//!
+//! ```
+//! use std::collections::HashMap;
+//! use taskflow::domain::{Task, Priority};
+//! use taskflow::domain::filter_dsl::{parse, evaluate, EvalContext};
+//!
+//! let task = Task::new("Fix login bug").with_priority(Priority::High);
+//! let expr = parse("priority:high AND title:login").unwrap();
+//! let projects = HashMap::new();
+//! let ctx = EvalContext::new(&projects);
+//!
+//! assert!(evaluate(&expr, &task, &ctx));
+//! ```
 
 use std::collections::HashMap;
 

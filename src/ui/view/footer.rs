@@ -1,4 +1,45 @@
 //! Footer rendering for the view module.
+//!
+//! The footer displays contextual status information at the bottom of the screen.
+//! It adapts its content based on application state, showing the most relevant
+//! information at any given time.
+//!
+//! # Display Priority
+//!
+//! The footer shows content in this priority order (highest first):
+//!
+//! 1. **Error message** (red) - Validation errors, operation failures
+//! 2. **Status message** (accent) - Success notifications, confirmations
+//! 3. **Macro recording** (red) - "[REC] Recording macro..." indicator
+//! 4. **Normal footer** - Task stats, indicators, and hints
+//!
+//! # Normal Footer Components
+//!
+//! When no alerts are active, the footer displays (left to right):
+//!
+//! ```text
+//! N tasks (M completed) | [MULTI-SELECT: X] | K overdue | L due today | 🍅 MM:SS [C/G] | hint | mode | ? help
+//! ```
+//!
+//! | Component | Condition | Color |
+//! |-----------|-----------|-------|
+//! | Task count | Always | Muted |
+//! | Multi-select | `model.multi_select.mode` | Accent, bold |
+//! | Overdue count | > 0 | Danger, bold |
+//! | Due today count | > 0 | Warning, bold |
+//! | Pomodoro timer | Active session | Accent (work) / Success (break) |
+//! | View hint | View-specific | Accent |
+//! | Show mode | Always | Muted |
+//! | Help | Always | Muted |
+//!
+//! # View-Specific Hints
+//!
+//! Each view can provide navigation hints via [`get_view_hint`]:
+//!
+//! - **Kanban**: "h/l: columns | j/k: tasks"
+//! - **Eisenhower**: "h/l/j/k: quadrants"
+//! - **Calendar**: "h/l: months | Enter: day tasks"
+//! - **Focus mode**: "[/]: chain | t: timer | f: exit"
 
 use ratatui::{
     layout::Rect,
@@ -11,7 +52,18 @@ use ratatui::{
 use crate::app::{Model, ViewId};
 use crate::config::Theme;
 
-/// Renders the footer status bar
+/// Renders the footer status bar.
+///
+/// The footer occupies a single row at the bottom of the screen and displays
+/// contextual information based on application state. See module documentation
+/// for the complete display priority order and component breakdown.
+///
+/// # Arguments
+///
+/// * `model` - Application state containing alerts, stats, and view info
+/// * `frame` - Ratatui frame for rendering
+/// * `area` - The footer rectangle (typically 1 row tall)
+/// * `theme` - Color theme for styling
 pub(super) fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     // Show error message if available (in red, higher priority than status)
     if let Some(ref msg) = model.alerts.error_message {
@@ -166,7 +218,16 @@ pub(super) fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, th
     frame.render_widget(footer, area);
 }
 
-/// Returns view-specific navigation hints for the footer
+/// Returns view-specific navigation hints for the footer.
+///
+/// Each view can provide contextual hints to help users navigate.
+/// Returns `None` for views that use default controls or are view-only
+/// (like Heatmap, Forecast, Burndown).
+///
+/// # Focus Mode
+///
+/// When `model.focus_mode` is enabled, returns focus-specific hints
+/// regardless of the underlying view.
 pub(super) fn get_view_hint(model: &Model) -> Option<&'static str> {
     // Focus mode has its own hints
     if model.focus_mode {

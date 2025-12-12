@@ -218,9 +218,12 @@ impl<'a> Lexer<'a> {
             return Ok(TokenWithSpan::new(token, start, self.position));
         }
 
-        // Unknown character
-        let ch = remaining.chars().next().unwrap();
-        Err(ParseError::unexpected_char(start, ch))
+        // Unknown character - remaining is guaranteed non-empty here since we checked
+        // position < input.len() in the caller, but we handle None defensively
+        match remaining.chars().next() {
+            Some(ch) => Err(ParseError::unexpected_char(start, ch)),
+            None => Err(ParseError::unexpected_eof("token")),
+        }
     }
 
     /// Lex a quoted string starting at the given position.
@@ -232,7 +235,9 @@ impl<'a> Lexer<'a> {
         let mut found_end = false;
 
         while self.position < self.input.len() {
-            let ch = self.input[self.position..].chars().next().unwrap();
+            let Some(ch) = self.input[self.position..].chars().next() else {
+                break;
+            };
             if ch == '"' {
                 found_end = true;
                 break;
@@ -259,7 +264,9 @@ impl<'a> Lexer<'a> {
     /// Skip whitespace characters.
     fn skip_whitespace(&mut self) {
         while self.position < self.input.len() {
-            let ch = self.input[self.position..].chars().next().unwrap();
+            let Some(ch) = self.input[self.position..].chars().next() else {
+                break;
+            };
             if ch.is_whitespace() {
                 self.position += ch.len_utf8();
             } else {

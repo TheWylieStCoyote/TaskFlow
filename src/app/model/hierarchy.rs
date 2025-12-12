@@ -56,6 +56,7 @@ impl Model {
     /// model.tasks.insert(parent.id.clone(), parent);
     /// model.tasks.insert(subtask1.id.clone(), subtask1);
     /// model.tasks.insert(subtask2.id.clone(), subtask2);
+    /// model.rebuild_caches(); // Rebuild cache to update hierarchy
     ///
     /// let (completed, total) = model.subtask_progress(&parent_id);
     /// assert_eq!(total, 2);
@@ -100,7 +101,8 @@ impl Model {
 
     /// Returns all descendant task IDs (children, grandchildren, etc.)
     ///
-    /// Uses iterative approach with cycle detection.
+    /// Uses iterative approach with cycle detection and the cached children map
+    /// for O(d) complexity where d is the number of descendants.
     #[must_use]
     pub fn get_all_descendants(&self, task_id: &TaskId) -> Vec<TaskId> {
         let mut descendants = Vec::new();
@@ -113,10 +115,11 @@ impl Model {
             }
             visited.insert(current_id);
 
-            for (id, task) in &self.tasks {
-                if task.parent_task_id.as_ref() == Some(&current_id) {
-                    descendants.push(*id);
-                    stack.push(*id);
+            // Use cached children map for O(1) lookup instead of scanning all tasks
+            if let Some(children) = self.task_cache.children.get(&current_id) {
+                for child_id in children {
+                    descendants.push(*child_id);
+                    stack.push(*child_id);
                 }
             }
         }
@@ -150,9 +153,10 @@ impl Model {
     /// Returns true if the task has any subtasks (direct children).
     #[must_use]
     pub fn has_subtasks(&self, task_id: &TaskId) -> bool {
-        self.tasks
-            .values()
-            .any(|t| t.parent_task_id.as_ref() == Some(task_id))
+        self.task_cache
+            .children
+            .get(task_id)
+            .is_some_and(|children| !children.is_empty())
     }
 
     /// Returns recursive subtask completion as a percentage (0-100).

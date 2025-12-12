@@ -1339,4 +1339,75 @@ mod tests {
             panic!("Expected Condition");
         }
     }
+
+    // === Edge case tests for Phase 5 improvements ===
+
+    #[test]
+    fn test_operator_precedence_and_binds_tighter_than_or() {
+        // "a AND b OR c" should parse as "(a AND b) OR c", not "a AND (b OR c)"
+        let expr = parse("status:todo AND priority:high OR status:done").unwrap();
+
+        // The result should be Or(And(todo, high), done)
+        if let FilterExpr::Or(left, right) = expr {
+            // Left side should be an And expression
+            assert!(matches!(*left, FilterExpr::And(_, _)));
+            // Right side should be a Condition (status:done)
+            assert!(matches!(*right, FilterExpr::Condition(_)));
+        } else {
+            panic!("Expected Or at top level for AND/OR precedence");
+        }
+    }
+
+    #[test]
+    fn test_malformed_input_empty_value_after_colon() {
+        // "status:" with nothing after should fail
+        let result = parse("status:");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_malformed_input_unclosed_parenthesis() {
+        let result = parse("((status:todo");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_malformed_input_extra_closing_paren() {
+        let result = parse("status:todo))");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_malformed_input_double_operator() {
+        let result = parse("status:todo AND AND priority:high");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_date_range_open_start() {
+        // "..2025-12-31" should parse as OnOrBefore (less than or equal)
+        let expr = parse("due:..2025-12-31").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert!(matches!(
+                cond.value,
+                FilterValue::Due(DueFilter::OnOrBefore(_))
+            ));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
+
+    #[test]
+    fn test_date_range_open_end() {
+        // "2025-01-01.." should parse as OnOrAfter (greater than or equal)
+        let expr = parse("due:2025-01-01..").unwrap();
+        if let FilterExpr::Condition(cond) = expr {
+            assert!(matches!(
+                cond.value,
+                FilterValue::Due(DueFilter::OnOrAfter(_))
+            ));
+        } else {
+            panic!("Expected Condition");
+        }
+    }
 }

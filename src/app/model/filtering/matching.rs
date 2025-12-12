@@ -1,5 +1,7 @@
 //! Task filter matching methods.
 
+use std::collections::HashSet;
+
 use chrono::{Datelike, NaiveDate, Utc};
 
 use crate::domain::{TagFilterMode, Task};
@@ -34,21 +36,22 @@ impl Model {
 
         // Filter by tags (if set) - uses pre-computed lowercase filter tags
         if let Some(ref filter_tags_lower) = cache.filter_tags_lower {
-            // Lowercase task tags (must be done per task)
-            let task_tags_lower: Vec<String> = task.tags.iter().map(|t| t.to_lowercase()).collect();
+            // Use HashSet for O(1) lookup instead of O(n) iteration
+            let task_tags_lower: HashSet<String> =
+                task.tags.iter().map(|t| t.to_lowercase()).collect();
 
             let has_tags = match self.filtering.filter.tags_mode {
                 TagFilterMode::Any => {
                     // Task must have at least one of the filter tags
                     filter_tags_lower
                         .iter()
-                        .any(|ft| task_tags_lower.iter().any(|t| t == ft))
+                        .any(|ft| task_tags_lower.contains(ft))
                 }
                 TagFilterMode::All => {
                     // Task must have all of the filter tags
                     filter_tags_lower
                         .iter()
-                        .all(|ft| task_tags_lower.iter().any(|t| t == ft))
+                        .all(|ft| task_tags_lower.contains(ft))
                 }
             };
             if !has_tags {

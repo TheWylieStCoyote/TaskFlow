@@ -72,26 +72,44 @@ pub fn find_similar_task<'a>(
 ///
 /// * `tasks` - All tasks to check for duplicates
 /// * `threshold` - Minimum similarity score (0.0 to 1.0)
+///
+/// # Performance
+///
+/// This function pre-groups tasks by project and caches lowercase titles
+/// to avoid repeated allocations. Complexity is O(Σ(p²)) where p is the
+/// number of tasks per project, rather than O(n²) for all tasks.
 #[must_use]
 pub fn find_all_duplicates(tasks: &HashMap<TaskId, Task>, threshold: f64) -> Vec<DuplicatePair> {
     let mut duplicates = Vec::new();
-    let task_list: Vec<_> = tasks.values().collect();
 
-    for (i, task1) in task_list.iter().enumerate() {
-        for task2 in task_list.iter().skip(i + 1) {
-            // Only compare tasks in the same project
-            if task1.project_id != task2.project_id {
-                continue;
-            }
+    // Pre-compute lowercase titles once per task
+    let tasks_with_lower: Vec<_> = tasks
+        .values()
+        .map(|t| (t, t.title.to_lowercase()))
+        .collect();
 
-            let similarity = jaro_winkler(&task1.title.to_lowercase(), &task2.title.to_lowercase());
+    // Group by project_id for efficient comparison (avoids wasted cross-project comparisons)
+    let mut by_project: HashMap<Option<ProjectId>, Vec<(&Task, &str)>> = HashMap::new();
+    for (task, title_lower) in &tasks_with_lower {
+        by_project
+            .entry(task.project_id)
+            .or_default()
+            .push((*task, title_lower.as_str()));
+    }
 
-            if similarity >= threshold {
-                duplicates.push(DuplicatePair {
-                    task1_id: task1.id,
-                    task2_id: task2.id,
-                    similarity,
-                });
+    // Only compare within same project
+    for project_tasks in by_project.values() {
+        for (i, (task1, title1)) in project_tasks.iter().enumerate() {
+            for (task2, title2) in project_tasks.iter().skip(i + 1) {
+                let similarity = jaro_winkler(title1, title2);
+
+                if similarity >= threshold {
+                    duplicates.push(DuplicatePair {
+                        task1_id: task1.id,
+                        task2_id: task2.id,
+                        similarity,
+                    });
+                }
             }
         }
     }
@@ -258,5 +276,80 @@ mod tests {
     #[test]
     fn test_default_threshold() {
         assert!((DEFAULT_SIMILARITY_THRESHOLD - 0.85).abs() < f64::EPSILON);
+    }
+
+    // === Edge case tests for Phase 5 improvements ===
+
+    #[test]
+    fn test_unicode_emoji_titles() {
+        let mut tasks = HashMap::new();
+        let task1 = create_task("🚀 Launch feature", None);
+        let task2 = create_task("🚀 Launch feature update", None);
+        let task1_id = task1.id;
+        let task2_id = task2.id;
+        tasks.insert(task1.id, task1);
+        tasks.insert(task2.id, task2);
+
+        let result = find_all_duplicates(&tasks, 0.8);
+        assert_eq!(result.len(), 1);
+        assert!(
+            (result[0].task1_id == task1_id && result[0].task2_id == task2_id)
+                || (result[0].task1_id == task2_id && result[0].task2_id == task1_id)
+        );
+    }
+
+    #[test]
+    fn test_very_long_titles() {
+        let mut tasks = HashMap::new();
+        let long_title1 = "A".repeat(1000);
+        let long_title2 = format!("{}B", "A".repeat(999));
+        let task1 = create_task(&long_title1, None);
+        let task2 = create_task(&long_title2, None);
+        tasks.insert(task1.id, task1);
+        tasks.insert(task2.id, task2);
+
+        // Should not panic and should find similarity
+        let result = find_all_duplicates(&tasks, 0.9);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_special_characters_in_titles() {
+        let mut tasks = HashMap::new();
+        let task1 = create_task("Fix bug #123 in @module", None);
+        let task2 = create_task("Fix bug #124 in @module", None);
+        tasks.insert(task1.id, task1);
+        tasks.insert(task2.id, task2);
+
+        let result = find_all_duplicates(&tasks, 0.9);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_single_task_no_duplicates() {
+        let mut tasks = HashMap::new();
+        let task = create_task("Only task", None);
+        tasks.insert(task.id, task);
+
+        let result = find_all_duplicates(&tasks, 0.85);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_cross_project_isolation() {
+        // Ensure tasks in different projects are never compared
+        let mut tasks = HashMap::new();
+        let project1 = Some(ProjectId::new());
+        let project2 = Some(ProjectId::new());
+
+        // Add identical titles in different projects
+        let task1 = create_task("Exact same title", project1);
+        let task2 = create_task("Exact same title", project2);
+        tasks.insert(task1.id, task1);
+        tasks.insert(task2.id, task2);
+
+        // Should find no duplicates since they're in different projects
+        let result = find_all_duplicates(&tasks, 0.85);
+        assert!(result.is_empty());
     }
 }

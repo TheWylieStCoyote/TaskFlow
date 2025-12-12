@@ -13,14 +13,16 @@ mod visibility;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashSet;
+
 use super::Model;
 
 /// Pre-computed filter values to avoid repeated allocations during filtering.
 pub(super) struct FilterCache {
     /// Lowercased search text (if any)
     pub search_lower: Option<String>,
-    /// Lowercased filter tags (if any)
-    pub filter_tags_lower: Option<Vec<String>>,
+    /// Lowercased filter tags as HashSet for O(1) lookup
+    pub filter_tags_lower: Option<HashSet<String>>,
 }
 
 impl FilterCache {

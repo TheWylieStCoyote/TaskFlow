@@ -74,6 +74,7 @@ fn test_get_all_descendants_nested() {
     model.tasks.insert(child1.id, child1);
     model.tasks.insert(child2.id, child2);
     model.tasks.insert(grandchild.id, grandchild);
+    model.rebuild_caches();
 
     let descendants = model.get_all_descendants(&root_id);
     assert_eq!(descendants.len(), 3);
@@ -138,6 +139,7 @@ fn test_would_create_cycle_descendant() {
     model.tasks.insert(root.id, root);
     model.tasks.insert(child.id, child);
     model.tasks.insert(grandchild.id, grandchild);
+    model.rebuild_caches();
 
     // Setting root's parent to grandchild would create a cycle
     assert!(model.would_create_cycle(&root_id, &grandchild_id));
@@ -163,6 +165,7 @@ fn test_has_subtasks() {
     model.tasks.insert(parent.id, parent);
     model.tasks.insert(child.id, child);
     model.tasks.insert(standalone.id, standalone);
+    model.rebuild_caches();
 
     assert!(model.has_subtasks(&parent_id));
     assert!(!model.has_subtasks(&standalone_id));
@@ -186,6 +189,7 @@ fn test_subtask_progress_recursive() {
     model.tasks.insert(child1.id, child1);
     model.tasks.insert(child2.id, child2);
     model.tasks.insert(grandchild.id, grandchild);
+    model.rebuild_caches();
 
     let (completed, total) = model.subtask_progress(&root_id);
     assert_eq!(total, 3); // child1, child2, grandchild
@@ -206,6 +210,7 @@ fn test_subtask_percentage() {
     model.tasks.insert(root.id, root);
     model.tasks.insert(child1.id, child1);
     model.tasks.insert(child2.id, child2);
+    model.rebuild_caches();
 
     // 1 of 2 completed = 50%
     assert_eq!(model.subtask_percentage(&root_id), Some(50));

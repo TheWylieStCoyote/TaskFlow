@@ -267,6 +267,7 @@ fn parse_ics_vtodo(props: &HashMap<String, String>, validate: bool) -> Result<Ta
         updated_at: Utc::now(),
         completed_at,
         snooze_until: None,
+        git_ref: None,
     };
 
     Ok(task)

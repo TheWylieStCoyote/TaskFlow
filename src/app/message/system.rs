@@ -65,4 +65,6 @@ pub enum SystemMessage {
     CancelImport,
     /// Refresh storage to detect external file changes
     RefreshStorage,
+    /// Check for merged git branches and auto-complete linked tasks
+    CheckMergedBranches,
 }

@@ -280,6 +280,7 @@ fn parse_csv_task(
         updated_at: Utc::now(),
         completed_at,
         snooze_until: None,
+        git_ref: None,
     };
 
     // Set completed_at if status is Done

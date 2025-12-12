@@ -16,10 +16,10 @@ use taskflow::app::Model;
 use taskflow::config::Settings;
 use taskflow::storage::BackendType;
 
-use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, ListFilters};
+use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, GitCommands, ListFilters};
 use commands::{
-    extract_git_todos, list_tasks, mark_task_done, next_task, quick_add_task, run_pipe, show_stats,
-    today_tasks,
+    extract_git_todos, git_check_merged, git_commits, git_link, git_status, git_sync, git_unlink,
+    list_tasks, mark_task_done, next_task, quick_add_task, run_pipe, show_stats, today_tasks,
 };
 use tui::run_tui;
 
@@ -174,6 +174,16 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Pipe { format }) => {
             return run_pipe(&cli, format);
+        }
+        Some(Commands::Git(git_cmd)) => {
+            return match git_cmd {
+                GitCommands::Link { task, branch } => git_link(&cli, task, branch.as_deref()),
+                GitCommands::Unlink { task } => git_unlink(&cli, task),
+                GitCommands::Commits { task, limit } => git_commits(&cli, task, *limit),
+                GitCommands::Status => git_status(&cli),
+                GitCommands::Sync { dry_run } => git_sync(&cli, *dry_run),
+                GitCommands::CheckMerged { dry_run } => git_check_merged(&cli, *dry_run),
+            };
         }
         None => {}
     }

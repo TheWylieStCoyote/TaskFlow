@@ -86,6 +86,9 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
                 model.alerts.status_message = Some("No external changes detected".to_string());
             }
         }
+        SystemMessage::CheckMergedBranches => {
+            handle_check_merged_branches(model);
+        }
     }
 }
 
@@ -584,4 +587,71 @@ fn handle_cancel_import(model: &mut Model) {
     model.import.pending = None;
     model.import.show_preview = false;
     model.alerts.status_message = Some("Import cancelled".to_string());
+}
+
+/// Check for merged branches and auto-complete linked tasks.
+fn handle_check_merged_branches(model: &mut Model) {
+    use crate::domain::git::operations::{get_base_branch, is_branch_merged, is_git_repo};
+    use crate::domain::TaskStatus;
+
+    // Get current working directory
+    let Ok(repo_path) = std::env::current_dir() else {
+        return;
+    };
+
+    // Check if we're in a git repository
+    if !is_git_repo(&repo_path) {
+        return;
+    }
+
+    // Get base branch
+    let Ok(base_branch) = get_base_branch(&repo_path) else {
+        return;
+    };
+
+    // Find incomplete tasks with git links and check if merged
+    // Collect task_id, title, and branch for tasks to complete
+    let tasks_to_complete: Vec<_> = model
+        .tasks
+        .values()
+        .filter(|t| t.git_ref.is_some() && !t.status.is_complete())
+        .filter_map(|task| {
+            let git_ref = task.git_ref.as_ref()?;
+            // Check if branch is merged
+            if is_branch_merged(&repo_path, &git_ref.branch, &base_branch).unwrap_or(false) {
+                Some((task.id, task.title.clone(), git_ref.branch.clone()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if tasks_to_complete.is_empty() {
+        return;
+    }
+
+    let completed_count = tasks_to_complete.len();
+
+    // Now complete the tasks
+    for (task_id, task_title, branch) in tasks_to_complete {
+        if let Some(t) = model.tasks.get_mut(&task_id) {
+            t.status = TaskStatus::Done;
+            t.completed_at = Some(chrono::Utc::now());
+            t.updated_at = chrono::Utc::now();
+        }
+        model.sync_task_by_id(&task_id);
+
+        // Log the completion
+        tracing::info!(
+            task = %task_title,
+            branch = %branch,
+            "Auto-completed task (branch merged)"
+        );
+    }
+
+    model.refresh_visible_tasks();
+    model.alerts.status_message = Some(format!(
+        "Auto-completed {completed_count} task{} (merged branches)",
+        if completed_count == 1 { "" } else { "s" }
+    ));
 }

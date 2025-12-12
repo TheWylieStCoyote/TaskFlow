@@ -237,6 +237,7 @@ fn default_context<'a>(task: &'a Task, theme: &'a Theme) -> TaskItemContext<'a> 
         has_chain: false,
         subtask_progress: (0, 0),
         theme,
+        git_branch: None,
     }
 }
 
@@ -686,4 +687,44 @@ fn test_project_header_decorations() {
 
     // Headers have ── decorations
     assert!(text.contains("──"), "Header should have decorations");
+}
+
+#[test]
+fn test_item_git_branch_indicator() {
+    let theme = Theme::default();
+    let task = Task::new("Git Task");
+    let mut ctx = default_context(&task, &theme);
+    ctx.git_branch = Some("feature/login");
+    let item = task_to_list_item(&ctx);
+    let text = list_item_text(item);
+
+    assert!(
+        text.contains("⎇ feature/login"),
+        "Git branch should be visible"
+    );
+}
+
+#[test]
+fn test_item_git_branch_truncated() {
+    let theme = Theme::default();
+    let task = Task::new("Git Task");
+    let mut ctx = default_context(&task, &theme);
+    ctx.git_branch = Some("feature/very-long-branch-name-that-should-truncate");
+    let item = task_to_list_item(&ctx);
+    let text = list_item_text(item);
+
+    // Should truncate to 17 chars + "..."
+    assert!(text.contains("⎇"), "Git branch icon should be visible");
+    assert!(text.contains("..."), "Long branch should be truncated");
+}
+
+#[test]
+fn test_item_no_git_branch() {
+    let theme = Theme::default();
+    let task = Task::new("No Git");
+    let ctx = default_context(&task, &theme);
+    let item = task_to_list_item(&ctx);
+    let text = list_item_text(item);
+
+    assert!(!text.contains('⎇'), "No git branch should not show ⎇ icon");
 }

@@ -106,6 +106,8 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         snooze_until: parse_optional_date(
             row.get::<_, Option<String>>("snooze_until").ok().flatten(),
         ),
+        // Git integration is not stored in SQLite (ephemeral linking)
+        git_ref: None,
     })
 }
 

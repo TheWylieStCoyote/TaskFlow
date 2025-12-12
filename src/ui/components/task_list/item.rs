@@ -22,6 +22,7 @@ pub struct TaskItemContext<'a> {
     pub has_chain: bool,                  // Task is linked to another task
     pub subtask_progress: (usize, usize), // (completed, total)
     pub theme: &'a Theme,
+    pub git_branch: Option<&'a str>, // Linked git branch name
 }
 
 /// Render a project header as a list item
@@ -270,6 +271,22 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
         Span::raw("")
     };
 
+    // Git branch indicator - shows linked branch name
+    let git_span = if let Some(branch) = ctx.git_branch {
+        // Truncate long branch names for display
+        let display_branch = if branch.len() > 20 {
+            format!("{}...", &branch[..17])
+        } else {
+            branch.to_string()
+        };
+        Span::styled(
+            format!(" ⎇ {display_branch}"),
+            Style::default().fg(theme.colors.accent.to_color()),
+        )
+    } else {
+        Span::raw("")
+    };
+
     let line = Line::from(vec![
         select_span,
         indent_span,
@@ -283,6 +300,7 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
         dep_span,
         recur_span,
         chain_span,
+        git_span,
         due_span,
         sched_span,
         time_span,

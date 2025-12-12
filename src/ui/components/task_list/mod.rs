@@ -202,6 +202,7 @@ impl Widget for TaskList<'_> {
                         has_chain: *has_chain,
                         subtask_progress: *subtask_progress,
                         theme,
+                        git_branch: task.git_ref.as_ref().map(|r| r.branch.as_str()),
                     };
                     task_to_list_item(&ctx)
                 }

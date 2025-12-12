@@ -10,7 +10,9 @@ use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::{Modifier, Style},
-    widgets::{List, ListState, StatefulWidget, Widget},
+    widgets::{
+        List, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
+    },
 };
 
 use crate::app::{Model, ViewId};
@@ -170,8 +172,10 @@ impl<'a> TaskList<'a> {
     }
 }
 
-impl Widget for TaskList<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl StatefulWidget for TaskList<'_> {
+    type State = ListState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let theme = self.theme;
         let selected_row = self.selected_row();
 
@@ -226,9 +230,47 @@ impl Widget for TaskList<'_> {
                     .add_modifier(Modifier::BOLD),
             );
 
-        let mut state = ListState::default();
+        // Update selection on the persisted state (keeps scroll offset intact)
         state.select(selected_row);
 
-        StatefulWidget::render(list, area, buf, &mut state);
+        StatefulWidget::render(list, area, buf, state);
+
+        // Render scrollbar if content exceeds viewport
+        let total_items = self.entries.len();
+        let viewport_height = area.height.saturating_sub(2) as usize; // Account for borders
+
+        if total_items > viewport_height {
+            // Use selected_row for position to show where cursor is in the list
+            let position = selected_row.unwrap_or(state.offset());
+
+            let mut scrollbar_state = ScrollbarState::new(total_items.saturating_sub(1))
+                .position(position);
+
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("▲"))
+                .end_symbol(Some("▼"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("█")
+                .track_style(Style::default().fg(theme.colors.muted.to_color()))
+                .thumb_style(Style::default().fg(theme.colors.accent.to_color()));
+
+            // Render scrollbar in the inner area (inside the border)
+            let scrollbar_area = Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: area.height,
+            };
+            StatefulWidget::render(scrollbar, scrollbar_area, buf, &mut scrollbar_state);
+        }
+    }
+}
+
+/// Widget implementation for backwards compatibility and testing.
+/// Creates a default ListState (no scroll offset preserved).
+impl Widget for TaskList<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let mut state = ListState::default();
+        StatefulWidget::render(self, area, buf, &mut state);
     }
 }

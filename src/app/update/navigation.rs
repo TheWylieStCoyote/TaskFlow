@@ -121,6 +121,9 @@ pub fn handle_navigation(model: &mut Model, msg: NavigationMessage) {
             model.focus_pane = FocusPane::TaskList;
             model.habit_view.show_analytics = false; // Clear modal state when switching views
 
+            // Reset task list scroll position when changing views
+            *model.task_list_state.borrow_mut() = ratatui::widgets::ListState::default();
+
             // Special handling for Duplicates view - refresh duplicate pairs
             if view_id == ViewId::Duplicates {
                 model.duplicates_view.pairs =

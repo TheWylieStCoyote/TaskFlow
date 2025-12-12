@@ -325,7 +325,7 @@ pub(super) fn render_main_content(model: &Model, frame: &mut Frame<'_>, area: Re
                     .saturating_sub(area.height as usize / 2),
             );
             let task_list = TaskList::new(model, theme);
-            frame.render_widget(task_list, area);
+            frame.render_stateful_widget(task_list, area, &mut *model.task_list_state.borrow_mut());
         }
     }
 }

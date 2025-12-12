@@ -368,6 +368,11 @@ pub struct Model {
     // Task detail modal
     /// Task detail modal state (visibility, scroll)
     pub task_detail: TaskDetailState,
+
+    // Task list scroll state
+    /// Ratatui ListState for task list scrolling (persists scroll offset).
+    /// Uses RefCell for interior mutability during rendering.
+    pub task_list_state: std::cell::RefCell<ratatui::widgets::ListState>,
 }
 
 impl Model {
@@ -451,6 +456,7 @@ impl Model {
             burndown_state: BurndownState::default(),
             pending_editor_command: None,
             task_detail: TaskDetailState::default(),
+            task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }
     }
 

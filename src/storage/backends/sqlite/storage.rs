@@ -123,7 +123,8 @@ impl StorageBackend for SqliteBackend {
         self.inner.create_tables()?;
         // Run migrations (all are idempotent)
         self.inner.migrate_tags_to_junction_table()?;
-        self.inner.migrate_add_estimation_multiplier()
+        self.inner.migrate_add_estimation_multiplier()?;
+        self.inner.migrate_add_scheduled_time()
     }
 
     fn flush(&mut self) -> StorageResult<()> {

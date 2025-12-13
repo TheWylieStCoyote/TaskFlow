@@ -34,8 +34,9 @@ impl TaskRepository for SqliteBackend {
             r"INSERT INTO tasks (
                 id, title, description, status, priority, project_id, parent_task_id,
                 tags, dependencies, created_at, updated_at, due_date, scheduled_date,
-                completed_at, recurrence, estimated_minutes, actual_minutes, sort_order, next_task_id, custom_fields
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                completed_at, recurrence, estimated_minutes, actual_minutes, sort_order,
+                next_task_id, custom_fields, scheduled_start_time, scheduled_end_time
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 task.id.0.to_string(),
                 task.title,
@@ -57,6 +58,8 @@ impl TaskRepository for SqliteBackend {
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
                 custom_fields_json,
+                task.scheduled_start_time.map(|t| t.format("%H:%M:%S").to_string()),
+                task.scheduled_end_time.map(|t| t.format("%H:%M:%S").to_string()),
             ],
         )?;
         // Sync tags to junction table
@@ -94,7 +97,8 @@ impl TaskRepository for SqliteBackend {
                 project_id = ?6, parent_task_id = ?7, tags = ?8, dependencies = ?9,
                 updated_at = ?10, due_date = ?11, scheduled_date = ?12, completed_at = ?13,
                 recurrence = ?14, estimated_minutes = ?15, actual_minutes = ?16, sort_order = ?17,
-                next_task_id = ?18, custom_fields = ?19
+                next_task_id = ?18, custom_fields = ?19,
+                scheduled_start_time = ?20, scheduled_end_time = ?21
             WHERE id = ?1",
             params![
                 task.id.0.to_string(),
@@ -117,6 +121,8 @@ impl TaskRepository for SqliteBackend {
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
                 custom_fields_json,
+                task.scheduled_start_time.map(|t| t.format("%H:%M:%S").to_string()),
+                task.scheduled_end_time.map(|t| t.format("%H:%M:%S").to_string()),
             ],
         )?;
         if rows == 0 {

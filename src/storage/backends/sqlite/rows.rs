@@ -4,7 +4,7 @@
 //! into domain types. All parsing functions log warnings on failure rather
 //! than panicking.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use tracing::warn;
 
 use crate::domain::{
@@ -57,6 +57,11 @@ fn parse_optional_date(s: Option<String>) -> Option<NaiveDate> {
     s.and_then(|s| parse_date(&s))
 }
 
+/// Parse an optional time string in HH:MM:SS format.
+fn parse_optional_time(s: Option<String>) -> Option<NaiveTime> {
+    s.and_then(|s| NaiveTime::parse_from_str(&s, "%H:%M:%S").ok())
+}
+
 /// Parse a Task from a SQLite row.
 pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
     let id: String = row.get("id")?;
@@ -106,9 +111,13 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         snooze_until: parse_optional_date(
             row.get::<_, Option<String>>("snooze_until").ok().flatten(),
         ),
-        // Time blocking - will be populated from DB in Task 2
-        scheduled_start_time: None,
-        scheduled_end_time: None,
+        // Time blocking
+        scheduled_start_time: parse_optional_time(
+            row.get::<_, Option<String>>("scheduled_start_time").ok().flatten(),
+        ),
+        scheduled_end_time: parse_optional_time(
+            row.get::<_, Option<String>>("scheduled_end_time").ok().flatten(),
+        ),
         // Git integration is not stored in SQLite (ephemeral linking)
         git_ref: None,
     })

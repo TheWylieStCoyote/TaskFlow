@@ -33,6 +33,7 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
             InputTarget::EditTask(_) => "Edit Task",
             InputTarget::EditDueDate(_) => "Due Date (YYYY-MM-DD, empty to clear)",
             InputTarget::EditScheduledDate(_) => "Scheduled Date (YYYY-MM-DD, empty to clear)",
+            InputTarget::EditScheduledTime(_) => "Time Block (e.g., 9:00-11:00, 9am-11am)",
             InputTarget::EditTags(_) => "Tags (comma-separated)",
             InputTarget::EditDescription(_) => "Description (empty to clear)",
             InputTarget::EditEstimate(_) => "Time Estimate (e.g., 30m, 1h, 1h30m)",

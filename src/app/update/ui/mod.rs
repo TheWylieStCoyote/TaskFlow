@@ -295,6 +295,24 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 start_input(model, InputTarget::EditScheduledDate(task_id), prefill);
             }
         }
+        UiMessage::StartEditScheduledTime => {
+            if let Some(task_id) = model.selected_task_id() {
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(|t| t.scheduled_time_display());
+                start_input(model, InputTarget::EditScheduledTime(task_id), prefill);
+            }
+        }
+        UiMessage::ClearScheduledTime => {
+            if let Some(task_id) = model.selected_task_id() {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = None;
+                    task.scheduled_end_time = None;
+                });
+                model.refresh_visible_tasks();
+            }
+        }
         UiMessage::StartEditTags => {
             if let Some(task_id) = model.selected_task_id() {
                 let prefill = model.tasks.get(&task_id).map(|t| t.tags.join(", "));

@@ -168,6 +168,22 @@ pub fn handle_submit_input(model: &mut Model) {
             }
             model.refresh_visible_tasks();
         }
+        InputTarget::EditScheduledTime(task_id) => {
+            let task_id = *task_id;
+            // Parse time range - empty clears, invalid shows error
+            // Time parsing will be implemented in Task 4, full handler in Task 5
+            if input.is_empty() {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = None;
+                    task.scheduled_end_time = None;
+                });
+                model.alerts.status_message = Some("Time block cleared".to_string());
+            } else {
+                // TODO: Implement time parsing in Task 4/5
+                model.alerts.status_message = Some("Time parsing not yet implemented".to_string());
+            }
+            model.refresh_visible_tasks();
+        }
         InputTarget::EditTags(task_id) => {
             let task_id = *task_id;
             // Parse comma-separated tags outside closure

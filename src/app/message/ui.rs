@@ -56,6 +56,10 @@ pub enum UiMessage {
     StartEditDueDate,
     /// Enter input mode to edit scheduled date
     StartEditScheduledDate,
+    /// Enter input mode to edit scheduled time block (start and end time)
+    StartEditScheduledTime,
+    /// Clear scheduled time block from selected task
+    ClearScheduledTime,
     /// Enter input mode to edit tags
     StartEditTags,
     /// Enter input mode to edit description

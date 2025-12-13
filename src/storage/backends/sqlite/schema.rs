@@ -252,14 +252,8 @@ impl SqliteBackendInner {
             .is_ok();
 
         if !has_start {
-            conn.execute(
-                "ALTER TABLE tasks ADD COLUMN scheduled_start_time TEXT",
-                [],
-            )?;
-            conn.execute(
-                "ALTER TABLE tasks ADD COLUMN scheduled_end_time TEXT",
-                [],
-            )?;
+            conn.execute("ALTER TABLE tasks ADD COLUMN scheduled_start_time TEXT", [])?;
+            conn.execute("ALTER TABLE tasks ADD COLUMN scheduled_end_time TEXT", [])?;
         }
 
         Ok(())

@@ -121,8 +121,10 @@ impl TaskRepository for SqliteBackend {
                 task.sort_order,
                 task.next_task_id.as_ref().map(|t| t.0.to_string()),
                 custom_fields_json,
-                task.scheduled_start_time.map(|t| t.format("%H:%M:%S").to_string()),
-                task.scheduled_end_time.map(|t| t.format("%H:%M:%S").to_string()),
+                task.scheduled_start_time
+                    .map(|t| t.format("%H:%M:%S").to_string()),
+                task.scheduled_end_time
+                    .map(|t| t.format("%H:%M:%S").to_string()),
             ],
         )?;
         if rows == 0 {

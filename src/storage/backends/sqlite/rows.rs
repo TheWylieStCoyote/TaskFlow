@@ -113,10 +113,14 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         ),
         // Time blocking
         scheduled_start_time: parse_optional_time(
-            row.get::<_, Option<String>>("scheduled_start_time").ok().flatten(),
+            row.get::<_, Option<String>>("scheduled_start_time")
+                .ok()
+                .flatten(),
         ),
         scheduled_end_time: parse_optional_time(
-            row.get::<_, Option<String>>("scheduled_end_time").ok().flatten(),
+            row.get::<_, Option<String>>("scheduled_end_time")
+                .ok()
+                .flatten(),
         ),
         // Git integration is not stored in SQLite (ephemeral linking)
         git_ref: None,

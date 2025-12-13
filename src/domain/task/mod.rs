@@ -16,7 +16,7 @@ pub use recurrence::Recurrence;
 pub use status::TaskStatus;
 pub use task_id::TaskId;
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -119,6 +119,12 @@ pub struct Task {
     #[serde(default)]
     pub snooze_until: Option<NaiveDate>,
 
+    // Time blocking - schedule task for specific time slot
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_start_time: Option<NaiveTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduled_end_time: Option<NaiveTime>,
+
     // Custom fields for extensibility
     #[serde(default)]
     pub custom_fields: HashMap<String, serde_json::Value>,
@@ -152,6 +158,8 @@ impl Task {
             sort_order: None,
             next_task_id: None,
             snooze_until: None,
+            scheduled_start_time: None,
+            scheduled_end_time: None,
             custom_fields: HashMap::new(),
             git_ref: None,
         }
@@ -242,6 +250,43 @@ impl Task {
     pub fn with_git_ref(mut self, git_ref: super::git::GitRef) -> Self {
         self.git_ref = Some(git_ref);
         self
+    }
+
+    /// Sets the scheduled start time for time blocking.
+    #[must_use]
+    pub const fn with_scheduled_start_time(mut self, time: NaiveTime) -> Self {
+        self.scheduled_start_time = Some(time);
+        self
+    }
+
+    /// Sets the scheduled end time for time blocking.
+    #[must_use]
+    pub const fn with_scheduled_end_time(mut self, time: NaiveTime) -> Self {
+        self.scheduled_end_time = Some(time);
+        self
+    }
+
+    /// Sets both scheduled start and end times for time blocking.
+    #[must_use]
+    pub const fn with_scheduled_time(mut self, start: NaiveTime, end: NaiveTime) -> Self {
+        self.scheduled_start_time = Some(start);
+        self.scheduled_end_time = Some(end);
+        self
+    }
+
+    /// Returns a formatted display string for the scheduled time block.
+    ///
+    /// Returns `Some("HH:MM-HH:MM")` if both times set, `Some("HH:MM")` if only start,
+    /// or `None` if no times are set.
+    #[must_use]
+    pub fn scheduled_time_display(&self) -> Option<String> {
+        match (self.scheduled_start_time, self.scheduled_end_time) {
+            (Some(start), Some(end)) => {
+                Some(format!("{}-{}", start.format("%H:%M"), end.format("%H:%M")))
+            }
+            (Some(start), None) => Some(start.format("%H:%M").to_string()),
+            _ => None,
+        }
     }
 
     #[must_use]

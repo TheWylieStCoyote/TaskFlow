@@ -106,6 +106,9 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         snooze_until: parse_optional_date(
             row.get::<_, Option<String>>("snooze_until").ok().flatten(),
         ),
+        // Time blocking - will be populated from DB in Task 2
+        scheduled_start_time: None,
+        scheduled_end_time: None,
         // Git integration is not stored in SQLite (ephemeral linking)
         git_ref: None,
     })

@@ -611,6 +611,14 @@ pub fn create_task_from_quick_add(
         task.scheduled_date = Some(sched);
     }
 
+    // Apply scheduled time block
+    if let Some(start_time) = parsed.scheduled_start_time {
+        task.scheduled_start_time = Some(start_time);
+    }
+    if let Some(end_time) = parsed.scheduled_end_time {
+        task.scheduled_end_time = Some(end_time);
+    }
+
     // Apply project by name (find matching project)
     if let Some(ref project_name) = parsed.project_name {
         let project_name_lower = project_name.to_lowercase();

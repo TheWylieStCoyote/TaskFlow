@@ -10,6 +10,7 @@
 //! | `!priority` | Set priority | `!urgent`, `!high`, `!med`, `!low` |
 //! | `due:date` | Set due date | `due:tomorrow`, `due:friday`, `due:2024-12-25` |
 //! | `sched:date` | Set scheduled date | `sched:monday`, `sched:next week` |
+//! | `time:range` | Set time block | `time:9:00-11:00`, `time:9am-11am` |
 //! | `@project` | Assign to project | `@work`, `@personal` |
 //!
 //! # Priority Values
@@ -79,7 +80,7 @@ mod tests;
 
 use std::sync::LazyLock;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveTime};
 use regex::Regex;
 
 use crate::domain::Priority;
@@ -98,6 +99,8 @@ static SCHED_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"sched:(\S+)").expect("valid regex pattern"));
 static PROJECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"@(\w+)").expect("valid regex pattern"));
+static TIME_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"time:(\S+)").expect("valid regex pattern"));
 
 /// Result of parsing a quick add string
 #[derive(Debug, Clone, Default)]
@@ -114,6 +117,10 @@ pub struct ParsedTask {
     pub scheduled_date: Option<NaiveDate>,
     /// Project name extracted from @project syntax
     pub project_name: Option<String>,
+    /// Scheduled start time extracted from time:HH:MM-HH:MM syntax
+    pub scheduled_start_time: Option<NaiveTime>,
+    /// Scheduled end time extracted from time:HH:MM-HH:MM syntax
+    pub scheduled_end_time: Option<NaiveTime>,
 }
 
 /// Parse a quick add string to extract metadata
@@ -170,6 +177,17 @@ pub fn parse_quick_add(input: &str) -> ParsedTask {
     }
     remaining = PROJECT_RE.replace_all(&remaining, "").to_string();
 
+    // Extract time block (time:HH:MM-HH:MM or time:9am-11am) - using pre-compiled regex
+    if let Some(cap) = TIME_RE.captures(input) {
+        if let Some((start, end)) = parse_time_range(&cap[1]) {
+            result.scheduled_start_time = Some(start);
+            result.scheduled_end_time = Some(end);
+        } else if let Some(start) = parse_single_time(&cap[1]) {
+            result.scheduled_start_time = Some(start);
+        }
+    }
+    remaining = TIME_RE.replace_all(&remaining, "").to_string();
+
     // Clean up title: collapse multiple spaces and trim
     result.title = remaining.split_whitespace().collect::<Vec<_>>().join(" ");
 
@@ -186,4 +204,64 @@ pub(crate) fn parse_priority(s: &str) -> Option<Priority> {
         "none" | "n" | "0" => Some(Priority::None),
         _ => None,
     }
+}
+
+/// Parse a single time string (e.g., "14:30", "2:30pm", "9am").
+fn parse_single_time(input: &str) -> Option<NaiveTime> {
+    let input = input.trim().to_lowercase();
+    if input.is_empty() {
+        return None;
+    }
+
+    // Check for am/pm suffix
+    let (time_str, is_pm) = if input.ends_with("pm") {
+        (input.trim_end_matches("pm").trim(), true)
+    } else if input.ends_with("am") {
+        (input.trim_end_matches("am").trim(), false)
+    } else {
+        (input.as_str(), false)
+    };
+
+    // Parse hour and minute
+    let (hour, minute): (u32, u32) = if let Some((h, m)) = time_str.split_once(':') {
+        (h.trim().parse().ok()?, m.trim().parse().ok()?)
+    } else {
+        (time_str.parse().ok()?, 0)
+    };
+
+    if minute >= 60 {
+        return None;
+    }
+
+    // Convert to 24-hour format if am/pm was specified
+    let hour = if input.ends_with("pm") || input.ends_with("am") {
+        if hour > 12 || hour == 0 {
+            return None;
+        }
+        if is_pm && hour != 12 {
+            hour + 12
+        } else if !is_pm && hour == 12 {
+            0
+        } else {
+            hour
+        }
+    } else {
+        if hour >= 24 {
+            return None;
+        }
+        hour
+    };
+
+    NaiveTime::from_hms_opt(hour, minute, 0)
+}
+
+/// Parse a time range string (e.g., "9:00-11:00", "9am-11am").
+fn parse_time_range(input: &str) -> Option<(NaiveTime, NaiveTime)> {
+    let parts: Vec<&str> = input.trim().split('-').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let start = parse_single_time(parts[0])?;
+    let end = parse_single_time(parts[1])?;
+    Some((start, end))
 }

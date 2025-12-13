@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **User Feedback**: Status messages with auto-dismiss timeouts for better UX
 - **Sample Data**: Expanded demo data with 88 tasks across 10 projects for better onboarding
 - **Historical Completion Dates**: Tasks now track completion timestamps for accurate heatmap visualization
+- **Time Blocking**: Schedule tasks with specific time blocks
+  - `scheduled_start_time` and `scheduled_end_time` fields for tasks
+  - Quick-add syntax: `time:9:00-11:00` or `time:9am-11am`
+  - Keybinding: `Alt+s` for editing time blocks
+  - Time block display in timeline and task detail views
+  - CSV/ICS export support for time block fields
 
 ### Changed
 

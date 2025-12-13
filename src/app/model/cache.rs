@@ -182,15 +182,39 @@ impl TaskCache {
             self.compute_depth(*task_id, tasks);
         }
 
-        // Compute subtask progress for tasks with children
-        for parent_id in self.children.keys() {
-            let descendants = self.get_all_descendants_cached(*parent_id);
-            let total = descendants.len();
-            let completed = descendants
-                .iter()
-                .filter(|id| tasks.get(id).is_some_and(|t| t.status.is_complete()))
-                .count();
-            self.subtask_progress.insert(*parent_id, (completed, total));
+        // Compute subtask progress using bottom-up aggregation (O(n) instead of O(n²))
+        // Sort tasks by depth descending so we process deepest tasks first
+        let mut tasks_by_depth: Vec<_> = tasks.keys().copied().collect();
+        tasks_by_depth.sort_by(|a, b| {
+            let depth_a = self.depths.get(a).copied().unwrap_or(0);
+            let depth_b = self.depths.get(b).copied().unwrap_or(0);
+            depth_b.cmp(&depth_a) // Descending order (deepest first)
+        });
+
+        // Aggregate progress from children to parents (bottom-up)
+        for task_id in tasks_by_depth {
+            if let Some(children) = self.children.get(&task_id) {
+                let mut completed = 0;
+                let mut total = 0;
+
+                for &child_id in children {
+                    // Add this child
+                    total += 1;
+                    if tasks.get(&child_id).is_some_and(|t| t.status.is_complete()) {
+                        completed += 1;
+                    }
+
+                    // Add child's descendants (already computed since we process bottom-up)
+                    if let Some(&(child_completed, child_total)) =
+                        self.subtask_progress.get(&child_id)
+                    {
+                        completed += child_completed;
+                        total += child_total;
+                    }
+                }
+
+                self.subtask_progress.insert(task_id, (completed, total));
+            }
         }
     }
 
@@ -209,28 +233,6 @@ impl TaskCache {
 
         self.depths.insert(task_id, depth);
         depth
-    }
-
-    /// Get all descendants using the cached children map.
-    fn get_all_descendants_cached(&self, task_id: TaskId) -> Vec<TaskId> {
-        let mut descendants = Vec::new();
-        let mut stack = vec![task_id];
-        let mut visited = HashSet::new();
-
-        while let Some(current_id) = stack.pop() {
-            if visited.contains(&current_id) {
-                continue;
-            }
-            visited.insert(current_id);
-
-            if let Some(children) = self.children.get(&current_id) {
-                for child_id in children {
-                    descendants.push(*child_id);
-                    stack.push(*child_id);
-                }
-            }
-        }
-        descendants
     }
 
     /// Get cached time sum for a task, returning 0 if not cached.

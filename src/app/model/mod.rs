@@ -61,12 +61,12 @@ pub use editor::MultilineEditor;
 pub use cache::{FooterStats, ReportCache, TaskCache};
 pub use layout_cache::LayoutCache;
 pub use types::{
-    AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState, DailyReviewState,
-    DescriptionEditorState, DuplicatesViewState, EveningReviewState, FilterState, GoalViewState,
-    HabitViewState, ImportState, InputState, KeybindingsEditorState, MultiSelectState,
-    PomodoroState, RunningState, SavedFilterPickerState, StorageState, TaskDetailState,
-    TemplatePickerState, TimeLogEditorState, TimelineState, TimelineZoom, ViewSelectionState,
-    WeeklyReviewState, WorkLogEditorState,
+    AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState,
+    CommandPaletteState, DailyReviewState, DescriptionEditorState, DuplicatesViewState,
+    EveningReviewState, FilterState, GoalViewState, HabitViewState, ImportState, InputState,
+    KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState, SavedFilterPickerState,
+    StorageState, TaskDetailState, TemplatePickerState, TimeLogEditorState, TimelineState,
+    TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
 pub use view_queries::extract_git_location;
 
@@ -369,6 +369,10 @@ pub struct Model {
     /// Task detail modal state (visibility, scroll)
     pub task_detail: TaskDetailState,
 
+    // Command palette
+    /// Command palette state (searchable action launcher)
+    pub command_palette: CommandPaletteState,
+
     // Task list scroll state
     /// Ratatui ListState for task list scrolling (persists scroll offset).
     /// Uses RefCell for interior mutability during rendering.
@@ -461,6 +465,7 @@ impl Model {
             burndown_state: BurndownState::default(),
             pending_editor_command: None,
             task_detail: TaskDetailState::default(),
+            command_palette: CommandPaletteState::default(),
             task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
             sidebar_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }

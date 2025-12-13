@@ -182,5 +182,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowEveningReview => Message::Ui(UiMessage::ShowEveningReview),
         // Task detail
         Action::ShowTaskDetail => Message::Ui(UiMessage::ShowTaskDetail),
+        // Command palette
+        Action::ShowCommandPalette => Message::Ui(UiMessage::ShowCommandPalette),
     }
 }

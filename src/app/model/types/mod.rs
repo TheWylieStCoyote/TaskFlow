@@ -26,7 +26,9 @@ pub use burndown::{BurndownMode, BurndownState, BurndownTimeWindow};
 pub use calendar::CalendarState;
 pub use editors::{DescriptionEditorState, TimeLogEditorState, WorkLogEditorState};
 pub use persistence::{ImportState, StorageState};
-pub use pickers::{KeybindingsEditorState, SavedFilterPickerState, TemplatePickerState};
+pub use pickers::{
+    CommandPaletteState, KeybindingsEditorState, SavedFilterPickerState, TemplatePickerState,
+};
 pub use pomodoro::PomodoroState;
 pub use reviews::{DailyReviewState, EveningReviewState, WeeklyReviewState};
 pub use timeline::{TimelineState, TimelineZoom};

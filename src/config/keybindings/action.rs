@@ -176,6 +176,9 @@ pub enum Action {
 
     // Task detail
     ShowTaskDetail,
+
+    // Command palette
+    ShowCommandPalette,
 }
 
 /// Category for grouping actions in help display
@@ -412,6 +415,8 @@ impl Action {
             Self::ShowEveningReview => "Evening review",
             // Task detail
             Self::ShowTaskDetail => "Show task details",
+            // Command palette
+            Self::ShowCommandPalette => "Open command palette",
         }
     }
 
@@ -552,6 +557,161 @@ impl Action {
             }
 
             Self::ShowTaskDetail => ActionCategory::Tasks,
+            Self::ShowCommandPalette => ActionCategory::ViewFilter,
         }
     }
 }
+
+/// All available actions for iteration.
+///
+/// Used by the command palette to list all available commands.
+pub const ALL_ACTIONS: &[Action] = &[
+    // Navigation
+    Action::MoveUp,
+    Action::MoveDown,
+    Action::MoveFirst,
+    Action::MoveLast,
+    Action::PageUp,
+    Action::PageDown,
+    // Task actions
+    Action::ToggleComplete,
+    Action::CreateTask,
+    Action::QuickCapture,
+    Action::CreateSubtask,
+    Action::CreateProject,
+    Action::EditProject,
+    Action::DeleteProject,
+    Action::EditTask,
+    Action::EditDueDate,
+    Action::EditScheduledDate,
+    Action::EditTags,
+    Action::EditDescription,
+    Action::EditDescriptionMultiline,
+    Action::DeleteTask,
+    Action::DuplicateTask,
+    Action::CyclePriority,
+    Action::MoveToProject,
+    // Time tracking
+    Action::ToggleTimeTracking,
+    Action::ShowTimeLog,
+    Action::ShowWorkLog,
+    Action::EditEstimate,
+    // UI actions
+    Action::ToggleSidebar,
+    Action::ToggleShowCompleted,
+    Action::ShowHelp,
+    Action::ToggleFocusMode,
+    Action::ToggleFullScreenFocus,
+    Action::AddToFocusQueue,
+    Action::ClearFocusQueue,
+    Action::AdvanceFocusQueue,
+    Action::FocusSidebar,
+    Action::FocusTaskList,
+    Action::Select,
+    Action::Search,
+    Action::ClearSearch,
+    Action::FilterByTag,
+    Action::ClearTagFilter,
+    Action::CycleSortField,
+    Action::ToggleSortOrder,
+    // Multi-select
+    Action::ToggleMultiSelect,
+    Action::ToggleTaskSelection,
+    Action::SelectAll,
+    Action::ClearSelection,
+    Action::BulkDelete,
+    Action::BulkMoveToProject,
+    Action::BulkSetStatus,
+    // Dependencies
+    Action::EditDependencies,
+    // Recurrence
+    Action::EditRecurrence,
+    // Manual ordering
+    Action::MoveTaskUp,
+    Action::MoveTaskDown,
+    // Task chains
+    Action::LinkTask,
+    Action::UnlinkTask,
+    // Calendar navigation
+    Action::CalendarPrevMonth,
+    Action::CalendarNextMonth,
+    Action::CalendarPrevDay,
+    Action::CalendarNextDay,
+    // Reports navigation
+    Action::ReportsNextPanel,
+    Action::ReportsPrevPanel,
+    // System
+    Action::Save,
+    Action::Undo,
+    Action::Redo,
+    Action::Quit,
+    Action::RefreshStorage,
+    // Export
+    Action::ExportCsv,
+    Action::ExportIcs,
+    Action::ExportChainsDot,
+    Action::ExportChainsMermaid,
+    Action::ExportReportMarkdown,
+    Action::ExportReportHtml,
+    // Import
+    Action::ImportCsv,
+    Action::ImportIcs,
+    // Macros
+    Action::RecordMacro,
+    Action::StopRecordMacro,
+    Action::PlayMacro0,
+    Action::PlayMacro1,
+    Action::PlayMacro2,
+    Action::PlayMacro3,
+    Action::PlayMacro4,
+    Action::PlayMacro5,
+    Action::PlayMacro6,
+    Action::PlayMacro7,
+    Action::PlayMacro8,
+    Action::PlayMacro9,
+    // Templates
+    Action::ShowTemplates,
+    // Keybindings editor
+    Action::ShowKeybindingsEditor,
+    // Quick reschedule
+    Action::RescheduleTomorrow,
+    Action::RescheduleNextWeek,
+    Action::RescheduleNextMonday,
+    // Task snooze
+    Action::SnoozeTask,
+    Action::ClearSnooze,
+    // Pomodoro timer
+    Action::PomodoroStart,
+    Action::PomodoroPause,
+    Action::PomodoroResume,
+    Action::PomodoroTogglePause,
+    Action::PomodoroSkip,
+    Action::PomodoroStop,
+    // Habit tracking
+    Action::CreateHabit,
+    Action::EditHabit,
+    Action::DeleteHabit,
+    Action::ToggleHabitToday,
+    Action::ShowHabitAnalytics,
+    Action::HabitToggleShowArchived,
+    Action::HabitArchive,
+    // Burndown chart controls
+    Action::BurndownCycleWindow,
+    Action::BurndownToggleMode,
+    Action::BurndownToggleScopeCreep,
+    // Duplicate detection controls
+    Action::DismissDuplicate,
+    Action::MergeDuplicates,
+    Action::RefreshDuplicates,
+    // Git integration
+    Action::ViewGitTodos,
+    Action::OpenInEditor,
+    // Review modes
+    Action::ShowDailyReview,
+    Action::ShowWeeklyReview,
+    Action::ShowEveningReview,
+    // Task detail
+    Action::ShowTaskDetail,
+    // Command palette
+    Action::ShowCommandPalette,
+];

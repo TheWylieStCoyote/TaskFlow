@@ -465,4 +465,20 @@ pub enum UiMessage {
     TaskDetailScrollTop,
     /// Jump to bottom in task detail modal
     TaskDetailScrollBottom,
+
+    // Command palette
+    /// Show the command palette
+    ShowCommandPalette,
+    /// Hide the command palette
+    HideCommandPalette,
+    /// Insert character in command palette search
+    CommandPaletteInput(char),
+    /// Delete character before cursor in command palette search
+    CommandPaletteBackspace,
+    /// Navigate up in command palette list
+    CommandPaletteUp,
+    /// Navigate down in command palette list
+    CommandPaletteDown,
+    /// Execute the selected command
+    CommandPaletteExecute,
 }

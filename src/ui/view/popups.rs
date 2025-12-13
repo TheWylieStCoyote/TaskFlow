@@ -9,10 +9,10 @@ use crate::app::Model;
 use crate::config::Theme;
 
 use crate::ui::components::{
-    centered_rect, centered_rect_fixed_height, ConfirmDialog, DailyReview, DescriptionEditor,
-    EveningReview, HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode, InputTarget,
-    KeybindingsEditor, OverdueAlert, QuickCaptureDialog, SavedFilterPicker, StorageErrorAlert,
-    TaskDetail, TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
+    centered_rect, centered_rect_fixed_height, CommandPalette, ConfirmDialog, DailyReview,
+    DescriptionEditor, EveningReview, HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode,
+    InputTarget, KeybindingsEditor, OverdueAlert, QuickCaptureDialog, SavedFilterPicker,
+    StorageErrorAlert, TaskDetail, TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
 };
 
 /// Renders all popup dialogs and overlays based on model state
@@ -312,6 +312,21 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
         frame.render_widget(
             TaskDetail::new(model, theme, model.task_detail.scroll),
             popup_area,
+        );
+    }
+
+    // Render command palette (high priority - renders over other popups)
+    if model.command_palette.visible {
+        let palette_area = centered_rect_fixed_height(60, 15, area);
+        frame.render_widget(
+            CommandPalette::new(
+                &model.command_palette.query,
+                model.command_palette.cursor,
+                model.command_palette.selected,
+                &model.keybindings,
+                theme,
+            ),
+            palette_area,
         );
     }
 }

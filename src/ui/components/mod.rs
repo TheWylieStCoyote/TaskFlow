@@ -48,6 +48,7 @@
 mod burndown;
 mod calendar;
 pub mod charts;
+mod command_palette;
 mod daily_review;
 mod dashboard;
 mod description_editor;
@@ -79,6 +80,7 @@ mod work_log_editor;
 
 pub use burndown::*;
 pub use calendar::*;
+pub use command_palette::*;
 pub use daily_review::*;
 pub use dashboard::*;
 pub use description_editor::*;

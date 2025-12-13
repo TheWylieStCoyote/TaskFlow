@@ -63,6 +63,7 @@
 //! ```
 
 mod calendar;
+mod command_palette;
 mod delete;
 mod duplicates;
 mod editors;
@@ -88,6 +89,7 @@ use crate::app::{Model, UiMessage, UndoAction};
 use crate::ui::{InputMode, InputTarget};
 
 use calendar::handle_ui_calendar;
+use command_palette::handle_ui_command_palette;
 use duplicates::handle_ui_duplicates;
 use editors::{handle_ui_description_editor, handle_ui_work_log};
 use filters::handle_ui_saved_filters;
@@ -105,6 +107,7 @@ use time_tracking::handle_ui_time_log;
 use views::handle_ui_views;
 
 // Re-export for external use
+pub use command_palette::get_palette_action;
 pub use input::create_task_from_quick_add;
 
 /// Format duration in minutes as a human-readable string (e.g., "1h30m" or "45m")
@@ -812,6 +815,17 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::TaskDetailScrollTop
         | UiMessage::TaskDetailScrollBottom => {
             handle_ui_task_detail(model, msg);
+        }
+
+        // Command palette - delegated to helper
+        UiMessage::ShowCommandPalette
+        | UiMessage::HideCommandPalette
+        | UiMessage::CommandPaletteInput(_)
+        | UiMessage::CommandPaletteBackspace
+        | UiMessage::CommandPaletteUp
+        | UiMessage::CommandPaletteDown
+        | UiMessage::CommandPaletteExecute => {
+            handle_ui_command_palette(model, msg);
         }
     }
 }

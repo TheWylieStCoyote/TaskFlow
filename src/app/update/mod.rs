@@ -23,6 +23,7 @@ use crate::app::{Message, Model};
 pub use navigation::days_in_month;
 pub use task::create_next_recurring_task;
 pub use ui::create_task_from_quick_add;
+pub use ui::get_palette_action;
 
 /// Main update function - heart of TEA pattern
 ///

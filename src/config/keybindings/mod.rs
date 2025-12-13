@@ -7,7 +7,7 @@ mod key_binding;
 #[cfg(test)]
 mod tests;
 
-pub use action::{Action, ActionCategory};
+pub use action::{Action, ActionCategory, ALL_ACTIONS};
 pub use key_binding::{KeyBinding, Modifier};
 
 use std::collections::HashMap;

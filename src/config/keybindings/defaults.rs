@@ -182,5 +182,9 @@ pub fn default_bindings() -> HashMap<String, Action> {
     // Task detail
     bindings.insert("i".to_string(), Action::ShowTaskDetail);
 
+    // Command palette
+    bindings.insert("alt+p".to_string(), Action::ShowCommandPalette);
+    bindings.insert(":".to_string(), Action::ShowCommandPalette);
+
     bindings
 }

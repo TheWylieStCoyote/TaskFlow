@@ -28,3 +28,19 @@ pub struct KeybindingsEditorState {
     /// Whether currently capturing a new key
     pub capturing: bool,
 }
+
+/// State for command palette popup.
+///
+/// The command palette provides a searchable list of all available
+/// actions, similar to VS Code's Ctrl+P command palette.
+#[derive(Debug, Clone, Default)]
+pub struct CommandPaletteState {
+    /// Whether the command palette is visible
+    pub visible: bool,
+    /// Current search query
+    pub query: String,
+    /// Cursor position in the query string
+    pub cursor: usize,
+    /// Index of selected command in filtered list
+    pub selected: usize,
+}

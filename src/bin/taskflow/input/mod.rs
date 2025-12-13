@@ -29,6 +29,11 @@ pub fn handle_key_event(
     model: &mut Model,
     keybindings: &Keybindings,
 ) -> Message {
+    // Handle command palette first (highest priority when visible)
+    if model.command_palette.visible {
+        return handle_command_palette_input(key, model);
+    }
+
     // Handle delete confirmation dialog first
     if model.show_confirm_delete {
         return match key.code {
@@ -234,4 +239,33 @@ pub fn handle_key_event(
     }
 
     Message::None
+}
+
+/// Handle input for the command palette.
+fn handle_command_palette_input(key: event::KeyEvent, model: &Model) -> Message {
+    match key.code {
+        KeyCode::Esc => Message::Ui(UiMessage::HideCommandPalette),
+        KeyCode::Enter => {
+            // Execute the selected command
+            // The update handler will close the palette and get the action
+            if let Some(action) = taskflow::app::get_palette_action(model) {
+                // First hide the palette, then return the action's message
+                // We use a special approach: return the execute message,
+                // which will be handled to dispatch the selected action
+                return action_to_message(&action);
+            }
+            Message::Ui(UiMessage::HideCommandPalette)
+        }
+        KeyCode::Up => Message::Ui(UiMessage::CommandPaletteUp),
+        KeyCode::Down => Message::Ui(UiMessage::CommandPaletteDown),
+        KeyCode::Char('k') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::CommandPaletteUp)
+        }
+        KeyCode::Char('j') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::CommandPaletteDown)
+        }
+        KeyCode::Backspace => Message::Ui(UiMessage::CommandPaletteBackspace),
+        KeyCode::Char(c) => Message::Ui(UiMessage::CommandPaletteInput(c)),
+        _ => Message::None,
+    }
 }

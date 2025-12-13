@@ -207,7 +207,7 @@ pub(crate) fn parse_priority(s: &str) -> Option<Priority> {
 }
 
 /// Parse a single time string (e.g., "14:30", "2:30pm", "9am").
-fn parse_single_time(input: &str) -> Option<NaiveTime> {
+pub(crate) fn parse_single_time(input: &str) -> Option<NaiveTime> {
     let input = input.trim().to_lowercase();
     if input.is_empty() {
         return None;
@@ -256,7 +256,7 @@ fn parse_single_time(input: &str) -> Option<NaiveTime> {
 }
 
 /// Parse a time range string (e.g., "9:00-11:00", "9am-11am").
-fn parse_time_range(input: &str) -> Option<(NaiveTime, NaiveTime)> {
+pub(crate) fn parse_time_range(input: &str) -> Option<(NaiveTime, NaiveTime)> {
     let parts: Vec<&str> = input.trim().split('-').collect();
     if parts.len() != 2 {
         return None;

@@ -170,17 +170,36 @@ pub fn handle_submit_input(model: &mut Model) {
         }
         InputTarget::EditScheduledTime(task_id) => {
             let task_id = *task_id;
-            // Parse time range - empty clears, invalid shows error
-            // Time parsing will be implemented in Task 4, full handler in Task 5
             if input.is_empty() {
                 model.modify_task_with_undo(&task_id, |task| {
                     task.scheduled_start_time = None;
                     task.scheduled_end_time = None;
                 });
                 model.alerts.status_message = Some("Time block cleared".to_string());
+            } else if let Some((start, end)) = super::parse_time_range(&input) {
+                // Full time range: "9:00-11:00" or "9am-11am"
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = Some(start);
+                    task.scheduled_end_time = Some(end);
+                });
+                model.alerts.status_message = Some(format!(
+                    "Time block set: {}-{}",
+                    start.format("%H:%M"),
+                    end.format("%H:%M")
+                ));
+            } else if let Some(start) = super::parse_single_time(&input) {
+                // Single time (start only): "9:00" or "9am"
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = Some(start);
+                    task.scheduled_end_time = None;
+                });
+                model.alerts.status_message =
+                    Some(format!("Start time set: {}", start.format("%H:%M")));
             } else {
-                // TODO: Implement time parsing in Task 4/5
-                model.alerts.status_message = Some("Time parsing not yet implemented".to_string());
+                model.alerts.status_message = Some(
+                    "Invalid time format. Use 9:00-11:00, 9am-11am, or single time like 9:00"
+                        .to_string(),
+                );
             }
             model.refresh_visible_tasks();
         }

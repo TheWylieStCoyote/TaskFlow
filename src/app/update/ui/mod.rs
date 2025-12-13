@@ -86,6 +86,7 @@ mod views;
 use std::fmt::Write as _;
 
 use crate::app::{Model, UiMessage, UndoAction};
+use crate::domain::Task;
 use crate::ui::{InputMode, InputTarget};
 
 use calendar::handle_ui_calendar;
@@ -389,7 +390,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 let prefill = model
                     .tasks
                     .get(&task_id)
-                    .and_then(|t| t.scheduled_time_display());
+                    .and_then(Task::scheduled_time_display);
                 start_input(model, InputTarget::EditScheduledTime(task_id), prefill);
             }
         }

@@ -49,6 +49,27 @@ pub fn export_to_ics<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
             writeln!(writer, "DUE;VALUE=DATE:{}", due.format("%Y%m%d"))?;
         }
 
+        // DTSTART/DTEND for time-blocked tasks (scheduled_date + scheduled_start_time)
+        if let (Some(date), Some(start_time)) = (task.scheduled_date, task.scheduled_start_time) {
+            // Format: YYYYMMDDTHHMMSS (local time, no Z suffix)
+            writeln!(
+                writer,
+                "DTSTART:{}T{}",
+                date.format("%Y%m%d"),
+                start_time.format("%H%M%S")
+            )?;
+
+            // Add DTEND if end time is also set
+            if let Some(end_time) = task.scheduled_end_time {
+                writeln!(
+                    writer,
+                    "DTEND:{}T{}",
+                    date.format("%Y%m%d"),
+                    end_time.format("%H%M%S")
+                )?;
+            }
+        }
+
         // STATUS
         let ics_status = match task.status {
             TaskStatus::Todo => "NEEDS-ACTION",

@@ -8,20 +8,20 @@ use super::InMemoryBackend;
 
 impl<B: InMemoryBackend> TaskRepository for B {
     fn create_task(&mut self, task: &Task) -> StorageResult<()> {
-        if self.data().tasks.iter().any(|t| t.id == task.id) {
+        if self.data().tasks.contains_key(&task.id) {
             return Err(StorageError::already_exists("Task", task.id.to_string()));
         }
-        self.data_mut().tasks.push(task.clone());
+        self.data_mut().tasks.insert(task.id, task.clone());
         self.mark_dirty();
         Ok(())
     }
 
     fn get_task(&self, id: &TaskId) -> StorageResult<Option<Task>> {
-        Ok(self.data().tasks.iter().find(|t| &t.id == id).cloned())
+        Ok(self.data().tasks.get(id).cloned())
     }
 
     fn update_task(&mut self, task: &Task) -> StorageResult<()> {
-        if let Some(existing) = self.data_mut().tasks.iter_mut().find(|t| t.id == task.id) {
+        if let Some(existing) = self.data_mut().tasks.get_mut(&task.id) {
             *existing = task.clone();
             self.mark_dirty();
             Ok(())
@@ -31,9 +31,7 @@ impl<B: InMemoryBackend> TaskRepository for B {
     }
 
     fn delete_task(&mut self, id: &TaskId) -> StorageResult<()> {
-        let len_before = self.data().tasks.len();
-        self.data_mut().tasks.retain(|t| &t.id != id);
-        if self.data().tasks.len() == len_before {
+        if self.data_mut().tasks.remove(id).is_none() {
             return Err(StorageError::not_found("Task", id.to_string()));
         }
         self.mark_dirty();
@@ -41,14 +39,14 @@ impl<B: InMemoryBackend> TaskRepository for B {
     }
 
     fn list_tasks(&self) -> StorageResult<Vec<Task>> {
-        Ok(self.data().tasks.clone())
+        Ok(self.data().tasks.values().cloned().collect())
     }
 
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
         let tasks = self
             .data()
             .tasks
-            .iter()
+            .values()
             .filter(|task| task_matches_filter(task, filter))
             .cloned()
             .collect();
@@ -59,7 +57,7 @@ impl<B: InMemoryBackend> TaskRepository for B {
         Ok(self
             .data()
             .tasks
-            .iter()
+            .values()
             .filter(|t| t.project_id.as_ref() == Some(project_id))
             .cloned()
             .collect())
@@ -69,7 +67,7 @@ impl<B: InMemoryBackend> TaskRepository for B {
         Ok(self
             .data()
             .tasks
-            .iter()
+            .values()
             .filter(|t| t.tags.contains(&tag.to_string()))
             .cloned()
             .collect())
@@ -122,6 +120,7 @@ mod tests {
         assert!(result.is_ok());
         assert!(backend.dirty);
         assert_eq!(backend.data.tasks.len(), 1);
+        assert!(backend.data.tasks.contains_key(&task.id));
     }
 
     #[test]

@@ -305,7 +305,7 @@ fn test_weekly_all_days() {
     // Check a full week
     for day in 1..=7 {
         let date = NaiveDate::from_ymd_opt(2024, 1, day).unwrap();
-        assert!(freq.is_due_on(date, start), "Day {} should be due", day);
+        assert!(freq.is_due_on(date, start), "Day {day} should be due");
     }
 }
 

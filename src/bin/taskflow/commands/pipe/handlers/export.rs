@@ -24,7 +24,7 @@ pub fn handle_export(model: &Model, _request: &PipeRequest) -> HandlerResult {
     let tags: Vec<Tag> = tag_names.into_iter().map(Tag::new).collect();
 
     let export_data = ExportData {
-        tasks: model.tasks.values().cloned().collect(),
+        tasks: model.tasks.clone(),
         projects: model.projects.values().cloned().collect(),
         tags,
         time_entries: model.time_entries.values().cloned().collect(),

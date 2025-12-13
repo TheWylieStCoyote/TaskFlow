@@ -133,7 +133,7 @@ impl StorageBackend for SqliteBackend {
 
     fn export_all(&self) -> StorageResult<ExportData> {
         Ok(ExportData {
-            tasks: self.list_tasks()?,
+            tasks: self.list_tasks()?.into_iter().map(|t| (t.id, t)).collect(),
             projects: self.list_projects()?,
             tags: self.list_tags()?,
             time_entries: self.list_all_time_entries()?,
@@ -161,7 +161,7 @@ impl StorageBackend for SqliteBackend {
         for project in &data.projects {
             self.create_project(project)?;
         }
-        for task in &data.tasks {
+        for task in data.tasks.values() {
             self.create_task(task)?;
         }
         for tag in &data.tags {

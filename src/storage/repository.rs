@@ -390,7 +390,7 @@ pub trait KeyResultRepository {
 /// Data export structure for migration between backends
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportData {
-    pub tasks: Vec<Task>,
+    pub tasks: std::collections::HashMap<TaskId, Task>,
     pub projects: Vec<Project>,
     pub tags: Vec<Tag>,
     pub time_entries: Vec<TimeEntry>,
@@ -424,7 +424,7 @@ pub struct ExportData {
 impl Default for ExportData {
     fn default() -> Self {
         Self {
-            tasks: Vec::new(),
+            tasks: std::collections::HashMap::new(),
             projects: Vec::new(),
             tags: Vec::new(),
             time_entries: Vec::new(),

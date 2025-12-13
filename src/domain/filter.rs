@@ -141,6 +141,77 @@ impl Default for SortSpec {
     }
 }
 
+impl SortField {
+    /// Compare two tasks by this sort field.
+    ///
+    /// Returns the ordering based on the selected field. For fields with
+    /// optional values (like `DueDate`), tasks with values sort before
+    /// tasks without.
+    #[must_use]
+    pub fn compare(&self, a: &super::Task, b: &super::Task) -> std::cmp::Ordering {
+        match self {
+            SortField::CreatedAt => a.created_at.cmp(&b.created_at),
+            SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+            SortField::DueDate => Self::compare_due_date(a, b),
+            SortField::Priority => Self::compare_priority(a, b),
+            SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            SortField::Status => Self::compare_status(a, b),
+        }
+    }
+
+    fn compare_due_date(a: &super::Task, b: &super::Task) -> std::cmp::Ordering {
+        // Tasks with due dates sort before tasks without
+        match (a.due_date, b.due_date) {
+            (Some(da), Some(db)) => da.cmp(&db),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }
+    }
+
+    fn compare_priority(a: &super::Task, b: &super::Task) -> std::cmp::Ordering {
+        Self::priority_order(a.priority).cmp(&Self::priority_order(b.priority))
+    }
+
+    fn priority_order(p: Priority) -> u8 {
+        match p {
+            Priority::Urgent => 0,
+            Priority::High => 1,
+            Priority::Medium => 2,
+            Priority::Low => 3,
+            Priority::None => 4,
+        }
+    }
+
+    fn compare_status(a: &super::Task, b: &super::Task) -> std::cmp::Ordering {
+        Self::status_order(a.status).cmp(&Self::status_order(b.status))
+    }
+
+    fn status_order(s: TaskStatus) -> u8 {
+        match s {
+            TaskStatus::InProgress => 0,
+            TaskStatus::Todo => 1,
+            TaskStatus::Blocked => 2,
+            TaskStatus::Done => 3,
+            TaskStatus::Cancelled => 4,
+        }
+    }
+}
+
+/// Compare tasks by manual sort_order field (secondary sort).
+///
+/// Tasks with a `sort_order` value sort before tasks without.
+/// Used as a tiebreaker when primary sort fields are equal.
+#[must_use]
+pub fn compare_sort_order(a: &super::Task, b: &super::Task) -> std::cmp::Ordering {
+    match (a.sort_order, b.sort_order) {
+        (Some(oa), Some(ob)) => oa.cmp(&ob),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

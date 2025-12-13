@@ -34,8 +34,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::NaiveDate;
+
 use crate::domain::analytics::AnalyticsReport;
-use crate::domain::{Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId};
+use crate::domain::{
+    is_context_tag, ProjectId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
+};
 
 use super::hierarchy::traverse_ancestors;
 
@@ -94,6 +98,14 @@ pub struct TaskCache {
     pub time_entries_by_task: HashMap<TaskId, Vec<TimeEntryId>>,
     /// Work log IDs per task (for O(1) lookup by task)
     pub work_logs_by_task: HashMap<TaskId, Vec<WorkLogEntryId>>,
+
+    // Secondary indexes for fast lookups
+    /// Task IDs grouped by project (None key for tasks without a project)
+    pub tasks_by_project: HashMap<Option<ProjectId>, Vec<TaskId>>,
+    /// Task IDs grouped by due date (None key for tasks without a due date)
+    pub tasks_by_due_date: HashMap<Option<NaiveDate>, Vec<TaskId>>,
+    /// Pre-computed set of context tags (tags starting with @)
+    pub contexts: HashSet<String>,
 }
 
 impl TaskCache {
@@ -111,6 +123,9 @@ impl TaskCache {
         self.children.clear();
         self.time_entries_by_task.clear();
         self.work_logs_by_task.clear();
+        self.tasks_by_project.clear();
+        self.tasks_by_due_date.clear();
+        self.contexts.clear();
     }
 
     /// Rebuild time sum cache and time entry index from time entries.
@@ -237,6 +252,56 @@ impl TaskCache {
             .get(&task_id)
             .copied()
             .unwrap_or((0, 0))
+    }
+
+    /// Rebuild the project index from tasks.
+    ///
+    /// Groups task IDs by their project_id for O(1) project-based lookups.
+    pub fn rebuild_project_index(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.tasks_by_project.clear();
+        for (id, task) in tasks {
+            self.tasks_by_project
+                .entry(task.project_id)
+                .or_default()
+                .push(*id);
+        }
+    }
+
+    /// Rebuild the due date index from tasks.
+    ///
+    /// Groups task IDs by their due_date for O(1) date-based lookups.
+    pub fn rebuild_due_date_index(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.tasks_by_due_date.clear();
+        for (id, task) in tasks {
+            self.tasks_by_due_date
+                .entry(task.due_date)
+                .or_default()
+                .push(*id);
+        }
+    }
+
+    /// Rebuild the context tags set from tasks.
+    ///
+    /// Extracts all unique @-prefixed tags for O(1) context listing.
+    pub fn rebuild_contexts(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.contexts.clear();
+        for task in tasks.values() {
+            for tag in &task.tags {
+                if is_context_tag(tag) {
+                    self.contexts.insert(tag.clone());
+                }
+            }
+        }
+    }
+
+    /// Rebuild all secondary indexes from tasks.
+    ///
+    /// This is called by [`super::Model::rebuild_caches()`] to update
+    /// project, due date, and context indexes.
+    pub fn rebuild_secondary_indexes(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.rebuild_project_index(tasks);
+        self.rebuild_due_date_index(tasks);
+        self.rebuild_contexts(tasks);
     }
 }
 

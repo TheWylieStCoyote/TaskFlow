@@ -23,9 +23,9 @@ pub fn handle_import(model: &mut Model, request: &PipeRequest) -> HandlerResult 
     let mut imported = ImportStats::default();
 
     // Import tasks
-    for task in export_data.tasks {
-        if !model.tasks.contains_key(&task.id) {
-            model.tasks.insert(task.id, task.clone());
+    for (task_id, task) in export_data.tasks {
+        if !model.tasks.contains_key(&task_id) {
+            model.tasks.insert(task_id, task.clone());
             model.sync_task(&task);
             imported.tasks += 1;
         }

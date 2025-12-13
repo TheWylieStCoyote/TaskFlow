@@ -399,8 +399,9 @@ fn test_initialize_loads_existing() {
     let path = dir.path().join("test.json");
 
     // Create file manually with some data
+    let task = Task::new("Pre-existing task");
     let data = ExportData {
-        tasks: vec![Task::new("Pre-existing task")],
+        tasks: [(task.id, task)].into_iter().collect(),
         ..Default::default()
     };
     std::fs::write(&path, serde_json::to_string(&data).unwrap()).unwrap();

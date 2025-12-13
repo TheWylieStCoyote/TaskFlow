@@ -40,7 +40,7 @@ impl StorageBackend for MarkdownBackend {
 
     fn export_all(&self) -> StorageResult<ExportData> {
         Ok(ExportData {
-            tasks: self.tasks_cache.values().cloned().collect(),
+            tasks: self.tasks_cache.clone(),
             projects: self.projects_cache.values().cloned().collect(),
             tags: self.tags.clone(),
             time_entries: self.time_entries.clone(),
@@ -80,7 +80,7 @@ impl StorageBackend for MarkdownBackend {
         for project in &data.projects {
             self.create_project(project)?;
         }
-        for task in &data.tasks {
+        for task in data.tasks.values() {
             self.create_task(task)?;
         }
         for tag in &data.tags {

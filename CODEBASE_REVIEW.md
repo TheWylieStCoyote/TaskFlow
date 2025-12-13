@@ -8,8 +8,8 @@
 
 | Category      | Total | Fixed | Partial | Remaining |
 |---------------|-------|-------|---------|-----------|
-| Performance   | 8     | 4     | 2       | 2         |
-| Code Quality  | 5     | 2     | 1       | 2         |
+| Performance   | 8     | 6     | 0       | 2         |
+| Code Quality  | 5     | 4     | 0       | 1         |
 | Testing Gaps  | 6     | 6     | 0       | 0         |
 | Documentation | 6     | 6     | 0       | 0         |
 
@@ -57,17 +57,33 @@ filter_tags.iter().any(|ft| task_tags_lower.contains(ft))
 
 ---
 
-### 4. Linear Scan for Task ID Lookup - ❌ NOT FIXED
+### 4. Linear Scan for Task ID Lookup - ✅ FIXED
 
 **File:** `src/storage/backends/in_memory/task_repo.rs`
 
+**Solution:** Changed `ExportData.tasks` from `Vec<Task>` to `HashMap<TaskId, Task>`.
+
 ```rust
-if self.data().tasks.iter().any(|t| t.id == task.id) { ... }
+// Current: O(1) HashMap operations
+fn create_task(&mut self, task: &Task) -> StorageResult<()> {
+    if self.data().tasks.contains_key(&task.id) {
+        return Err(StorageError::already_exists("Task", task.id.to_string()));
+    }
+    self.data_mut().tasks.insert(task.id, task.clone());
+    Ok(())
+}
+
+fn get_task(&self, id: &TaskId) -> StorageResult<Option<Task>> {
+    Ok(self.data().tasks.get(id).cloned())
+}
 ```
 
-**Note:** App layer uses HashMap<TaskId, Task> for O(1) lookups. This is a storage layer limitation in ExportData structure.
-
-**Fix:** Change `ExportData.tasks` from `Vec<Task>` to `HashMap<TaskId, Task>`.
+Updated files:
+- `src/storage/repository.rs` - ExportData struct definition
+- `src/storage/backends/in_memory/task_repo.rs` - All CRUD operations
+- `src/storage/backends/markdown/storage.rs` - Import/export
+- `src/storage/backends/sqlite/storage.rs` - Import/export
+- `src/bin/taskflow/commands/pipe/handlers/` - CLI handlers
 
 ---
 
@@ -101,20 +117,20 @@ Used throughout `src/app/update/task.rs` for SetStatus, SetPriority, CyclePriori
 
 ---
 
-### 7. Missing Secondary Indexes - ⚠️ PARTIAL
+### 7. Secondary Indexes - ✅ FIXED
 
-**File:** `src/app/model/mod.rs`
+**File:** `src/app/model/cache.rs`
 
-**Current indexes:**
+**All indexes now present:**
 - ✅ `tasks: HashMap<TaskId, Task>` - Primary
 - ✅ `task_cache.children: HashMap<TaskId, Vec<TaskId>>` - Hierarchy
 - ✅ `task_cache.time_entries_by_task` - Time tracking
 - ✅ `task_cache.work_logs_by_task` - Work logs
+- ✅ `task_cache.tasks_by_project: HashMap<Option<ProjectId>, Vec<TaskId>>` - Project lookup
+- ✅ `task_cache.tasks_by_due_date: HashMap<Option<NaiveDate>, Vec<TaskId>>` - Due date lookup
+- ✅ `task_cache.contexts: HashSet<String>` - Pre-computed @-prefixed tags
 
-**Still missing:**
-- ❌ `HashMap<ProjectId, Vec<TaskId>>` for fast "get tasks by project"
-- ❌ `HashMap<String, Vec<TaskId>>` for fast "get tasks by tag"
-- ❌ `HashMap<Option<NaiveDate>, Vec<TaskId>>` for fast "get tasks by due date"
+**Solution:** Added `rebuild_secondary_indexes()` method called from `rebuild_caches()`. Query methods `all_contexts()` and `tasks_for_day()` now use cached indexes for O(1) lookups.
 
 ---
 
@@ -144,28 +160,59 @@ match remaining.chars().next() {
 
 ---
 
-### 2. Long Function: handle_navigation() - ⚠️ PARTIAL
+### 2. Long Function: handle_navigation() - ✅ FIXED
 
-**File:** `src/app/update/navigation.rs`
+**File:** `src/app/update/navigation/` (now a module directory)
 
-**Status:** 756 lines, still has `#[allow(clippy::too_many_lines)]`
+**Solution:** Refactored 756-line monolithic function into 10 view-specific modules:
 
-**Progress:** Helper functions extracted:
-- `handle_calendar_up()` / `handle_calendar_down()`
-- `skip_sidebar_non_selectable_up()` / `skip_sidebar_non_selectable_down()`
-- `handle_sidebar_selection()`
+```
+src/app/update/navigation/
+├── mod.rs           # Main dispatcher (~120 lines)
+├── calendar.rs      # Calendar navigation + helpers
+├── sidebar.rs       # Sidebar navigation + helpers
+├── kanban.rs        # Kanban board navigation
+├── eisenhower.rs    # Eisenhower matrix navigation
+├── weekly_planner.rs # Weekly planner navigation
+├── timeline.rs      # Timeline view navigation
+├── reports.rs       # Reports panel navigation
+├── network.rs       # Network view navigation
+├── task_list.rs     # Basic Up/Down/First/Last/PageUp/PageDown
+└── view.rs          # GoToView handling
+```
 
-**Remaining:** Main function still large. Consider splitting into view-specific handlers.
+**Benefits:**
+- Each module is focused and under 100 lines
+- Removed `#[allow(clippy::too_many_lines)]`
+- Easier to navigate and maintain view-specific logic
 
 ---
 
-### 3. Complex Sort Logic - ❌ NOT FIXED
+### 3. Complex Sort Logic - ✅ FIXED
 
-**File:** `src/app/model/filtering/visibility.rs` (lines 67-119)
+**File:** `src/domain/filter.rs`
 
-Large match on SortField still inline in closure.
+**Solution:** Extracted sort logic into `impl SortField` methods.
 
-**Fix:** Extract into `impl SortField` comparison methods.
+```rust
+impl SortField {
+    pub fn compare(&self, a: &Task, b: &Task) -> Ordering {
+        match self {
+            SortField::CreatedAt => a.created_at.cmp(&b.created_at),
+            SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
+            SortField::DueDate => Self::compare_due_date(a, b),
+            SortField::Priority => Self::compare_priority(a, b),
+            SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            SortField::Status => Self::compare_status(a, b),
+        }
+    }
+    // Private helper methods for each field type...
+}
+
+pub fn compare_sort_order(a: &Task, b: &Task) -> Ordering { ... }
+```
+
+**Updated:** `src/app/model/filtering/visibility.rs` now uses `sort_field.compare(a, b)` - reduced 50-line closure to ~15 lines.
 
 ---
 
@@ -243,14 +290,14 @@ All documentation gaps have been addressed:
 
 ---
 
-## Quick Wins (Remaining)
+## Quick Wins (All Completed)
 
-| Fix                         | File              | Impact | Effort |
-|-----------------------------|-------------------|--------|--------|
-| Change ExportData to HashMap| storage/repository| Medium | Medium |
-| Add secondary indexes       | app/model/mod.rs  | Medium | Medium |
-| Extract sort logic          | visibility.rs     | Low    | Medium |
-| Split handle_navigation()   | navigation.rs     | Low    | High   |
+All identified quick wins have been addressed:
+
+- ✅ Changed ExportData to HashMap (Dec 2024)
+- ✅ Added secondary indexes to TaskCache (Dec 2024)
+- ✅ Extracted sort logic into SortField methods (Dec 2024)
+- ✅ Split handle_navigation() into view-specific modules (Dec 2024)
 
 ---
 

@@ -516,20 +516,26 @@ impl Model {
     ///
     /// Context tags follow GTD (Getting Things Done) convention and represent
     /// where or when a task can be done (e.g., @home, @work, @errands).
+    ///
+    /// Uses the cached contexts set for O(c) performance where c = number of contexts.
     #[must_use]
     pub fn all_contexts(&self) -> Vec<String> {
-        crate::domain::extract_contexts(self.tasks.values())
+        let mut contexts: Vec<_> = self.task_cache.contexts.iter().cloned().collect();
+        contexts.sort();
+        contexts
     }
 
     /// Returns all tasks due on a specific day.
     ///
     /// Used by the calendar view to display tasks for a selected date.
+    /// Uses the cached due date index for O(1) lookup.
     #[must_use]
     pub fn tasks_for_day(&self, date: NaiveDate) -> Vec<&Task> {
-        self.tasks
-            .values()
-            .filter(|t| t.due_date == Some(date))
-            .collect()
+        self.task_cache
+            .tasks_by_due_date
+            .get(&Some(date))
+            .map(|ids| ids.iter().filter_map(|id| self.tasks.get(id)).collect())
+            .unwrap_or_default()
     }
 
     /// Returns all tasks due on the currently selected calendar day.

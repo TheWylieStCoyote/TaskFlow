@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::domain::{SortField, SortOrder, Task, TaskId};
+use crate::domain::{compare_sort_order, SortOrder, Task, TaskId};
 
 use super::super::Model;
 use super::FilterCache;
@@ -20,6 +20,7 @@ impl Model {
         self.task_cache.rebuild_time_sums(&self.time_entries);
         self.task_cache.rebuild_work_logs_index(&self.work_logs);
         self.task_cache.rebuild_hierarchy(&self.tasks);
+        self.task_cache.rebuild_secondary_indexes(&self.tasks);
     }
 
     /// Recalculates visible tasks based on current filters and sort.
@@ -65,54 +66,17 @@ impl Model {
         let sort_order = self.filtering.sort.order;
 
         let sort_fn = |a: &&Task, b: &&Task| {
-            let primary_cmp = match sort_field {
-                SortField::CreatedAt => a.created_at.cmp(&b.created_at),
-                SortField::UpdatedAt => a.updated_at.cmp(&b.updated_at),
-                SortField::DueDate => {
-                    // Tasks with no due date go last
-                    match (a.due_date, b.due_date) {
-                        (Some(da), Some(db)) => da.cmp(&db),
-                        (Some(_), None) => std::cmp::Ordering::Less,
-                        (None, Some(_)) => std::cmp::Ordering::Greater,
-                        (None, None) => std::cmp::Ordering::Equal,
-                    }
-                }
-                SortField::Priority => {
-                    let priority_order = |p: &crate::domain::Priority| match p {
-                        crate::domain::Priority::Urgent => 0,
-                        crate::domain::Priority::High => 1,
-                        crate::domain::Priority::Medium => 2,
-                        crate::domain::Priority::Low => 3,
-                        crate::domain::Priority::None => 4,
-                    };
-                    priority_order(&a.priority).cmp(&priority_order(&b.priority))
-                }
-                SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
-                SortField::Status => {
-                    let status_order = |s: &crate::domain::TaskStatus| match s {
-                        crate::domain::TaskStatus::InProgress => 0,
-                        crate::domain::TaskStatus::Todo => 1,
-                        crate::domain::TaskStatus::Blocked => 2,
-                        crate::domain::TaskStatus::Done => 3,
-                        crate::domain::TaskStatus::Cancelled => 4,
-                    };
-                    status_order(&a.status).cmp(&status_order(&b.status))
-                }
-            };
+            // Primary comparison by sort field
+            let primary = sort_field.compare(a, b);
 
-            // Use sort_order as secondary sort key when primary values are equal
-            // Tasks with sort_order come before tasks without
-            let cmp = if primary_cmp == std::cmp::Ordering::Equal {
-                match (a.sort_order, b.sort_order) {
-                    (Some(oa), Some(ob)) => oa.cmp(&ob),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => std::cmp::Ordering::Equal,
-                }
+            // Secondary sort by manual sort_order when primary values are equal
+            let cmp = if primary == std::cmp::Ordering::Equal {
+                compare_sort_order(a, b)
             } else {
-                primary_cmp
+                primary
             };
 
+            // Apply sort direction
             match sort_order {
                 SortOrder::Ascending => cmp,
                 SortOrder::Descending => cmp.reverse(),

@@ -535,4 +535,99 @@ mod tests {
             Some(NaiveDate::from_ymd_opt(2026, 12, 25).unwrap())
         );
     }
+
+    // ========================================================================
+    // Additional Edge Cases - Short Months and Leap Years
+    // ========================================================================
+
+    #[test]
+    fn test_create_next_recurring_task_monthly_31st_to_30_day_month() {
+        // Mar 31 -> Apr 30 (April only has 30 days)
+        let due = NaiveDate::from_ymd_opt(2025, 3, 31).unwrap();
+        let task = Task::new("Monthly task")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Monthly { day: 31 }));
+
+        let next = create_next_recurring_task(&task);
+
+        // April 31 doesn't exist -> April 30
+        assert_eq!(
+            next.due_date,
+            Some(NaiveDate::from_ymd_opt(2025, 4, 30).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_monthly_31st_to_feb_leap_year() {
+        // Jan 31, 2024 -> Feb (2024 is a leap year, so Feb has 29 days)
+        let due = NaiveDate::from_ymd_opt(2024, 1, 31).unwrap();
+        let task = Task::new("Monthly task")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Monthly { day: 31 }));
+
+        let next = create_next_recurring_task(&task);
+
+        // Feb 31 doesn't exist -> Feb 29 (leap year)
+        assert_eq!(
+            next.due_date,
+            Some(NaiveDate::from_ymd_opt(2024, 2, 29).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_yearly_feb_29_leap_to_leap() {
+        // Feb 29, 2024 (leap year) -> Feb 29, 2028 (next leap year)
+        // This tests the less common case: year 2024 -> 2025 (non-leap) already covered
+        // Here we test what happens after multiple non-leap years
+
+        // Note: The implementation creates next occurrence for the immediate next year,
+        // not skipping to the next leap year. So Feb 29, 2024 -> Feb 28, 2025.
+        // This test documents that behavior.
+        let due = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        let task = Task::new("Leap year task")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Yearly { month: 2, day: 29 }));
+
+        let next = create_next_recurring_task(&task);
+
+        // 2025 is not a leap year, so Feb 29 -> Feb 28
+        assert_eq!(
+            next.due_date,
+            Some(NaiveDate::from_ymd_opt(2025, 2, 28).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_monthly_30th_to_feb() {
+        // Jan 30 -> Feb (Feb only has 28/29 days)
+        let due = NaiveDate::from_ymd_opt(2025, 1, 30).unwrap();
+        let task = Task::new("Monthly task")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Monthly { day: 30 }));
+
+        let next = create_next_recurring_task(&task);
+
+        // Feb 30 doesn't exist, 2025 is not a leap year -> Feb 28
+        assert_eq!(
+            next.due_date,
+            Some(NaiveDate::from_ymd_opt(2025, 2, 28).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_yearly_invalid_date() {
+        // Test yearly recurrence with invalid date (Apr 31)
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let task = Task::new("Invalid date task")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Yearly { month: 4, day: 31 }));
+
+        let next = create_next_recurring_task(&task);
+
+        // April 31 doesn't exist -> April 30
+        assert_eq!(
+            next.due_date,
+            Some(NaiveDate::from_ymd_opt(2026, 4, 30).unwrap())
+        );
+    }
 }

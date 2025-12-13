@@ -721,3 +721,419 @@ mod level_5 {
         );
     }
 }
+
+// ============================================================================
+// Deep Hierarchy Tests
+// ============================================================================
+//
+// Tests for deeply nested task hierarchies (parent-child relationships)
+
+mod deep_hierarchy {
+    use super::*;
+    use taskflow::domain::TaskId;
+
+    /// Create a deep hierarchy with specified depth and width.
+    /// Returns (model, root_task_id).
+    fn create_deep_hierarchy(depth: usize, width: usize) -> (Model, TaskId) {
+        let mut model = Model::new();
+
+        // Create root task
+        let root = Task::new("Root task");
+        let root_id = root.id;
+        model.tasks.insert(root.id, root);
+
+        // Create hierarchy level by level
+        let mut current_level_ids = vec![root_id];
+
+        for level in 1..=depth {
+            let mut next_level_ids = Vec::new();
+
+            for parent_id in &current_level_ids {
+                for child_num in 0..width {
+                    let mut child = Task::new(format!("Task L{level} C{child_num}"));
+                    child.parent_task_id = Some(*parent_id);
+                    let child_id = child.id;
+                    model.tasks.insert(child.id, child);
+                    next_level_ids.push(child_id);
+                }
+            }
+
+            current_level_ids = next_level_ids;
+        }
+
+        model.refresh_visible_tasks();
+        (model, root_id)
+    }
+
+    /// Create a linear chain (depth N, width 1) - worst case for tree traversal.
+    fn create_linear_chain(length: usize) -> (Model, TaskId) {
+        let mut model = Model::new();
+
+        let root = Task::new("Chain root");
+        let root_id = root.id;
+        model.tasks.insert(root.id, root);
+
+        let mut parent_id = root_id;
+        for i in 1..length {
+            let mut child = Task::new(format!("Chain task {i}"));
+            child.parent_task_id = Some(parent_id);
+            let child_id = child.id;
+            model.tasks.insert(child.id, child);
+            parent_id = child_id;
+        }
+
+        model.refresh_visible_tasks();
+        (model, root_id)
+    }
+
+    #[test]
+    fn test_moderate_hierarchy_depth_5_width_3() {
+        // 5 levels deep, 3 children per node
+        // Total tasks: 1 + 3 + 9 + 27 + 81 + 243 = 364
+        let (mut model, _root_id) = create_deep_hierarchy(5, 3);
+
+        let expected_total = 1 + 3 + 9 + 27 + 81 + 243;
+        assert_eq!(
+            model.tasks.len(),
+            expected_total,
+            "Expected {expected_total} tasks"
+        );
+
+        // Measure refresh performance
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!(
+            "Depth 5, Width 3 hierarchy ({} tasks): {elapsed}ms",
+            model.tasks.len()
+        );
+        assert!(
+            elapsed < 100,
+            "Hierarchy refresh took {elapsed}ms, expected < 100ms"
+        );
+    }
+
+    #[test]
+    fn test_deep_hierarchy_depth_10_width_2() {
+        // 10 levels deep, 2 children per node
+        // Total tasks: 2^11 - 1 = 2047
+        let (mut model, _root_id) = create_deep_hierarchy(10, 2);
+
+        let expected_total = (1 << 11) - 1; // 2^11 - 1
+        assert_eq!(
+            model.tasks.len(),
+            expected_total,
+            "Expected {expected_total} tasks"
+        );
+
+        // Measure refresh performance
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!(
+            "Depth 10, Width 2 hierarchy ({} tasks): {elapsed}ms",
+            model.tasks.len()
+        );
+        assert!(
+            elapsed < 200,
+            "Deep hierarchy refresh took {elapsed}ms, expected < 200ms"
+        );
+    }
+
+    #[test]
+    fn test_linear_chain_100() {
+        // Linear chain: 100 tasks deep (worst case for tree traversal)
+        let (mut model, _root_id) = create_linear_chain(100);
+
+        assert_eq!(model.tasks.len(), 100);
+
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!("Linear chain (100 tasks): {elapsed}ms");
+        assert!(
+            elapsed < 50,
+            "Linear chain refresh took {elapsed}ms, expected < 50ms"
+        );
+    }
+
+    #[test]
+    fn test_linear_chain_500() {
+        // Linear chain: 500 tasks deep
+        let (mut model, _root_id) = create_linear_chain(500);
+
+        assert_eq!(model.tasks.len(), 500);
+
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!("Linear chain (500 tasks): {elapsed}ms");
+        // Allow generous threshold for debug builds (release is much faster)
+        assert!(
+            elapsed < 500,
+            "Linear chain refresh took {elapsed}ms, expected < 500ms"
+        );
+    }
+
+    #[test]
+    #[ignore = "slow test - run with: cargo test --test stress deep_hierarchy -- --ignored"]
+    fn test_linear_chain_1000() {
+        // Linear chain: 1000 tasks deep
+        let (mut model, _root_id) = create_linear_chain(1000);
+
+        assert_eq!(model.tasks.len(), 1000);
+
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!("Linear chain (1000 tasks): {elapsed}ms");
+        // Allow generous threshold for debug builds (release is much faster)
+        assert!(
+            elapsed < 1000,
+            "Linear chain refresh took {elapsed}ms, expected < 1000ms"
+        );
+    }
+
+    #[test]
+    fn test_wide_hierarchy_depth_2_width_100() {
+        // Very wide: 2 levels, 100 children each
+        // Total: 1 + 100 + 10000 = 10101
+        let (mut model, _root_id) = create_deep_hierarchy(2, 100);
+
+        let expected_total = 1 + 100 + 10000;
+        assert_eq!(
+            model.tasks.len(),
+            expected_total,
+            "Expected {expected_total} tasks"
+        );
+
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!(
+            "Wide hierarchy (depth 2, width 100, {} tasks): {elapsed}ms",
+            model.tasks.len()
+        );
+        assert!(
+            elapsed < 500,
+            "Wide hierarchy refresh took {elapsed}ms, expected < 500ms"
+        );
+    }
+
+    #[test]
+    fn test_hierarchy_with_filtering() {
+        let (mut model, _root_id) = create_deep_hierarchy(5, 3);
+
+        // Set some tasks as completed
+        let task_ids: Vec<_> = model.tasks.keys().copied().collect();
+        for (i, id) in task_ids.iter().enumerate() {
+            if i % 3 == 0 {
+                if let Some(task) = model.tasks.get_mut(id) {
+                    task.status = TaskStatus::Done;
+                }
+            }
+        }
+
+        // Filter out completed
+        model.filtering.show_completed = false;
+
+        let start = Instant::now();
+        model.refresh_visible_tasks();
+        let elapsed = start.elapsed().as_millis();
+
+        println!(
+            "Hierarchy with filter ({} total, {} visible): {elapsed}ms",
+            model.tasks.len(),
+            model.visible_tasks.len()
+        );
+        assert!(
+            elapsed < 100,
+            "Filtered hierarchy refresh took {elapsed}ms, expected < 100ms"
+        );
+
+        // About 2/3 of tasks should be visible
+        let expected_visible = model.tasks.len() * 2 / 3;
+        assert!(
+            model.visible_tasks.len() > expected_visible - 50
+                && model.visible_tasks.len() < expected_visible + 50,
+            "Expected ~{expected_visible} visible, got {}",
+            model.visible_tasks.len()
+        );
+    }
+}
+
+// ============================================================================
+// Storage Backend Stress Tests
+// ============================================================================
+//
+// Tests for storage operations with large datasets
+
+mod storage_stress {
+    use super::*;
+    use taskflow::storage::{create_backend, BackendType};
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_json_backend_1000_tasks() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create 1000 tasks
+        let start = Instant::now();
+        for i in 0..1000 {
+            let task = Task::new(format!("Task {i}"));
+            backend.create_task(&task).unwrap();
+        }
+        let create_elapsed = start.elapsed().as_millis();
+
+        // List all tasks
+        let start = Instant::now();
+        let tasks = backend.list_tasks().unwrap();
+        let list_elapsed = start.elapsed().as_millis();
+
+        println!("JSON backend 1000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
+        assert_eq!(tasks.len(), 1000);
+        assert!(
+            create_elapsed < 2000,
+            "Create took {create_elapsed}ms, expected < 2000ms"
+        );
+        assert!(
+            list_elapsed < 500,
+            "List took {list_elapsed}ms, expected < 500ms"
+        );
+    }
+
+    #[test]
+    fn test_sqlite_backend_1000_tasks() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let mut backend = create_backend(BackendType::Sqlite, &path).unwrap();
+
+        // Create 1000 tasks
+        let start = Instant::now();
+        for i in 0..1000 {
+            let task = Task::new(format!("Task {i}"));
+            backend.create_task(&task).unwrap();
+        }
+        let create_elapsed = start.elapsed().as_millis();
+
+        // List all tasks
+        let start = Instant::now();
+        let tasks = backend.list_tasks().unwrap();
+        let list_elapsed = start.elapsed().as_millis();
+
+        println!("SQLite backend 1000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
+        assert_eq!(tasks.len(), 1000);
+        assert!(
+            create_elapsed < 5000,
+            "Create took {create_elapsed}ms, expected < 5000ms"
+        );
+        assert!(
+            list_elapsed < 500,
+            "List took {list_elapsed}ms, expected < 500ms"
+        );
+    }
+
+    #[test]
+    #[ignore = "slow test - run with: cargo test --test stress storage_stress -- --ignored"]
+    fn test_json_backend_10000_tasks() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create 10000 tasks
+        let start = Instant::now();
+        for i in 0..10_000 {
+            let task = Task::new(format!("Task {i}"));
+            backend.create_task(&task).unwrap();
+        }
+        let create_elapsed = start.elapsed().as_millis();
+
+        // List all tasks
+        let start = Instant::now();
+        let tasks = backend.list_tasks().unwrap();
+        let list_elapsed = start.elapsed().as_millis();
+
+        println!("JSON backend 10000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
+        assert_eq!(tasks.len(), 10_000);
+    }
+
+    #[test]
+    #[ignore = "slow test - run with: cargo test --test stress storage_stress -- --ignored"]
+    fn test_sqlite_backend_10000_tasks() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let mut backend = create_backend(BackendType::Sqlite, &path).unwrap();
+
+        // Create 10000 tasks
+        let start = Instant::now();
+        for i in 0..10_000 {
+            let task = Task::new(format!("Task {i}"));
+            backend.create_task(&task).unwrap();
+        }
+        let create_elapsed = start.elapsed().as_millis();
+
+        // List all tasks
+        let start = Instant::now();
+        let tasks = backend.list_tasks().unwrap();
+        let list_elapsed = start.elapsed().as_millis();
+
+        println!("SQLite backend 10000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
+        assert_eq!(tasks.len(), 10_000);
+    }
+
+    #[test]
+    fn test_backend_filtered_query_performance() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.json");
+        let mut backend = create_backend(BackendType::Json, &path).unwrap();
+
+        // Create 1000 tasks with varied properties
+        for i in 0..1000 {
+            let priority = match i % 5 {
+                0 => Priority::None,
+                1 => Priority::Low,
+                2 => Priority::Medium,
+                3 => Priority::High,
+                _ => Priority::Urgent,
+            };
+            let mut task = Task::new(format!("Task {i}"));
+            task.priority = priority;
+            task.tags = vec![format!("tag{}", i % 10)];
+            backend.create_task(&task).unwrap();
+        }
+
+        // Filter by priority
+        let filter = taskflow::domain::Filter {
+            priority: Some(vec![Priority::High, Priority::Urgent]),
+            include_completed: true,
+            ..Default::default()
+        };
+
+        let start = Instant::now();
+        let filtered = backend.list_tasks_filtered(&filter).unwrap();
+        let elapsed = start.elapsed().as_millis();
+
+        println!(
+            "Filtered query (1000 tasks): {elapsed}ms, found {} tasks",
+            filtered.len()
+        );
+        assert!(
+            elapsed < 200,
+            "Filtered query took {elapsed}ms, expected < 200ms"
+        );
+        // High + Urgent = 2/5 of tasks = 400
+        assert!(
+            filtered.len() > 350 && filtered.len() < 450,
+            "Expected ~400 tasks, got {}",
+            filtered.len()
+        );
+    }
+}

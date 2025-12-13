@@ -199,3 +199,130 @@ fn test_frequency_display() {
         "Every 3 days"
     );
 }
+
+// ============================================================================
+// Recurrence Edge Cases - Year Boundaries
+// ============================================================================
+
+#[test]
+fn test_every_n_days_year_boundary() {
+    use chrono::NaiveDate;
+
+    let freq = HabitFrequency::EveryNDays { n: 7 };
+    let start = NaiveDate::from_ymd_opt(2024, 12, 25).unwrap();
+
+    // Dec 25 is start, should be due
+    assert!(freq.is_due_on(start, start));
+
+    // Jan 1, 2025 is 7 days later, should be due
+    let jan_1 = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    assert!(freq.is_due_on(jan_1, start));
+
+    // Dec 30 is 5 days later, should NOT be due
+    let dec_30 = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
+    assert!(!freq.is_due_on(dec_30, start));
+}
+
+#[test]
+fn test_weekly_habit_year_boundary() {
+    use chrono::NaiveDate;
+
+    let freq = HabitFrequency::Weekly {
+        days: vec![Weekday::Mon],
+    };
+    let start = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+
+    // Dec 30, 2024 is a Monday
+    let dec_30 = NaiveDate::from_ymd_opt(2024, 12, 30).unwrap();
+    assert!(freq.is_due_on(dec_30, start));
+
+    // Jan 6, 2025 is a Monday
+    let jan_6 = NaiveDate::from_ymd_opt(2025, 1, 6).unwrap();
+    assert!(freq.is_due_on(jan_6, start));
+
+    // Dec 31, 2024 is a Tuesday - not due
+    let dec_31 = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
+    assert!(!freq.is_due_on(dec_31, start));
+}
+
+#[test]
+fn test_streak_across_year_boundary() {
+    use chrono::NaiveDate;
+
+    let start = NaiveDate::from_ymd_opt(2024, 12, 25).unwrap();
+    let mut habit = Habit::new("Test").with_start_date(start);
+
+    // Build a streak across the year boundary
+    // Dec 28, 29, 30, 31, Jan 1, 2, 3
+    for day in 28..=31 {
+        habit.check_in(NaiveDate::from_ymd_opt(2024, 12, day).unwrap(), true, None);
+    }
+    for day in 1..=3 {
+        habit.check_in(NaiveDate::from_ymd_opt(2025, 1, day).unwrap(), true, None);
+    }
+
+    // The longest streak should be 7 (Dec 28 - Jan 3)
+    assert_eq!(habit.longest_streak(), 7);
+}
+
+#[test]
+fn test_every_n_days_leap_year_boundary() {
+    use chrono::NaiveDate;
+
+    let freq = HabitFrequency::EveryNDays { n: 1 };
+    let start = NaiveDate::from_ymd_opt(2024, 2, 28).unwrap();
+
+    // Feb 28 is start - due
+    assert!(freq.is_due_on(start, start));
+
+    // Feb 29 (leap day) is 1 day later - due
+    let feb_29 = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+    assert!(freq.is_due_on(feb_29, start));
+
+    // Mar 1 is 2 days later - due
+    let mar_1 = NaiveDate::from_ymd_opt(2024, 3, 1).unwrap();
+    assert!(freq.is_due_on(mar_1, start));
+}
+
+#[test]
+fn test_weekly_all_days() {
+    use chrono::NaiveDate;
+
+    // All days of the week - should always be due
+    let freq = HabitFrequency::Weekly {
+        days: vec![
+            Weekday::Mon,
+            Weekday::Tue,
+            Weekday::Wed,
+            Weekday::Thu,
+            Weekday::Fri,
+            Weekday::Sat,
+            Weekday::Sun,
+        ],
+    };
+    let start = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+
+    // Check a full week
+    for day in 1..=7 {
+        let date = NaiveDate::from_ymd_opt(2024, 1, day).unwrap();
+        assert!(freq.is_due_on(date, start), "Day {} should be due", day);
+    }
+}
+
+#[test]
+fn test_completion_rate_across_year_boundary() {
+    use chrono::NaiveDate;
+
+    let mut habit = Habit::new("Test");
+
+    // Complete in December 2024
+    habit.check_in(NaiveDate::from_ymd_opt(2024, 12, 30).unwrap(), true, None);
+    habit.check_in(NaiveDate::from_ymd_opt(2024, 12, 31).unwrap(), true, None);
+
+    // Complete in January 2025
+    habit.check_in(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(), true, None);
+    habit.check_in(NaiveDate::from_ymd_opt(2025, 1, 2).unwrap(), false, None); // miss
+
+    // Overall: 3 completed, 1 missed = 75%
+    assert!((habit.overall_completion_rate() - 75.0).abs() < 0.01);
+}

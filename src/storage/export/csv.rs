@@ -149,4 +149,62 @@ mod tests {
         assert!(result.starts_with("ID,Title,Status,Priority"));
         assert_eq!(result.lines().count(), 1);
     }
+
+    // ========================================================================
+    // Round-trip and Special Character Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_export_csv_combined_special_chars() {
+        // Task with comma, quotes, and newline all together
+        let mut task = create_test_task("Task with, \"quotes\" and\nnewline");
+        task.description = Some("Description with,\n\"special\" chars".to_string());
+
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_csv(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // The title should be properly quoted and escaped
+        assert!(result.contains("\"Task with, \"\"quotes\"\" and"));
+        assert!(result.contains("newline\""));
+    }
+
+    #[test]
+    fn test_export_csv_unicode_characters() {
+        let mut task = create_test_task("会议 📅 Meeting");
+        task.description = Some("日本語の説明".to_string());
+        task.tags = vec!["工作".to_string(), "日程".to_string()];
+
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_csv(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        assert!(result.contains("会议"));
+        assert!(result.contains("📅"));
+        assert!(result.contains("日本語の説明"));
+        assert!(result.contains("工作;日程"));
+    }
+
+    #[test]
+    fn test_escape_csv_combined() {
+        // All special chars together
+        assert_eq!(escape_csv("a,b\"c\nd"), "\"a,b\"\"c\nd\"");
+    }
+
+    #[test]
+    fn test_export_csv_empty_title() {
+        // Edge case: empty title
+        let task = create_test_task("");
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_csv(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Should have two commas together where title is
+        let data_line = result.lines().nth(1).unwrap();
+        // Format: ID,Title,Status... - empty title means ,, after ID
+        assert!(data_line.contains(",,") || data_line.contains(",todo,")); // Empty title followed by status
+    }
 }

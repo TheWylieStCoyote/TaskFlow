@@ -193,4 +193,109 @@ mod tests {
         assert!(result.starts_with("digraph TaskChains {"));
         assert!(result.ends_with("}\n"));
     }
+
+    // ========================================================================
+    // Structure Verification and Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_export_dot_valid_graph_structure() {
+        let mut tasks = HashMap::new();
+
+        // Create a chain: task1 -> task2 -> task3
+        let task1 = create_test_task("Task 1");
+        let task1_id = task1.id;
+        tasks.insert(task1.id, task1);
+
+        let mut task2 = create_test_task("Task 2");
+        task2.next_task_id = Some(task1_id);
+        let task2_id = task2.id;
+        tasks.insert(task2.id, task2);
+
+        let mut task3 = create_test_task("Task 3");
+        task3.next_task_id = Some(task2_id);
+        task3.dependencies.push(task1_id); // Also depends on task1
+        tasks.insert(task3.id, task3);
+
+        let mut buffer = Vec::new();
+        export_to_dot(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Verify DOT structure
+        assert!(result.starts_with("digraph TaskChains {"));
+        assert!(result.contains("rankdir=LR"));
+        assert!(result.contains("node [shape=box"));
+
+        // Verify we have nodes and edges
+        assert!(result.contains("label=\"Task 1\""));
+        assert!(result.contains("label=\"Task 2\""));
+        assert!(result.contains("label=\"Task 3\""));
+        assert!(result.contains("->")); // Has edges
+        assert!(result.ends_with("}\n"));
+
+        // Count braces to verify structure
+        let open_braces = result.matches('{').count();
+        let close_braces = result.matches('}').count();
+        assert_eq!(open_braces, close_braces);
+    }
+
+    #[test]
+    fn test_export_dot_with_quotes_in_label() {
+        let task = create_test_task("Task with \"quotes\" in name");
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+
+        let mut buffer = Vec::new();
+        export_to_dot(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Quotes should be escaped
+        assert!(result.contains("\\\"quotes\\\""));
+    }
+
+    #[test]
+    fn test_export_dot_unicode() {
+        let task = create_test_task("会议 📅 Meeting");
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+
+        let mut buffer = Vec::new();
+        export_to_dot(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        assert!(result.contains("会议"));
+        assert!(result.contains("📅"));
+    }
+
+    #[test]
+    fn test_export_dot_all_statuses() {
+        let mut tasks = HashMap::new();
+
+        let statuses = [
+            ("Todo", TaskStatus::Todo),
+            ("InProgress", TaskStatus::InProgress),
+            ("Done", TaskStatus::Done),
+            ("Blocked", TaskStatus::Blocked),
+            ("Cancelled", TaskStatus::Cancelled),
+        ];
+
+        for (name, status) in statuses {
+            let mut task = create_test_task(name);
+            task.status = status;
+            tasks.insert(task.id, task);
+        }
+
+        let mut buffer = Vec::new();
+        export_to_dot(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // All status colors should be present
+        assert!(result.contains("#FFFFFF")); // Todo - white
+        assert!(result.contains("#FFD700")); // InProgress - gold
+        assert!(result.contains("#90EE90")); // Done - light green
+        assert!(result.contains("#FFB6C1")); // Blocked - light pink
+        assert!(result.contains("#D3D3D3")); // Cancelled - light gray
+    }
 }

@@ -217,4 +217,126 @@ mod tests {
         assert!(result.contains("T1["));
         assert!(result.contains("T2["));
     }
+
+    // ========================================================================
+    // Structure Verification and Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_export_mermaid_valid_flowchart_structure() {
+        let mut tasks = HashMap::new();
+
+        // Create a chain with dependencies
+        let task1 = create_test_task("Task 1");
+        let task1_id = task1.id;
+        tasks.insert(task1.id, task1);
+
+        let mut task2 = create_test_task("Task 2");
+        task2.next_task_id = Some(task1_id);
+        tasks.insert(task2.id, task2);
+
+        let mut task3 = create_test_task("Task 3");
+        task3.dependencies.push(task1_id);
+        tasks.insert(task3.id, task3);
+
+        let mut buffer = Vec::new();
+        export_to_mermaid(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Verify Mermaid structure
+        assert!(result.starts_with("```mermaid"));
+        assert!(result.contains("flowchart LR"));
+
+        // Style definitions
+        assert!(result.contains("classDef done"));
+        assert!(result.contains("classDef inprogress"));
+        assert!(result.contains("classDef blocked"));
+        assert!(result.contains("classDef todo"));
+
+        // Nodes and edges
+        assert!(result.contains("Task 1"));
+        assert!(result.contains("Task 2"));
+        assert!(result.contains("Task 3"));
+        assert!(result.contains("-->")); // Chain edge
+        assert!(result.contains("-.->|blocks|")); // Dependency edge
+
+        assert!(result.ends_with("```\n"));
+    }
+
+    #[test]
+    fn test_export_mermaid_special_characters_in_label() {
+        // Test characters that need escaping: quotes and brackets
+        let task = create_test_task("Task with \"quotes\" and [brackets]");
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+
+        let mut buffer = Vec::new();
+        export_to_mermaid(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Quotes become single quotes, brackets become parens
+        assert!(result.contains("'quotes'"));
+        assert!(result.contains("(brackets)"));
+    }
+
+    #[test]
+    fn test_export_mermaid_unicode() {
+        let task = create_test_task("会议 📅 Meeting");
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+
+        let mut buffer = Vec::new();
+        export_to_mermaid(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        assert!(result.contains("会议"));
+        assert!(result.contains("📅"));
+    }
+
+    #[test]
+    fn test_export_mermaid_all_statuses() {
+        let mut tasks = HashMap::new();
+
+        let statuses = [
+            ("Todo", TaskStatus::Todo, ":::todo"),
+            ("InProgress", TaskStatus::InProgress, ":::inprogress"),
+            ("Done", TaskStatus::Done, ":::done"),
+            ("Blocked", TaskStatus::Blocked, ":::blocked"),
+            ("Cancelled", TaskStatus::Cancelled, ":::cancelled"),
+        ];
+
+        for (name, status, _) in statuses {
+            let mut task = create_test_task(name);
+            task.status = status;
+            tasks.insert(task.id, task);
+        }
+
+        let mut buffer = Vec::new();
+        export_to_mermaid(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // All status classes should be applied
+        assert!(result.contains(":::todo"));
+        assert!(result.contains(":::inprogress"));
+        assert!(result.contains(":::done"));
+        assert!(result.contains(":::blocked"));
+        assert!(result.contains(":::cancelled"));
+    }
+
+    #[test]
+    fn test_export_mermaid_newlines_in_label() {
+        let task = create_test_task("Line1\nLine2");
+
+        let mut tasks = HashMap::new();
+        tasks.insert(task.id, task);
+
+        let mut buffer = Vec::new();
+        export_to_mermaid(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Newlines become spaces
+        assert!(result.contains("Line1 Line2"));
+    }
 }

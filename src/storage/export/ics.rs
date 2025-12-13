@@ -226,4 +226,86 @@ mod tests {
         assert!(result.ends_with("END:VCALENDAR\n"));
         assert!(!result.contains("BEGIN:VTODO"));
     }
+
+    // ========================================================================
+    // Special Character Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_export_ics_special_characters() {
+        // Task with semicolons, commas, backslashes, and newlines
+        // Note: Colons don't need escaping in ICS property values
+        let mut task = create_test_task("Meeting; with, special\\chars");
+        task.description = Some("Line1\nLine2\nLine3".to_string());
+
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_ics(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // ICS escaping: semicolon, comma, backslash, newlines
+        // Colons are NOT escaped in ICS as they're valid in property values
+        assert!(result.contains("Meeting\\; with\\, special\\\\chars"));
+        assert!(result.contains("Line1\\nLine2\\nLine3"));
+    }
+
+    #[test]
+    fn test_export_ics_unicode() {
+        let mut task = create_test_task("会议 📅 Meeting");
+        task.description = Some("日本語の説明".to_string());
+        task.tags = vec!["工作".to_string(), "日程".to_string()];
+
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_ics(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        assert!(result.contains("会议"));
+        assert!(result.contains("📅"));
+        assert!(result.contains("日本語の説明"));
+        // Tags with commas should be escaped
+        assert!(
+            result.contains("CATEGORIES:工作\\,日程") || result.contains("CATEGORIES:工作,日程")
+        );
+    }
+
+    #[test]
+    fn test_export_ics_combined_escaping() {
+        // Test all escape characters combined
+        assert_eq!(escape_ics("a\\b;c,d\ne"), "a\\\\b\\;c\\,d\\ne");
+    }
+
+    #[test]
+    fn test_export_ics_structure_validity() {
+        let mut task = create_test_task("Test");
+        task.due_date = Some(chrono::NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+        task.tags = vec!["tag1".to_string()];
+        task.description = Some("Description".to_string());
+
+        let tasks = vec![task];
+        let mut buffer = Vec::new();
+        export_to_ics(&tasks, &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+
+        // Verify ICS structure
+        assert!(result.starts_with("BEGIN:VCALENDAR"));
+        assert!(result.contains("VERSION:2.0"));
+        assert!(result.contains("BEGIN:VTODO"));
+        assert!(result.contains("UID:"));
+        assert!(result.contains("DTSTAMP:"));
+        assert!(result.contains("SUMMARY:"));
+        assert!(result.contains("STATUS:"));
+        assert!(result.contains("PRIORITY:"));
+        assert!(result.contains("PERCENT-COMPLETE:"));
+        assert!(result.contains("DUE;VALUE=DATE:20250615"));
+        assert!(result.contains("DESCRIPTION:"));
+        assert!(result.contains("CATEGORIES:"));
+        assert!(result.contains("END:VTODO"));
+        assert!(result.ends_with("END:VCALENDAR\n"));
+
+        // Every BEGIN should have matching END
+        let begin_count = result.matches("BEGIN:").count();
+        let end_count = result.matches("END:").count();
+        assert_eq!(begin_count, end_count);
+    }
 }

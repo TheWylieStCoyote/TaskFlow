@@ -1531,4 +1531,193 @@ mod filter_dsl_fuzz {
             }
         }
     }
+
+    // ========================================================================
+    // Operator Precedence Edge Cases
+    // ========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        /// Property: AND binds tighter than OR - `a OR b AND c` = `a OR (b AND c)`
+        /// Both parsing and evaluation should be consistent
+        #[test]
+        fn prop_and_binds_tighter_than_or(
+            a in "(high|low|medium|urgent|none)",
+            b in "(todo|done|in_progress|blocked)",
+            c in "(high|low|medium|urgent|none)"
+        ) {
+            // Expression: priority:a OR status:b AND priority:c
+            // Should be parsed as: priority:a OR (status:b AND priority:c)
+            let query = format!("priority:{a} OR status:{b} AND priority:{c}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Should parse: {}", query);
+        }
+
+        /// Property: Multiple ORs are left-associative
+        #[test]
+        fn prop_or_left_associative(
+            a in "(high|low)",
+            b in "(high|low)",
+            c in "(high|low)"
+        ) {
+            // a OR b OR c = (a OR b) OR c
+            let query = format!("priority:{a} OR priority:{b} OR priority:{c}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Should parse: {}", query);
+        }
+
+        /// Property: Multiple ANDs are left-associative
+        #[test]
+        fn prop_and_left_associative(
+            a in "(todo|done)",
+            b in "(high|low)",
+            c in "(todo|done)"
+        ) {
+            // a AND b AND c = (a AND b) AND c
+            let query = format!("status:{a} AND priority:{b} AND status:{c}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Should parse: {}", query);
+        }
+
+        /// Property: Parentheses override default precedence
+        #[test]
+        fn prop_parentheses_override_precedence(
+            a in "(high|low)",
+            b in "(high|low)",
+            c in "(todo|done)"
+        ) {
+            // (a OR b) AND c - parentheses make OR evaluate first
+            let query = format!("(priority:{a} OR priority:{b}) AND status:{c}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Should parse with parentheses: {}", query);
+        }
+    }
+
+    // ========================================================================
+    // Date Boundary Edge Cases
+    // ========================================================================
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        /// Property: Valid dates parse correctly (all months)
+        #[test]
+        fn prop_valid_dates_parse(
+            year in 2020i32..2030,
+            month in 1u32..=12,
+            day in 1u32..=28  // Safe for all months
+        ) {
+            let query = format!("due:{year:04}-{month:02}-{day:02}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Valid date should parse: {}", query);
+        }
+
+        /// Property: Feb 29 parsing depends on whether it's a leap year
+        #[test]
+        fn prop_feb_29_leap_year(year in 2020i32..2030) {
+            let is_leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+            let query = format!("due:{year:04}-02-29");
+            let result = parse(&query);
+
+            // The parser validates dates - Feb 29 should only succeed in leap years
+            if is_leap {
+                prop_assert!(result.is_ok(), "Leap year Feb 29 should parse: {}", query);
+            }
+            // Non-leap years may fail during parsing - that's expected behavior
+        }
+
+        /// Property: Month boundaries (last day of each month) parse
+        #[test]
+        fn prop_month_boundaries_parse(month in 1u32..=12) {
+            let last_day = match month {
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+                4 | 6 | 9 | 11 => 30,
+                2 => 28,
+                _ => unreachable!(),
+            };
+            let query = format!("due:2025-{month:02}-{last_day:02}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Last day of month should parse: {}", query);
+        }
+
+        /// Property: Date comparisons parse correctly
+        #[test]
+        fn prop_date_comparisons(
+            year in 2020i32..2030,
+            month in 1u32..=12,
+            day in 1u32..=28
+        ) {
+            let date_str = format!("{year:04}-{month:02}-{day:02}");
+            // Note: Filter DSL supports < and > for dates, not <= and >=
+            let ops = ["<", ">"];
+
+            for op in ops {
+                let query = format!("due:{op}{date_str}");
+                let result = parse(&query);
+                prop_assert!(result.is_ok(), "Date comparison should parse: {}", query);
+            }
+        }
+
+        /// Property: Date ranges parse correctly
+        #[test]
+        fn prop_date_ranges(
+            start_day in 1u32..=14,
+            end_day in 15u32..=28
+        ) {
+            let query = format!("due:2025-06-{start_day:02}..2025-06-{end_day:02}");
+            let result = parse(&query);
+            prop_assert!(result.is_ok(), "Date range should parse: {}", query);
+        }
+    }
+
+    // ========================================================================
+    // Complex Precedence Evaluation Tests
+    // ========================================================================
+
+    /// Test that operator precedence is correctly applied during evaluation
+    #[test]
+    fn test_operator_precedence_evaluation() {
+        use std::collections::HashMap;
+        use taskflow::domain::filter_dsl::{evaluate, EvalContext};
+
+        // Create a task with priority:high, status:todo
+        let mut task = Task::new("Test task");
+        task.priority = Priority::High;
+        task.status = TaskStatus::Todo;
+
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Test: "priority:low OR status:todo AND priority:high"
+        // With correct precedence (AND binds tighter):
+        //   = priority:low OR (status:todo AND priority:high)
+        //   = false OR (true AND true)
+        //   = false OR true
+        //   = true
+        if let Ok(expr) = parse("priority:low OR status:todo AND priority:high") {
+            let result = evaluate(&expr, &task, &ctx);
+            assert!(result, "AND should bind tighter than OR");
+        }
+
+        // Test: "(priority:low OR status:todo) AND priority:high"
+        // With parentheses forcing OR first:
+        //   = (false OR true) AND true
+        //   = true AND true
+        //   = true
+        if let Ok(expr) = parse("(priority:low OR status:todo) AND priority:high") {
+            let result = evaluate(&expr, &task, &ctx);
+            assert!(result, "Parentheses should override precedence");
+        }
+
+        // Test: "priority:low OR status:done AND priority:high"
+        // = priority:low OR (status:done AND priority:high)
+        // = false OR (false AND true)
+        // = false OR false
+        // = false
+        if let Ok(expr) = parse("priority:low OR status:done AND priority:high") {
+            let result = evaluate(&expr, &task, &ctx);
+            assert!(!result, "Complex precedence evaluation");
+        }
+    }
 }

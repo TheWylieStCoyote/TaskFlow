@@ -32,13 +32,20 @@ src/
 │   ├── macros.rs    # Keyboard macro recording
 │   ├── templates.rs # Task templates
 │   └── quick_add.rs # Natural language task parsing
-├── domain/          # Core business entities
-│   ├── task.rs      # Task entity
-│   ├── project.rs   # Project entity
-│   ├── time_entry.rs # Time tracking
-│   ├── work_log.rs  # Work log entries
-│   ├── filter.rs    # Filter criteria
-│   └── pomodoro.rs  # Pomodoro timer
+├── domain/          # Core business entities (see Domain Modules below)
+│   ├── task.rs      # Task entity with status, priority, recurrence
+│   ├── project.rs   # Project entity for task grouping
+│   ├── time_entry.rs # Time tracking entries
+│   ├── work_log.rs  # Journal-style work log entries
+│   ├── filter.rs    # Filter criteria types
+│   ├── filter_dsl/  # Advanced filter query language
+│   ├── pomodoro.rs  # Pomodoro timer with phases
+│   ├── goal.rs      # OKR goals with quarterly tracking
+│   ├── key_result.rs # Key results linked to goals
+│   ├── habit.rs     # Habit tracking with streaks
+│   ├── calendar_event.rs # ICS calendar events
+│   ├── analytics.rs # Productivity analytics
+│   └── tag.rs       # Tags with context support
 ├── ui/              # Terminal UI (Ratatui)
 │   ├── view.rs      # Main render function
 │   └── components/  # Reusable widgets
@@ -191,6 +198,31 @@ pub trait StorageBackend: Send + Sync {
 | YAML | `.yaml` | Human-readable |
 | SQLite | `.db` | Large datasets |
 | Markdown | `.md` files | Git-friendly |
+
+## Domain Modules
+
+The domain layer (`src/domain/`) contains core business entities. Each module includes comprehensive documentation with examples.
+
+| Module | Purpose | Key Types |
+|--------|---------|-----------|
+| `task.rs` | Task entity with status, priority, recurrence | `Task`, `TaskId`, `TaskStatus`, `Priority` |
+| `project.rs` | Project grouping for tasks | `Project`, `ProjectId` |
+| `tag.rs` | Tagging with GTD context support (`@home`, `@work`) | `Tag`, `is_context_tag()` |
+| `time_entry.rs` | Time tracking entries | `TimeEntry`, `TimeEntryId` |
+| `work_log.rs` | Journal-style work notes | `WorkLogEntry`, `WorkLogEntryId` |
+| `pomodoro.rs` | Pomodoro timer with work/break phases | `PomodoroSession`, `PomodoroConfig` |
+| `goal.rs` | OKR objectives with quarterly tracking | `Goal`, `GoalId`, `Quarter` |
+| `key_result.rs` | Measurable key results for goals | `KeyResult`, `KeyResultId` |
+| `habit.rs` | Habit tracking with streaks | `Habit`, `HabitFrequency` |
+| `calendar_event.rs` | ICS calendar event imports | `CalendarEvent`, `CalendarEventStatus` |
+| `analytics.rs` | Productivity analytics and reports | `CompletionTrend`, `VelocityMetrics` |
+| `filter_dsl/` | Advanced filter query language | `parse()`, `evaluate()`, `FilterExpr` |
+
+**Documentation Features:**
+- Module-level doc comments with usage examples
+- Workflow documentation (e.g., OKR workflow in `goal.rs`)
+- Cross-references between related types
+- Runnable doc tests for all examples
 
 ## Undo/Redo System
 

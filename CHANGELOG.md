@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Architecture Decision Records**: Documented key design decisions in ADR format
 - **View Documentation**: Expanded help text and keyboard shortcut hints
 - **CONTRIBUTING Guide**: Updated contribution guidelines
+- **Domain Module Docs**: Enhanced documentation for 6 key domain modules:
+  - `analytics.rs`: Type overview table, ReportConfig examples, cross-references
+  - `work_log.rs`: Usage patterns, TimeEntry comparison, query examples
+  - `calendar_event.rs`: ICS import mapping, enum status docs, multi-day events
+  - `goal.rs` / `key_result.rs`: OKR workflow, linked tasks, progress tracking
+  - `pomodoro.rs`: Session lifecycle, phase transitions, pause/resume
+  - `tag.rs`: Naming conventions, filter DSL integration
 
 ### Developer Experience
 

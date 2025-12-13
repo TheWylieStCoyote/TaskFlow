@@ -4,6 +4,54 @@
 //! date ranges. They contain Key Results that measure progress toward
 //! the objective.
 //!
+//! # OKR Workflow
+//!
+//! Goals and Key Results work together following the OKR (Objectives and
+//! Key Results) methodology:
+//!
+//! 1. **Create a Goal** - The high-level objective you want to achieve
+//! 2. **Add Key Results** - Measurable outcomes that indicate success
+//! 3. **Track Progress** - Update key result values as work progresses
+//! 4. **Review** - Assess goal completion based on key result progress
+//!
+//! ```
+//! use taskflow::domain::{Goal, KeyResult, Quarter, GoalId};
+//!
+//! // 1. Create a quarterly goal
+//! let goal = Goal::new("Improve customer satisfaction")
+//!     .with_quarter(2025, Quarter::Q1)
+//!     .with_description("Focus on support quality and response times");
+//! let goal_id = goal.id;
+//!
+//! // 2. Add measurable key results
+//! let kr1 = KeyResult::new(goal_id, "Increase NPS score")
+//!     .with_target(50.0, Some("points"));
+//!
+//! let kr2 = KeyResult::new(goal_id, "Reduce response time")
+//!     .with_target(4.0, Some("hours"));
+//!
+//! // 3. Track progress by updating current values
+//! let mut kr1 = kr1.with_current_value(42.0); // 84% complete
+//! let mut kr2 = kr2.with_current_value(3.0);  // 75% complete (lower is better here)
+//!
+//! // 4. Calculate overall progress
+//! let avg_progress = (kr1.progress_percent() + kr2.progress_percent()) / 2;
+//! ```
+//!
+//! See [`crate::domain::KeyResult`] for key result tracking details.
+//!
+//! # Quarter-based Planning
+//!
+//! Goals commonly align with fiscal quarters. Use [`Quarter`] for standard
+//! Q1-Q4 timeframes:
+//!
+//! ```
+//! use taskflow::domain::{Goal, Quarter};
+//!
+//! let q1_goal = Goal::new("Q1 Revenue Target").with_quarter(2025, Quarter::Q1);
+//! assert_eq!(q1_goal.formatted_timeframe(), "Q1 2025");
+//! ```
+//!
 //! # Examples
 //!
 //! ```

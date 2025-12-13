@@ -3,18 +3,56 @@
 //! This module provides data structures for analyzing task completion trends,
 //! velocity metrics, burndown charts, and productivity insights.
 //!
-//! # Example
+//! # Available Analytics Types
 //!
-//! ```rust
-//! use taskflow::domain::analytics::{TimeSeriesPoint, CompletionTrend, VelocityMetrics};
+//! | Type | Purpose |
+//! |------|---------|
+//! | [`CompletionTrend`] | Daily completion/creation rates |
+//! | [`VelocityMetrics`] | Weekly productivity tracking |
+//! | [`BurnChart`] | Sprint/goal progress visualization |
+//! | [`TimeAnalytics`] | Time spent analysis by category |
+//! | [`ProductivityInsights`] | Peak hours, days, patterns |
+//! | [`StatusBreakdown`] | Task counts by status |
+//! | [`PriorityBreakdown`] | Task counts by priority |
+//! | [`ReportConfig`] | Configures date ranges for reports |
+//! | [`EstimationAnalytics`] | Estimation accuracy tracking |
+//!
+//! # Report Configuration
+//!
+//! Use [`ReportConfig`] to define the time range for analytics:
+//!
+//! ```
+//! use taskflow::domain::analytics::ReportConfig;
 //! use chrono::NaiveDate;
 //!
-//! // Create a time series point
-//! let point = TimeSeriesPoint {
-//!     date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-//!     value: 5.0,
-//! };
+//! // Last 30 days
+//! let config = ReportConfig::last_n_days(30);
+//!
+//! // Specific date range
+//! let start = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+//! let end = NaiveDate::from_ymd_opt(2025, 1, 31).unwrap();
+//! let config = ReportConfig::custom(start, end);
 //! ```
+//!
+//! # Time Series Data
+//!
+//! Many analytics types use [`TimeSeriesPoint`] for historical data:
+//!
+//! ```
+//! use taskflow::domain::analytics::TimeSeriesPoint;
+//! use chrono::NaiveDate;
+//!
+//! let point = TimeSeriesPoint::new(
+//!     NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
+//!     5.0,  // e.g., 5 tasks completed that day
+//! );
+//! ```
+//!
+//! # Cross-References
+//!
+//! - [`CompletionTrend`] feeds into [`VelocityMetrics`] for weekly summaries
+//! - [`BurnChart`] uses completion data to project remaining work
+//! - [`ProductivityInsights`] analyzes when you're most effective
 
 use chrono::{Datelike, NaiveDate, Weekday};
 use std::collections::HashMap;

@@ -5,16 +5,96 @@
 //! - Short breaks (default 5 minutes)
 //! - Long breaks after a configurable number of cycles (default 4)
 //!
-//! ## Example
+//! # Session Lifecycle
+//!
+//! A typical Pomodoro session follows this flow:
+//!
+//! ```text
+//! Start → Work (25m) → Short Break (5m) → Work → Short Break → ... → Long Break (15m)
+//!         └─ can pause/resume at any time ─┘
+//! ```
+//!
+//! ## Creating and Running a Session
 //!
 //! ```
 //! use taskflow::domain::{PomodoroConfig, PomodoroSession, PomodoroPhase, TaskId};
+//!
+//! let config = PomodoroConfig::default();
+//! let task_id = TaskId::new();
+//!
+//! // Start a session with a goal of 4 work cycles
+//! let mut session = PomodoroSession::new(task_id, &config, 4);
+//! assert_eq!(session.phase, PomodoroPhase::Work);
+//! assert_eq!(session.formatted_remaining(), "25:00");
+//!
+//! // Check progress (0.0 to 1.0)
+//! let progress = session.progress(&config);
+//! assert!(progress >= 0.0 && progress <= 1.0);
+//! ```
+//!
+//! ## Pause and Resume
+//!
+//! Sessions can be paused when interrupted:
+//!
+//! ```
+//! use taskflow::domain::{PomodoroConfig, PomodoroSession, TaskId};
+//! use chrono::Utc;
+//!
+//! let config = PomodoroConfig::default();
+//! let mut session = PomodoroSession::new(TaskId::new(), &config, 4);
+//!
+//! // Pause when interrupted
+//! session.paused = true;
+//! session.paused_at = Some(Utc::now());
+//! assert!(session.paused);
+//!
+//! // Resume when ready
+//! session.paused = false;
+//! session.paused_at = None;
+//! assert!(!session.paused);
+//! ```
+//!
+//! ## Time Recalculation
+//!
+//! When restoring a session (e.g., after app restart), call [`PomodoroSession::recalculate_remaining_time`]
+//! to account for elapsed time:
+//!
+//! ```ignore
+//! // After deserializing a saved session
+//! session.recalculate_remaining_time(&config);
+//! ```
+//!
+//! This method:
+//! 1. Calculates elapsed time since the phase started
+//! 2. Subtracts total pause duration
+//! 3. Updates `remaining_secs` accordingly
+//!
+//! # Phase Transitions
+//!
+//! After each phase completes, the session transitions:
+//!
+//! | Current Phase | Next Phase | Condition |
+//! |---------------|------------|-----------|
+//! | Work | Short Break | cycles < `cycles_before_long_break` |
+//! | Work | Long Break | cycles >= `cycles_before_long_break` |
+//! | Short Break | Work | always |
+//! | Long Break | Work | resets cycle counter |
+//!
+//! # Configuration
+//!
+//! ```
+//! use taskflow::domain::PomodoroConfig;
 //!
 //! let config = PomodoroConfig::default();
 //! assert_eq!(config.work_duration_mins, 25);
 //! assert_eq!(config.short_break_mins, 5);
 //! assert_eq!(config.long_break_mins, 15);
 //! assert_eq!(config.cycles_before_long_break, 4);
+//!
+//! // Customize durations
+//! let custom = PomodoroConfig::default()
+//!     .with_work_duration(50)      // 50-minute work sessions
+//!     .with_short_break(10);       // 10-minute breaks
 //! ```
 
 use chrono::{DateTime, NaiveDate, Utc};

@@ -3,6 +3,63 @@
 //! Key Results are specific, measurable outcomes that indicate progress
 //! toward a Goal. They can track numeric targets or link to tasks/projects.
 //!
+//! # Tracking Methods
+//!
+//! Key Results support two tracking approaches:
+//!
+//! ## Numeric Targets
+//!
+//! Track progress toward a measurable number (revenue, users, score):
+//!
+//! ```
+//! use taskflow::domain::{KeyResult, GoalId};
+//!
+//! let kr = KeyResult::new(GoalId::new(), "Acquire 1000 users")
+//!     .with_target(1000.0, Some("users"))
+//!     .with_current_value(450.0);
+//!
+//! assert_eq!(kr.progress_percent(), 45); // 450/1000 = 45%
+//! ```
+//!
+//! ## Linked Tasks/Projects
+//!
+//! Track progress based on task or project completion:
+//!
+//! ```
+//! use taskflow::domain::{KeyResult, GoalId, TaskId};
+//!
+//! let goal_id = GoalId::new();
+//! let mut kr = KeyResult::new(goal_id, "Complete migration tasks");
+//!
+//! // Link tasks to this key result
+//! kr.linked_task_ids.push(TaskId::new());
+//! kr.linked_task_ids.push(TaskId::new());
+//! kr.linked_task_ids.push(TaskId::new());
+//!
+//! // Progress is calculated from linked task completion
+//! // When 2 of 3 tasks are done → 66.7% progress
+//! // (Requires calling calculate_progress_from_tasks() to update)
+//! ```
+//!
+//! # When to Use Each Approach
+//!
+//! | Use Case | Approach |
+//! |----------|----------|
+//! | Revenue, users, NPS scores | Numeric target |
+//! | Completing a set of tasks | Linked tasks |
+//! | Shipping a project | Linked project |
+//! | Abstract goals (culture, learning) | Numeric with % target |
+//!
+//! # Status Transitions
+//!
+//! Key result status updates automatically based on progress:
+//! - **NotStarted**: `current_value == 0`
+//! - **InProgress**: `0 < progress < 100%`
+//! - **Completed**: `progress >= 100%`
+//! - **AtRisk**: Set manually when behind schedule
+//!
+//! See [`crate::domain::Goal`] for the parent goal entity.
+//!
 //! # Examples
 //!
 //! ```

@@ -2,6 +2,43 @@
 //!
 //! Work log entries record notes, updates, and progress information
 //! for individual tasks over time, similar to commit history.
+//!
+//! # Usage Pattern
+//!
+//! Work logs are designed for journaling progress on tasks. Unlike [`TimeEntry`]
+//! which tracks time spent, work logs capture *what* was done in text form.
+//!
+//! ```
+//! use taskflow::domain::{Task, WorkLogEntry};
+//!
+//! // Create a task and log work on it
+//! let task = Task::new("Implement search feature");
+//!
+//! // Log initial research
+//! let entry1 = WorkLogEntry::new(task.id, "Researched full-text search options:\n- Tantivy (Rust native)\n- MeiliSearch\n- SQLite FTS5");
+//!
+//! // Log implementation progress
+//! let entry2 = WorkLogEntry::new(task.id, "Implemented basic search with SQLite FTS5.\nStill need to add highlighting.");
+//!
+//! // Get a quick summary for list views
+//! assert_eq!(entry1.summary(), "Researched full-text search options:");
+//!
+//! // Show relative time in UI
+//! println!("Logged {}", entry1.relative_time()); // "just now", "2 hours ago", etc.
+//! ```
+//!
+//! # Querying Work Logs
+//!
+//! Work logs are typically queried by task ID to show a task's history:
+//!
+//! ```ignore
+//! // In the app model, work logs are stored in a HashMap:
+//! let logs_for_task: Vec<_> = model.work_logs.values()
+//!     .filter(|log| log.task_id == task_id)
+//!     .collect();
+//! ```
+//!
+//! [`TimeEntry`]: crate::domain::TimeEntry
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

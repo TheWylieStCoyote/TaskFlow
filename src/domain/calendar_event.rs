@@ -4,6 +4,56 @@
 //! calendar applications via ICS files. Unlike tasks, events are display-only
 //! and represent fixed appointments rather than actionable items.
 //!
+//! # ICS Import
+//!
+//! Events are typically imported from `.ics` files exported from calendar
+//! applications like Google Calendar, Outlook, or Apple Calendar. The import
+//! process maps ICS properties to event fields:
+//!
+//! | ICS Property | Event Field |
+//! |--------------|-------------|
+//! | `SUMMARY` | `title` |
+//! | `DESCRIPTION` | `description` |
+//! | `LOCATION` | `location` |
+//! | `DTSTART` | `start` |
+//! | `DTEND` | `end` |
+//! | `STATUS` | `status` |
+//! | `UID` | `uid` |
+//!
+//! # Querying Events
+//!
+//! Find events occurring on a specific date:
+//!
+//! ```
+//! use taskflow::domain::CalendarEvent;
+//! use chrono::{NaiveDate, Utc, TimeZone};
+//!
+//! let start = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
+//! let event = CalendarEvent::new("Meeting").with_start(start);
+//!
+//! let query_date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+//! assert!(event.occurs_on(query_date));
+//! ```
+//!
+//! # Multi-day Events
+//!
+//! Events can span multiple days (conferences, vacations, etc.):
+//!
+//! ```
+//! use taskflow::domain::CalendarEvent;
+//! use chrono::{NaiveDate, Utc, TimeZone};
+//!
+//! let start = Utc.with_ymd_and_hms(2025, 1, 15, 9, 0, 0).unwrap();
+//! let end = Utc.with_ymd_and_hms(2025, 1, 17, 17, 0, 0).unwrap();
+//!
+//! let conference = CalendarEvent::new("Annual Conference")
+//!     .with_start(start)
+//!     .with_end(end);
+//!
+//! assert!(conference.is_multi_day());
+//! assert!(conference.occurs_on(NaiveDate::from_ymd_opt(2025, 1, 16).unwrap()));
+//! ```
+//!
 //! # Examples
 //!
 //! ```
@@ -47,15 +97,32 @@ impl std::fmt::Display for CalendarEventId {
 }
 
 /// Status of a calendar event (from ICS STATUS property).
+///
+/// # Status Meanings
+///
+/// - **Tentative**: Event is proposed but not yet confirmed. Common for
+///   meeting invitations awaiting RSVP.
+/// - **Confirmed**: Event is definitely happening. This is the default
+///   status for most imported events.
+/// - **Cancelled**: Event was scheduled but has been cancelled. Cancelled
+///   events are typically hidden from the main calendar view but kept
+///   for historical reference.
+///
+/// # ICS Mapping
+///
+/// The STATUS property in ICS files maps directly:
+/// - `STATUS:TENTATIVE` → [`Tentative`](Self::Tentative)
+/// - `STATUS:CONFIRMED` → [`Confirmed`](Self::Confirmed)
+/// - `STATUS:CANCELLED` → [`Cancelled`](Self::Cancelled)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CalendarEventStatus {
-    /// Event is tentative/unconfirmed.
+    /// Event is tentative/unconfirmed (awaiting RSVP).
     Tentative,
-    /// Event is confirmed (default).
+    /// Event is confirmed and will occur (default).
     #[default]
     Confirmed,
-    /// Event was cancelled.
+    /// Event was cancelled (kept for history).
     Cancelled,
 }
 

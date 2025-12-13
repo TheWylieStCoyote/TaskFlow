@@ -9,6 +9,39 @@
 //! Tags starting with `@` are treated as context tags (GTD-style), representing
 //! where or when a task can be done: `@home`, `@work`, `@errands`, `@phone`.
 //!
+//! # Tag Conventions
+//!
+//! ## Naming
+//! - Use lowercase with hyphens: `high-priority`, `needs-review`
+//! - Context tags start with `@`: `@home`, `@office`, `@errands`
+//! - Project prefixes can help organization: `proj:website`, `area:finance`
+//!
+//! ## Common Patterns
+//! - **Priority**: `urgent`, `important`, `low-priority`
+//! - **Status**: `blocked`, `waiting-on`, `needs-review`
+//! - **Type**: `bug`, `feature`, `docs`, `refactor`
+//! - **Context**: `@home`, `@work`, `@phone`, `@computer`
+//!
+//! # Filtering with Tags
+//!
+//! Tags integrate with the filter DSL for powerful querying:
+//!
+//! ```
+//! use taskflow::domain::filter_dsl::parse;
+//!
+//! // Find tasks with a specific tag
+//! let filter = parse("tag:urgent").unwrap();
+//!
+//! // Combine with other filters
+//! let filter = parse("tag:urgent AND status:todo").unwrap();
+//!
+//! // Multiple tags (OR logic)
+//! let filter = parse("tag:bug OR tag:feature").unwrap();
+//! ```
+//!
+//! Note: Context tags (starting with `@`) are identified using [`is_context_tag`]
+//! and can be filtered via the UI's context selector.
+//!
 //! # Examples
 //!
 //! ```

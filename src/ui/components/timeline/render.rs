@@ -203,12 +203,17 @@ impl Timeline<'_> {
             let y = inner.y + row_idx as u16;
             let is_selected = (row_idx + scroll_offset) == state.selected_task_index;
 
-            // Task label (truncated)
+            // Task label (truncated), with optional time prefix
             let max_label = (LABEL_WIDTH - 2) as usize;
-            let label = if task.title.len() > max_label {
-                format!("{}...", &task.title[..max_label - 3])
+            let display_text = if let Some(time_str) = task.scheduled_time_display() {
+                format!("{} {}", time_str, task.title)
             } else {
-                format!("{:<width$}", task.title, width = max_label)
+                task.title.clone()
+            };
+            let label = if display_text.len() > max_label {
+                format!("{}...", &display_text[..max_label - 3])
+            } else {
+                format!("{display_text:<max_label$}")
             };
 
             let label_style = if is_selected {

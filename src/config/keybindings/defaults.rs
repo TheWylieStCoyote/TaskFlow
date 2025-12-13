@@ -33,6 +33,7 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("e".to_string(), Action::EditTask);
     bindings.insert("D".to_string(), Action::EditDueDate);
     bindings.insert("S".to_string(), Action::EditScheduledDate);
+    bindings.insert("alt+s".to_string(), Action::EditScheduledTime);
     bindings.insert("T".to_string(), Action::EditTags);
     bindings.insert("n".to_string(), Action::EditDescription);
     bindings.insert("N".to_string(), Action::EditDescriptionMultiline);

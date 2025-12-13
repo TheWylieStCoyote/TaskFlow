@@ -25,10 +25,10 @@ expression: output
 │[         Reschedule to next week                                             │
 │]         Reschedule to tomorrow                                              │
 │a         Create task                                                         │
+│Alt+s     Edit scheduled time block                                           │
 │Ctrl+↓    Move task down                                                      │
 │Ctrl+↑    Move task up                                                        │
 │d         Delete task                                                         │
 │e         Edit task title                                                     │
 │i         Show task details                                                   │
-│m         Move to project                                                     │
 └──────────────────────────────────────────────────────────────────────────────┘

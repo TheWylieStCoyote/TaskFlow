@@ -6,6 +6,7 @@
 //! - Import/export operations
 
 use crate::app::{Model, RunningState, SystemMessage, UndoAction};
+use crate::domain::plural_s;
 use crate::ui::{InputMode, InputTarget};
 
 /// Handle system messages
@@ -536,13 +537,9 @@ pub fn handle_execute_import(model: &mut Model) {
     // Build descriptive message
     let items_part = match (task_count, event_count) {
         (0, 0) => String::new(),
-        (t, 0) => format!("{t} task{}", if t == 1 { "" } else { "s" }),
-        (0, e) => format!("{e} event{}", if e == 1 { "" } else { "s" }),
-        (t, e) => format!(
-            "{t} task{}, {e} event{}",
-            if t == 1 { "" } else { "s" },
-            if e == 1 { "" } else { "s" }
-        ),
+        (t, 0) => format!("{t} task{}", plural_s(t)),
+        (0, e) => format!("{e} event{}", plural_s(e)),
+        (t, e) => format!("{t} task{}, {e} event{}", plural_s(t), plural_s(e)),
     };
 
     model.alerts.status_message = Some(format!(
@@ -573,12 +570,12 @@ fn handle_confirm_import(model: &mut Model) {
         // Update status message based on what was imported
         let message = match (task_count, event_count) {
             (0, 0) => "No items imported".to_string(),
-            (t, 0) => format!("Imported {t} task{}", if t == 1 { "" } else { "s" }),
-            (0, e) => format!("Imported {e} event{}", if e == 1 { "" } else { "s" }),
+            (t, 0) => format!("Imported {t} task{}", plural_s(t)),
+            (0, e) => format!("Imported {e} event{}", plural_s(e)),
             (t, e) => format!(
                 "Imported {t} task{} and {e} event{}",
-                if t == 1 { "" } else { "s" },
-                if e == 1 { "" } else { "s" }
+                plural_s(t),
+                plural_s(e)
             ),
         };
         model.alerts.status_message = Some(message);
@@ -654,6 +651,6 @@ fn handle_check_merged_branches(model: &mut Model) {
     model.refresh_visible_tasks();
     model.alerts.status_message = Some(format!(
         "Auto-completed {completed_count} task{} (merged branches)",
-        if completed_count == 1 { "" } else { "s" }
+        plural_s(completed_count)
     ));
 }

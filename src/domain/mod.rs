@@ -146,3 +146,25 @@ pub use tag::*;
 pub use task::*;
 pub use time_entry::*;
 pub use work_log::*;
+
+/// Returns "s" for plural counts, "" for singular.
+///
+/// Useful for constructing messages like "1 task" vs "2 tasks".
+///
+/// # Examples
+///
+/// ```
+/// use taskflow::domain::plural_s;
+///
+/// assert_eq!(format!("1 task{}", plural_s(1)), "1 task");
+/// assert_eq!(format!("2 task{}", plural_s(2)), "2 tasks");
+/// assert_eq!(format!("0 task{}", plural_s(0)), "0 tasks");
+/// ```
+#[must_use]
+pub const fn plural_s(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
+    }
+}

@@ -16,6 +16,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::plural_s;
 
 /// Duplicates view widget showing potential duplicate task pairs
 pub struct Duplicates<'a> {
@@ -45,7 +46,7 @@ impl<'a> Duplicates<'a> {
             Span::styled(
                 format!(
                     "potential duplicate pair{} found (threshold: {threshold:.0}%)",
-                    if pair_count == 1 { "" } else { "s" }
+                    plural_s(pair_count)
                 ),
                 Style::default().fg(self.theme.colors.foreground.to_color()),
             ),

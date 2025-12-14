@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::config::Theme;
+use crate::domain::plural_s;
 use crate::ui::primitives::{danger_block, warning_block};
 
 /// Overdue tasks alert popup shown at startup
@@ -34,7 +35,7 @@ impl Widget for OverdueAlert<'_> {
         let mut lines = vec![format!(
             "You have {} overdue task{}!\n",
             self.count,
-            if self.count == 1 { "" } else { "s" }
+            plural_s(self.count)
         )];
 
         // Show up to 5 task titles

@@ -153,18 +153,14 @@ impl Model {
     /// Tasks within each project follow the current sort order.
     #[must_use]
     pub fn get_tasks_grouped_by_project(&self) -> Vec<(Option<ProjectId>, String, Vec<TaskId>)> {
-        // Group visible tasks by project_id using a Vec to preserve order
-        let mut grouped: Vec<(Option<ProjectId>, Vec<TaskId>)> = Vec::new();
+        use std::collections::HashMap;
+
+        // Group visible tasks by project_id using HashMap for O(1) lookup
+        let mut grouped: HashMap<Option<ProjectId>, Vec<TaskId>> = HashMap::new();
 
         for task_id in &self.visible_tasks {
             if let Some(task) = self.tasks.get(task_id) {
-                let project_id = task.project_id;
-                // Find existing group or create new one
-                if let Some(group) = grouped.iter_mut().find(|(pid, _)| *pid == project_id) {
-                    group.1.push(*task_id);
-                } else {
-                    grouped.push((project_id, vec![*task_id]));
-                }
+                grouped.entry(task.project_id).or_default().push(*task_id);
             }
         }
 

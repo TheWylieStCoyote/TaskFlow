@@ -17,7 +17,9 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
             model.running = RunningState::Quitting;
         }
         SystemMessage::Save => {
-            let _ = model.save();
+            if let Err(e) = model.save() {
+                model.alerts.error_message = Some(format!("Save failed: {e}"));
+            }
         }
         SystemMessage::Undo => {
             handle_undo(model);

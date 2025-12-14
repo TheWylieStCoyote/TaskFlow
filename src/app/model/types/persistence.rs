@@ -15,6 +15,8 @@ pub struct StorageState {
     pub data_path: Option<PathBuf>,
     /// Whether there are unsaved changes
     pub dirty: bool,
+    /// Whether the model is in sample/demo data mode (no persistence)
+    pub sample_data_mode: bool,
 }
 
 impl std::fmt::Debug for StorageState {
@@ -26,6 +28,7 @@ impl std::fmt::Debug for StorageState {
             )
             .field("data_path", &self.data_path)
             .field("dirty", &self.dirty)
+            .field("sample_data_mode", &self.sample_data_mode)
             .finish()
     }
 }
@@ -37,6 +40,7 @@ impl Clone for StorageState {
             backend: None,
             data_path: self.data_path.clone(),
             dirty: self.dirty,
+            sample_data_mode: self.sample_data_mode,
         }
     }
 }
@@ -116,11 +120,13 @@ mod tests {
             backend: None,
             data_path: Some(PathBuf::from("/tmp/test")),
             dirty: true,
+            sample_data_mode: true,
         };
 
         let cloned = state.clone();
         assert!(cloned.backend.is_none()); // Backend doesn't clone
         assert_eq!(cloned.data_path, Some(PathBuf::from("/tmp/test")));
         assert!(cloned.dirty);
+        assert!(cloned.sample_data_mode);
     }
 }

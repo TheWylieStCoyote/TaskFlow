@@ -12,7 +12,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tracing::{debug, error, info, warn};
 
 use taskflow::app::{update, Message, Model, PomodoroMessage, RunningState, SystemMessage};
-use taskflow::config::{Keybindings, Settings, Theme};
+use taskflow::config::{FirstRunMode, Keybindings, Settings, Theme};
 use taskflow::storage::BackendType;
 use taskflow::ui::view;
 
@@ -21,7 +21,10 @@ use crate::input::handle_key_event;
 
 /// Run the TUI application
 pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
-    // Load settings from config file
+    // Check if config file exists before loading (for later prompt)
+    let config_existed = Settings::config_exists();
+
+    // Load settings from config file (uses defaults if missing)
     let settings = Settings::load();
     debug!("Settings loaded from config file");
 
@@ -41,13 +44,21 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
         debug!("Using demo/sample data");
         Model::new().with_sample_data()
     } else {
-        // Try to load from storage, fall back to sample data on error
+        // Try to load from storage
         match Model::new().with_storage(backend_type, data_path.clone()) {
             Ok(m) => {
                 if m.tasks.is_empty() {
-                    debug!("No tasks found, loading sample data");
-                    // No tasks loaded, use sample data
-                    m.with_sample_data()
+                    // Check first_run_mode setting to decide what to do
+                    match settings.first_run_mode {
+                        FirstRunMode::Demo => {
+                            debug!("No tasks found, loading sample data (first_run_mode=demo)");
+                            m.with_sample_data()
+                        }
+                        FirstRunMode::Empty => {
+                            info!("No tasks found, starting with empty database (first_run_mode=empty)");
+                            m
+                        }
+                    }
                 } else {
                     info!(
                         task_count = m.tasks.len(),
@@ -61,10 +72,21 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
                 // Set error state so TUI can show alert to user
                 warn!(error = %e, path = %data_path.display(), "Failed to load data");
                 let error_msg = format!("{}: {e}", data_path.display());
-                let mut m = Model::new().with_sample_data();
-                m.alerts.storage_error = Some(error_msg);
-                m.alerts.show_storage_error = true;
-                m
+                // On error, respect first_run_mode setting
+                match settings.first_run_mode {
+                    FirstRunMode::Demo => {
+                        let mut m = Model::new().with_sample_data();
+                        m.alerts.storage_error = Some(error_msg);
+                        m.alerts.show_storage_error = true;
+                        m
+                    }
+                    FirstRunMode::Empty => {
+                        let mut m = Model::new();
+                        m.alerts.storage_error = Some(error_msg);
+                        m.alerts.show_storage_error = true;
+                        m
+                    }
+                }
             }
         }
     };
@@ -77,6 +99,11 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
 
     // Check for overdue tasks and show alert at startup
     model.check_overdue_alert();
+
+    // Prompt to generate config file if it didn't exist at startup
+    if !config_existed {
+        model.show_generate_config_prompt = true;
+    }
 
     // Load keybindings and theme
     let keybindings = Keybindings::load();
@@ -92,8 +119,8 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Run the app
     let result = run_app(&mut terminal, &mut model, &keybindings, &settings, &theme);
 
-    // Save before exit if storage is configured
-    if model.has_storage() && model.storage.dirty {
+    // Save before exit if storage is configured and not in sample data mode
+    if model.has_storage() && !model.storage.sample_data_mode && model.storage.dirty {
         debug!("Saving data before exit");
         if let Err(e) = model.save() {
             warn!(error = %e, "Could not save data on exit");
@@ -151,9 +178,13 @@ fn run_app(
             break;
         }
 
-        // Auto-save if interval has passed and there are unsaved changes
+        // Auto-save if interval has passed and there are unsaved changes (skip in sample data mode)
         if let Some(interval) = auto_save_interval {
-            if model.storage.dirty && model.has_storage() && last_save.elapsed() >= interval {
+            if model.storage.dirty
+                && model.has_storage()
+                && !model.storage.sample_data_mode
+                && last_save.elapsed() >= interval
+            {
                 if let Err(e) = model.save() {
                     model.alerts.error_message = Some(format!("Auto-save failed: {e}"));
                 }

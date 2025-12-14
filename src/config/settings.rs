@@ -27,6 +27,29 @@ use tracing::warn;
 use crate::domain::Priority;
 use crate::storage::BackendType;
 
+/// What to show when the database is empty on first run
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FirstRunMode {
+    /// Load sample/demo data for new users to explore
+    #[default]
+    Demo,
+    /// Start with an empty database
+    Empty,
+}
+
+impl FirstRunMode {
+    /// Parse a string into a FirstRunMode
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "demo" | "sample" => Some(Self::Demo),
+            "empty" | "blank" => Some(Self::Empty),
+            _ => None,
+        }
+    }
+}
+
 /// Main application settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -51,6 +74,9 @@ pub struct Settings {
 
     /// Default priority for new tasks
     pub default_priority: String,
+
+    /// What to show when database is empty on first run
+    pub first_run_mode: FirstRunMode,
 }
 
 impl Default for Settings {
@@ -63,6 +89,7 @@ impl Default for Settings {
             show_completed: false,
             auto_save_interval: 300, // 5 minutes
             default_priority: "none".to_string(),
+            first_run_mode: FirstRunMode::default(),
         }
     }
 }
@@ -79,6 +106,12 @@ pub enum SettingsError {
 }
 
 impl Settings {
+    /// Check if the config file exists.
+    #[must_use]
+    pub fn config_exists() -> bool {
+        Self::config_path().exists()
+    }
+
     /// Load settings from the default config path.
     ///
     /// Returns default settings if the config file doesn't exist or can't be parsed.
@@ -214,6 +247,23 @@ mod tests {
         assert!(!settings.show_completed);
         assert_eq!(settings.auto_save_interval, 300);
         assert_eq!(settings.default_priority, "none");
+        assert_eq!(settings.first_run_mode, FirstRunMode::Demo);
+    }
+
+    #[test]
+    fn test_first_run_mode_parse() {
+        assert_eq!(FirstRunMode::parse("demo"), Some(FirstRunMode::Demo));
+        assert_eq!(FirstRunMode::parse("sample"), Some(FirstRunMode::Demo));
+        assert_eq!(FirstRunMode::parse("empty"), Some(FirstRunMode::Empty));
+        assert_eq!(FirstRunMode::parse("blank"), Some(FirstRunMode::Empty));
+        assert_eq!(FirstRunMode::parse("DEMO"), Some(FirstRunMode::Demo));
+        assert_eq!(FirstRunMode::parse("EMPTY"), Some(FirstRunMode::Empty));
+        assert_eq!(FirstRunMode::parse("invalid"), None);
+    }
+
+    #[test]
+    fn test_first_run_mode_default() {
+        assert_eq!(FirstRunMode::default(), FirstRunMode::Demo);
     }
 
     #[test]

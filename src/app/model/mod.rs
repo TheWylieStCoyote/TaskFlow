@@ -231,6 +231,8 @@ pub struct Model {
     pub input: InputState,
     /// Whether delete confirmation dialog is showing
     pub show_confirm_delete: bool,
+    /// Whether config file generation prompt is showing
+    pub show_generate_config_prompt: bool,
 
     // Multi-select state for bulk operations
     /// Multi-select state (mode, selected tasks)
@@ -424,6 +426,7 @@ impl Model {
             selected_project: None,
             input: InputState::default(),
             show_confirm_delete: false,
+            show_generate_config_prompt: false,
             multi_select: MultiSelectState::default(),
             storage: StorageState::default(),
             default_priority: Priority::default(),

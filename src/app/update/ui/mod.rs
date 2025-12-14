@@ -86,6 +86,7 @@ mod views;
 use std::fmt::Write as _;
 
 use crate::app::{Model, UiMessage, UndoAction};
+use crate::config::Settings;
 use crate::ui::{InputMode, InputTarget};
 
 use calendar::handle_ui_calendar;
@@ -477,6 +478,24 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::ShowDeleteConfirm => delete::show_delete_confirm(model),
         UiMessage::ConfirmDelete => delete::confirm_delete(model),
         UiMessage::CancelDelete => delete::cancel_delete(model),
+        // Config file generation prompt
+        UiMessage::ShowGenerateConfigPrompt => {
+            model.show_generate_config_prompt = true;
+        }
+        UiMessage::ConfirmGenerateConfig => {
+            if let Err(e) = Settings::default().save() {
+                model.alerts.error_message = Some(format!("Failed to create config: {e}"));
+            } else {
+                model.alerts.status_message = Some(format!(
+                    "Config created: {}",
+                    Settings::config_path().display()
+                ));
+            }
+            model.show_generate_config_prompt = false;
+        }
+        UiMessage::CancelGenerateConfig => {
+            model.show_generate_config_prompt = false;
+        }
         // Multi-select / Bulk operations - delegated to helper
         UiMessage::ToggleMultiSelect => multi_select::toggle_multi_select(model),
         UiMessage::ToggleTaskSelection => multi_select::toggle_task_selection(model),

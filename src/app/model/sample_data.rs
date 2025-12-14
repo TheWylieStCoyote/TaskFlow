@@ -29,6 +29,10 @@ impl Model {
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn with_sample_data(mut self) -> Self {
+        // Disable storage to prevent sample data from being persisted
+        self.storage.backend = None;
+        self.storage.sample_data_mode = true;
+
         let now = Utc::now();
         let today = now.date_naive();
 

@@ -123,11 +123,16 @@ impl Model {
     ///
     /// Flushes any pending changes to the configured storage backend.
     /// Clears the dirty flag on success.
+    /// Does nothing in sample data mode.
     ///
     /// # Errors
     ///
     /// Returns an error if the storage backend fails to flush data.
     pub fn save(&mut self) -> anyhow::Result<()> {
+        // Don't save in sample data mode
+        if self.storage.sample_data_mode {
+            return Ok(());
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Sync Pomodoro state before flushing
             backend.set_pomodoro_session(self.pomodoro.session.as_ref())?;
@@ -144,7 +149,11 @@ impl Model {
     ///
     /// Creates or updates the task in the storage backend.
     /// Sets the dirty flag to indicate unsaved changes.
+    /// Does nothing in sample data mode.
     pub fn sync_task(&mut self, task: &Task) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_task(task) {
@@ -163,7 +172,11 @@ impl Model {
     ///
     /// Looks up the task in the model and syncs it to the storage backend.
     /// This avoids the need to clone the task when you have a mutable borrow.
+    /// Does nothing in sample data mode.
     pub fn sync_task_by_id(&mut self, task_id: &TaskId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let (Some(ref mut backend), Some(task)) =
             (&mut self.storage.backend, self.tasks.get(task_id))
         {
@@ -183,7 +196,11 @@ impl Model {
     /// Deletes a task from storage.
     ///
     /// Removes the task from the storage backend.
+    /// Does nothing in sample data mode.
     pub fn delete_task_from_storage(&mut self, id: &TaskId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = backend.delete_task(id) {
                 warn!("Failed to delete task {} from storage: {}", id, e);
@@ -195,7 +212,11 @@ impl Model {
     /// Syncs a project to storage.
     ///
     /// Creates or updates the project in the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_project(&mut self, project: &Project) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_project(project) {
@@ -214,7 +235,11 @@ impl Model {
     ///
     /// Looks up the project in the model and syncs it to the storage backend.
     /// This avoids the need to clone the project when you have a mutable borrow.
+    /// Does nothing in sample data mode.
     pub fn sync_project_by_id(&mut self, project_id: &ProjectId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let (Some(ref mut backend), Some(project)) =
             (&mut self.storage.backend, self.projects.get(project_id))
         {
@@ -234,7 +259,11 @@ impl Model {
     /// Syncs a habit to storage.
     ///
     /// Creates or updates the habit in the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_habit(&mut self, habit: &Habit) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = HabitRepository::update_habit(backend.as_mut(), habit) {
@@ -252,7 +281,11 @@ impl Model {
     /// Syncs a habit by ID to storage.
     ///
     /// Looks up the habit in the model and syncs it to the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_habit_by_id(&mut self, habit_id: &HabitId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let (Some(ref mut backend), Some(habit)) =
             (&mut self.storage.backend, self.habits.get(habit_id))
         {
@@ -272,7 +305,11 @@ impl Model {
     /// Deletes a habit from storage.
     ///
     /// Removes the habit from the storage backend.
+    /// Does nothing in sample data mode.
     pub fn delete_habit_from_storage(&mut self, id: &HabitId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = HabitRepository::delete_habit(backend.as_mut(), id) {
                 warn!("Failed to delete habit {} from storage: {}", id, e);
@@ -284,7 +321,11 @@ impl Model {
     /// Syncs a goal to storage.
     ///
     /// Creates or updates the goal in the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_goal(&mut self, goal: &Goal) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = GoalRepository::update_goal(backend.as_mut(), goal) {
@@ -302,7 +343,11 @@ impl Model {
     /// Syncs a goal by ID to storage.
     ///
     /// Looks up the goal in the model and syncs it to the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_goal_by_id(&mut self, goal_id: &GoalId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let (Some(ref mut backend), Some(goal)) =
             (&mut self.storage.backend, self.goals.get(goal_id))
         {
@@ -322,7 +367,11 @@ impl Model {
     /// Deletes a goal from storage.
     ///
     /// Removes the goal from the storage backend.
+    /// Does nothing in sample data mode.
     pub fn delete_goal_from_storage(&mut self, id: &GoalId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = GoalRepository::delete_goal(backend.as_mut(), id) {
                 warn!("Failed to delete goal {} from storage: {}", id, e);
@@ -334,7 +383,11 @@ impl Model {
     /// Syncs a key result to storage.
     ///
     /// Creates or updates the key result in the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_key_result(&mut self, kr: &KeyResult) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = KeyResultRepository::update_key_result(backend.as_mut(), kr) {
@@ -352,7 +405,11 @@ impl Model {
     /// Syncs a key result by ID to storage.
     ///
     /// Looks up the key result in the model and syncs it to the storage backend.
+    /// Does nothing in sample data mode.
     pub fn sync_key_result_by_id(&mut self, kr_id: &KeyResultId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let (Some(ref mut backend), Some(kr)) =
             (&mut self.storage.backend, self.key_results.get(kr_id))
         {
@@ -372,7 +429,11 @@ impl Model {
     /// Deletes a key result from storage.
     ///
     /// Removes the key result from the storage backend.
+    /// Does nothing in sample data mode.
     pub fn delete_key_result_from_storage(&mut self, id: &KeyResultId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = KeyResultRepository::delete_key_result(backend.as_mut(), id) {
                 warn!("Failed to delete key result {} from storage: {}", id, e);
@@ -385,6 +446,9 @@ impl Model {
     ///
     /// Creates or updates the time entry in the storage backend.
     pub fn sync_time_entry(&mut self, entry: &TimeEntry) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = backend.update_time_entry(entry) {
@@ -527,6 +591,9 @@ impl Model {
     ///
     /// Creates or updates the work log entry in the storage backend.
     pub fn sync_work_log(&mut self, entry: &WorkLogEntry) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             // Try update first, if not found, create
             if let Err(e) = WorkLogRepository::update_work_log(backend.as_mut(), entry) {
@@ -545,6 +612,9 @@ impl Model {
     ///
     /// Removes the work log entry from the storage backend.
     pub fn delete_work_log_from_storage(&mut self, id: &WorkLogEntryId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
         if let Some(ref mut backend) = self.storage.backend {
             if let Err(e) = WorkLogRepository::delete_work_log(backend.as_mut(), id) {
                 warn!("Failed to delete work log {} from storage: {}", id, e);
@@ -723,5 +793,36 @@ mod tests {
 
         assert!(!result);
         assert!(model.undo_stack.is_empty());
+    }
+
+    // ========================================================================
+    // sample_data_mode tests
+    // ========================================================================
+
+    #[test]
+    fn test_sample_data_mode_prevents_persistence() {
+        let model = Model::new().with_sample_data();
+        assert!(model.storage.sample_data_mode);
+        assert!(model.storage.backend.is_none());
+    }
+
+    #[test]
+    fn test_sample_data_mode_default_is_false() {
+        let model = Model::new();
+        assert!(!model.storage.sample_data_mode);
+    }
+
+    #[test]
+    fn test_with_sample_data_clears_existing_backend() {
+        // Even if we somehow had a backend set, with_sample_data should clear it
+        let mut model = Model::new();
+        model.storage.sample_data_mode = false;
+        // Simulate having data
+        model.tasks.insert(TaskId::new(), Task::new("Test"));
+
+        // Calling with_sample_data should clear backend and set sample_data_mode
+        let model = model.with_sample_data();
+        assert!(model.storage.sample_data_mode);
+        assert!(model.storage.backend.is_none());
     }
 }

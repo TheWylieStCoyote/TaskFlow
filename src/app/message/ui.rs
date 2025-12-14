@@ -103,6 +103,14 @@ pub enum UiMessage {
     /// Cancel deletion
     CancelDelete,
 
+    // Config file generation prompt
+    /// Show config file generation prompt
+    ShowGenerateConfigPrompt,
+    /// Confirm config file generation
+    ConfirmGenerateConfig,
+    /// Cancel config file generation
+    CancelGenerateConfig,
+
     // Multi-select / Bulk operations
     /// Toggle multi-select mode
     ToggleMultiSelect,

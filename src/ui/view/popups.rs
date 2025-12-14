@@ -91,6 +91,19 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
         );
     }
 
+    // Render config file generation prompt
+    if model.show_generate_config_prompt {
+        let confirm_area = centered_rect_fixed_height(55, 5, area);
+        frame.render_widget(
+            ConfirmDialog::new(
+                "Generate Config",
+                "No config file found. Generate default config?",
+                theme,
+            ),
+            confirm_area,
+        );
+    }
+
     // Render import preview dialog
     if model.import.show_preview {
         if let Some(ref result) = model.import.pending {

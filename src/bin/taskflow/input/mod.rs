@@ -43,6 +43,15 @@ pub fn handle_key_event(
         };
     }
 
+    // Handle config file generation prompt
+    if model.show_generate_config_prompt {
+        return match key.code {
+            KeyCode::Char('y' | 'Y') => Message::Ui(UiMessage::ConfirmGenerateConfig),
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => Message::Ui(UiMessage::CancelGenerateConfig),
+            _ => Message::None,
+        };
+    }
+
     // Handle import preview dialog
     if model.import.show_preview {
         return match key.code {

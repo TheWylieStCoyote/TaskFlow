@@ -68,6 +68,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::EditTask => Message::Ui(UiMessage::StartEditTask),
         Action::EditDueDate => Message::Ui(UiMessage::StartEditDueDate),
         Action::EditScheduledDate => Message::Ui(UiMessage::StartEditScheduledDate),
+        Action::EditScheduledTime => Message::Ui(UiMessage::StartEditScheduledTime),
         Action::EditTags => Message::Ui(UiMessage::StartEditTags),
         Action::EditDescription => Message::Ui(UiMessage::StartEditDescription),
         Action::EditDescriptionMultiline => Message::Ui(UiMessage::StartEditDescriptionMultiline),

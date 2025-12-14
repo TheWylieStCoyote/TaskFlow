@@ -240,6 +240,25 @@ impl SqliteBackendInner {
         Ok(())
     }
 
+    /// Migrate tasks table to add scheduled_start_time and scheduled_end_time columns.
+    ///
+    /// This is idempotent - it checks if the columns exist before adding.
+    pub(crate) fn migrate_add_scheduled_time(&self) -> StorageResult<()> {
+        let conn = self.conn()?;
+
+        // Check if columns exist by trying to select them
+        let has_start = conn
+            .prepare("SELECT scheduled_start_time FROM tasks LIMIT 1")
+            .is_ok();
+
+        if !has_start {
+            conn.execute("ALTER TABLE tasks ADD COLUMN scheduled_start_time TEXT", [])?;
+            conn.execute("ALTER TABLE tasks ADD COLUMN scheduled_end_time TEXT", [])?;
+        }
+
+        Ok(())
+    }
+
     /// Sync task tags to the junction table.
     ///
     /// Removes old tags and inserts new ones for the given task.

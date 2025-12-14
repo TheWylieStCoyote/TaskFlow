@@ -19,6 +19,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Habit Tracking**: Track daily/weekly habits with streaks, check-ins, and analytics
 - **Tagging System**: Categorize tasks with flexible tags
 - **Time Tracking**: Track time spent on tasks with start/stop timer; persists across restarts
+- **Time Blocking**: Schedule tasks with specific start/end times (`Alt+s` to edit, `time:9:00-11:00` syntax)
 - **Git Integration**: Extract TODO/FIXME comments from code and create tasks automatically
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
 - **Filter DSL**: Advanced query language for complex task filtering (see [FILTER_SYNTAX.md](docs/FILTER_SYNTAX.md))
@@ -163,6 +164,7 @@ Each task shows:
 | `x` or `Space` | Toggle task completion |
 | `p` | Cycle priority (None → Low → Medium → High → Urgent) |
 | `D` | Edit due date (YYYY-MM-DD format) |
+| `Alt+s` | Edit time block (start/end times) |
 | `T` | Edit tags (comma-separated) |
 | `n` | Edit description/notes |
 | `m` | Move task to project |

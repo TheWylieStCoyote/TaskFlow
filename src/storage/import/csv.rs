@@ -280,6 +280,8 @@ fn parse_csv_task(
         updated_at: Utc::now(),
         completed_at,
         snooze_until: None,
+        scheduled_start_time: None,
+        scheduled_end_time: None,
         git_ref: None,
     };
 

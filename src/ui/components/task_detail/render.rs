@@ -163,6 +163,17 @@ impl TaskDetail<'_> {
             ]));
         }
 
+        // Scheduled time block
+        if let Some(time_display) = task.scheduled_time_display() {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Time Block: ",
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::raw(time_display),
+            ]));
+        }
+
         // Completed date
         if let Some(completed) = task.completed_at {
             lines.push(Line::from(vec![

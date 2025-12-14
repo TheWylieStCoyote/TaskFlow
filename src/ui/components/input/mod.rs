@@ -47,6 +47,7 @@ pub enum InputTarget {
     EditTask(TaskId),
     EditDueDate(TaskId),
     EditScheduledDate(TaskId),
+    EditScheduledTime(TaskId), // Time block (e.g., "9:00-11:00", "9am-11am")
     EditTags(TaskId),
     EditDescription(TaskId),
     Project,

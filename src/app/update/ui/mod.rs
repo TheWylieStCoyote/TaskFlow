@@ -87,6 +87,7 @@ use std::fmt::Write as _;
 
 use crate::app::{Model, UiMessage, UndoAction};
 use crate::config::Settings;
+use crate::domain::Task;
 use crate::ui::{InputMode, InputTarget};
 
 use calendar::handle_ui_calendar;
@@ -170,6 +171,95 @@ fn parse_duration_input(input: &str) -> Option<u32> {
     }
 
     None
+}
+
+/// Parse a single time string into a NaiveTime.
+///
+/// Supports multiple formats:
+/// - 24-hour: "14:30", "9:00", "09:00"
+/// - 12-hour: "2:30pm", "9am", "11:30AM", "9:00 PM"
+///
+/// Returns `None` if the input cannot be parsed.
+pub fn parse_single_time(input: &str) -> Option<chrono::NaiveTime> {
+    use chrono::NaiveTime;
+
+    let input = input.trim().to_lowercase();
+    if input.is_empty() {
+        return None;
+    }
+
+    // Check for am/pm suffix
+    let (time_str, is_pm) = if input.ends_with("pm") {
+        (input.trim_end_matches("pm").trim(), true)
+    } else if input.ends_with("am") {
+        (input.trim_end_matches("am").trim(), false)
+    } else {
+        (input.as_str(), false)
+    };
+
+    // Parse the time portion
+    let (hour, minute) = if let Some((h, m)) = time_str.split_once(':') {
+        let hour: u32 = h.trim().parse().ok()?;
+        let minute: u32 = m.trim().parse().ok()?;
+        (hour, minute)
+    } else {
+        // Just an hour (e.g., "9am", "14")
+        let hour: u32 = time_str.parse().ok()?;
+        (hour, 0)
+    };
+
+    // Validate ranges
+    if minute >= 60 {
+        return None;
+    }
+
+    // Convert 12-hour to 24-hour if am/pm was specified
+    let hour = if input.ends_with("pm") || input.ends_with("am") {
+        // 12-hour format
+        if hour > 12 || hour == 0 {
+            return None;
+        }
+        if is_pm && hour != 12 {
+            hour + 12
+        } else if !is_pm && hour == 12 {
+            0
+        } else {
+            hour
+        }
+    } else {
+        // 24-hour format
+        if hour >= 24 {
+            return None;
+        }
+        hour
+    };
+
+    NaiveTime::from_hms_opt(hour, minute, 0)
+}
+
+/// Parse a time range string into start and end times.
+///
+/// Supports formats like:
+/// - "9:00-11:00"
+/// - "9am-11am"
+/// - "9:30am-2:30pm"
+/// - "14:00-16:30"
+///
+/// Returns `None` if the input cannot be parsed.
+pub fn parse_time_range(input: &str) -> Option<(chrono::NaiveTime, chrono::NaiveTime)> {
+    let input = input.trim();
+
+    // Split on '-' but be careful with negative numbers (shouldn't happen for times)
+    let parts: Vec<&str> = input.split('-').collect();
+
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let start = parse_single_time(parts[0])?;
+    let end = parse_single_time(parts[1])?;
+
+    Some((start, end))
 }
 
 /// Handle a UI message by dispatching to the appropriate sub-handler.
@@ -294,6 +384,24 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                     .get(&task_id)
                     .and_then(|t| t.scheduled_date.map(|d| d.format("%Y-%m-%d").to_string()));
                 start_input(model, InputTarget::EditScheduledDate(task_id), prefill);
+            }
+        }
+        UiMessage::StartEditScheduledTime => {
+            if let Some(task_id) = model.selected_task_id() {
+                let prefill = model
+                    .tasks
+                    .get(&task_id)
+                    .and_then(Task::scheduled_time_display);
+                start_input(model, InputTarget::EditScheduledTime(task_id), prefill);
+            }
+        }
+        UiMessage::ClearScheduledTime => {
+            if let Some(task_id) = model.selected_task_id() {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = None;
+                    task.scheduled_end_time = None;
+                });
+                model.refresh_visible_tasks();
             }
         }
         UiMessage::StartEditTags => {

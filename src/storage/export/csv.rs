@@ -13,7 +13,7 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
     // Write header
     writeln!(
         writer,
-        "ID,Title,Status,Priority,Due Date,Tags,Project ID,Description,Created,Completed"
+        "ID,Title,Status,Priority,Due Date,Scheduled Date,Start Time,End Time,Tags,Project ID,Description,Created,Completed"
     )?;
 
     for task in tasks {
@@ -22,6 +22,18 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
         let status = task.status.as_str();
         let priority = task.priority.as_str();
         let due_date = task.due_date.map(|d| d.to_string()).unwrap_or_default();
+        let scheduled_date = task
+            .scheduled_date
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        let start_time = task
+            .scheduled_start_time
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_default();
+        let end_time = task
+            .scheduled_end_time
+            .map(|t| t.format("%H:%M").to_string())
+            .unwrap_or_default();
         let tags = task.tags.join(";");
         let project_id = task
             .project_id
@@ -41,7 +53,7 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
 
         writeln!(
             writer,
-            "{id},{title},{status},{priority},{due_date},{tags},{project_id},{description},{created},{completed}"
+            "{id},{title},{status},{priority},{due_date},{scheduled_date},{start_time},{end_time},{tags},{project_id},{description},{created},{completed}"
         )?;
     }
 
@@ -94,7 +106,8 @@ mod tests {
         export_to_csv(&tasks, &mut buffer).unwrap();
         let result = String::from_utf8(buffer).unwrap();
 
-        assert!(result.starts_with("ID,Title,Status,Priority"));
+        assert!(result
+            .starts_with("ID,Title,Status,Priority,Due Date,Scheduled Date,Start Time,End Time"));
         assert!(result.contains("Test Task"));
         assert!(result.contains("todo"));
         assert!(result.contains("none"));
@@ -146,7 +159,8 @@ mod tests {
         let result = String::from_utf8(buffer).unwrap();
 
         // Should only have header
-        assert!(result.starts_with("ID,Title,Status,Priority"));
+        assert!(result
+            .starts_with("ID,Title,Status,Priority,Due Date,Scheduled Date,Start Time,End Time"));
         assert_eq!(result.lines().count(), 1);
     }
 

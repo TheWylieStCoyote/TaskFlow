@@ -25,6 +25,7 @@ pub enum Action {
     EditTask,
     EditDueDate,
     EditScheduledDate,
+    EditScheduledTime,
     EditTags,
     EditDescription,
     EditDescriptionMultiline,
@@ -282,6 +283,7 @@ impl Action {
             Self::EditTask => "Edit task title",
             Self::EditDueDate => "Edit due date",
             Self::EditScheduledDate => "Edit scheduled date",
+            Self::EditScheduledTime => "Edit scheduled time block",
             Self::EditTags => "Edit tags",
             Self::EditDescription => "Edit description",
             Self::EditDescriptionMultiline => "Edit description (multi-line)",
@@ -438,6 +440,7 @@ impl Action {
             | Self::EditTask
             | Self::EditDueDate
             | Self::EditScheduledDate
+            | Self::EditScheduledTime
             | Self::EditTags
             | Self::EditDescription
             | Self::EditDescriptionMultiline
@@ -584,6 +587,7 @@ pub const ALL_ACTIONS: &[Action] = &[
     Action::EditTask,
     Action::EditDueDate,
     Action::EditScheduledDate,
+    Action::EditScheduledTime,
     Action::EditTags,
     Action::EditDescription,
     Action::EditDescriptionMultiline,

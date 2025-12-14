@@ -168,6 +168,41 @@ pub fn handle_submit_input(model: &mut Model) {
             }
             model.refresh_visible_tasks();
         }
+        InputTarget::EditScheduledTime(task_id) => {
+            let task_id = *task_id;
+            if input.is_empty() {
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = None;
+                    task.scheduled_end_time = None;
+                });
+                model.alerts.status_message = Some("Time block cleared".to_string());
+            } else if let Some((start, end)) = super::parse_time_range(&input) {
+                // Full time range: "9:00-11:00" or "9am-11am"
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = Some(start);
+                    task.scheduled_end_time = Some(end);
+                });
+                model.alerts.status_message = Some(format!(
+                    "Time block set: {}-{}",
+                    start.format("%H:%M"),
+                    end.format("%H:%M")
+                ));
+            } else if let Some(start) = super::parse_single_time(&input) {
+                // Single time (start only): "9:00" or "9am"
+                model.modify_task_with_undo(&task_id, |task| {
+                    task.scheduled_start_time = Some(start);
+                    task.scheduled_end_time = None;
+                });
+                model.alerts.status_message =
+                    Some(format!("Start time set: {}", start.format("%H:%M")));
+            } else {
+                model.alerts.status_message = Some(
+                    "Invalid time format. Use 9:00-11:00, 9am-11am, or single time like 9:00"
+                        .to_string(),
+                );
+            }
+            model.refresh_visible_tasks();
+        }
         InputTarget::EditTags(task_id) => {
             let task_id = *task_id;
             // Parse comma-separated tags outside closure
@@ -574,6 +609,14 @@ pub fn create_task_from_quick_add(
     // Apply scheduled date
     if let Some(sched) = parsed.scheduled_date {
         task.scheduled_date = Some(sched);
+    }
+
+    // Apply scheduled time block
+    if let Some(start_time) = parsed.scheduled_start_time {
+        task.scheduled_start_time = Some(start_time);
+    }
+    if let Some(end_time) = parsed.scheduled_end_time {
+        task.scheduled_end_time = Some(end_time);
     }
 
     // Apply project by name (find matching project)

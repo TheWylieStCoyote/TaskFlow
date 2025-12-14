@@ -259,7 +259,8 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
     }
 
     // Render overdue alert popup (shown at startup if there are overdue tasks)
-    if model.alerts.show_overdue {
+    // Don't show if config prompt is visible (config prompt takes priority)
+    if model.alerts.show_overdue && !model.show_generate_config_prompt {
         let (count, overdue_tasks) = model.overdue_summary();
         let task_titles: Vec<String> = overdue_tasks.iter().map(|t| t.title.clone()).collect();
         // Height: 4 + min(5, count) + 2 for header/footer

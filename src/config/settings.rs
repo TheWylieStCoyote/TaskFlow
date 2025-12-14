@@ -32,9 +32,9 @@ use crate::storage::BackendType;
 #[serde(rename_all = "lowercase")]
 pub enum FirstRunMode {
     /// Load sample/demo data for new users to explore
-    #[default]
     Demo,
     /// Start with an empty database
+    #[default]
     Empty,
 }
 
@@ -247,7 +247,7 @@ mod tests {
         assert!(!settings.show_completed);
         assert_eq!(settings.auto_save_interval, 300);
         assert_eq!(settings.default_priority, "none");
-        assert_eq!(settings.first_run_mode, FirstRunMode::Demo);
+        assert_eq!(settings.first_run_mode, FirstRunMode::Empty);
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_first_run_mode_default() {
-        assert_eq!(FirstRunMode::default(), FirstRunMode::Demo);
+        assert_eq!(FirstRunMode::default(), FirstRunMode::Empty);
     }
 
     #[test]

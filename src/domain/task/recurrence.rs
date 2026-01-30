@@ -176,4 +176,261 @@ mod tests {
         let restored: Recurrence = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(yearly, restored);
     }
+
+    // ========================================================================
+    // Edge Case Tests
+    // ========================================================================
+
+    #[test]
+    fn test_monthly_edge_of_month() {
+        // Test edge cases for monthly day values
+        let day1 = Recurrence::Monthly { day: 1 };
+        assert_eq!(day1.to_string(), "Monthly (day 1)");
+
+        let day31 = Recurrence::Monthly { day: 31 };
+        assert_eq!(day31.to_string(), "Monthly (day 31)");
+    }
+
+    #[test]
+    fn test_monthly_february_edge_case() {
+        // Day 29, 30, 31 for February - domain layer doesn't validate
+        let day29 = Recurrence::Monthly { day: 29 };
+        let day30 = Recurrence::Monthly { day: 30 };
+        let day31 = Recurrence::Monthly { day: 31 };
+
+        assert_eq!(day29.to_string(), "Monthly (day 29)");
+        assert_eq!(day30.to_string(), "Monthly (day 30)");
+        assert_eq!(day31.to_string(), "Monthly (day 31)");
+    }
+
+    #[test]
+    fn test_yearly_leap_year_date() {
+        // Feb 29 for yearly recurrence
+        let leap_day = Recurrence::Yearly { month: 2, day: 29 };
+        assert_eq!(leap_day.to_string(), "Yearly (2/29)");
+    }
+
+    #[test]
+    fn test_yearly_invalid_dates() {
+        // Domain layer doesn't validate - accepts any values
+        let invalid1 = Recurrence::Yearly { month: 2, day: 30 }; // Feb 30 doesn't exist
+        let invalid2 = Recurrence::Yearly { month: 13, day: 1 }; // Month 13 doesn't exist
+        let invalid3 = Recurrence::Yearly { month: 4, day: 31 }; // April 31 doesn't exist
+
+        assert_eq!(invalid1.to_string(), "Yearly (2/30)");
+        assert_eq!(invalid2.to_string(), "Yearly (13/1)");
+        assert_eq!(invalid3.to_string(), "Yearly (4/31)");
+    }
+
+    #[test]
+    fn test_yearly_boundary_dates() {
+        // First and last day of year
+        let new_year = Recurrence::Yearly { month: 1, day: 1 };
+        assert_eq!(new_year.to_string(), "Yearly (1/1)");
+
+        let new_years_eve = Recurrence::Yearly { month: 12, day: 31 };
+        assert_eq!(new_years_eve.to_string(), "Yearly (12/31)");
+    }
+
+    // ========================================================================
+    // Weekly Recurrence Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_weekly_empty_days() {
+        // Weekly with no days - technically valid in domain layer
+        let weekly = Recurrence::Weekly { days: vec![] };
+        assert_eq!(weekly.to_string(), "Weekly ()");
+    }
+
+    #[test]
+    fn test_weekly_weekdays_only() {
+        let weekdays = Recurrence::Weekly {
+            days: vec![
+                Weekday::Mon,
+                Weekday::Tue,
+                Weekday::Wed,
+                Weekday::Thu,
+                Weekday::Fri,
+            ],
+        };
+        assert_eq!(weekdays.to_string(), "Weekly (Mon, Tue, Wed, Thu, Fri)");
+    }
+
+    #[test]
+    fn test_weekly_weekends_only() {
+        let weekends = Recurrence::Weekly {
+            days: vec![Weekday::Sat, Weekday::Sun],
+        };
+        assert_eq!(weekends.to_string(), "Weekly (Sat, Sun)");
+    }
+
+    #[test]
+    fn test_weekly_duplicate_days() {
+        // Domain layer allows duplicates
+        let duplicates = Recurrence::Weekly {
+            days: vec![Weekday::Mon, Weekday::Mon, Weekday::Tue],
+        };
+        assert_eq!(duplicates.to_string(), "Weekly (Mon, Mon, Tue)");
+    }
+
+    #[test]
+    fn test_weekly_unordered_days() {
+        let unordered = Recurrence::Weekly {
+            days: vec![Weekday::Fri, Weekday::Mon, Weekday::Wed],
+        };
+        // Displays in the order given, doesn't sort
+        assert_eq!(unordered.to_string(), "Weekly (Fri, Mon, Wed)");
+    }
+
+    // ========================================================================
+    // Cloning and Equality
+    // ========================================================================
+
+    #[test]
+    fn test_recurrence_clone() {
+        let original = Recurrence::Weekly {
+            days: vec![Weekday::Mon, Weekday::Wed],
+        };
+        let cloned = original.clone();
+
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn test_recurrence_clone_independence() {
+        let original = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        let cloned = original.clone();
+
+        // Create a different instance to verify independence
+        let modified = Recurrence::Weekly {
+            days: vec![Weekday::Tue],
+        };
+
+        assert_eq!(original, cloned);
+        assert_ne!(original, modified);
+    }
+
+    #[test]
+    fn test_recurrence_different_types_not_equal() {
+        let daily = Recurrence::Daily;
+        let weekly = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        let monthly = Recurrence::Monthly { day: 1 };
+        let yearly = Recurrence::Yearly { month: 1, day: 1 };
+
+        assert_ne!(daily, weekly);
+        assert_ne!(daily, monthly);
+        assert_ne!(daily, yearly);
+        assert_ne!(weekly, monthly);
+        assert_ne!(weekly, yearly);
+        assert_ne!(monthly, yearly);
+    }
+
+    // ========================================================================
+    // Serialization Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_recurrence_serialization_format() {
+        let daily = Recurrence::Daily;
+        let json = serde_json::to_string(&daily).unwrap();
+        assert!(json.contains("\"type\":\"daily\""));
+    }
+
+    #[test]
+    fn test_weekly_serialization_with_days() {
+        let weekly = Recurrence::Weekly {
+            days: vec![Weekday::Mon, Weekday::Fri],
+        };
+        let json = serde_json::to_string(&weekly).unwrap();
+        assert!(json.contains("\"type\":\"weekly\""));
+        assert!(json.contains("\"days\""));
+    }
+
+    #[test]
+    fn test_weekly_serialization_empty_days() {
+        let weekly = Recurrence::Weekly { days: vec![] };
+        let json = serde_json::to_string(&weekly).unwrap();
+        let restored: Recurrence = serde_json::from_str(&json).unwrap();
+        assert_eq!(weekly, restored);
+    }
+
+    #[test]
+    fn test_monthly_serialization_boundary_values() {
+        let month_start = Recurrence::Monthly { day: 1 };
+        let month_end = Recurrence::Monthly { day: 31 };
+
+        let json1 = serde_json::to_string(&month_start).unwrap();
+        let json2 = serde_json::to_string(&month_end).unwrap();
+
+        let restored1: Recurrence = serde_json::from_str(&json1).unwrap();
+        let restored2: Recurrence = serde_json::from_str(&json2).unwrap();
+
+        assert_eq!(month_start, restored1);
+        assert_eq!(month_end, restored2);
+    }
+
+    #[test]
+    fn test_yearly_serialization_all_months() {
+        // Test a few different months
+        for month in [1, 2, 6, 11, 12] {
+            let yearly = Recurrence::Yearly { month, day: 15 };
+            let json = serde_json::to_string(&yearly).unwrap();
+            let restored: Recurrence = serde_json::from_str(&json).unwrap();
+            assert_eq!(yearly, restored);
+        }
+    }
+
+    // ========================================================================
+    // Display Tests
+    // ========================================================================
+
+    #[test]
+    fn test_display_does_not_panic() {
+        // Ensure display doesn't panic on edge cases
+        let patterns = vec![
+            Recurrence::Daily,
+            Recurrence::Weekly { days: vec![] },
+            Recurrence::Weekly {
+                days: vec![Weekday::Mon],
+            },
+            Recurrence::Weekly {
+                days: vec![
+                    Weekday::Mon,
+                    Weekday::Tue,
+                    Weekday::Wed,
+                    Weekday::Thu,
+                    Weekday::Fri,
+                    Weekday::Sat,
+                    Weekday::Sun,
+                ],
+            },
+            Recurrence::Monthly { day: 1 },
+            Recurrence::Monthly { day: 31 },
+            Recurrence::Yearly { month: 1, day: 1 },
+            Recurrence::Yearly { month: 12, day: 31 },
+        ];
+
+        for pattern in patterns {
+            let _ = pattern.to_string(); // Should not panic
+        }
+    }
+
+    #[test]
+    fn test_debug_format() {
+        let daily = Recurrence::Daily;
+        let debug_str = format!("{daily:?}");
+        assert!(debug_str.contains("Daily"));
+
+        let weekly = Recurrence::Weekly {
+            days: vec![Weekday::Mon],
+        };
+        let debug_str = format!("{weekly:?}");
+        assert!(debug_str.contains("Weekly"));
+        assert!(debug_str.contains("Mon"));
+    }
 }

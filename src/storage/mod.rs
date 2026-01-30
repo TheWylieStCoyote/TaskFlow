@@ -101,6 +101,9 @@ pub mod export;
 pub mod import;
 mod repository;
 
+#[cfg(test)]
+mod export_import_comprehensive_tests;
+
 pub use error::*;
 pub use export::{
     export_chains_to_string, export_report_to_html, export_report_to_html_string,

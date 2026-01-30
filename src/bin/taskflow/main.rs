@@ -5,6 +5,9 @@ mod commands;
 mod input;
 mod tui;
 
+#[cfg(test)]
+mod commands_tests;
+
 use std::fs::File;
 use std::io;
 

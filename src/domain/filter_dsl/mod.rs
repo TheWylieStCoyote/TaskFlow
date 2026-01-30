@@ -262,6 +262,9 @@ mod eval;
 mod lexer;
 mod parser;
 
+#[cfg(test)]
+mod comprehensive_tests;
+
 // Re-export public types
 pub use ast::{
     Condition, CreatedFilter, DueFilter, FilterExpr, FilterField, FilterValue, HasField,

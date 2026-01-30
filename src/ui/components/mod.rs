@@ -78,6 +78,9 @@ mod weekly_planner;
 mod weekly_review;
 mod work_log_editor;
 
+#[cfg(test)]
+mod comprehensive_component_tests;
+
 pub use burndown::*;
 pub use calendar::*;
 pub use command_palette::*;

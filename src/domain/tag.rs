@@ -295,4 +295,275 @@ mod tests {
         let contexts = extract_contexts(tasks.iter());
         assert!(contexts.is_empty());
     }
+
+    // ========================================================================
+    // Tag Name Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_tag_empty_name() {
+        let tag = Tag::new("");
+        assert_eq!(tag.name, "");
+    }
+
+    #[test]
+    fn test_tag_very_long_name() {
+        let long_name = "a".repeat(1000);
+        let tag = Tag::new(&long_name);
+        assert_eq!(tag.name, long_name);
+    }
+
+    #[test]
+    fn test_tag_with_special_characters() {
+        let tags = vec![
+            Tag::new("tag!with!exclamation"),
+            Tag::new("tag#with#hash"),
+            Tag::new("tag@with@at"),
+            Tag::new("tag:with:colon"),
+            Tag::new("tag/with/slash"),
+            Tag::new("tag\\with\\backslash"),
+        ];
+
+        for tag in tags {
+            assert!(!tag.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_tag_with_whitespace() {
+        let tag1 = Tag::new("tag with spaces");
+        assert_eq!(tag1.name, "tag with spaces");
+
+        let tag2 = Tag::new("  leading space");
+        assert_eq!(tag2.name, "  leading space");
+
+        let tag3 = Tag::new("trailing space  ");
+        assert_eq!(tag3.name, "trailing space  ");
+    }
+
+    #[test]
+    fn test_tag_with_unicode() {
+        let tags = vec![
+            Tag::new("日本語"),
+            Tag::new("中文"),
+            Tag::new("Русский"),
+            Tag::new("العربية"),
+            Tag::new("emoji😀🎉"),
+        ];
+
+        for tag in tags {
+            assert!(!tag.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_tag_case_sensitivity() {
+        let tag1 = Tag::new("urgent");
+        let tag2 = Tag::new("URGENT");
+        let tag3 = Tag::new("Urgent");
+
+        // Tags are case-sensitive
+        assert_ne!(tag1, tag2);
+        assert_ne!(tag1, tag3);
+        assert_ne!(tag2, tag3);
+    }
+
+    #[test]
+    fn test_tag_with_numbers() {
+        let tags = vec![
+            Tag::new("bug-123"),
+            Tag::new("v2.0"),
+            Tag::new("2025-q1"),
+            Tag::new("priority-1"),
+        ];
+
+        for tag in tags {
+            assert!(!tag.name.is_empty());
+        }
+    }
+
+    // ========================================================================
+    // Tag Description Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tag_with_description() {
+        let mut tag = Tag::new("urgent");
+        tag.description = Some("High priority items".to_string());
+
+        assert_eq!(tag.description, Some("High priority items".to_string()));
+    }
+
+    #[test]
+    fn test_tag_description_none_by_default() {
+        let tag = Tag::new("test");
+        assert!(tag.description.is_none());
+    }
+
+    #[test]
+    fn test_tag_description_multiline() {
+        let mut tag = Tag::new("project-x");
+        tag.description = Some("Line 1\nLine 2\nLine 3".to_string());
+
+        assert!(tag.description.unwrap().contains('\n'));
+    }
+
+    #[test]
+    fn test_tag_description_unicode() {
+        let mut tag = Tag::new("test");
+        tag.description = Some("描述 with emoji 🏷️".to_string());
+
+        assert!(tag.description.unwrap().contains('🏷'));
+    }
+
+    // ========================================================================
+    // Context Tag Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_context_tag_variations() {
+        assert!(is_context_tag("@home"));
+        assert!(is_context_tag("@HOME"));
+        assert!(is_context_tag("@Home"));
+        assert!(is_context_tag("@home-office"));
+        assert!(is_context_tag("@home_office"));
+        assert!(is_context_tag("@home123"));
+    }
+
+    #[test]
+    fn test_context_tag_at_symbol_only() {
+        // Just @ is technically a context tag
+        assert!(is_context_tag("@"));
+    }
+
+    #[test]
+    fn test_context_tag_double_at() {
+        assert!(is_context_tag("@@mention"));
+    }
+
+    #[test]
+    fn test_context_tag_unicode_after_at() {
+        assert!(is_context_tag("@日本"));
+        assert!(is_context_tag("@中文"));
+        assert!(is_context_tag("@😀"));
+    }
+
+    #[test]
+    fn test_extract_contexts_case_sensitive() {
+        let task1 = Task::new("Task 1").with_tags(vec!["@home".into()]);
+        let task2 = Task::new("Task 2").with_tags(vec!["@HOME".into()]);
+        let tasks = [task1, task2];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        // Should have both @home and @HOME as separate contexts
+        assert_eq!(contexts.len(), 2);
+        assert!(contexts.contains(&"@home".to_string()));
+        assert!(contexts.contains(&"@HOME".to_string()));
+    }
+
+    #[test]
+    fn test_extract_contexts_mixed_regular_and_context() {
+        let task =
+            Task::new("Task").with_tags(vec!["@home".into(), "urgent".into(), "@work".into()]);
+        let tasks = [task];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        // Should only extract context tags
+        assert_eq!(contexts.len(), 2);
+        assert!(contexts.contains(&"@home".to_string()));
+        assert!(contexts.contains(&"@work".to_string()));
+        assert!(!contexts.contains(&"urgent".to_string()));
+    }
+
+    #[test]
+    fn test_extract_contexts_multiple_at_in_tag() {
+        let task = Task::new("Task").with_tags(vec!["@@mention".into()]);
+        let tasks = [task];
+
+        let contexts = extract_contexts(tasks.iter());
+
+        assert_eq!(contexts.len(), 1);
+        assert!(contexts.contains(&"@@mention".to_string()));
+    }
+
+    // ========================================================================
+    // Serialization Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_tag_serialization_with_description() {
+        let mut tag = Tag::new("feature");
+        tag.description = Some("New feature implementation".to_string());
+
+        let json = serde_json::to_string(&tag).unwrap();
+        let restored: Tag = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(tag, restored);
+        assert_eq!(
+            restored.description,
+            Some("New feature implementation".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tag_serialization_special_characters() {
+        let tag = Tag::new("tag/with\\special\"chars");
+        let json = serde_json::to_string(&tag).unwrap();
+        let restored: Tag = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(tag, restored);
+    }
+
+    #[test]
+    fn test_tag_serialization_unicode() {
+        let tag = Tag::new("日本語タグ🏷️");
+        let json = serde_json::to_string(&tag).unwrap();
+        let restored: Tag = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(tag.name, restored.name);
+    }
+
+    #[test]
+    fn test_tag_serialization_empty_name() {
+        let tag = Tag::new("");
+        let json = serde_json::to_string(&tag).unwrap();
+        let restored: Tag = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(tag.name, restored.name);
+        assert_eq!(restored.name, "");
+    }
+
+    #[test]
+    fn test_tag_clone() {
+        let tag1 = Tag::new("urgent").with_color("#ff0000");
+        let tag2 = tag1.clone();
+
+        assert_eq!(tag1, tag2);
+        assert_eq!(tag1.name, tag2.name);
+        assert_eq!(tag1.color, tag2.color);
+    }
+
+    // ========================================================================
+    // Tag Display Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tag_display_with_special_characters() {
+        let tag = Tag::new("@home-office");
+        assert_eq!(tag.to_string(), "@home-office");
+    }
+
+    #[test]
+    fn test_tag_display_empty() {
+        let tag = Tag::new("");
+        assert_eq!(tag.to_string(), "");
+    }
+
+    #[test]
+    fn test_tag_display_unicode() {
+        let tag = Tag::new("日本語🏷️");
+        assert_eq!(tag.to_string(), "日本語🏷️");
+    }
 }

@@ -21,6 +21,9 @@ pub mod format;
 pub mod handlers;
 pub mod types;
 
+#[cfg(test)]
+mod tests;
+
 use std::io::{BufRead, Write};
 
 use tracing::warn;

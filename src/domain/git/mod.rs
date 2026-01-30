@@ -28,6 +28,9 @@
 pub mod matching;
 pub mod operations;
 
+#[cfg(test)]
+mod comprehensive_tests;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

@@ -125,3 +125,6 @@ pub use quick_add::{parse_date, parse_date_with_reference, parse_quick_add};
 pub use templates::*;
 pub use undo::*;
 pub use update::*;
+
+#[cfg(test)]
+mod e2e_workflow_tests;

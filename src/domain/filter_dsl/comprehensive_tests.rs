@@ -1555,3 +1555,738 @@ mod serialization_tests {
         assert_eq!(expr, restored);
     }
 }
+
+// ============================================================================
+// AST TRAVERSAL AND MANIPULATION TESTS
+// ============================================================================
+
+mod ast_traversal_tests {
+    use super::*;
+    use crate::domain::filter_dsl::{Condition, FilterExpr};
+
+    /// Count the number of nodes in an AST.
+    fn count_nodes(expr: &FilterExpr) -> usize {
+        match expr {
+            FilterExpr::And(left, right) | FilterExpr::Or(left, right) => {
+                1 + count_nodes(left) + count_nodes(right)
+            }
+            FilterExpr::Not(inner) => 1 + count_nodes(inner),
+            FilterExpr::Condition(_) => 1,
+        }
+    }
+
+    /// Count the depth of an AST tree.
+    fn tree_depth(expr: &FilterExpr) -> usize {
+        match expr {
+            FilterExpr::And(left, right) | FilterExpr::Or(left, right) => {
+                1 + count_nodes(left).max(count_nodes(right))
+            }
+            FilterExpr::Not(inner) => 1 + tree_depth(inner),
+            FilterExpr::Condition(_) => 1,
+        }
+    }
+
+    /// Collect all leaf conditions from an expression.
+    fn collect_conditions(expr: &FilterExpr) -> Vec<&Condition> {
+        match expr {
+            FilterExpr::And(left, right) | FilterExpr::Or(left, right) => {
+                let mut conditions = collect_conditions(left);
+                conditions.extend(collect_conditions(right));
+                conditions
+            }
+            FilterExpr::Not(inner) => collect_conditions(inner),
+            FilterExpr::Condition(c) => vec![c],
+        }
+    }
+
+    #[test]
+    fn test_count_nodes_simple() {
+        let expr = parse("priority:high").unwrap();
+        assert_eq!(count_nodes(&expr), 1);
+    }
+
+    #[test]
+    fn test_count_nodes_and() {
+        let expr = parse("priority:high AND status:todo").unwrap();
+        assert_eq!(count_nodes(&expr), 3); // AND + 2 conditions
+    }
+
+    #[test]
+    fn test_count_nodes_complex() {
+        let expr =
+            parse("(priority:high OR priority:urgent) AND (status:todo OR status:in_progress)")
+                .unwrap();
+        // Structure: AND(OR(cond, cond), OR(cond, cond))
+        // = 1 (AND) + 2 (ORs) + 4 (conditions) = 7
+        assert_eq!(count_nodes(&expr), 7);
+    }
+
+    #[test]
+    fn test_tree_depth_simple() {
+        let expr = parse("priority:high").unwrap();
+        assert_eq!(tree_depth(&expr), 1);
+    }
+
+    #[test]
+    fn test_tree_depth_nested() {
+        let expr = parse("!(priority:high AND status:todo)").unwrap();
+        assert_eq!(tree_depth(&expr), 3); // NOT -> AND -> conditions
+    }
+
+    #[test]
+    fn test_collect_conditions() {
+        let expr = parse("priority:high AND status:todo AND tags:work").unwrap();
+        let conditions = collect_conditions(&expr);
+        assert_eq!(conditions.len(), 3);
+    }
+
+    #[test]
+    fn test_collect_conditions_with_not() {
+        let expr = parse("priority:high AND !status:done").unwrap();
+        let conditions = collect_conditions(&expr);
+        assert_eq!(conditions.len(), 2);
+    }
+
+    #[test]
+    fn test_deeply_nested_tree() {
+        // Create a deeply nested expression (50 levels)
+        let mut expr_str = String::from("priority:high");
+        for _ in 0..50 {
+            expr_str = format!("!({})", expr_str);
+        }
+
+        let expr = parse(&expr_str).unwrap();
+        assert!(tree_depth(&expr) >= 50);
+    }
+
+    #[test]
+    fn test_wide_tree() {
+        // Create a wide tree (many ORs)
+        let expr_str = (0..20)
+            .map(|_i| format!("priority:high"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+
+        let expr = parse(&expr_str).unwrap();
+        let conditions = collect_conditions(&expr);
+        assert_eq!(conditions.len(), 20);
+    }
+}
+
+// ============================================================================
+// BOOLEAN LOGIC TRUTH TABLE TESTS
+// ============================================================================
+
+mod boolean_logic_tests {
+    use super::*;
+
+    fn create_test_task(priority_high: bool, status_todo: bool, has_tags: bool) -> Task {
+        let mut task = Task::new("Test");
+        task.priority = if priority_high {
+            Priority::High
+        } else {
+            Priority::Low
+        };
+        task.status = if status_todo {
+            TaskStatus::Todo
+        } else {
+            TaskStatus::Done
+        };
+        if has_tags {
+            task.tags = vec!["work".to_string()];
+        }
+        task
+    }
+
+    #[test]
+    fn test_and_truth_table() {
+        // Test all 4 combinations of A AND B
+        let expr = parse("priority:high AND status:todo").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // T AND T = T
+        let task = create_test_task(true, true, false);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // T AND F = F
+        let task = create_test_task(true, false, false);
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // F AND T = F
+        let task = create_test_task(false, true, false);
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // F AND F = F
+        let task = create_test_task(false, false, false);
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_or_truth_table() {
+        // Test all 4 combinations of A OR B
+        let expr = parse("priority:high OR status:todo").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // T OR T = T
+        let task = create_test_task(true, true, false);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // T OR F = T
+        let task = create_test_task(true, false, false);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // F OR T = T
+        let task = create_test_task(false, true, false);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // F OR F = F
+        let task = create_test_task(false, false, false);
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_not_truth_table() {
+        // Test NOT A
+        let expr = parse("!priority:high").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // NOT T = F
+        let task = create_test_task(true, true, false);
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // NOT F = T
+        let task = create_test_task(false, true, false);
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_three_way_and() {
+        // Test A AND B AND C (8 combinations)
+        let expr = parse("priority:high AND status:todo AND tags:work").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Only T AND T AND T should be true
+        assert!(evaluate(&expr, &create_test_task(true, true, true), &ctx));
+
+        // All other 7 combinations should be false
+        assert!(!evaluate(&expr, &create_test_task(true, true, false), &ctx));
+        assert!(!evaluate(&expr, &create_test_task(true, false, true), &ctx));
+        assert!(!evaluate(
+            &expr,
+            &create_test_task(true, false, false),
+            &ctx
+        ));
+        assert!(!evaluate(&expr, &create_test_task(false, true, true), &ctx));
+        assert!(!evaluate(
+            &expr,
+            &create_test_task(false, true, false),
+            &ctx
+        ));
+        assert!(!evaluate(
+            &expr,
+            &create_test_task(false, false, true),
+            &ctx
+        ));
+        assert!(!evaluate(
+            &expr,
+            &create_test_task(false, false, false),
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn test_three_way_or() {
+        // Test A OR B OR C (8 combinations)
+        let expr = parse("priority:high OR status:todo OR tags:work").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Only F OR F OR F should be false
+        assert!(!evaluate(
+            &expr,
+            &create_test_task(false, false, false),
+            &ctx
+        ));
+
+        // All other 7 combinations should be true
+        assert!(evaluate(&expr, &create_test_task(true, true, true), &ctx));
+        assert!(evaluate(&expr, &create_test_task(true, true, false), &ctx));
+        assert!(evaluate(&expr, &create_test_task(true, false, true), &ctx));
+        assert!(evaluate(&expr, &create_test_task(true, false, false), &ctx));
+        assert!(evaluate(&expr, &create_test_task(false, true, true), &ctx));
+        assert!(evaluate(&expr, &create_test_task(false, true, false), &ctx));
+        assert!(evaluate(&expr, &create_test_task(false, false, true), &ctx));
+    }
+
+    #[test]
+    fn test_demorgan_law_not_and() {
+        // De Morgan's Law: !(A AND B) = (NOT A) OR (NOT B)
+        let expr1 = parse("!(priority:high AND status:todo)").unwrap();
+        let expr2 = parse("(!priority:high) OR (!status:todo)").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Test all 4 combinations
+        for high in [true, false] {
+            for todo in [true, false] {
+                let task = create_test_task(high, todo, false);
+                assert_eq!(
+                    evaluate(&expr1, &task, &ctx),
+                    evaluate(&expr2, &task, &ctx),
+                    "De Morgan's Law failed for high={}, todo={}",
+                    high,
+                    todo
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_demorgan_law_not_or() {
+        // De Morgan's Law: !(A OR B) = (NOT A) AND (NOT B)
+        let expr1 = parse("!(priority:high OR status:todo)").unwrap();
+        let expr2 = parse("(!priority:high) AND (!status:todo)").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Test all 4 combinations
+        for high in [true, false] {
+            for todo in [true, false] {
+                let task = create_test_task(high, todo, false);
+                assert_eq!(
+                    evaluate(&expr1, &task, &ctx),
+                    evaluate(&expr2, &task, &ctx),
+                    "De Morgan's Law failed for high={}, todo={}",
+                    high,
+                    todo
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_distributive_law_and_over_or() {
+        // Distributive Law: A AND (B OR C) = (A AND B) OR (A AND C)
+        let expr1 = parse("priority:high AND (status:todo OR tags:work)").unwrap();
+        let expr2 =
+            parse("(priority:high AND status:todo) OR (priority:high AND tags:work)").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Test all 8 combinations
+        for high in [true, false] {
+            for todo in [true, false] {
+                for work in [true, false] {
+                    let task = create_test_task(high, todo, work);
+                    assert_eq!(
+                        evaluate(&expr1, &task, &ctx),
+                        evaluate(&expr2, &task, &ctx),
+                        "Distributive law failed for high={}, todo={}, work={}",
+                        high,
+                        todo,
+                        work
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_associative_law_and() {
+        // Associative Law: (A AND B) AND C = A AND (B AND C)
+        let expr1 = parse("(priority:high AND status:todo) AND tags:work").unwrap();
+        let expr2 = parse("priority:high AND (status:todo AND tags:work)").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        for high in [true, false] {
+            for todo in [true, false] {
+                for work in [true, false] {
+                    let task = create_test_task(high, todo, work);
+                    assert_eq!(evaluate(&expr1, &task, &ctx), evaluate(&expr2, &task, &ctx));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_associative_law_or() {
+        // Associative Law: (A OR B) OR C = A OR (B OR C)
+        let expr1 = parse("(priority:high OR status:todo) OR tags:work").unwrap();
+        let expr2 = parse("priority:high OR (status:todo OR tags:work)").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        for high in [true, false] {
+            for todo in [true, false] {
+                for work in [true, false] {
+                    let task = create_test_task(high, todo, work);
+                    assert_eq!(evaluate(&expr1, &task, &ctx), evaluate(&expr2, &task, &ctx));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_double_negation() {
+        // !(NOT A) = A
+        let expr1 = parse("!(!priority:high)").unwrap();
+        let expr2 = parse("priority:high").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let task_high = create_test_task(true, true, false);
+        let task_low = create_test_task(false, true, false);
+
+        assert_eq!(
+            evaluate(&expr1, &task_high, &ctx),
+            evaluate(&expr2, &task_high, &ctx)
+        );
+        assert_eq!(
+            evaluate(&expr1, &task_low, &ctx),
+            evaluate(&expr2, &task_low, &ctx)
+        );
+    }
+}
+
+// ============================================================================
+// PERFORMANCE AND STRESS TESTS
+// ============================================================================
+
+mod performance_tests {
+    use super::*;
+
+    #[test]
+    fn test_evaluate_with_1000_tasks() {
+        let expr = parse("priority:high AND status:todo").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Create 1000 tasks
+        let tasks: Vec<Task> = (0..1000)
+            .map(|i| {
+                let mut task = Task::new(format!("Task {}", i));
+                task.priority = if i % 3 == 0 {
+                    Priority::High
+                } else {
+                    Priority::Low
+                };
+                task.status = if i % 2 == 0 {
+                    TaskStatus::Todo
+                } else {
+                    TaskStatus::Done
+                };
+                task
+            })
+            .collect();
+
+        // Evaluate all tasks
+        let matches: Vec<_> = tasks.iter().filter(|t| evaluate(&expr, t, &ctx)).collect();
+
+        // Should match tasks where i % 6 == 0 (both high priority AND todo)
+        // Count: 0, 6, 12, ..., 996 = 167 tasks
+        assert_eq!(matches.len(), 167);
+    }
+
+    #[test]
+    fn test_evaluate_with_10000_tasks() {
+        let expr = parse("(priority:high OR priority:urgent) AND status:todo").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Create 10,000 tasks
+        let tasks: Vec<Task> = (0..10_000)
+            .map(|i| {
+                let mut task = Task::new(format!("Task {}", i));
+                task.priority = match i % 5 {
+                    0 => Priority::High,
+                    1 => Priority::Urgent,
+                    _ => Priority::Low,
+                };
+                task.status = if i % 2 == 0 {
+                    TaskStatus::Todo
+                } else {
+                    TaskStatus::Done
+                };
+                task
+            })
+            .collect();
+
+        // Evaluate all tasks
+        let matches: Vec<_> = tasks.iter().filter(|t| evaluate(&expr, t, &ctx)).collect();
+
+        // Should match tasks where (i % 5 <= 1) AND (i % 2 == 0)
+        // High or Urgent: 40% of tasks
+        // Todo: 50% of tasks
+        // Both: 20% of tasks
+        assert_eq!(matches.len(), 2000);
+    }
+
+    #[test]
+    fn test_caching_with_large_dataset() {
+        let expr = parse("search:task AND priority:high").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Create 5000 tasks with varying properties
+        let tasks: Vec<Task> = (0..5000)
+            .map(|i| {
+                let mut task = Task::new(if i % 2 == 0 {
+                    format!("Task {}", i)
+                } else {
+                    format!("Item {}", i)
+                });
+                task.priority = if i % 3 == 0 {
+                    Priority::High
+                } else {
+                    Priority::Low
+                };
+                task
+            })
+            .collect();
+
+        // Evaluate using cache (creates cache per task)
+        let matches1: Vec<_> = tasks
+            .iter()
+            .filter(|t| {
+                let cache = TaskLowerCache::new(t);
+                evaluate_with_cache(&expr, &cache, &ctx)
+            })
+            .collect();
+
+        // Evaluate without cache should give same results
+        let matches2: Vec<_> = tasks.iter().filter(|t| evaluate(&expr, t, &ctx)).collect();
+
+        // Results should be identical
+        assert_eq!(matches1.len(), matches2.len());
+    }
+
+    #[test]
+    fn test_complex_filter_performance() {
+        // Complex nested filter
+        let expr = parse(
+            "(priority:high OR priority:urgent) AND \
+             (status:todo OR status:in_progress) AND \
+             !(tags:blocked OR tags:waiting) AND \
+             (has:due OR has:scheduled)",
+        )
+        .unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        // Create diverse task set
+        let tasks: Vec<Task> = (0..5000)
+            .map(|i| {
+                let mut task = Task::new(format!("Task {}", i));
+                task.priority = match i % 5 {
+                    0 => Priority::High,
+                    1 => Priority::Urgent,
+                    2 => Priority::Medium,
+                    _ => Priority::Low,
+                };
+                task.status = match i % 4 {
+                    0 => TaskStatus::Todo,
+                    1 => TaskStatus::InProgress,
+                    2 => TaskStatus::Done,
+                    _ => TaskStatus::Blocked,
+                };
+                if i % 3 == 0 {
+                    task.tags = vec!["work".to_string()];
+                }
+                if i % 7 == 0 {
+                    task.tags.push("blocked".to_string());
+                }
+                if i % 2 == 0 {
+                    task.due_date = Some(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap());
+                }
+                task
+            })
+            .collect();
+
+        // Should complete without panic or timeout
+        let matches: Vec<_> = tasks.iter().filter(|t| evaluate(&expr, t, &ctx)).collect();
+
+        // Verify we got some matches (exact number depends on complex logic)
+        assert!(!matches.is_empty());
+    }
+
+    #[test]
+    fn test_parse_very_long_filter() {
+        // Create a filter with 100 OR clauses
+        let parts: Vec<String> = (0..100).map(|i| format!("tags:tag{}", i)).collect();
+        let filter_str = parts.join(" OR ");
+
+        // Should parse without error
+        let result = parse(&filter_str);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_deeply_nested_performance() {
+        // Create expression nested 100 levels deep
+        let mut expr_str = String::from("priority:high");
+        for _ in 0..100 {
+            expr_str = format!("({})", expr_str);
+        }
+
+        let expr = parse(&expr_str).unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("Test");
+        task.priority = Priority::High;
+
+        // Should evaluate without stack overflow
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_wide_tree_performance() {
+        // Create expression with 200 OR branches
+        let parts: Vec<String> = (0..200).map(|_i| format!("priority:high")).collect();
+        let expr_str = parts.join(" OR ");
+
+        let expr = parse(&expr_str).unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("Test");
+        task.priority = Priority::High;
+
+        // Should evaluate efficiently
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+}
+
+// ============================================================================
+// ADVANCED INTEGRATION TESTS
+// ============================================================================
+
+mod advanced_integration_tests {
+    use super::*;
+
+    #[test]
+    fn test_project_hierarchy_filtering() {
+        let expr = parse("project:frontend").unwrap();
+
+        let mut projects = HashMap::new();
+        let frontend_project = Project::new("Frontend Team");
+        projects.insert(frontend_project.id, frontend_project.clone());
+
+        let mut task = Task::new("Fix UI bug");
+        task.project_id = Some(frontend_project.id);
+
+        let ctx = EvalContext::new(&projects);
+
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_multi_tag_filtering() {
+        let expr = parse("tags:work AND tags:urgent AND tags:bug").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("Critical bug");
+        task.tags = vec!["work".to_string(), "urgent".to_string(), "bug".to_string()];
+
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // Missing one tag should fail
+        task.tags = vec!["work".to_string(), "urgent".to_string()];
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_date_range_with_timezone() {
+        // Test that date comparisons work correctly
+        let expr = parse("due:2025-01-01..2025-01-31").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("January task");
+        task.due_date = Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap());
+        assert!(evaluate(&expr, &task, &ctx));
+
+        task.due_date = Some(NaiveDate::from_ymd_opt(2025, 2, 1).unwrap());
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_combined_has_and_value_filters() {
+        let expr = parse("has:due AND due:overdue").unwrap();
+
+        let today = chrono::Utc::now().date_naive();
+        let past_date = today - Duration::days(5);
+        let projects = HashMap::new();
+        let ctx = EvalContext::with_date(&projects, today);
+
+        let mut task = Task::new("Overdue task");
+        task.due_date = Some(past_date);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // Task without due date should fail
+        task.due_date = None;
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_search_with_special_characters() {
+        let expr = parse(r#"search:"Fix bug #123""#).unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("Fix bug #123 in login");
+        assert!(evaluate(&expr, &task, &ctx));
+
+        task.title = "Fix bug 456".to_string();
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_complex_real_world_query() {
+        // Realistic query: high priority bugs due soon that aren't blocked
+        let expr = parse(
+            "(priority:high OR priority:urgent) AND \
+             tags:bug AND \
+             !status:blocked AND \
+             has:due",
+        )
+        .unwrap();
+
+        let today = chrono::Utc::now().date_naive();
+        let projects = HashMap::new();
+        let ctx = EvalContext::with_date(&projects, today);
+
+        let mut task = Task::new("Critical login bug");
+        task.priority = Priority::High;
+        task.tags = vec!["bug".to_string()];
+        task.due_date = Some(today + Duration::days(2));
+        task.status = TaskStatus::InProgress;
+
+        assert!(evaluate(&expr, &task, &ctx));
+    }
+
+    #[test]
+    fn test_estimate_filtering() {
+        let expr = parse("estimate:>60 AND has:estimate").unwrap();
+        let projects = HashMap::new();
+        let ctx = EvalContext::new(&projects);
+
+        let mut task = Task::new("Large task");
+        task.estimated_minutes = Some(120);
+        assert!(evaluate(&expr, &task, &ctx));
+
+        // Task without estimate should not match
+        task.estimated_minutes = None;
+        assert!(!evaluate(&expr, &task, &ctx));
+
+        // Task with small estimate should not match
+        task.estimated_minutes = Some(30);
+        assert!(!evaluate(&expr, &task, &ctx));
+    }
+}

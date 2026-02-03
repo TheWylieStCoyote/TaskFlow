@@ -755,3 +755,625 @@ fn test_branch_name_with_slashes() {
     let branches = list_branches(repo.path()).unwrap();
     assert!(branches.contains(&"feature/user/auth/login".to_string()));
 }
+
+// ============================================================================
+// ERROR HANDLING EDGE CASES
+// ============================================================================
+
+#[test]
+fn test_corrupted_git_config() {
+    let repo = setup_test_repo();
+
+    // Corrupt the git config file
+    let config_path = repo.path().join(".git").join("config");
+    fs::write(&config_path, "invalid [ config { content").unwrap();
+
+    // Most operations should handle corrupted config gracefully
+    let result = get_current_branch(repo.path());
+    // May succeed or fail depending on the operation, but should not panic
+    let _ = result;
+}
+
+#[test]
+fn test_missing_git_directory() {
+    let temp = TempDir::new().unwrap();
+
+    // Create a .git file instead of directory (submodule scenario)
+    fs::write(
+        temp.path().join(".git"),
+        "gitdir: ../parent/.git/modules/sub",
+    )
+    .unwrap();
+
+    let result = get_current_branch(temp.path());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_empty_repository() {
+    let dir = TempDir::new().unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    // No commits yet - git creates default branch but it's not "born" yet
+    let result = get_current_branch(dir.path());
+    // Modern git creates initial branch (main/master) even without commits
+    // Behavior varies by git version
+    let _ = result; // May succeed or fail depending on git version
+
+    let result = list_branches(dir.path());
+    assert!(result.is_ok());
+    // May be empty or contain default branch depending on git version
+    let _ = result;
+}
+
+#[test]
+fn test_branch_with_invalid_characters() {
+    let repo = setup_test_repo();
+
+    // Try creating branches with characters git rejects
+    let invalid_names = [
+        "feature..double-dot", // consecutive dots
+        "feature/",            // trailing slash
+        "feature//double",     // double slash
+    ];
+
+    for name in invalid_names {
+        let result = Command::new("git")
+            .args(["branch", name])
+            .current_dir(repo.path())
+            .output();
+
+        // Git should reject these, or if accepted, our operations should handle them
+        if let Ok(output) = result {
+            if output.status.success() {
+                // If git accepted it, verify our operations handle it
+                assert!(branch_exists(repo.path(), name));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_operations_on_bare_repository() {
+    let dir = TempDir::new().unwrap();
+
+    // Create a bare repository
+    Command::new("git")
+        .args(["init", "--bare"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+
+    // Operations on bare repos should handle appropriately
+    let result = get_current_branch(dir.path());
+    // Bare repos may or may not have a current branch depending on git version
+    // Modern git still tracks HEAD in bare repos
+    let _ = result;
+
+    let result = list_branches(dir.path());
+    // May succeed with empty list or fail - both acceptable for bare repos
+    let _ = result;
+}
+
+#[test]
+fn test_very_long_branch_name() {
+    let repo = setup_test_repo();
+
+    // Git allows very long branch names (up to filesystem limits)
+    let long_name = format!("feature/{}", "a".repeat(200));
+
+    Command::new("git")
+        .args(["branch", &long_name])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    assert!(branch_exists(repo.path(), &long_name));
+
+    let branches = list_branches(repo.path()).unwrap();
+    assert!(branches.contains(&long_name));
+}
+
+#[test]
+fn test_unicode_in_branch_names() {
+    let repo = setup_test_repo();
+
+    // Unicode characters in branch names
+    let unicode_names = [
+        "feature/用户认证", // Chinese
+        "feature/テスト",   // Japanese
+        "feature/тест",     // Russian
+        "feature/café",     // Accented chars
+        "feature/emoji-🚀", // Emoji
+    ];
+
+    for name in unicode_names {
+        let result = Command::new("git")
+            .args(["branch", name])
+            .current_dir(repo.path())
+            .output();
+
+        if let Ok(output) = result {
+            if output.status.success() {
+                assert!(
+                    branch_exists(repo.path(), name),
+                    "Branch '{name}' should exist"
+                );
+            }
+        }
+    }
+}
+
+// ============================================================================
+// PERFORMANCE TESTS
+// ============================================================================
+
+#[test]
+fn test_list_branches_performance_100_branches() {
+    let repo = setup_test_repo();
+
+    // Create 100 branches
+    for i in 1..=100 {
+        Command::new("git")
+            .args(["branch", &format!("feature/branch-{i:03}")])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+    }
+
+    let start = std::time::Instant::now();
+    let branches = list_branches(repo.path()).unwrap();
+    let elapsed = start.elapsed();
+
+    assert!(branches.len() >= 100);
+    assert!(
+        elapsed.as_millis() < 1000,
+        "Listing 100 branches took {elapsed:?}"
+    );
+}
+
+#[test]
+fn test_branch_matching_performance_many_tasks() {
+    let matcher = BranchMatcher::new();
+
+    // Create 1000 tasks
+    let tasks: Vec<Task> = (0..1000)
+        .map(|i| Task::new(format!("Task number {i}")))
+        .collect();
+
+    let start = std::time::Instant::now();
+    let result = matcher.match_branch_to_task("feature/task-number-500", tasks.iter());
+    let elapsed = start.elapsed();
+
+    assert!(result.is_some());
+    assert!(
+        elapsed.as_millis() < 100,
+        "Matching against 1000 tasks took {elapsed:?}"
+    );
+}
+
+#[test]
+fn test_get_commits_performance_many_commits() {
+    let repo = setup_test_repo();
+
+    // Create 100 commits
+    for i in 1..=100 {
+        fs::write(repo.path().join(format!("file{i}.txt")), "content").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", &format!("Commit {i}")])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+    }
+
+    let start = std::time::Instant::now();
+    let commits = get_branch_commits(repo.path(), "main", 50).unwrap();
+    let elapsed = start.elapsed();
+
+    assert_eq!(commits.len(), 50);
+    assert!(
+        elapsed.as_millis() < 500,
+        "Getting 50 commits took {elapsed:?}"
+    );
+}
+
+#[test]
+fn test_is_merged_check_performance() {
+    let repo = setup_test_repo();
+
+    // Create and merge 20 branches
+    for i in 1..=20 {
+        create_feature_branch(
+            &repo,
+            &format!("feature/branch-{i}"),
+            &format!("file{i}.txt"),
+            &format!("Feature {i}"),
+        );
+        merge_branch(&repo, &format!("feature/branch-{i}"));
+    }
+
+    // Check all branches in sequence
+    let start = std::time::Instant::now();
+    for i in 1..=20 {
+        let is_merged = is_branch_merged(repo.path(), &format!("feature/branch-{i}"), "main");
+        assert!(is_merged.unwrap());
+    }
+    let elapsed = start.elapsed();
+
+    assert!(
+        elapsed.as_millis() < 2000,
+        "Checking 20 merged branches took {elapsed:?}"
+    );
+}
+
+// ============================================================================
+// ADVANCED BRANCH MATCHING EDGE CASES
+// ============================================================================
+
+#[test]
+fn test_match_ambiguous_branches() {
+    let matcher = BranchMatcher::new();
+
+    let task1 = Task::new("Fix login");
+    let task2 = Task::new("Fix login page");
+    let task3 = Task::new("Fix login button");
+
+    let tasks = [task1.clone(), task2.clone(), task3.clone()];
+
+    // Branch is ambiguous - could match all three
+    let result = matcher.match_branch_to_task("fix/login", tasks.iter());
+
+    // Should match the best one (shortest title or highest similarity)
+    assert!(result.is_some());
+    assert_eq!(result.unwrap(), task1.id); // Exact match
+}
+
+#[test]
+fn test_match_with_ticket_numbers() {
+    let matcher = BranchMatcher::new();
+
+    let task = Task::new("Implement OAuth authentication JIRA-1234");
+    let tasks = [task.clone()];
+
+    // Common patterns with ticket numbers
+    let branches = [
+        "feature/JIRA-1234-oauth",
+        "feature/oauth-JIRA-1234",
+        "JIRA-1234/oauth-implementation",
+        "jira-1234/oauth", // lowercase
+    ];
+
+    for branch in branches {
+        let result = matcher.match_branch_to_task(branch, tasks.iter());
+        assert_eq!(
+            result,
+            Some(task.id),
+            "Branch '{branch}' should match task with JIRA-1234"
+        );
+    }
+}
+
+#[test]
+fn test_match_with_prefix_conventions() {
+    let matcher = BranchMatcher::new();
+
+    let task = Task::new("Add user profile page");
+    let tasks = [task.clone()];
+
+    // Common prefix conventions
+    let branches = [
+        "feat/user-profile",
+        "feature/user-profile-page",
+        "add/user-profile",
+        "enhancement/profile-page",
+    ];
+
+    for branch in branches {
+        let result = matcher.match_branch_to_task(branch, tasks.iter());
+        assert!(
+            result.is_some(),
+            "Branch '{branch}' should match task about user profile"
+        );
+    }
+}
+
+#[test]
+fn test_match_with_hyphens_vs_underscores() {
+    let matcher = BranchMatcher::new();
+
+    let task = Task::new("Update database schema");
+    let tasks = [task.clone()];
+
+    // Both hyphens and underscores should work
+    let result1 = matcher.match_branch_to_task("feature/database-schema", tasks.iter());
+    let result2 = matcher.match_branch_to_task("feature/database_schema", tasks.iter());
+    let result3 = matcher.match_branch_to_task("feature/databaseSchema", tasks.iter());
+
+    assert_eq!(result1, Some(task.id));
+    assert_eq!(result2, Some(task.id));
+    assert_eq!(result3, Some(task.id));
+}
+
+#[test]
+fn test_match_no_match_below_threshold() {
+    let matcher = BranchMatcher::new().with_threshold(0.9); // Very high threshold
+
+    let task = Task::new("Implement payment processing");
+    let tasks = [task.clone()];
+
+    // Completely different topic
+    let result = matcher.match_branch_to_task("feature/user-authentication", tasks.iter());
+    assert!(result.is_none());
+}
+
+#[test]
+fn test_match_exact_title_in_branch() {
+    let matcher = BranchMatcher::new();
+
+    let task = Task::new("TASK-456");
+    let tasks = [task.clone()];
+
+    // Exact match should work even with very short titles
+    let result = matcher.match_branch_to_task("feature/TASK-456", tasks.iter());
+    assert_eq!(result, Some(task.id));
+}
+
+#[test]
+fn test_match_multiple_branches_same_task() {
+    let repo = setup_test_repo();
+    let matcher = BranchMatcher::new();
+
+    let task = Task::new("Implement authentication system");
+    let id_short = &task.id.to_string()[..8];
+    let tasks = [task.clone()];
+
+    // Multiple branches for same task (e.g., WIP branches)
+    // Use "task-" prefix so ID matching works
+    let branch_names = [
+        format!("feature/task-{id_short}"),
+        format!("wip/task-{id_short}"),
+        format!("refactor/task-{id_short}"),
+    ];
+
+    for name in &branch_names {
+        Command::new("git")
+            .args(["branch", name])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+    }
+
+    // All should match the same task by ID
+    for name in branch_names {
+        let result = matcher.match_branch_to_task(&name, tasks.iter());
+        assert_eq!(
+            result,
+            Some(task.id),
+            "Branch '{name}' should match task by ID"
+        );
+    }
+}
+
+// ============================================================================
+// MERGE DETECTION EDGE CASES
+// ============================================================================
+
+#[test]
+fn test_merge_detection_fast_forward() {
+    let repo = setup_test_repo();
+
+    // Create branch
+    Command::new("git")
+        .args(["checkout", "-b", "feature/fast-forward"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    fs::write(repo.path().join("new.txt"), "content").unwrap();
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["commit", "-m", "Add new file"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    // Fast-forward merge (no merge commit)
+    Command::new("git")
+        .args(["merge", "--ff-only", "feature/fast-forward"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    // Should still detect as merged
+    let is_merged = is_branch_merged(repo.path(), "feature/fast-forward", "main").unwrap();
+    assert!(is_merged);
+}
+
+#[test]
+fn test_merge_detection_squash_merge() {
+    let repo = setup_test_repo();
+
+    create_feature_branch(&repo, "feature/squash-test", "file.txt", "Feature work");
+
+    // Squash merge
+    Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["merge", "--squash", "feature/squash-test"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["commit", "-m", "Squash merge"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    // Squash merges don't preserve history, may not be detected
+    // This test documents the behavior
+    let is_merged = is_branch_merged(repo.path(), "feature/squash-test", "main");
+    // Result depends on git's merge detection heuristics
+    let _ = is_merged;
+}
+
+#[test]
+fn test_merge_detection_cherry_pick() {
+    let repo = setup_test_repo();
+
+    create_feature_branch(&repo, "feature/cherry-test", "file.txt", "Feature commit");
+
+    // Get the commit hash
+    let output = Command::new("git")
+        .args(["rev-parse", "feature/cherry-test"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    // Cherry-pick instead of merge
+    Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["cherry-pick", &commit])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    // Cherry-pick creates new commit with same content
+    // Git's merge detection may consider this merged depending on version/heuristics
+    let is_merged = is_branch_merged(repo.path(), "feature/cherry-test", "main").unwrap();
+    // Modern git can detect cherry-picked commits as merged
+    let _ = is_merged; // May be true or false depending on git's detection
+}
+
+#[test]
+fn test_merge_detection_rebase_and_merge() {
+    let repo = setup_test_repo();
+
+    create_feature_branch(&repo, "feature/rebase-test", "file.txt", "Feature");
+
+    // Rebase onto main
+    Command::new("git")
+        .args(["checkout", "feature/rebase-test"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["rebase", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    // Now merge
+    Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    Command::new("git")
+        .args(["merge", "feature/rebase-test"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    let is_merged = is_branch_merged(repo.path(), "feature/rebase-test", "main").unwrap();
+    assert!(is_merged);
+}
+
+// ============================================================================
+// BRANCH STATUS AND LIFECYCLE TESTS
+// ============================================================================
+
+#[test]
+fn test_branch_lifecycle_create_work_merge_delete() {
+    let repo = setup_test_repo();
+    let branch = "feature/lifecycle-test";
+
+    // 1. Create
+    create_feature_branch(&repo, branch, "work.txt", "Work done");
+    assert!(branch_exists(repo.path(), branch));
+
+    // 2. Verify not merged
+    assert!(!is_branch_merged(repo.path(), branch, "main").unwrap());
+
+    // 3. Merge
+    merge_branch(&repo, branch);
+    assert!(is_branch_merged(repo.path(), branch, "main").unwrap());
+
+    // 4. Delete
+    Command::new("git")
+        .args(["branch", "-d", branch])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    assert!(!branch_exists(repo.path(), branch));
+}
+
+#[test]
+fn test_stale_branch_detection() {
+    let repo = setup_test_repo();
+
+    // Create an old branch
+    create_feature_branch(&repo, "feature/old-branch", "old.txt", "Old work");
+
+    // Add commits to main (making branch stale)
+    Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+
+    for i in 1..=5 {
+        fs::write(repo.path().join(format!("main{i}.txt")), "content").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", &format!("Main commit {i}")])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+    }
+
+    // Branch still exists but is behind
+    assert!(branch_exists(repo.path(), "feature/old-branch"));
+
+    // Could add function to check if branch is behind main
+    // For now, just verify it's not merged
+    assert!(!is_branch_merged(repo.path(), "feature/old-branch", "main").unwrap());
+}

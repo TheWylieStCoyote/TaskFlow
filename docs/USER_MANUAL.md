@@ -209,6 +209,8 @@ TaskFlow's interface is divided into distinct areas:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+![TaskFlow interface](../screenshots/svg/task_list.svg)
+
 ### Header
 
 The top bar displays:
@@ -675,6 +677,8 @@ The calendar provides a monthly overview:
 | `Enter` | Focus task list for selected day |
 | `Esc` | Return focus to calendar grid |
 
+![Calendar view](../screenshots/svg/calendar.svg)
+
 ### Searching Tasks
 
 #### Start a Search
@@ -871,9 +875,13 @@ Access the Dashboard from the sidebar to see at-a-glance statistics:
 └────────────────────────────────────────────────────────────────┘
 ```
 
+![Dashboard](../screenshots/svg/dashboard.svg)
+
 ### Reports View
 
 Access detailed analytics from the sidebar → Reports.
+
+![Reports view](../screenshots/svg/reports.svg)
 
 The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`):
 

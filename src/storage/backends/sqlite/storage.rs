@@ -147,6 +147,7 @@ impl StorageBackend for SqliteBackend {
             pomodoro_config: self.get_pomodoro_value("config")?,
             pomodoro_stats: self.get_pomodoro_value("stats")?,
             saved_filters: self.list_saved_filters()?,
+            audit_logs: Vec::new(),
         })
     }
 

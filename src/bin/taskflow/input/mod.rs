@@ -31,7 +31,7 @@ pub fn handle_key_event(
 ) -> Message {
     // Handle command palette first (highest priority when visible)
     if model.command_palette.visible {
-        return handle_command_palette_input(key, model);
+        return handle_command_palette_input(key, model as &mut Model);
     }
 
     // Handle delete confirmation dialog first
@@ -129,9 +129,25 @@ pub fn handle_key_event(
         return handle_description_editor(key);
     }
 
-    // In multi-select mode, Space toggles task selection
-    if model.multi_select.mode && key.code == KeyCode::Char(' ') {
-        return Message::Ui(UiMessage::ToggleTaskSelection);
+    // In multi-select mode, Space toggles task selection and certain keys
+    // trigger bulk operations instead of their single-task equivalents
+    if model.multi_select.mode {
+        match key.code {
+            KeyCode::Char(' ') => return Message::Ui(UiMessage::ToggleTaskSelection),
+            KeyCode::Char('p') if !model.multi_select.selected.is_empty() => {
+                return Message::Ui(UiMessage::StartBulkSetPriority)
+            }
+            KeyCode::Char('T') if !model.multi_select.selected.is_empty() => {
+                return Message::Ui(UiMessage::StartBulkAddTags)
+            }
+            KeyCode::Char('D') if !model.multi_select.selected.is_empty() => {
+                return Message::Ui(UiMessage::StartBulkSetDueDate)
+            }
+            KeyCode::Char('z') if !model.multi_select.selected.is_empty() => {
+                return Message::Ui(UiMessage::StartBulkSnooze)
+            }
+            _ => {}
+        }
     }
 
     // In calendar view, handle focus switching and navigation
@@ -251,16 +267,15 @@ pub fn handle_key_event(
 }
 
 /// Handle input for the command palette.
-fn handle_command_palette_input(key: event::KeyEvent, model: &Model) -> Message {
+fn handle_command_palette_input(key: event::KeyEvent, model: &mut Model) -> Message {
     match key.code {
         KeyCode::Esc => Message::Ui(UiMessage::HideCommandPalette),
         KeyCode::Enter => {
-            // Execute the selected command
-            // The update handler will close the palette and get the action
+            // Execute the selected command and close the palette
             if let Some(action) = taskflow::app::get_palette_action(model) {
-                // First hide the palette, then return the action's message
-                // We use a special approach: return the execute message,
-                // which will be handled to dispatch the selected action
+                // Close the palette immediately so it doesn't remain visible
+                // while the dispatched action runs
+                model.command_palette.visible = false;
                 return action_to_message(&action);
             }
             Message::Ui(UiMessage::HideCommandPalette)

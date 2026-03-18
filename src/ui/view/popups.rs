@@ -44,9 +44,15 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
             InputTarget::FilterByTag => "Filter by Tag (comma-separated, Ctrl+T to clear)",
             InputTarget::BulkMoveToProject => "Move Selected to Project (enter number)",
             InputTarget::BulkSetStatus => "Set Status for Selected (enter number)",
+            InputTarget::BulkSetPriority => {
+                "Set Priority for Selected (0=None 1=Low 2=Med 3=High 4=Urgent)"
+            }
+            InputTarget::BulkAddTags => "Tags for Selected (comma-separated, prefix - to remove)",
+            InputTarget::BulkSetDueDate => "Due Date for Selected (YYYY-MM-DD, empty to clear)",
+            InputTarget::BulkSnooze => "Snooze Selected Until (YYYY-MM-DD, empty to clear)",
             InputTarget::EditDependencies(_) => "Blocked by (task numbers, comma-separated)",
             InputTarget::EditRecurrence(_) => {
-                "Recurrence (d=daily, w=weekly, m=monthly, y=yearly, 0=none)"
+                "Recurrence (d[N], w[N], m[day], y, 0=none; end=YYYY-MM-DD, max=N)"
             }
             InputTarget::LinkTask(_) => "Link to next task (task number or title)",
             InputTarget::ImportFilePath(format) => match format {

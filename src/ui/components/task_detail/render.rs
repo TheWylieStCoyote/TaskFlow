@@ -500,6 +500,63 @@ impl TaskDetail<'_> {
         lines
     }
 
+    /// Render audit history section.
+    pub(super) fn render_history(&self, task: &Task) -> Vec<Line<'static>> {
+        let theme = self.theme;
+        let mut lines = Vec::new();
+
+        let entries = self.model.audit_log_for_task(&task.id);
+
+        if entries.is_empty() {
+            return lines;
+        }
+
+        lines.push(Line::from(Span::styled(
+            format!("── History ({}) ──", entries.len()),
+            Style::default()
+                .fg(theme.colors.accent.to_color())
+                .add_modifier(Modifier::BOLD),
+        )));
+
+        // Show up to 10 most recent entries (already sorted newest-first)
+        for entry in entries.iter().take(10) {
+            let timestamp = entry.formatted_timestamp();
+            let action = entry.action.to_string();
+
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    timestamp,
+                    Style::default().fg(theme.colors.muted.to_color()),
+                ),
+                Span::raw("  "),
+                Span::styled(action, Style::default().fg(theme.colors.accent.to_color())),
+            ]));
+
+            // Show field changes indented below
+            for change in &entry.changes {
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(
+                        format!("{}:", change.field),
+                        Style::default().fg(theme.colors.muted.to_color()),
+                    ),
+                    Span::raw(format!(" {} → {}", change.old_value, change.new_value)),
+                ]));
+            }
+        }
+
+        if entries.len() > 10 {
+            lines.push(Line::from(Span::styled(
+                format!("  ... and {} more", entries.len() - 10),
+                Style::default().fg(theme.colors.muted.to_color()),
+            )));
+        }
+
+        lines.push(Line::from(""));
+        lines
+    }
+
     /// Render work logs section.
     pub(super) fn render_work_logs(&self, task: &Task) -> Vec<Line<'static>> {
         let theme = self.theme;

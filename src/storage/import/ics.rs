@@ -259,6 +259,7 @@ fn parse_ics_vtodo(props: &HashMap<String, String>, validate: bool) -> Result<Ta
         dependencies: Vec::new(),
         next_task_id: None,
         recurrence: None,
+        recurrence_options: crate::domain::RecurrenceOptions::default(),
         estimated_minutes: None,
         actual_minutes: 0,
         sort_order: None,

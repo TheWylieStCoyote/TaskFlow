@@ -612,6 +612,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::BulkDelete => multi_select::bulk_delete(model),
         UiMessage::StartBulkMoveToProject => multi_select::start_bulk_move_to_project(model),
         UiMessage::StartBulkSetStatus => multi_select::start_bulk_set_status(model),
+        UiMessage::StartBulkSetPriority => multi_select::start_bulk_set_priority(model),
+        UiMessage::StartBulkAddTags => multi_select::start_bulk_add_tags(model),
+        UiMessage::StartBulkSetDueDate => multi_select::start_bulk_set_due_date(model),
+        UiMessage::StartBulkSnooze => multi_select::start_bulk_snooze(model),
         UiMessage::StartEditDependencies => {
             if let Some(task_id) = model.selected_task_id() {
                 if let Some(task) = model.tasks.get(&task_id) {
@@ -641,15 +645,43 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
                 if let Some(task) = model.tasks.get(&task_id) {
                     model.input.mode = InputMode::Editing;
                     model.input.target = InputTarget::EditRecurrence(task_id);
-                    // Show current recurrence setting
-                    let current = match &task.recurrence {
-                        Some(crate::domain::Recurrence::Daily) => "d (daily)",
-                        Some(crate::domain::Recurrence::Weekly { .. }) => "w (weekly)",
-                        Some(crate::domain::Recurrence::Monthly { .. }) => "m (monthly)",
-                        Some(crate::domain::Recurrence::Yearly { .. }) => "y (yearly)",
-                        None => "0 (none)",
+                    // Show current recurrence setting including interval / bounds
+                    let opts = &task.recurrence_options;
+                    let base = match &task.recurrence {
+                        Some(crate::domain::Recurrence::Daily) => {
+                            format!(
+                                "d{}",
+                                if opts.interval > 1 {
+                                    opts.interval.to_string()
+                                } else {
+                                    String::new()
+                                }
+                            )
+                        }
+                        Some(crate::domain::Recurrence::Weekly { .. }) => {
+                            format!(
+                                "w{}",
+                                if opts.interval > 1 {
+                                    opts.interval.to_string()
+                                } else {
+                                    String::new()
+                                }
+                            )
+                        }
+                        Some(crate::domain::Recurrence::Monthly { day }) => {
+                            format!("m{day}")
+                        }
+                        Some(crate::domain::Recurrence::Yearly { .. }) => "y".to_string(),
+                        None => "0".to_string(),
                     };
-                    model.input.buffer = format!("Current: {current}");
+                    let mut hint = base;
+                    if let Some(end) = opts.end_date {
+                        hint.push_str(&format!(" end={end}"));
+                    }
+                    if let Some(max) = opts.max_occurrences {
+                        hint.push_str(&format!(" max={max}"));
+                    }
+                    model.input.buffer = hint;
                     model.input.cursor = model.input.buffer.len();
                 }
             }

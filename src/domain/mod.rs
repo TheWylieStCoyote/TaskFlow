@@ -117,6 +117,7 @@
 //! ```
 
 pub mod analytics;
+mod audit_log;
 mod calendar_event;
 pub mod duplicate_detector;
 mod filter;
@@ -135,6 +136,7 @@ mod work_log;
 #[cfg(test)]
 mod proptest_tests;
 
+pub use audit_log::*;
 pub use calendar_event::*;
 pub use filter::*;
 pub use goal::*;

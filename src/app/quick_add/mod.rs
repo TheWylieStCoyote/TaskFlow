@@ -101,6 +101,9 @@ static PROJECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"@(\w+)").expect("valid regex pattern"));
 static TIME_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"time:(\S+)").expect("valid regex pattern"));
+// Natural language "at 3pm" or "at 9:00-11:00" — matched case-insensitively
+static AT_TIME_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\bat\s+(\S+(?:-\S+)?)").expect("valid regex pattern"));
 
 /// Result of parsing a quick add string
 #[derive(Debug, Clone, Default)]
@@ -187,6 +190,22 @@ pub fn parse_quick_add(input: &str) -> ParsedTask {
         }
     }
     remaining = TIME_RE.replace_all(&remaining, "").to_string();
+
+    // Natural language time: "at 3pm", "at 9:00-11:00"
+    // Only apply if no time was already set via time: prefix
+    if result.scheduled_start_time.is_none() {
+        if let Some(cap) = AT_TIME_RE.captures(input) {
+            let time_str = &cap[1];
+            if let Some((start, end)) = parse_time_range(time_str) {
+                result.scheduled_start_time = Some(start);
+                result.scheduled_end_time = Some(end);
+                remaining = AT_TIME_RE.replace(&remaining, "").to_string();
+            } else if let Some(start) = parse_single_time(time_str) {
+                result.scheduled_start_time = Some(start);
+                remaining = AT_TIME_RE.replace(&remaining, "").to_string();
+            }
+        }
+    }
 
     // Clean up title: collapse multiple spaces and trim
     result.title = remaining.split_whitespace().collect::<Vec<_>>().join(" ");

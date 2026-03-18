@@ -53,6 +53,7 @@ impl StorageBackend for MarkdownBackend {
             pomodoro_config: self.pomodoro_state.config.clone(),
             pomodoro_stats: self.pomodoro_state.stats.clone(),
             saved_filters: self.saved_filters.clone(),
+            audit_logs: Vec::new(),
         })
     }
 

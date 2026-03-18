@@ -149,6 +149,8 @@ pub enum BackendType {
     Sqlite,
     /// Markdown files with YAML frontmatter - git-friendly
     Markdown,
+    /// CalDAV server sync (Google Calendar, Nextcloud, etc.) - requires config file
+    Caldav,
 }
 
 impl BackendType {
@@ -162,6 +164,7 @@ impl BackendType {
             "yaml" | "yml" => Some(Self::Yaml),
             "sqlite" | "db" => Some(Self::Sqlite),
             "markdown" | "md" => Some(Self::Markdown),
+            "caldav" | "carddav" => Some(Self::Caldav),
             _ => None,
         }
     }
@@ -174,6 +177,7 @@ impl BackendType {
             Self::Yaml => "yaml",
             Self::Sqlite => "sqlite",
             Self::Markdown => "markdown",
+            Self::Caldav => "caldav",
         }
     }
 
@@ -185,6 +189,7 @@ impl BackendType {
             Self::Yaml => "yaml",
             Self::Sqlite => "db",
             Self::Markdown => "md",
+            Self::Caldav => "toml",
         }
     }
 }
@@ -238,6 +243,11 @@ pub fn create_backend(
         }
         BackendType::Markdown => {
             let mut backend = backends::MarkdownBackend::new(path)?;
+            backend.initialize()?;
+            Ok(Box::new(backend))
+        }
+        BackendType::Caldav => {
+            let mut backend = backends::CalDavBackend::new(path)?;
             backend.initialize()?;
             Ok(Box::new(backend))
         }

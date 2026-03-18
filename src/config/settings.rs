@@ -27,6 +27,37 @@ use tracing::warn;
 use crate::domain::Priority;
 use crate::storage::BackendType;
 
+/// A user-defined task template loaded from `config.toml`.
+///
+/// Example TOML:
+/// ```toml
+/// [[custom_templates]]
+/// name = "PR Review"
+/// title = "Review PR: "
+/// priority = "medium"
+/// tags = ["review", "pr"]
+/// due_days = 1
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateConfig {
+    /// Display name shown in the template picker
+    pub name: String,
+    /// Default task title (user can edit after selection)
+    pub title: String,
+    /// Default priority: "none", "low", "medium", "high", "urgent"
+    #[serde(default)]
+    pub priority: String,
+    /// Default tags
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Optional description pre-fill
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Days from now for the due date (0 = today, 1 = tomorrow, None = no due date)
+    #[serde(default)]
+    pub due_days: Option<i64>,
+}
+
 /// What to show when the database is empty on first run
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -77,6 +108,10 @@ pub struct Settings {
 
     /// What to show when database is empty on first run
     pub first_run_mode: FirstRunMode,
+
+    /// User-defined task templates loaded from config
+    #[serde(default)]
+    pub custom_templates: Vec<TemplateConfig>,
 }
 
 impl Default for Settings {
@@ -90,6 +125,7 @@ impl Default for Settings {
             auto_save_interval: 300, // 5 minutes
             default_priority: "none".to_string(),
             first_run_mode: FirstRunMode::default(),
+            custom_templates: Vec::new(),
         }
     }
 }

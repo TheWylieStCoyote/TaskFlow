@@ -296,6 +296,10 @@ pub struct Model {
     /// Work log editor state
     pub work_log_editor: WorkLogEditorState,
 
+    // Audit log
+    /// Append-only history of all task mutations, indexed by entry ID
+    pub audit_logs: HashMap<crate::domain::AuditLogEntryId, crate::domain::AuditLogEntry>,
+
     // Description editor state (multi-line)
     /// Description editor state
     pub description_editor: DescriptionEditorState,
@@ -444,6 +448,7 @@ impl Model {
             time_log: TimeLogEditorState::default(),
             work_logs: HashMap::new(),
             work_log_editor: WorkLogEditorState::default(),
+            audit_logs: HashMap::new(),
             description_editor: DescriptionEditorState::default(),
             saved_filters: HashMap::new(),
             active_saved_filter: None,

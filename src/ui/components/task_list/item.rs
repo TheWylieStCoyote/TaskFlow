@@ -256,17 +256,23 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
         Span::raw("")
     };
 
-    // Subtask progress indicator - shows percentage if task has subtasks
+    // Subtask progress indicator - shows a compact bar and count if task has subtasks
     let progress_span = if ctx.subtask_progress.1 > 0 {
         let (completed, total) = ctx.subtask_progress;
-        let percentage = (completed * 100) / total;
+        const BAR_WIDTH: usize = 6;
+        let filled = (completed * BAR_WIDTH) / total;
+        let bar = format!(
+            "{}{}",
+            "\u{2588}".repeat(filled),
+            "\u{2591}".repeat(BAR_WIDTH - filled)
+        );
         let style = if completed == total {
             // All done - show in success/done color
             Style::default().fg(theme.status.done.to_color())
         } else {
             Style::default().fg(theme.colors.muted.to_color())
         };
-        Span::styled(format!(" [{percentage}%]"), style)
+        Span::styled(format!(" [{bar}] {completed}/{total}"), style)
     } else {
         Span::raw("")
     };

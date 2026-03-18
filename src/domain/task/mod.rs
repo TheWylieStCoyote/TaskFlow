@@ -12,7 +12,7 @@ mod task_id;
 mod tests;
 
 pub use priority::Priority;
-pub use recurrence::Recurrence;
+pub use recurrence::{Recurrence, RecurrenceOptions};
 pub use status::TaskStatus;
 pub use task_id::TaskId;
 
@@ -102,6 +102,10 @@ pub struct Task {
 
     // Recurrence
     pub recurrence: Option<Recurrence>,
+    /// Advanced recurrence options (interval, end date, max occurrences).
+    /// Defaults to `RecurrenceOptions::default()` for tasks without options set.
+    #[serde(default)]
+    pub recurrence_options: RecurrenceOptions,
 
     // Time tracking
     pub estimated_minutes: Option<u32>,
@@ -153,6 +157,7 @@ impl Task {
             scheduled_date: None,
             completed_at: None,
             recurrence: None,
+            recurrence_options: RecurrenceOptions::default(),
             estimated_minutes: None,
             actual_minutes: 0,
             sort_order: None,
@@ -213,6 +218,12 @@ impl Task {
     #[must_use]
     pub fn with_recurrence(mut self, recurrence: Option<Recurrence>) -> Self {
         self.recurrence = recurrence;
+        self
+    }
+
+    #[must_use]
+    pub fn with_recurrence_options(mut self, opts: RecurrenceOptions) -> Self {
+        self.recurrence_options = opts;
         self
     }
 

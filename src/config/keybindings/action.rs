@@ -168,6 +168,7 @@ pub enum Action {
     RefreshDuplicates,
     // Git integration
     ViewGitTodos,
+    ScanGitTodos,
     OpenInEditor,
 
     // Review modes
@@ -410,6 +411,7 @@ impl Action {
             Self::RefreshDuplicates => "Refresh duplicate list",
             // Git integration
             Self::ViewGitTodos => "View Git TODOs",
+            Self::ScanGitTodos => "Scan git repository for TODOs",
             Self::OpenInEditor => "Open in editor",
             // Reviews
             Self::ShowDailyReview => "Daily review",
@@ -553,7 +555,9 @@ impl Action {
             Self::DismissDuplicate | Self::MergeDuplicates | Self::RefreshDuplicates => {
                 ActionCategory::Duplicates
             }
-            Self::ViewGitTodos | Self::OpenInEditor => ActionCategory::ViewFilter,
+            Self::ViewGitTodos | Self::ScanGitTodos | Self::OpenInEditor => {
+                ActionCategory::ViewFilter
+            }
 
             Self::ShowDailyReview | Self::ShowWeeklyReview | Self::ShowEveningReview => {
                 ActionCategory::ViewFilter
@@ -709,6 +713,7 @@ pub const ALL_ACTIONS: &[Action] = &[
     Action::RefreshDuplicates,
     // Git integration
     Action::ViewGitTodos,
+    Action::ScanGitTodos,
     Action::OpenInEditor,
     // Review modes
     Action::ShowDailyReview,

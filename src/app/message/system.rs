@@ -67,4 +67,6 @@ pub enum SystemMessage {
     RefreshStorage,
     /// Check for merged git branches and auto-complete linked tasks
     CheckMergedBranches,
+    /// Scan git repository for TODO/FIXME comments and create tasks
+    ScanGitTodos,
 }

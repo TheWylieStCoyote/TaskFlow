@@ -92,6 +92,9 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         SystemMessage::CheckMergedBranches => {
             handle_check_merged_branches(model);
         }
+        SystemMessage::ScanGitTodos => {
+            handle_scan_git_todos(model);
+        }
     }
 }
 
@@ -586,6 +589,50 @@ fn handle_cancel_import(model: &mut Model) {
     model.import.pending = None;
     model.import.show_preview = false;
     model.alerts.status_message = Some("Import cancelled".to_string());
+}
+
+/// Scan git repository for TODO/FIXME comments and create tasks.
+fn handle_scan_git_todos(model: &mut Model) {
+    use crate::domain::git::scan_git_todos;
+    use crate::domain::Task;
+
+    let dir = std::env::current_dir().unwrap_or_default();
+    let items = scan_git_todos(&dir);
+
+    let mut created = 0usize;
+    let mut skipped = 0usize;
+
+    for item in &items {
+        let desc = format!("git:{}:{}", item.file, item.line);
+        if model
+            .tasks
+            .values()
+            .any(|t| t.description.as_deref() == Some(desc.as_str()))
+        {
+            skipped += 1;
+            continue;
+        }
+        let mut task = Task::new(&item.title);
+        task.description = Some(desc);
+        task.tags = vec!["git-todo".to_string()];
+        model.sync_task(&task);
+        model.tasks.insert(task.id, task);
+        created += 1;
+    }
+
+    if created > 0 {
+        model.storage.dirty = true;
+        if let Err(e) = model.save() {
+            model.alerts.status_message = Some(format!("Git TODOs: scan failed to save: {e}"));
+            return;
+        }
+        model.refresh_visible_tasks();
+    }
+
+    model.alerts.status_message = Some(format!(
+        "Git TODOs: {created} created, {skipped} already tracked"
+    ));
+    model.alerts.status_message_set_at = Some(std::time::Instant::now());
 }
 
 /// Check for merged branches and auto-complete linked tasks.

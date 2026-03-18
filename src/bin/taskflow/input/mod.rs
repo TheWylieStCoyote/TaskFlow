@@ -185,6 +185,11 @@ pub fn handle_key_event(
         }
     }
 
+    // In GitTodos view, r triggers an in-app rescan
+    if model.current_view == taskflow::app::ViewId::GitTodos && key.code == KeyCode::Char('r') {
+        return Message::System(SystemMessage::ScanGitTodos);
+    }
+
     // In Network view, handle task navigation
     if model.current_view == taskflow::app::ViewId::Network {
         if let Some(msg) = handle_network_view(key) {

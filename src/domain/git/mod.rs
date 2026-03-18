@@ -27,6 +27,9 @@
 
 pub mod matching;
 pub mod operations;
+pub mod scan;
+
+pub use scan::{scan_git_todos, scan_git_todos_with_patterns, GitTodoItem, DEFAULT_PATTERNS};
 
 #[cfg(test)]
 mod comprehensive_tests;

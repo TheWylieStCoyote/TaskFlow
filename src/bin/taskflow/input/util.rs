@@ -176,6 +176,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::RefreshDuplicates => Message::Ui(UiMessage::RefreshDuplicates),
         // Git integration
         Action::ViewGitTodos => Message::Navigation(NavigationMessage::GoToView(ViewId::GitTodos)),
+        Action::ScanGitTodos => Message::System(SystemMessage::ScanGitTodos),
         Action::OpenInEditor => Message::Ui(UiMessage::OpenInEditor),
         // Reviews
         Action::ShowDailyReview => Message::Ui(UiMessage::ShowDailyReview),

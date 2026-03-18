@@ -51,7 +51,7 @@ impl Widget for GitTodos<'_> {
                 )),
                 Line::from(""),
                 Line::from(Span::styled(
-                    "  Run 'taskflow git-todos' to extract TODOs from a repository.",
+                    "  Press `r` to scan git repository for TODOs.",
                     Style::default().fg(theme.colors.muted.to_color()),
                 )),
             ]);

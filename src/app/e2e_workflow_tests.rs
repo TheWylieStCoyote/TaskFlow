@@ -144,6 +144,7 @@ impl E2ETestHarness {
     }
 
     /// Get all visible tasks in the current view.
+    #[allow(dead_code)]
     fn visible_tasks(&self) -> Vec<&Task> {
         self.model
             .visible_tasks
@@ -250,6 +251,7 @@ impl E2ETestHarness {
     }
 
     /// Assert selected task has given status.
+    #[allow(dead_code)]
     fn assert_selected_status(&self, expected_status: TaskStatus) {
         let task = self.selected_task().expect("no task selected");
         assert_eq!(task.status, expected_status);
@@ -262,6 +264,7 @@ impl E2ETestHarness {
     }
 
     /// Assert number of visible tasks.
+    #[allow(dead_code)]
     fn assert_visible_count(&self, expected: usize) {
         let count = self.visible_tasks().len();
         assert_eq!(

@@ -22,3 +22,9 @@ allow-unwrap-in-tests = true
 # MSRV for compatibility lints
 # Uses LazyLock (1.80), is_none_or (1.82), const Vec methods (1.87)
 msrv = "1.87.0"
+
+# Maximum bytes for stack-allocated arrays before warning.
+# Default (16 KiB) produces a false-positive in clippy 0.1.93 where the
+# span is not resolved, pointing to this file instead of the actual site.
+# Raised to 512 KiB (the historical clippy default) to suppress it.
+array-size-threshold = 524288

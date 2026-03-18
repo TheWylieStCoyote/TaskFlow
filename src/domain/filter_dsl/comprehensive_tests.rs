@@ -1652,7 +1652,7 @@ mod ast_traversal_tests {
         // Create a deeply nested expression (50 levels)
         let mut expr_str = String::from("priority:high");
         for _ in 0..50 {
-            expr_str = format!("!({})", expr_str);
+            expr_str = format!("!({expr_str})");
         }
 
         let expr = parse(&expr_str).unwrap();
@@ -1663,7 +1663,7 @@ mod ast_traversal_tests {
     fn test_wide_tree() {
         // Create a wide tree (many ORs)
         let expr_str = (0..20)
-            .map(|_i| format!("priority:high"))
+            .map(|_i| "priority:high".to_string())
             .collect::<Vec<_>>()
             .join(" OR ");
 
@@ -1837,9 +1837,7 @@ mod boolean_logic_tests {
                 assert_eq!(
                     evaluate(&expr1, &task, &ctx),
                     evaluate(&expr2, &task, &ctx),
-                    "De Morgan's Law failed for high={}, todo={}",
-                    high,
-                    todo
+                    "De Morgan's Law failed for high={high}, todo={todo}"
                 );
             }
         }
@@ -1860,9 +1858,7 @@ mod boolean_logic_tests {
                 assert_eq!(
                     evaluate(&expr1, &task, &ctx),
                     evaluate(&expr2, &task, &ctx),
-                    "De Morgan's Law failed for high={}, todo={}",
-                    high,
-                    todo
+                    "De Morgan's Law failed for high={high}, todo={todo}"
                 );
             }
         }
@@ -1885,10 +1881,7 @@ mod boolean_logic_tests {
                     assert_eq!(
                         evaluate(&expr1, &task, &ctx),
                         evaluate(&expr2, &task, &ctx),
-                        "Distributive law failed for high={}, todo={}, work={}",
-                        high,
-                        todo,
-                        work
+                        "Distributive law failed for high={high}, todo={todo}, work={work}"
                     );
                 }
             }
@@ -1969,7 +1962,7 @@ mod performance_tests {
         // Create 1000 tasks
         let tasks: Vec<Task> = (0..1000)
             .map(|i| {
-                let mut task = Task::new(format!("Task {}", i));
+                let mut task = Task::new(format!("Task {i}"));
                 task.priority = if i % 3 == 0 {
                     Priority::High
                 } else {
@@ -2001,7 +1994,7 @@ mod performance_tests {
         // Create 10,000 tasks
         let tasks: Vec<Task> = (0..10_000)
             .map(|i| {
-                let mut task = Task::new(format!("Task {}", i));
+                let mut task = Task::new(format!("Task {i}"));
                 task.priority = match i % 5 {
                     0 => Priority::High,
                     1 => Priority::Urgent,
@@ -2036,9 +2029,9 @@ mod performance_tests {
         let tasks: Vec<Task> = (0..5000)
             .map(|i| {
                 let mut task = Task::new(if i % 2 == 0 {
-                    format!("Task {}", i)
+                    format!("Task {i}")
                 } else {
-                    format!("Item {}", i)
+                    format!("Item {i}")
                 });
                 task.priority = if i % 3 == 0 {
                     Priority::High
@@ -2081,7 +2074,7 @@ mod performance_tests {
         // Create diverse task set
         let tasks: Vec<Task> = (0..5000)
             .map(|i| {
-                let mut task = Task::new(format!("Task {}", i));
+                let mut task = Task::new(format!("Task {i}"));
                 task.priority = match i % 5 {
                     0 => Priority::High,
                     1 => Priority::Urgent,
@@ -2117,7 +2110,7 @@ mod performance_tests {
     #[test]
     fn test_parse_very_long_filter() {
         // Create a filter with 100 OR clauses
-        let parts: Vec<String> = (0..100).map(|i| format!("tags:tag{}", i)).collect();
+        let parts: Vec<String> = (0..100).map(|i| format!("tags:tag{i}")).collect();
         let filter_str = parts.join(" OR ");
 
         // Should parse without error
@@ -2130,7 +2123,7 @@ mod performance_tests {
         // Create expression nested 100 levels deep
         let mut expr_str = String::from("priority:high");
         for _ in 0..100 {
-            expr_str = format!("({})", expr_str);
+            expr_str = format!("({expr_str})");
         }
 
         let expr = parse(&expr_str).unwrap();
@@ -2147,7 +2140,7 @@ mod performance_tests {
     #[test]
     fn test_wide_tree_performance() {
         // Create expression with 200 OR branches
-        let parts: Vec<String> = (0..200).map(|_i| format!("priority:high")).collect();
+        let parts: Vec<String> = (0..200).map(|_i| "priority:high".to_string()).collect();
         let expr_str = parts.join(" OR ");
 
         let expr = parse(&expr_str).unwrap();

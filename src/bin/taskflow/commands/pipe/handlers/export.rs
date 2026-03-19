@@ -37,6 +37,7 @@ pub fn handle_export(model: &Model, _request: &PipeRequest) -> HandlerResult {
         pomodoro_config: Some(model.pomodoro.config.clone()),
         pomodoro_stats: Some(model.pomodoro.stats.clone()),
         saved_filters: model.saved_filters.values().cloned().collect(),
+        audit_logs: model.audit_logs.values().cloned().collect(),
     };
 
     serde_json::to_value(&export_data).map_err(PipeError::serialization)

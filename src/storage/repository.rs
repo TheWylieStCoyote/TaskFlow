@@ -419,6 +419,9 @@ pub struct ExportData {
     /// Saved filters for quick access
     #[serde(default)]
     pub saved_filters: Vec<SavedFilter>,
+    /// Append-only audit log of task mutations
+    #[serde(default)]
+    pub audit_logs: Vec<crate::domain::AuditLogEntry>,
 }
 
 impl Default for ExportData {
@@ -437,6 +440,7 @@ impl Default for ExportData {
             pomodoro_config: None,
             pomodoro_stats: None,
             saved_filters: Vec::new(),
+            audit_logs: Vec::new(),
         }
     }
 }

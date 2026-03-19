@@ -587,7 +587,8 @@ fn test_item_subtask_progress() {
     let item = task_to_list_item(&ctx);
     let text = list_item_text(item);
 
-    assert!(text.contains("[60%]"), "Subtask progress should show 60%");
+    // Feature 7: progress bar format is [████░░] completed/total
+    assert!(text.contains("3/5"), "Subtask progress should show 3/5");
 }
 
 #[test]
@@ -599,7 +600,8 @@ fn test_item_subtask_progress_complete() {
     let item = task_to_list_item(&ctx);
     let text = list_item_text(item);
 
-    assert!(text.contains("[100%]"), "Subtask progress should show 100%");
+    // Feature 7: progress bar format is [████████] completed/total
+    assert!(text.contains("5/5"), "Subtask progress should show 5/5");
 }
 
 #[test]

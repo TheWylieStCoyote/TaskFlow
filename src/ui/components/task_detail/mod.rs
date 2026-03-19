@@ -156,6 +156,9 @@ impl TaskDetail<'_> {
         // Work logs section
         lines.extend(self.render_work_logs(task));
 
+        // Audit history section
+        lines.extend(self.render_history(task));
+
         lines
     }
 }

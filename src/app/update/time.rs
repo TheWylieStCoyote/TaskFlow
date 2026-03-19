@@ -244,11 +244,14 @@ fn transition_pomodoro_phase(model: &mut Model) {
 
         // Check if goal reached
         if session.goal_reached() && next_phase == PomodoroPhase::Work {
-            model.alerts.status_message = Some(format!(
+            let goal_msg = format!(
                 "🎊 Goal reached! {} cycles completed. Keep going or stop.",
                 session.cycles_completed
-            ));
+            );
+            crate::notifications::notify_pomodoro_phase(&goal_msg);
+            model.alerts.status_message = Some(goal_msg);
         } else {
+            crate::notifications::notify_pomodoro_phase(&message);
             model.alerts.status_message = Some(message);
         }
     }

@@ -92,8 +92,12 @@ impl Widget for QuickCaptureDialog<'_> {
                     Style::default().fg(self.theme.colors.danger.to_color()),
                 ),
                 Span::styled(
-                    "sched:date",
+                    "sched:date ",
                     Style::default().fg(self.theme.colors.accent.to_color()),
+                ),
+                Span::styled(
+                    "at:time",
+                    Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
             ]),
             Line::from(vec![
@@ -104,7 +108,7 @@ impl Widget for QuickCaptureDialog<'_> {
                         .add_modifier(Modifier::ITALIC),
                 ),
                 Span::styled(
-                    "Buy milk #groceries @Home !high due:tomorrow",
+                    "Buy milk #groceries @Home !high due:+3d at 9am",
                     Style::default().fg(self.theme.colors.muted.to_color()),
                 ),
             ]),

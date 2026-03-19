@@ -112,6 +112,11 @@ impl Model {
             self.saved_filters.insert(filter.id.clone(), filter);
         }
 
+        // Load audit logs
+        for entry in export_data.audit_logs {
+            self.audit_logs.insert(entry.id, entry);
+        }
+
         self.storage.backend = Some(backend);
         self.storage.data_path = Some(path);
         self.refresh_visible_tasks();
@@ -553,9 +558,22 @@ impl Model {
             let after = task.clone();
             self.sync_task(&after);
             self.undo_stack.push(UndoAction::TaskModified {
-                before: Box::new(before),
-                after: Box::new(after),
+                before: Box::new(before.clone()),
+                after: Box::new(after.clone()),
             });
+            // Append audit log entry
+            let changes = crate::domain::diff_tasks(&before, &after);
+            if !changes.is_empty() {
+                let action = if after.status.is_complete() && !before.status.is_complete() {
+                    crate::domain::AuditAction::Completed
+                } else if !after.status.is_complete() && before.status.is_complete() {
+                    crate::domain::AuditAction::Uncompleted
+                } else {
+                    crate::domain::AuditAction::Modified
+                };
+                let entry = crate::domain::AuditLogEntry::new(*task_id, action, changes);
+                self.audit_logs.insert(entry.id, entry);
+            }
             true
         } else {
             false
@@ -621,6 +639,36 @@ impl Model {
             }
             self.storage.dirty = true;
         }
+    }
+
+    // ========================================================================
+    // Audit log helpers
+    // ========================================================================
+
+    /// Append a "task created" audit entry.
+    pub fn record_task_created(&mut self, task_id: TaskId) {
+        let entry =
+            crate::domain::AuditLogEntry::new(task_id, crate::domain::AuditAction::Created, vec![]);
+        self.audit_logs.insert(entry.id, entry);
+    }
+
+    /// Append a "task deleted" audit entry.
+    pub fn record_task_deleted(&mut self, task_id: TaskId) {
+        let entry =
+            crate::domain::AuditLogEntry::new(task_id, crate::domain::AuditAction::Deleted, vec![]);
+        self.audit_logs.insert(entry.id, entry);
+    }
+
+    /// Return audit log entries for a task, sorted newest-first.
+    #[must_use]
+    pub fn audit_log_for_task(&self, task_id: &TaskId) -> Vec<&crate::domain::AuditLogEntry> {
+        let mut entries: Vec<_> = self
+            .audit_logs
+            .values()
+            .filter(|e| &e.task_id == task_id)
+            .collect();
+        entries.sort_by(|a, b| b.changed_at.cmp(&a.changed_at));
+        entries
     }
 }
 

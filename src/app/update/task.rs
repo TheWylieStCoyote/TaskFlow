@@ -7,7 +7,7 @@
 //! - Moving tasks between projects
 
 use crate::app::{Model, TaskMessage, UndoAction};
-use crate::domain::{Priority, Recurrence, Task, TaskId, TaskStatus};
+use crate::domain::{Priority, Recurrence, RecurrenceOptions, Task, TaskId, TaskStatus};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
 
 // ============================================================================
@@ -39,7 +39,7 @@ impl ToggleData {
 
         // For recurring tasks: prepare the next occurrence if completing
         let next_recurring_task = if is_completing && task.recurrence.is_some() {
-            Some(create_next_recurring_task(task))
+            create_next_recurring_task(task)
         } else {
             None
         };
@@ -86,11 +86,43 @@ fn cascade_complete_descendants(model: &mut Model, descendants: &[TaskId]) {
 
 /// Add the next occurrence of a recurring task.
 fn add_next_recurring_task(model: &mut Model, new_task: Task) {
+    crate::notifications::notify_recurring_spawned(&new_task.title);
+    let task_id = new_task.id;
     model.sync_task(&new_task);
     model
         .undo_stack
         .push(UndoAction::TaskCreated(Box::new(new_task.clone())));
-    model.tasks.insert(new_task.id, new_task);
+    model.tasks.insert(task_id, new_task);
+    model.record_task_created(task_id);
+}
+
+/// Auto-transition Blocked tasks to Todo when their last open dependency is completed.
+///
+/// Scans every Blocked task and checks if all dependencies are now done.
+/// Any task whose last unmet dependency was `completed_id` gets promoted to Todo.
+fn auto_unblock_dependents(model: &mut Model, completed_id: &TaskId) {
+    // Collect IDs of blocked tasks that depend on the completed task
+    let candidates: Vec<TaskId> = model
+        .tasks
+        .iter()
+        .filter(|(_, t)| t.status == TaskStatus::Blocked && t.dependencies.contains(completed_id))
+        .map(|(id, _)| *id)
+        .collect();
+
+    for candidate_id in candidates {
+        // Check if every dependency of this candidate is now done
+        let all_done = model.tasks.get(&candidate_id).is_some_and(|t| {
+            t.dependencies
+                .iter()
+                .all(|dep| model.tasks.get(dep).is_some_and(|d| d.status.is_complete()))
+        });
+
+        if all_done {
+            model.modify_task_with_undo(&candidate_id, |task| {
+                task.status = TaskStatus::Todo;
+            });
+        }
+    }
 }
 
 /// Schedule the next task in a chain for today.
@@ -119,6 +151,33 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
             if let Some(id) = model.selected_task_id() {
                 // Phase 1: Gather all data BEFORE any mutations (avoids borrow conflicts)
                 if let Some(data) = ToggleData::gather(model, &id) {
+                    // Guard: when completing, block if any dependency is not done
+                    if data.is_completing {
+                        let unmet = model.tasks.get(&id).map_or(0, |t| {
+                            t.dependencies
+                                .iter()
+                                .filter(|dep_id| {
+                                    model
+                                        .tasks
+                                        .get(*dep_id)
+                                        .is_some_and(|d| !d.status.is_complete())
+                                })
+                                .count()
+                        });
+
+                        if unmet > 0 {
+                            let noun = if unmet == 1 {
+                                "dependency"
+                            } else {
+                                "dependencies"
+                            };
+                            model.alerts.status_message =
+                                Some(format!("Cannot complete: {unmet} {noun} still open"));
+                            model.refresh_visible_tasks();
+                            return;
+                        }
+                    }
+
                     // Phase 2: Toggle the task itself
                     if let Some(task) = model.tasks.get_mut(&id) {
                         let before = task.clone();
@@ -144,6 +203,13 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     // Phase 5: Handle task chain - schedule next task for today
                     if let Some(ref next_id) = data.chain_next_id {
                         schedule_chained_task(model, next_id);
+                    }
+
+                    // Phase 6: Auto-unblock tasks that were waiting on this task.
+                    // If completing, scan all Blocked tasks whose only remaining
+                    // unmet dependency was the task we just completed.
+                    if data.is_completing {
+                        auto_unblock_dependents(model, &id);
                     }
                 }
             }
@@ -210,6 +276,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
                     model.delete_time_entry(&entry_id);
                 }
 
+                model.record_task_deleted(task_id);
                 model.delete_task_from_storage(&task_id);
                 model.undo_stack.push(UndoAction::TaskDeleted {
                     task: Box::new(task),
@@ -255,20 +322,25 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
     model.invalidate_report_cache();
 }
 
-/// Create the next occurrence of a recurring task
+/// Create the next occurrence of a recurring task.
+///
+/// Returns `None` if the next occurrence would be beyond `end_date` or the task
+/// has already reached its `max_occurrences` limit. The `occurrence_count` on
+/// the returned task is incremented by 1.
 #[must_use]
-pub fn create_next_recurring_task(task: &Task) -> Task {
+pub fn create_next_recurring_task(task: &Task) -> Option<Task> {
     let today = Utc::now().date_naive();
     let base_date = task.due_date.unwrap_or(today);
+    let opts = &task.recurrence_options;
+    let interval = i64::from(opts.interval.max(1));
 
     let next_due = match &task.recurrence {
-        Some(Recurrence::Daily) => base_date + Duration::days(1),
+        Some(Recurrence::Daily) => base_date + Duration::days(interval),
         Some(Recurrence::Weekly { days }) => {
             if days.is_empty() {
-                // Default: same day next week
-                base_date + Duration::weeks(1)
+                base_date + Duration::weeks(interval)
             } else {
-                // Find next day in the list after today
+                // Find next day in the list after today, then apply additional weeks for interval > 1
                 let current_weekday = today.weekday();
                 let mut min_days = 7i64;
                 for day in days {
@@ -281,65 +353,66 @@ pub fn create_next_recurring_task(task: &Task) -> Task {
                         min_days = days_until;
                     }
                 }
-                today + Duration::days(min_days)
+                // Extra full weeks for interval > 1
+                today + Duration::days(min_days + (interval - 1) * 7)
             }
         }
         Some(Recurrence::Monthly { day }) => {
-            let next_month = if base_date.month() == 12 {
-                NaiveDate::from_ymd_opt(base_date.year() + 1, 1, *day)
-            } else {
-                NaiveDate::from_ymd_opt(base_date.year(), base_date.month() + 1, *day)
-            };
-            // Handle invalid dates (e.g., Feb 30) by using last day of month
-            next_month.unwrap_or_else(|| {
-                let year = if base_date.month() == 12 {
-                    base_date.year() + 1
+            // Advance by `interval` months
+            let total_months = i64::from(base_date.month()) + interval - 1;
+            let year_offset = total_months / 12;
+            let month = (total_months % 12 + 1) as u32;
+            let year = base_date.year() + year_offset as i32;
+            let next = NaiveDate::from_ymd_opt(year, month, *day);
+            // Handle invalid dates (e.g., Feb 30) by clamping to last day of month
+            next.unwrap_or_else(|| {
+                let (clamp_year, clamp_month) = if month == 12 {
+                    (year + 1, 1u32)
                 } else {
-                    base_date.year()
+                    (year, month + 1)
                 };
-                let month = if base_date.month() == 12 {
-                    1
-                } else {
-                    base_date.month() + 1
-                };
-                // Get last day of the target month (first of next month minus 1 day)
-                NaiveDate::from_ymd_opt(
-                    if month == 12 { year + 1 } else { year },
-                    if month == 12 { 1 } else { month + 1 },
-                    1,
-                )
-                .expect("day 1 of any month always exists")
+                NaiveDate::from_ymd_opt(clamp_year, clamp_month, 1)
+                    .expect("day 1 of any month always exists")
                     - Duration::days(1)
             })
         }
         Some(Recurrence::Yearly { month, day }) => {
-            let next_year = base_date.year() + 1;
-            // Try exact date, fall back to last day of month if invalid (e.g., Feb 29 in non-leap year)
+            let next_year = base_date.year() + interval as i32;
             NaiveDate::from_ymd_opt(next_year, *month, *day).unwrap_or_else(|| {
-                // Get last day of the target month (first of next month minus 1 day)
-                NaiveDate::from_ymd_opt(
-                    if *month == 12 {
-                        next_year + 1
-                    } else {
-                        next_year
-                    },
-                    if *month == 12 { 1 } else { month + 1 },
-                    1,
-                )
-                .expect("day 1 of any month always exists")
+                let (clamp_year, clamp_month) = if *month == 12 {
+                    (next_year + 1, 1u32)
+                } else {
+                    (next_year, month + 1)
+                };
+                NaiveDate::from_ymd_opt(clamp_year, clamp_month, 1)
+                    .expect("day 1 of any month always exists")
                     - Duration::days(1)
             })
         }
-        None => today + Duration::days(1), // Shouldn't happen
+        None => return None,
     };
 
-    Task::new(&task.title)
-        .with_priority(task.priority)
-        .with_due_date(next_due)
-        .with_tags(task.tags.clone())
-        .with_recurrence(task.recurrence.clone())
-        .with_project_opt(task.project_id)
-        .with_description_opt(task.description.clone())
+    // Check if this occurrence is within configured bounds
+    if !opts.allows_next_occurrence(next_due) {
+        return None;
+    }
+
+    // Build the next task, incrementing occurrence_count
+    let next_opts = RecurrenceOptions {
+        occurrence_count: opts.occurrence_count + 1,
+        ..opts.clone()
+    };
+
+    Some(
+        Task::new(&task.title)
+            .with_priority(task.priority)
+            .with_due_date(next_due)
+            .with_tags(task.tags.clone())
+            .with_recurrence(task.recurrence.clone())
+            .with_recurrence_options(next_opts)
+            .with_project_opt(task.project_id)
+            .with_description_opt(task.description.clone()),
+    )
 }
 
 #[cfg(test)]
@@ -355,7 +428,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Daily));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         assert_eq!(next.title, "Daily task");
         assert_eq!(next.due_date, Some(due + Duration::days(1)));
@@ -369,7 +442,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Weekly { days: vec![] }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Empty days = same day next week
         assert_eq!(next.due_date, Some(due + Duration::weeks(1)));
@@ -383,7 +456,7 @@ mod tests {
                 days: vec![Weekday::Mon, Weekday::Wed, Weekday::Fri],
             }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Next occurrence should be on one of the specified days
         let next_day = next.due_date.unwrap().weekday();
@@ -400,7 +473,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 15 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Next month, same day
         assert_eq!(
@@ -416,7 +489,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 10 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // December -> January next year
         assert_eq!(
@@ -433,7 +506,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 30 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Feb 30 invalid -> Feb 28 (2025 is not a leap year)
         assert_eq!(
@@ -449,7 +522,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Yearly { month: 6, day: 15 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Same date next year
         assert_eq!(
@@ -466,7 +539,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Yearly { month: 2, day: 29 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // 2025 is not a leap year, so Feb 29 -> Feb 28
         assert_eq!(
@@ -485,7 +558,7 @@ mod tests {
             .with_description("A recurring task description")
             .with_recurrence(Some(Recurrence::Daily));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         assert_eq!(next.priority, Priority::High);
         assert_eq!(next.tags, vec!["work".to_string(), "important".to_string()]);
@@ -500,7 +573,7 @@ mod tests {
     fn test_create_next_recurring_task_no_due_date_uses_today() {
         let task = Task::new("No due date").with_recurrence(Some(Recurrence::Daily));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
         let today = Utc::now().date_naive();
 
         // Should use today as base, so next is tomorrow
@@ -509,15 +582,11 @@ mod tests {
 
     #[test]
     fn test_create_next_recurring_task_none_recurrence() {
-        // Edge case: called with no recurrence (shouldn't happen but code handles it)
+        // Called with no recurrence: should return None
         let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
         let task = Task::new("No recurrence").with_due_date(due);
 
-        let next = create_next_recurring_task(&task);
-        let today = Utc::now().date_naive();
-
-        // Falls through to default: today + 1 day
-        assert_eq!(next.due_date, Some(today + Duration::days(1)));
+        assert!(create_next_recurring_task(&task).is_none());
     }
 
     #[test]
@@ -528,7 +597,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Yearly { month: 12, day: 25 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         assert_eq!(
             next.due_date,
@@ -548,7 +617,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 31 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // April 31 doesn't exist -> April 30
         assert_eq!(
@@ -565,7 +634,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 31 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Feb 31 doesn't exist -> Feb 29 (leap year)
         assert_eq!(
@@ -588,7 +657,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Yearly { month: 2, day: 29 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // 2025 is not a leap year, so Feb 29 -> Feb 28
         assert_eq!(
@@ -605,7 +674,7 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Monthly { day: 30 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // Feb 30 doesn't exist, 2025 is not a leap year -> Feb 28
         assert_eq!(
@@ -622,12 +691,88 @@ mod tests {
             .with_due_date(due)
             .with_recurrence(Some(Recurrence::Yearly { month: 4, day: 31 }));
 
-        let next = create_next_recurring_task(&task);
+        let next = create_next_recurring_task(&task).unwrap();
 
         // April 31 doesn't exist -> April 30
         assert_eq!(
             next.due_date,
             Some(NaiveDate::from_ymd_opt(2026, 4, 30).unwrap())
         );
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_daily_interval() {
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let task = Task::new("Every 3 days")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Daily))
+            .with_recurrence_options(RecurrenceOptions {
+                interval: 3,
+                ..RecurrenceOptions::default()
+            });
+
+        let next = create_next_recurring_task(&task).unwrap();
+        assert_eq!(next.due_date, Some(due + Duration::days(3)));
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_weekly_interval() {
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let task = Task::new("Biweekly")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Weekly { days: vec![] }))
+            .with_recurrence_options(RecurrenceOptions {
+                interval: 2,
+                ..RecurrenceOptions::default()
+            });
+
+        let next = create_next_recurring_task(&task).unwrap();
+        assert_eq!(next.due_date, Some(due + Duration::weeks(2)));
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_end_date_blocks() {
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap(); // next would be tomorrow, past end
+        let task = Task::new("Expiring")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Daily))
+            .with_recurrence_options(RecurrenceOptions {
+                end_date: Some(end),
+                ..RecurrenceOptions::default()
+            });
+
+        assert!(create_next_recurring_task(&task).is_none());
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_max_occurrences_blocks() {
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let task = Task::new("Limited")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Daily))
+            .with_recurrence_options(RecurrenceOptions {
+                max_occurrences: Some(3),
+                occurrence_count: 3,
+                ..RecurrenceOptions::default()
+            });
+
+        assert!(create_next_recurring_task(&task).is_none());
+    }
+
+    #[test]
+    fn test_create_next_recurring_task_increments_occurrence_count() {
+        let due = NaiveDate::from_ymd_opt(2025, 3, 15).unwrap();
+        let task = Task::new("Counted")
+            .with_due_date(due)
+            .with_recurrence(Some(Recurrence::Daily))
+            .with_recurrence_options(RecurrenceOptions {
+                max_occurrences: Some(5),
+                occurrence_count: 2,
+                ..RecurrenceOptions::default()
+            });
+
+        let next = create_next_recurring_task(&task).unwrap();
+        assert_eq!(next.recurrence_options.occurrence_count, 3);
     }
 }

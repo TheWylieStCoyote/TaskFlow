@@ -11,8 +11,11 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tracing::{debug, error, info, warn};
 
-use taskflow::app::{update, Message, Model, PomodoroMessage, RunningState, SystemMessage};
+use taskflow::app::{
+    update, Message, Model, PomodoroMessage, RunningState, SystemMessage, TaskTemplate,
+};
 use taskflow::config::{FirstRunMode, Keybindings, Settings, Theme};
+use taskflow::domain::Priority;
 use taskflow::storage::BackendType;
 use taskflow::ui::view;
 
@@ -95,10 +98,33 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     model.show_sidebar = settings.show_sidebar;
     model.filtering.show_completed = settings.show_completed;
     model.default_priority = settings.default_priority();
+
+    // Load user-defined templates from config
+    for cfg in &settings.custom_templates {
+        let mut template = TaskTemplate::new(&cfg.name, &cfg.title)
+            .with_priority(Priority::parse(&cfg.priority).unwrap_or_default())
+            .with_tags(cfg.tags.clone());
+        if let Some(ref desc) = cfg.description {
+            template = template.with_description(desc);
+        }
+        if let Some(days) = cfg.due_days {
+            template = template.with_due_days(days);
+        }
+        model.template_manager.add_template(template);
+    }
+
     model.refresh_visible_tasks();
 
     // Check for overdue tasks and show alert at startup
     model.check_overdue_alert();
+
+    // Desktop notifications for overdue and due-today tasks at startup
+    {
+        let (overdue_count, _) = model.overdue_summary();
+        taskflow::notifications::notify_overdue_tasks(overdue_count);
+        let due_today = model.footer_stats.due_today_count;
+        taskflow::notifications::notify_due_today(due_today);
+    }
 
     // Prompt to generate config file if it didn't exist at startup
     if !config_existed {

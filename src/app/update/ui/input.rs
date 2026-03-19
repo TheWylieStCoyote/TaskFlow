@@ -69,6 +69,7 @@ pub fn handle_submit_input(model: &mut Model) {
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
                 model.tasks.insert(task_id, task);
                 model.sync_task_by_id(&task_id);
+                model.record_task_created(task_id);
                 model.refresh_visible_tasks();
             }
         }
@@ -101,6 +102,7 @@ pub fn handle_submit_input(model: &mut Model) {
                     .push(UndoAction::TaskCreated(Box::new(task.clone())));
                 model.tasks.insert(task_id, task);
                 model.sync_task_by_id(&task_id);
+                model.record_task_created(task_id);
                 model.refresh_visible_tasks();
                 // Show confirmation and stay ready for another capture
                 // Get title from HashMap to avoid extra clone
@@ -383,6 +385,141 @@ pub fn handle_submit_input(model: &mut Model) {
                 );
             }
         }
+        InputTarget::BulkSetPriority => {
+            use crate::domain::Priority;
+            let priority = match input.parse::<usize>() {
+                Ok(0) => Some(Priority::None),
+                Ok(1) => Some(Priority::Low),
+                Ok(2) => Some(Priority::Medium),
+                Ok(3) => Some(Priority::High),
+                Ok(4) => Some(Priority::Urgent),
+                _ => None,
+            };
+
+            if let Some(new_priority) = priority {
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
+                let count = tasks_to_update.len();
+                for task_id in tasks_to_update {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.priority = new_priority;
+                    });
+                }
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
+                model.refresh_visible_tasks();
+                model.alerts.status_message =
+                    Some(format!("Set priority on {count} tasks to {new_priority:?}"));
+            } else {
+                model.alerts.status_message =
+                    Some("Invalid priority: enter 0-4 (None/Low/Medium/High/Urgent)".to_string());
+            }
+        }
+        InputTarget::BulkAddTags => {
+            // Parse comma-separated tags; prefix with '+' to add, '-' to remove, plain to replace
+            let all_remove = input.trim().starts_with('-');
+            let tags: Vec<String> = input
+                .split(',')
+                .map(|s| s.trim().trim_start_matches(['+', '-']).to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
+            let count = tasks_to_update.len();
+
+            if input.trim().is_empty() {
+                model.alerts.status_message = Some(
+                    "No tags entered. Use comma-separated tags (prefix - to remove)".to_string(),
+                );
+            } else {
+                for task_id in tasks_to_update {
+                    let adding = !all_remove && !input.trim().starts_with('-');
+                    let tags_clone = tags.clone();
+                    model.modify_task_with_undo(&task_id, |task| {
+                        if adding {
+                            for tag in &tags_clone {
+                                if !task.tags.contains(tag) {
+                                    task.tags.push(tag.clone());
+                                }
+                            }
+                        } else {
+                            task.tags.retain(|t| !tags_clone.contains(t));
+                        }
+                    });
+                }
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
+                model.refresh_visible_tasks();
+                let verb = if all_remove {
+                    "Removed tags from"
+                } else {
+                    "Added tags to"
+                };
+                model.alerts.status_message = Some(format!("{verb} {count} tasks"));
+            }
+        }
+        InputTarget::BulkSetDueDate => {
+            let new_due = if input.is_empty() {
+                Some(None) // Explicitly clear
+            } else {
+                parse_date(&input).map(Some)
+            };
+
+            if let Some(due_date) = new_due {
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
+                let count = tasks_to_update.len();
+                for task_id in tasks_to_update {
+                    model.modify_task_with_undo(&task_id, |task| {
+                        task.due_date = due_date;
+                    });
+                }
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
+                model.refresh_visible_tasks();
+                let msg = due_date.map_or_else(
+                    || format!("Cleared due date on {count} tasks"),
+                    |d| format!("Set due date to {} on {count} tasks", d.format("%Y-%m-%d")),
+                );
+                model.alerts.status_message = Some(msg);
+            } else {
+                model.alerts.status_message =
+                    Some("Invalid date format. Use YYYY-MM-DD or leave empty to clear".to_string());
+            }
+        }
+        InputTarget::BulkSnooze => {
+            if input.is_empty() {
+                // Clear snooze on all selected tasks
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
+                let count = tasks_to_update.len();
+                for task_id in tasks_to_update {
+                    if let Some(task) = model.tasks.get_mut(&task_id) {
+                        task.clear_snooze();
+                    }
+                    model.sync_task_by_id(&task_id);
+                }
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
+                model.refresh_visible_tasks();
+                model.alerts.status_message = Some(format!("Cleared snooze on {count} tasks"));
+            } else if let Some(date) = parse_date(&input) {
+                let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
+                let count = tasks_to_update.len();
+                for task_id in tasks_to_update {
+                    if let Some(task) = model.tasks.get_mut(&task_id) {
+                        task.snooze_until_date(date);
+                    }
+                    model.sync_task_by_id(&task_id);
+                }
+                model.multi_select.selected.clear();
+                model.multi_select.mode = false;
+                model.refresh_visible_tasks();
+                model.alerts.status_message = Some(format!(
+                    "Snoozed {count} tasks until {}",
+                    date.format("%Y-%m-%d")
+                ));
+            } else {
+                model.alerts.status_message = Some("Invalid date format".to_string());
+            }
+        }
         InputTarget::EditDependencies(task_id) => {
             let task_id = *task_id;
             // Parse task numbers from input
@@ -405,30 +542,81 @@ pub fn handle_submit_input(model: &mut Model) {
         }
         InputTarget::EditRecurrence(task_id) => {
             let task_id = *task_id;
-            use crate::domain::Recurrence;
+            use crate::domain::{Recurrence, RecurrenceOptions};
             use chrono::Datelike;
-            // Parse recurrence from input (first char: d, w, m, y, 0)
-            let first_char = input.chars().next().unwrap_or('0');
+
+            // Syntax: <pattern>[interval] [end=YYYY-MM-DD] [max=N]
+            //   d        daily (every day)
+            //   d3       daily every 3 days
+            //   w        weekly
+            //   w2       every 2 weeks
+            //   m        monthly (current day-of-month)
+            //   m15      monthly on the 15th
+            //   y        yearly
+            //   0 / n    clear recurrence
+            //   Optionally append: end=2025-12-31  and/or  max=5
+            let input_lower = input.to_lowercase();
+            let first_char = input_lower.chars().next().unwrap_or('0');
+
+            // Parse the optional `end=` date
+            let end_date = input_lower
+                .split_whitespace()
+                .find(|s| s.starts_with("end="))
+                .and_then(|s| chrono::NaiveDate::parse_from_str(&s[4..], "%Y-%m-%d").ok());
+
+            // Parse the optional `max=` count
+            let max_occurrences = input_lower
+                .split_whitespace()
+                .find(|s| s.starts_with("max="))
+                .and_then(|s| s[4..].parse::<u32>().ok());
+
+            // Parse the interval digit(s) immediately after the pattern char
+            let interval_str: String = input_lower
+                .chars()
+                .skip(1)
+                .take_while(char::is_ascii_digit)
+                .collect();
+            let interval: u32 = interval_str.parse().unwrap_or(1).max(1);
+
+            let today = chrono::Utc::now().date_naive();
+
             let new_recurrence = match first_char {
-                'd' | 'D' => Some(Recurrence::Daily),
-                'w' | 'W' => Some(Recurrence::Weekly {
-                    days: vec![], // Default to all days
-                }),
-                'm' | 'M' => Some(Recurrence::Monthly {
-                    day: chrono::Utc::now().date_naive().day(),
-                }),
-                'y' | 'Y' => {
-                    let today = chrono::Utc::now().date_naive();
-                    Some(Recurrence::Yearly {
-                        month: today.month(),
-                        day: today.day(),
-                    })
+                'd' => Some(Recurrence::Daily),
+                'w' => Some(Recurrence::Weekly { days: vec![] }),
+                'm' => {
+                    let day = if interval_str.is_empty() {
+                        today.day()
+                    } else {
+                        interval_str
+                            .parse::<u32>()
+                            .unwrap_or(today.day())
+                            .clamp(1, 31)
+                    };
+                    Some(Recurrence::Monthly { day })
                 }
-                _ => None, // Invalid input or explicit 0/n/N clears recurrence
+                'y' => Some(Recurrence::Yearly {
+                    month: today.month(),
+                    day: today.day(),
+                }),
+                _ => None,
+            };
+
+            // For monthly, interval_str is the day number, not an interval
+            let effective_interval = match first_char {
+                'm' => 1,
+                _ => interval,
+            };
+
+            let new_options = RecurrenceOptions {
+                interval: effective_interval,
+                end_date,
+                max_occurrences,
+                occurrence_count: 0,
             };
 
             model.modify_task_with_undo(&task_id, |task| {
                 task.recurrence = new_recurrence;
+                task.recurrence_options = new_options.clone();
             });
             model.refresh_visible_tasks();
         }

@@ -48,6 +48,16 @@ clap_complete = "4.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Desktop notifications (optional - gracefully degrades if unavailable)
+notify-rust = { version = "4", optional = true }
+
+# HTTP client for CalDAV sync (optional)
+reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
+
+[features]
+desktop-notifications = ["notify-rust"]
+caldav-sync = ["reqwest"]
+
 [dev-dependencies]
 tempfile = "3.13"
 pretty_assertions = "1.4"

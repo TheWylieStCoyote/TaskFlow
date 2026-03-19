@@ -1,6 +1,78 @@
 //! Task recurrence patterns.
 
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+
+fn default_interval() -> u32 {
+    1
+}
+
+/// Additional options controlling how often and how long a recurring task repeats.
+///
+/// These options are stored alongside the base [`Recurrence`] pattern on a task
+/// and are used by [`crate::app::update::task::create_next_recurring_task`] to
+/// decide whether to spawn a new occurrence.
+///
+/// # Example
+///
+/// A task that repeats every 2 weeks, at most 10 times:
+/// ```
+/// use taskflow::domain::RecurrenceOptions;
+/// let opts = RecurrenceOptions {
+///     interval: 2,
+///     max_occurrences: Some(10),
+///     ..RecurrenceOptions::default()
+/// };
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecurrenceOptions {
+    /// Repeat every N periods (e.g., 2 = every other week for weekly recurrence).
+    /// Must be at least 1; defaults to 1.
+    #[serde(default = "default_interval")]
+    pub interval: u32,
+
+    /// Stop spawning new occurrences after this date (inclusive).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<NaiveDate>,
+
+    /// Stop spawning after this many total occurrences.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_occurrences: Option<u32>,
+
+    /// How many occurrences have been spawned so far.
+    #[serde(default)]
+    pub occurrence_count: u32,
+}
+
+impl Default for RecurrenceOptions {
+    fn default() -> Self {
+        Self {
+            interval: 1,
+            end_date: None,
+            max_occurrences: None,
+            occurrence_count: 0,
+        }
+    }
+}
+
+impl RecurrenceOptions {
+    /// Returns `true` if a next occurrence should be created given `next_due_date`.
+    #[must_use]
+    pub fn allows_next_occurrence(&self, next_due_date: NaiveDate) -> bool {
+        if let Some(end) = self.end_date {
+            if next_due_date > end {
+                return false;
+            }
+        }
+        if let Some(max) = self.max_occurrences {
+            if self.occurrence_count >= max {
+                return false;
+            }
+        }
+        true
+    }
+}
 
 /// Recurrence pattern for repeating tasks.
 ///

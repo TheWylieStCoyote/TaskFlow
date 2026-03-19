@@ -130,6 +130,14 @@ pub enum UiMessage {
     StartBulkMoveToProject,
     /// Set status for all selected tasks
     StartBulkSetStatus,
+    /// Set priority for all selected tasks
+    StartBulkSetPriority,
+    /// Add/remove tags on all selected tasks
+    StartBulkAddTags,
+    /// Set due date on all selected tasks
+    StartBulkSetDueDate,
+    /// Snooze all selected tasks
+    StartBulkSnooze,
 
     // Dependencies
     /// Enter input mode to edit task dependencies

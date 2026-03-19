@@ -23,6 +23,9 @@ static RELATIVE_DURATION_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 static ORDINAL_DAY_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(\d{1,2})(st|nd|rd|th)$").expect("valid regex pattern"));
+// Compact relative shorthand: +3d, +2w, +1m, +1y
+static COMPACT_RELATIVE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\+(\d+)(d|w|m|y)$").expect("valid regex pattern"));
 
 /// Parse a date string with various formats.
 ///
@@ -70,7 +73,12 @@ pub fn parse_date_with_reference(s: &str, today: NaiveDate) -> Option<NaiveDate>
         return Some(date);
     }
 
-    // 4. Relative duration (in 3 days, in 2 weeks)
+    // 4a. Compact relative shorthand (+3d, +2w, +1m, +1y)
+    if let Some(date) = parse_compact_relative(s_trimmed, today) {
+        return Some(date);
+    }
+
+    // 4b. Relative duration (in 3 days, in 2 weeks)
     if let Some(date) = parse_relative_duration(s_trimmed, today) {
         return Some(date);
     }
@@ -148,6 +156,34 @@ fn parse_month_day(s: &str, sep: char, year: i32) -> Option<NaiveDate> {
 }
 
 /// Parse relative duration expressions like "in 3 days", "in 2 weeks", "in 1 month".
+/// Parse compact relative shorthand: `+3d`, `+2w`, `+1m`, `+1y`.
+fn parse_compact_relative(s: &str, today: NaiveDate) -> Option<NaiveDate> {
+    let s_lower = s.to_lowercase();
+    let caps = COMPACT_RELATIVE_RE.captures(&s_lower)?;
+    let count: i64 = caps.get(1)?.as_str().parse().ok()?;
+    let unit = caps.get(2)?.as_str();
+    match unit {
+        "d" => Some(today + chrono::Duration::days(count)),
+        "w" => Some(today + chrono::Duration::weeks(count)),
+        "m" => {
+            let new_month = i64::from(today.month()) + count;
+            let years_to_add = (new_month - 1) / 12;
+            let final_month = ((new_month - 1) % 12 + 1) as u32;
+            let final_year = today.year() + years_to_add as i32;
+            let max_day = days_in_month(final_year, final_month);
+            let final_day = today.day().min(max_day);
+            NaiveDate::from_ymd_opt(final_year, final_month, final_day)
+        }
+        "y" => NaiveDate::from_ymd_opt(today.year() + count as i32, today.month(), today.day())
+            .or_else(|| {
+                // Handle Feb 29 in non-leap years
+                NaiveDate::from_ymd_opt(today.year() + count as i32, today.month() + 1, 1)
+                    .map(|d| d - chrono::Duration::days(1))
+            }),
+        _ => None,
+    }
+}
+
 fn parse_relative_duration(s: &str, today: NaiveDate) -> Option<NaiveDate> {
     let s_lower = s.to_lowercase();
     let caps = RELATIVE_DURATION_RE.captures(&s_lower)?;

@@ -105,3 +105,43 @@ pub fn start_bulk_set_status(model: &mut Model) {
         model.input.cursor = model.input.buffer.len();
     }
 }
+
+/// Start bulk set priority input.
+pub fn start_bulk_set_priority(model: &mut Model) {
+    if model.multi_select.mode && !model.multi_select.selected.is_empty() {
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkSetPriority;
+        model.input.buffer = "0: None, 1: Low, 2: Medium, 3: High, 4: Urgent".to_string();
+        model.input.cursor = model.input.buffer.len();
+    }
+}
+
+/// Start bulk add/remove tags input.
+pub fn start_bulk_add_tags(model: &mut Model) {
+    if model.multi_select.mode && !model.multi_select.selected.is_empty() {
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkAddTags;
+        model.input.buffer.clear();
+        model.input.cursor = 0;
+    }
+}
+
+/// Start bulk set due date input.
+pub fn start_bulk_set_due_date(model: &mut Model) {
+    if model.multi_select.mode && !model.multi_select.selected.is_empty() {
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkSetDueDate;
+        model.input.buffer.clear();
+        model.input.cursor = 0;
+    }
+}
+
+/// Start bulk snooze input.
+pub fn start_bulk_snooze(model: &mut Model) {
+    if model.multi_select.mode && !model.multi_select.selected.is_empty() {
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::BulkSnooze;
+        model.input.buffer.clear();
+        model.input.cursor = 0;
+    }
+}

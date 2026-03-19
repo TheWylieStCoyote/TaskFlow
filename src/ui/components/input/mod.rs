@@ -57,6 +57,10 @@ pub enum InputTarget {
     FilterByTag,
     BulkMoveToProject,
     BulkSetStatus,
+    BulkSetPriority,
+    BulkAddTags,
+    BulkSetDueDate,
+    BulkSnooze,
     EditDependencies(TaskId),
     EditRecurrence(TaskId),
     LinkTask(TaskId),             // Linking current task to next task in chain

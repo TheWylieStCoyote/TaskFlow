@@ -4,6 +4,10 @@ A terminal-based project management application built with Rust.
 
 TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects, and time tracking—all from your terminal.
 
+<p align="center">
+  <img src="screenshots/vhs/demo.gif" alt="TaskFlow demo" width="900" />
+</p>
+
 ## Documentation
 
 - **[User Manual](docs/USER_MANUAL.md)** - Comprehensive guide covering all features
@@ -125,6 +129,8 @@ cargo run -- --demo
 │ 7 tasks (2 completed) | hiding completed | Press ? for help │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+![Task List](screenshots/svg/task_list.svg)
 
 ### Task Display
 
@@ -350,6 +356,20 @@ The Dashboard provides an overview of your task statistics:
 - **This Week Panel**: Tasks created and completed this week, active tasks count
 
 Access the Dashboard by selecting it from the sidebar navigation.
+
+### Screenshots
+
+![Dashboard](screenshots/svg/dashboard.svg)
+
+![Kanban](screenshots/svg/kanban.svg)
+
+![Calendar](screenshots/svg/calendar.svg)
+
+![Eisenhower Matrix](screenshots/svg/eisenhower.svg)
+
+![Goals](screenshots/svg/goals.svg)
+
+![Habits](screenshots/svg/habits.svg)
 
 ### Due Dates
 

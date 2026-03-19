@@ -5,6 +5,7 @@ edition = "2021"
 rust-version = "1.87"
 description = "A TUI project management application"
 license = "MIT"
+default-run = "taskflow"
 
 [dependencies]
 # TUI Framework

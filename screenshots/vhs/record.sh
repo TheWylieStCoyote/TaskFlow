@@ -11,6 +11,9 @@ VHS=$(go env GOPATH)/bin/vhs
 echo "Running VHS..."
 "$VHS" screenshots/vhs/demo.tape
 
+echo "Setting GIF loop..."
+convert -loop 0 screenshots/vhs/demo.gif screenshots/vhs/demo.gif
+
 echo ""
 echo "Done! Outputs:"
 echo "  screenshots/vhs/demo.gif    (animated tour)"

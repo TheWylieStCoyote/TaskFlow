@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::domain::{compare_sort_order, SortOrder, Task, TaskId};
 
-use super::super::Model;
+use super::super::{Model, ViewId};
 use super::FilterCache;
 
 impl Model {
@@ -31,10 +31,20 @@ impl Model {
     ///
     /// Also rebuilds performance caches to ensure UI data is current.
     ///
-    /// Subtasks are displayed directly after their parent task.
+    /// Subtasks are displayed directly after their parent task, unless the
+    /// parent is in `collapsed_tasks`, in which case its whole subtree is
+    /// hidden.
+    ///
+    /// In the Calendar view with a day selected, the list is instead the
+    /// day-panel order from [`Model::tasks_for_day`]: time-blocked tasks by
+    /// start time, then tasks that are only due that day.
     pub fn refresh_visible_tasks(&mut self) {
         // Rebuild caches when task list changes
         self.rebuild_caches();
+
+        // Forget collapse state for tasks that no longer exist
+        let tasks = &self.tasks;
+        self.collapsed_tasks.retain(|id| tasks.contains_key(id));
 
         // Pre-compute filter values once (avoids repeated allocations per task)
         let cache = FilterCache::new(self);
@@ -45,6 +55,21 @@ impl Model {
             .values()
             .filter(|task| self.task_matches_filter_cached(task, &cache))
             .collect();
+
+        // Calendar day panel: fixed time-block order instead of the sort field
+        if self.current_view == ViewId::Calendar {
+            if let Some(date) = self.calendar_state.to_date() {
+                let filtered_ids: HashSet<TaskId> = filtered_tasks.iter().map(|t| t.id).collect();
+                self.visible_tasks = self
+                    .tasks_for_day(date)
+                    .into_iter()
+                    .map(|t| t.id)
+                    .filter(|id| filtered_ids.contains(id))
+                    .collect();
+                self.clamp_selected_index();
+                return;
+            }
+        }
 
         // Separate into parent tasks and subtasks
         let mut parent_tasks: Vec<_> = filtered_tasks
@@ -95,24 +120,57 @@ impl Model {
         // Track seen IDs to avoid O(n²) contains() calls
         let mut seen_ids: HashSet<TaskId> = HashSet::new();
 
-        // Recursive helper to add a task and all its descendants
+        // Marks a task's whole subtree as handled without listing it, so the
+        // orphan pass below does not surface the hidden descendants.
+        fn hide_descendants(
+            task_id: &TaskId,
+            subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
+            seen_ids: &mut HashSet<TaskId>,
+        ) {
+            if let Some(children) = subtasks_by_parent.get(task_id) {
+                for child in children {
+                    seen_ids.insert(child.id);
+                    hide_descendants(&child.id, subtasks_by_parent, seen_ids);
+                }
+            }
+        }
+
+        // Recursive helper to add a task and all its descendants.
+        // If a task is in `collapsed_tasks`, its subtree is hidden instead.
         fn add_with_descendants(
             task_id: &TaskId,
             subtasks_by_parent: &HashMap<&TaskId, Vec<&Task>>,
+            collapsed_tasks: &HashSet<TaskId>,
             result: &mut Vec<TaskId>,
             seen_ids: &mut HashSet<TaskId>,
         ) {
             result.push(*task_id);
             seen_ids.insert(*task_id);
+            if collapsed_tasks.contains(task_id) {
+                hide_descendants(task_id, subtasks_by_parent, seen_ids);
+                return;
+            }
             if let Some(children) = subtasks_by_parent.get(task_id) {
                 for child in children {
-                    add_with_descendants(&child.id, subtasks_by_parent, result, seen_ids);
+                    add_with_descendants(
+                        &child.id,
+                        subtasks_by_parent,
+                        collapsed_tasks,
+                        result,
+                        seen_ids,
+                    );
                 }
             }
         }
 
         for parent in parent_tasks {
-            add_with_descendants(&parent.id, &subtasks_by_parent, &mut result, &mut seen_ids);
+            add_with_descendants(
+                &parent.id,
+                &subtasks_by_parent,
+                &self.collapsed_tasks,
+                &mut result,
+                &mut seen_ids,
+            );
         }
 
         // Handle orphaned subtasks (subtasks whose parent is not visible)
@@ -124,8 +182,11 @@ impl Model {
         }
 
         self.visible_tasks = result;
+        self.clamp_selected_index();
+    }
 
-        // Adjust selection if needed
+    /// Keeps `selected_index` inside `visible_tasks` after the list shrank.
+    fn clamp_selected_index(&mut self) {
         if self.selected_index >= self.visible_tasks.len() && !self.visible_tasks.is_empty() {
             self.selected_index = self.visible_tasks.len() - 1;
         }

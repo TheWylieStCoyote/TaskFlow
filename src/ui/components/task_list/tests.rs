@@ -239,6 +239,10 @@ fn default_context<'a>(task: &'a Task, theme: &'a Theme) -> TaskItemContext<'a> 
         subtask_progress: (0, 0),
         theme,
         git_branch: None,
+        is_collapsed: false,
+        is_editing: false,
+        edit_buffer: None,
+        edit_cursor: 0,
     }
 }
 

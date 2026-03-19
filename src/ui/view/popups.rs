@@ -26,8 +26,10 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
         );
     }
 
-    // Render input dialog if in editing mode
-    if model.input.mode == InputMode::Editing {
+    // Render input dialog if in editing mode.
+    // A title edit renders inline in the task list row when that list is on
+    // screen — skip the dialog overlay then.
+    if model.input.mode == InputMode::Editing && !model.is_inline_title_edit() {
         // Height: 3 rows (top border, text line, bottom border)
         let input_area = centered_rect_fixed_height(60, 3, area);
         let title = match &model.input.target {
@@ -359,7 +361,7 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
 #[cfg(test)]
 mod tests {
     use super::render_popups;
-    use crate::app::Model;
+    use crate::app::{Model, ViewId};
     use crate::config::Theme;
     use crate::domain::{today, Habit, SavedFilter, Task, TimeEntry, WorkLogEntry};
     use crate::storage::{ImportFormat, ImportResult};
@@ -419,6 +421,33 @@ mod tests {
     }
 
     #[test]
+    fn test_edit_task_dialog_only_where_the_row_cannot_be_edited_inline() {
+        let (mut model, id) = model_with_task();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::EditTask(id);
+        model.input.buffer = "typed text".to_string();
+        model.input.cursor = model.input.buffer.len();
+
+        // The task list draws the edit in the row itself: no overlay
+        assert!(model.current_view.renders_task_list());
+        let content = render(&model);
+        assert!(!content.contains("Edit Task"), "inline edit has no dialog");
+        assert!(!content.contains("typed text"));
+
+        // Views without a task list still get the dialog
+        model.current_view = ViewId::Kanban;
+        let content = render(&model);
+        assert!(content.contains("Edit Task"));
+        assert!(content.contains("typed text"));
+
+        // ...and so does focus mode, which hides the list
+        model.current_view = ViewId::TaskList;
+        model.focus_mode = true;
+        let content = render(&model);
+        assert!(content.contains("Edit Task"));
+    }
+
+    #[test]
     fn test_input_dialog_titles_follow_target() {
         let (mut model, id) = model_with_task();
         model.input.mode = InputMode::Editing;
@@ -429,7 +458,6 @@ mod tests {
         let cases: Vec<(InputTarget, &str)> = vec![
             (InputTarget::Task, "New Task"),
             (InputTarget::Subtask(id), "New Subtask"),
-            (InputTarget::EditTask(id), "Edit Task"),
             (InputTarget::EditDueDate(id), "Due Date (YYYY-MM-DD"),
             (InputTarget::EditScheduledDate(id), "Scheduled Date"),
             (InputTarget::EditScheduledTime(id), "Time Block"),

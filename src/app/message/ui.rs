@@ -179,6 +179,8 @@ pub enum UiMessage {
     CalendarPrevDay,
     /// Move to next day in calendar
     CalendarNextDay,
+    /// Schedule the selected task to the currently focused calendar day
+    ScheduleTaskToDay,
 
     // Keyboard macros
     /// Start recording a keyboard macro
@@ -514,6 +516,10 @@ pub enum UiMessage {
     // Command palette
     /// Show the command palette
     ShowCommandPalette,
+
+    // Subtask tree
+    /// Toggle collapse/expand of selected task's subtree
+    ToggleSubtaskCollapse,
     /// Hide the command palette
     HideCommandPalette,
     /// Insert character in command palette search

@@ -1106,7 +1106,7 @@ fn test_input_dialog_edit_task_targets() {
     let task_id = TaskId::new();
 
     let targets = vec![
-        (InputTarget::EditTask(task_id), "Edit Task"),
+        // EditTask is rendered inline in the task list row (no popup dialog)
         (InputTarget::EditDueDate(task_id), "Due Date"),
         (InputTarget::EditScheduledDate(task_id), "Scheduled Date"),
         (InputTarget::EditTags(task_id), "Tags"),

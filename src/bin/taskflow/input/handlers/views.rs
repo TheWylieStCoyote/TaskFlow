@@ -20,6 +20,12 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
         });
     }
 
+    // s schedules the selected task on the focused day (plain s only, so
+    // Alt+s keeps editing the time block and S the scheduled date)
+    if key.code == KeyCode::Char('s') && key.modifiers == event::KeyModifiers::NONE {
+        return Some(Message::Ui(UiMessage::ScheduleTaskToDay));
+    }
+
     if model.calendar_state.focus_task_list {
         // When focused on task list
         match key.code {

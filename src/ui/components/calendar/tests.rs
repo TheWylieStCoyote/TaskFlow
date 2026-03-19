@@ -101,8 +101,15 @@ fn test_calendar_renders_task_panel() {
     let buffer = render_widget(calendar, 60, 20);
     let content = buffer_content(&buffer);
 
-    // Task panel title "Tasks" or "Tasks for"
-    assert!(content.contains("Tasks"), "Tasks panel should be visible");
+    // Task panel shows the selected day's weekday and date, e.g. "Mon 19" or "Thu 19"
+    // or falls back to " Tasks " when no day is selected.
+    let has_weekday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        .iter()
+        .any(|d| content.contains(d));
+    assert!(
+        has_weekday || content.contains("Tasks"),
+        "Tasks panel title should be visible"
+    );
 }
 
 #[test]

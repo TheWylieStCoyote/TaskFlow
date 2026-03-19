@@ -103,6 +103,8 @@ pub struct TaskCache {
     pub tasks_by_project: HashMap<Option<ProjectId>, Vec<TaskId>>,
     /// Task IDs grouped by due date (None key for tasks without a due date)
     pub tasks_by_due_date: HashMap<Option<NaiveDate>, Vec<TaskId>>,
+    /// Task IDs grouped by scheduled date (only tasks with a scheduled_date)
+    pub tasks_by_scheduled_date: HashMap<NaiveDate, Vec<TaskId>>,
     /// Pre-computed set of context tags (tags starting with @)
     pub contexts: HashSet<String>,
 }
@@ -124,6 +126,7 @@ impl TaskCache {
         self.work_logs_by_task.clear();
         self.tasks_by_project.clear();
         self.tasks_by_due_date.clear();
+        self.tasks_by_scheduled_date.clear();
         self.contexts.clear();
     }
 
@@ -290,6 +293,35 @@ impl TaskCache {
         }
     }
 
+    /// Rebuild the scheduled date index from tasks.
+    ///
+    /// Groups task IDs by their `scheduled_date` for O(1) date-based lookups.
+    /// Each day's tasks are sorted by `scheduled_start_time` with untimed tasks
+    /// last; ties fall back to creation time so the order is stable across
+    /// rebuilds (the source map iterates in arbitrary order).
+    pub fn rebuild_scheduled_date_index(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.tasks_by_scheduled_date.clear();
+        for (id, task) in tasks {
+            if let Some(date) = task.scheduled_date {
+                self.tasks_by_scheduled_date
+                    .entry(date)
+                    .or_default()
+                    .push(*id);
+            }
+        }
+        for ids in self.tasks_by_scheduled_date.values_mut() {
+            ids.sort_by_key(|id| {
+                tasks.get(id).map(|t| {
+                    (
+                        t.scheduled_start_time.is_none(),
+                        t.scheduled_start_time,
+                        t.created_at,
+                    )
+                })
+            });
+        }
+    }
+
     /// Rebuild the context tags set from tasks.
     ///
     /// Extracts all unique @-prefixed tags for O(1) context listing.
@@ -311,6 +343,7 @@ impl TaskCache {
     pub fn rebuild_secondary_indexes(&mut self, tasks: &HashMap<TaskId, Task>) {
         self.rebuild_project_index(tasks);
         self.rebuild_due_date_index(tasks);
+        self.rebuild_scheduled_date_index(tasks);
         self.rebuild_contexts(tasks);
     }
 }

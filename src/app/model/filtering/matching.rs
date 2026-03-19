@@ -132,13 +132,16 @@ impl Model {
                 let in_week = |d: NaiveDate| d >= week_start && d <= week_end;
                 task.due_date.is_some_and(in_week) || task.scheduled_date.is_some_and(in_week)
             }
+            // A task belongs to a calendar day when it is due or scheduled
+            // (time-blocked) on it.
             ViewId::Calendar => self.calendar_state.selected_day.map_or_else(
                 || {
                     // No day selected - show tasks for the entire month
-                    task.due_date.is_some_and(|d| {
+                    let in_month = |d: NaiveDate| {
                         d.year() == self.calendar_state.year
                             && d.month() == self.calendar_state.month
-                    })
+                    };
+                    task.due_date.is_some_and(in_month) || task.scheduled_date.is_some_and(in_month)
                 },
                 |day| {
                     NaiveDate::from_ymd_opt(
@@ -146,7 +149,9 @@ impl Model {
                         self.calendar_state.month,
                         day,
                     )
-                    .is_some_and(|date| task.due_date == Some(date))
+                    .is_some_and(|date| {
+                        task.due_date == Some(date) || task.scheduled_date == Some(date)
+                    })
                 },
             ),
 

@@ -109,6 +109,7 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::CalendarNextMonth => Message::Navigation(NavigationMessage::CalendarNextMonth),
         Action::CalendarPrevDay => Message::Ui(UiMessage::CalendarPrevDay),
         Action::CalendarNextDay => Message::Ui(UiMessage::CalendarNextDay),
+        Action::ScheduleTaskToDay => Message::Ui(UiMessage::ScheduleTaskToDay),
         Action::Save => Message::System(SystemMessage::Save),
         Action::Undo => Message::System(SystemMessage::Undo),
         Action::Redo => Message::System(SystemMessage::Redo),
@@ -186,6 +187,8 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowTaskDetail => Message::Ui(UiMessage::ShowTaskDetail),
         // Command palette
         Action::ShowCommandPalette => Message::Ui(UiMessage::ShowCommandPalette),
+        // Subtask tree
+        Action::ToggleSubtaskCollapse => Message::Ui(UiMessage::ToggleSubtaskCollapse),
     }
 }
 

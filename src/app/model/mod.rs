@@ -71,10 +71,12 @@ pub use types::{
 };
 pub use view_queries::extract_git_location;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use chrono::NaiveDate;
+
+use crate::ui::{InputMode, InputTarget};
 
 use crate::domain::{
     CalendarEvent, CalendarEventId, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Priority,
@@ -395,6 +397,10 @@ pub struct Model {
     /// Command palette state (searchable action launcher)
     pub command_palette: CommandPaletteState,
 
+    // Subtask collapse state
+    /// Set of task IDs whose subtrees are collapsed (children hidden)
+    pub collapsed_tasks: HashSet<TaskId>,
+
     // Task list scroll state
     /// Ratatui ListState for task list scrolling (persists scroll offset).
     /// Uses RefCell for interior mutability during rendering.
@@ -495,6 +501,7 @@ impl Model {
             pending_editor_command: None,
             task_detail: TaskDetailState::default(),
             command_palette: CommandPaletteState::default(),
+            collapsed_tasks: HashSet::new(),
             task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
             sidebar_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }
@@ -571,17 +578,64 @@ impl Model {
         contexts
     }
 
-    /// Returns all tasks due on a specific day.
+    /// Whether the current title edit is drawn inline in the task-list row.
     ///
-    /// Used by the calendar view to display tasks for a selected date.
-    /// Uses the cached due date index for O(1) lookup.
+    /// True while an `EditTask` input is active and the task list is on
+    /// screen (a view that renders it, not focus mode). The input dialog
+    /// overlay is suppressed in that case.
+    #[must_use]
+    pub fn is_inline_title_edit(&self) -> bool {
+        self.input.mode == InputMode::Editing
+            && matches!(self.input.target, InputTarget::EditTask(_))
+            && !self.focus_mode
+            && self.current_view.renders_task_list()
+    }
+
+    /// Returns the tasks that belong to a calendar day, in day-panel order.
+    ///
+    /// Tasks scheduled for the day come first, ordered by their time block
+    /// (`scheduled_start_time`, untimed last); tasks that are only *due* that
+    /// day follow in due-date index order. A task both scheduled and due on
+    /// the day appears once, in the scheduled section.
+    ///
+    /// Used by the calendar view for the day panel, its selection bounds and
+    /// `ScheduleTaskToDay`. Uses the cached date indexes for O(1) lookup.
     #[must_use]
     pub fn tasks_for_day(&self, date: NaiveDate) -> Vec<&Task> {
-        self.task_cache
+        let scheduled_ids = self
+            .task_cache
+            .tasks_by_scheduled_date
+            .get(&date)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let due_ids = self
+            .task_cache
             .tasks_by_due_date
             .get(&Some(date))
-            .map(|ids| ids.iter().filter_map(|id| self.tasks.get(id)).collect())
-            .unwrap_or_default()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        scheduled_ids
+            .iter()
+            .chain(due_ids.iter().filter(|id| !scheduled_ids.contains(id)))
+            .filter_map(|id| self.tasks.get(id))
+            .collect()
+    }
+
+    /// Returns the number of visible tasks scheduled (time-blocked) on a day.
+    ///
+    /// Respects the `show_completed` setting. Drives the `◆` marker in the
+    /// calendar grid.
+    #[must_use]
+    pub fn scheduled_task_count_for_day(&self, date: NaiveDate) -> usize {
+        self.task_cache
+            .tasks_by_scheduled_date
+            .get(&date)
+            .map_or(0, |ids| {
+                ids.iter()
+                    .filter_map(|id| self.tasks.get(id))
+                    .filter(|t| self.filtering.show_completed || !t.status.is_complete())
+                    .count()
+            })
     }
 
     /// Returns all tasks due on the currently selected calendar day.

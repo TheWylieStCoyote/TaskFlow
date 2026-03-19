@@ -1,9 +1,12 @@
 //! Calendar task list rendering.
 //!
-//! Displays tasks and calendar events for the selected day.
+//! Displays the selected day's tasks and calendar events. Tasks scheduled
+//! (time-blocked) on the day come first with an `HH:MM–HH:MM` label, tasks
+//! that are only due that day follow under a `── Due ──` separator, then the
+//! day's calendar events.
 
 use crate::domain::text::truncate_chars;
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveTime};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -13,35 +16,97 @@ use ratatui::{
 };
 
 use crate::config::Theme;
+use crate::domain::{Priority, Task};
 
 use super::Calendar;
 
+/// Width of the time-label column (`HH:MM–HH:MM`).
+const TIME_LABEL_WIDTH: usize = 11;
+
+/// Format a task's time block as a fixed-width `HH:MM–HH:MM` label.
+///
+/// A start without an end gives `HH:MM` padded to the column width; no start
+/// gives a blank column so titles stay aligned.
+pub(crate) fn format_time_label(start: Option<NaiveTime>, end: Option<NaiveTime>) -> String {
+    match (start, end) {
+        (Some(s), Some(e)) => format!("{}–{}", s.format("%H:%M"), e.format("%H:%M")),
+        (Some(s), None) => format!("{:<TIME_LABEL_WIDTH$}", s.format("%H:%M")),
+        (None, _) => " ".repeat(TIME_LABEL_WIDTH),
+    }
+}
+
+/// Short title for the day panel: `Thu 19`, or `Thu 19 (2 events)`.
+fn panel_title(date: Option<NaiveDate>, event_count: usize) -> String {
+    match date {
+        Some(d) if event_count > 0 => {
+            format!(" {} {} ({event_count} events) ", d.weekday(), d.day())
+        }
+        Some(d) => format!(" {} {} ", d.weekday(), d.day()),
+        None => " Tasks ".to_string(),
+    }
+}
+
+fn priority_style(priority: Priority, theme: &Theme) -> Style {
+    match priority {
+        Priority::Urgent => Style::default().fg(theme.priority.urgent.to_color()),
+        Priority::High => Style::default().fg(theme.priority.high.to_color()),
+        Priority::Medium => Style::default().fg(theme.priority.medium.to_color()),
+        Priority::Low => Style::default().fg(theme.priority.low.to_color()),
+        Priority::None => Style::default(),
+    }
+}
+
+/// One task row: priority, status, optional time label, truncated title.
+fn task_line(task: &Task, time_label: Option<String>, width: u16, theme: &Theme) -> Line<'static> {
+    let status_style = if task.status.is_complete() {
+        Style::default().fg(theme.status.done.to_color())
+    } else {
+        Style::default().fg(theme.status.pending.to_color())
+    };
+    let title_style = if task.status.is_complete() {
+        Style::default()
+            .fg(theme.colors.muted.to_color())
+            .add_modifier(Modifier::CROSSED_OUT)
+    } else {
+        Style::default()
+    };
+
+    // Columns before the title: priority, status and optional time label,
+    // each followed by a space.
+    let reserved = task.priority.symbol().chars().count()
+        + task.status.symbol().chars().count()
+        + time_label.as_ref().map_or(0, |l| l.chars().count() + 1)
+        + 2;
+    let max_title_len = (width as usize).saturating_sub(reserved);
+    let title_display = truncate_chars(&task.title, max_title_len, "…");
+
+    let mut spans = vec![
+        Span::styled(
+            format!("{} ", task.priority.symbol()),
+            priority_style(task.priority, theme),
+        ),
+        Span::styled(format!("{} ", task.status.symbol()), status_style),
+    ];
+    if let Some(label) = time_label {
+        spans.push(Span::styled(
+            format!("{label} "),
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+    }
+    spans.push(Span::styled(title_display, title_style));
+    Line::from(spans)
+}
+
 impl Calendar<'_> {
     pub(crate) fn render_task_list(&self, area: Rect, buf: &mut Buffer, theme: &Theme) {
-        let selected_day = self.model.calendar_state.selected_day;
-        let date = selected_day.and_then(|day| {
-            NaiveDate::from_ymd_opt(
-                self.model.calendar_state.year,
-                self.model.calendar_state.month,
-                day,
-            )
-        });
+        let date = self.model.calendar_state.to_date();
 
         // Get events for the selected day
         let events = date
             .map(|d| self.model.events_for_day(d))
             .unwrap_or_default();
-        let event_count = events.len();
 
-        let title = if let Some(d) = date {
-            if event_count > 0 {
-                format!(" {}/{} ({} events) ", d.month(), d.day(), event_count)
-            } else {
-                format!(" Tasks for {}/{} ", d.month(), d.day())
-            }
-        } else {
-            " Tasks ".to_string()
-        };
+        let title = panel_title(date, events.len());
 
         // Highlight border when task list has focus
         let border_color = if self.model.calendar_state.focus_task_list {
@@ -62,9 +127,10 @@ impl Calendar<'_> {
             return;
         }
 
-        // Get tasks for the selected day using visible_tasks for consistency with selection
-        // This ensures selected_index refers to the same task in both rendering and actions
-        let tasks: Vec<_> = if date.is_some() {
+        // The day's tasks come from visible_tasks so that selected_index refers
+        // to the same task here and in the actions. refresh_visible_tasks()
+        // already orders them: scheduled (by start time) first, due-only after.
+        let tasks: Vec<&Task> = if date.is_some() {
             self.model
                 .visible_tasks
                 .iter()
@@ -73,6 +139,11 @@ impl Calendar<'_> {
         } else {
             Vec::new()
         };
+        let scheduled_count = tasks
+            .iter()
+            .filter(|t| t.scheduled_date.is_some() && t.scheduled_date == date)
+            .count();
+        let due_only_count = tasks.len() - scheduled_count;
 
         if tasks.is_empty() && events.is_empty() {
             let msg = if date.is_some() {
@@ -89,74 +160,48 @@ impl Calendar<'_> {
             return;
         }
 
-        // Render task items first
-        let mut items: Vec<ListItem<'_>> = tasks
-            .iter()
-            .take(inner.height as usize)
-            .map(|task| {
-                let status_style = if task.status.is_complete() {
-                    Style::default().fg(theme.status.done.to_color())
-                } else {
-                    Style::default().fg(theme.status.pending.to_color())
-                };
+        let separator = |label: &str| {
+            ListItem::new(Line::from(Span::styled(
+                label.to_string(),
+                Style::default().fg(theme.colors.muted.to_color()),
+            )))
+        };
 
-                let title_style = if task.status.is_complete() {
-                    Style::default()
-                        .fg(theme.colors.muted.to_color())
-                        .add_modifier(Modifier::CROSSED_OUT)
-                } else {
-                    Style::default()
-                };
+        let mut items: Vec<ListItem<'_>> = Vec::new();
 
-                let priority_symbol = task.priority.symbol();
-                let priority_style = match task.priority {
-                    crate::domain::Priority::Urgent => {
-                        Style::default().fg(theme.priority.urgent.to_color())
-                    }
-                    crate::domain::Priority::High => {
-                        Style::default().fg(theme.priority.high.to_color())
-                    }
-                    crate::domain::Priority::Medium => {
-                        Style::default().fg(theme.priority.medium.to_color())
-                    }
-                    crate::domain::Priority::Low => {
-                        Style::default().fg(theme.priority.low.to_color())
-                    }
-                    crate::domain::Priority::None => Style::default(),
-                };
+        // Scheduled tasks with their time block label
+        for task in &tasks[..scheduled_count] {
+            let label = format_time_label(task.scheduled_start_time, task.scheduled_end_time);
+            items.push(ListItem::new(task_line(
+                task,
+                Some(label),
+                inner.width,
+                theme,
+            )));
+        }
 
-                // Truncate title to fit
-                let max_title_len = inner.width.saturating_sub(8) as usize;
-                let title_display = truncate_chars(&task.title, max_title_len, "…");
-
-                ListItem::new(Line::from(vec![
-                    Span::styled(format!("{priority_symbol} "), priority_style),
-                    Span::styled(format!("{} ", task.status.symbol()), status_style),
-                    Span::styled(title_display, title_style),
-                ]))
-            })
-            .collect();
+        // Due-only tasks, separated when both sections are present
+        let has_due_separator = scheduled_count > 0 && due_only_count > 0;
+        if has_due_separator {
+            items.push(separator("── Due ──"));
+        }
+        for task in &tasks[scheduled_count..] {
+            items.push(ListItem::new(task_line(task, None, inner.width, theme)));
+        }
 
         // Add separator and events if there are any
         if !events.is_empty() && !tasks.is_empty() {
-            // Add a visual separator between tasks and events
-            items.push(ListItem::new(Line::from(Span::styled(
-                "── Events ──",
-                Style::default().fg(theme.colors.muted.to_color()),
-            ))));
+            items.push(separator("── Events ──"));
         }
 
         // Add event items
-        let remaining_slots = inner.height as usize - items.len();
+        let remaining_slots = (inner.height as usize).saturating_sub(items.len());
         for event in events.iter().take(remaining_slots) {
-            // Truncate title to fit
             let max_title_len = inner.width.saturating_sub(12) as usize;
             let title_display = truncate_chars(&event.title, max_title_len, "…");
 
-            // Format time range
             let time_range = event.formatted_time_range();
 
-            // Style based on event status
             let event_style = match event.status {
                 crate::domain::CalendarEventStatus::Tentative => {
                     Style::default().fg(theme.colors.muted.to_color())
@@ -183,10 +228,17 @@ impl Calendar<'_> {
                 .add_modifier(Modifier::BOLD),
         );
 
-        // Use selected_index for highlighting if in calendar view
+        // Map the selected task to its row: the Due separator shifts the
+        // due-only rows down by one.
+        let selected = self.model.selected_index;
         let mut state = ListState::default();
-        if self.model.selected_index < tasks.len() {
-            state.select(Some(self.model.selected_index));
+        if selected < tasks.len() {
+            let row = if has_due_separator && selected >= scheduled_count {
+                selected + 1
+            } else {
+                selected
+            };
+            state.select(Some(row));
         }
 
         StatefulWidget::render(list, inner, buf, &mut state);
@@ -196,7 +248,7 @@ impl Calendar<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::Model;
+    use crate::app::{Model, ViewId};
     use crate::domain::{today, CalendarEvent, CalendarEventStatus, Priority, Task, TaskStatus};
     use crate::ui::test_utils::buffer_content;
     use chrono::{Datelike, Local, TimeZone, Utc};
@@ -207,6 +259,22 @@ mod tests {
         let mut buf = Buffer::empty(area);
         Calendar::new(model, &theme).render_task_list(area, &mut buf, &theme);
         buffer_content(&buf)
+    }
+
+    fn time(h: u32, m: u32) -> NaiveTime {
+        NaiveTime::from_hms_opt(h, m, 0).unwrap()
+    }
+
+    /// Calendar model pinned to Thursday 2024-03-14 so the title and labels
+    /// never depend on the wall clock.
+    fn pinned_calendar_model() -> (Model, NaiveDate) {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let mut model = Model::new();
+        model.current_view = ViewId::Calendar;
+        model.calendar_state.year = 2024;
+        model.calendar_state.month = 3;
+        model.calendar_state.selected_day = Some(14);
+        (model, date)
     }
 
     /// Build an event that starts today in local time (events are matched to
@@ -225,6 +293,41 @@ mod tests {
     }
 
     #[test]
+    fn test_format_time_label_full_range() {
+        assert_eq!(
+            format_time_label(Some(time(9, 0)), Some(time(10, 30))),
+            "09:00–10:30"
+        );
+        assert_eq!(
+            format_time_label(Some(time(9, 0)), Some(time(10, 30)))
+                .chars()
+                .count(),
+            11
+        );
+    }
+
+    #[test]
+    fn test_format_time_label_start_only_is_padded() {
+        let label = format_time_label(Some(time(14, 5)), None);
+        assert_eq!(label, "14:05      ");
+        assert_eq!(label.chars().count(), 11);
+    }
+
+    #[test]
+    fn test_format_time_label_without_start_is_blank_column() {
+        assert_eq!(format_time_label(None, None), " ".repeat(11));
+        assert_eq!(format_time_label(None, Some(time(10, 0))), " ".repeat(11));
+    }
+
+    #[test]
+    fn test_panel_title_uses_weekday_and_day() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        assert_eq!(panel_title(Some(date), 0), " Thu 14 ");
+        assert_eq!(panel_title(Some(date), 2), " Thu 14 (2 events) ");
+        assert_eq!(panel_title(None, 0), " Tasks ");
+    }
+
+    #[test]
     fn test_no_selected_day_prompts_selection() {
         let mut model = Model::new();
         model.calendar_state.selected_day = None;
@@ -235,10 +338,9 @@ mod tests {
 
     #[test]
     fn test_selected_day_without_items() {
-        let model = Model::new();
+        let (model, _) = pinned_calendar_model();
         let content = render_tasks(&model, 40, 10);
-        let d = today();
-        assert!(content.contains(&format!(" Tasks for {}/{} ", d.month(), d.day())));
+        assert!(content.contains(" Thu 14 "));
         assert!(content.contains("No tasks or events"));
     }
 
@@ -264,6 +366,74 @@ mod tests {
         assert!(content.contains(&format!("{} ", Priority::Urgent.symbol())));
         assert!(content.contains(&format!("{} ", TaskStatus::Done.symbol())));
         assert!(!content.contains("── Events ──"));
+        assert!(
+            !content.contains("── Due ──"),
+            "no separator without scheduled tasks"
+        );
+    }
+
+    #[test]
+    fn test_scheduled_tasks_show_time_label_before_title() {
+        let (mut model, date) = pinned_calendar_model();
+        let mut task = Task::new("Deep work");
+        task.scheduled_date = Some(date);
+        task.scheduled_start_time = Some(time(9, 0));
+        task.scheduled_end_time = Some(time(10, 30));
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let content = render_tasks(&model, 50, 8);
+
+        assert!(
+            content.contains("09:00–10:30 Deep work"),
+            "time label precedes the title: {content}"
+        );
+    }
+
+    #[test]
+    fn test_scheduled_tasks_are_ordered_by_start_time_with_due_only_after() {
+        let (mut model, date) = pinned_calendar_model();
+        let mut late = Task::new("Late block");
+        late.scheduled_date = Some(date);
+        late.scheduled_start_time = Some(time(15, 0));
+        let mut early = Task::new("Early block");
+        early.scheduled_date = Some(date);
+        early.scheduled_start_time = Some(time(8, 0));
+        early.scheduled_end_time = Some(time(9, 0));
+        let mut untimed = Task::new("Untimed block");
+        untimed.scheduled_date = Some(date);
+        let mut due = Task::new("Just due");
+        due.due_date = Some(date);
+        for t in [late, early, untimed, due] {
+            model.tasks.insert(t.id, t);
+        }
+        model.refresh_visible_tasks();
+
+        let content = render_tasks(&model, 50, 10);
+
+        let pos = |s: &str| {
+            content
+                .find(s)
+                .unwrap_or_else(|| panic!("{s} missing: {content}"))
+        };
+        assert!(pos("08:00–09:00 Early block") < pos("15:00       Late block"));
+        assert!(pos("Late block") < pos("Untimed block"));
+        assert!(pos("Untimed block") < pos("── Due ──"));
+        assert!(pos("── Due ──") < pos("Just due"));
+    }
+
+    #[test]
+    fn test_task_due_and_scheduled_same_day_listed_once() {
+        let (mut model, date) = pinned_calendar_model();
+        let mut task = Task::new("Both");
+        task.scheduled_date = Some(date);
+        task.due_date = Some(date);
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let content = render_tasks(&model, 40, 8);
+        assert_eq!(content.matches("Both").count(), 1);
+        assert!(!content.contains("── Due ──"));
     }
 
     #[test]
@@ -277,6 +447,21 @@ mod tests {
 
         assert!(content.contains("…"));
         assert!(!content.contains("cannot fit"));
+    }
+
+    #[test]
+    fn test_long_scheduled_titles_leave_room_for_time_label() {
+        let (mut model, date) = pinned_calendar_model();
+        let mut task = Task::new("An exceptionally long scheduled task title");
+        task.scheduled_date = Some(date);
+        task.scheduled_start_time = Some(time(9, 0));
+        task.scheduled_end_time = Some(time(10, 0));
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let content = render_tasks(&model, 30, 6);
+        assert!(content.contains("09:00–10:00 An"));
+        assert!(content.contains("…"));
     }
 
     #[test]
@@ -296,7 +481,7 @@ mod tests {
         let content = render_tasks(&model, 60, 12);
 
         let d = today();
-        assert!(content.contains(&format!(" {}/{} (3 events) ", d.month(), d.day())));
+        assert!(content.contains(&format!(" {} {} (3 events) ", d.weekday(), d.day())));
         assert!(content.contains("Morning task"));
         assert!(content.contains("── Events ──"));
         assert!(content.contains("📅"));
@@ -350,10 +535,10 @@ mod tests {
 
     #[test]
     fn test_focused_task_list_still_renders_title() {
-        let mut model = Model::new();
+        let (mut model, _) = pinned_calendar_model();
         model.calendar_state.focus_task_list = true;
         let content = render_tasks(&model, 40, 8);
-        assert!(content.contains("Tasks for"));
+        assert!(content.contains(" Thu 14 "));
     }
 
     #[test]

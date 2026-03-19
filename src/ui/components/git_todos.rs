@@ -11,6 +11,18 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
+#[cfg(test)]
+fn buffer_to_string(buffer: &Buffer) -> String {
+    let mut result = String::new();
+    for y in 0..buffer.area.height {
+        for x in 0..buffer.area.width {
+            result.push_str(buffer[(x, y)].symbol());
+        }
+        result.push('\n');
+    }
+    result
+}
+
 use crate::app::Model;
 use crate::config::Theme;
 
@@ -141,5 +153,96 @@ impl Widget for GitTodos<'_> {
         let mut state = ListState::default();
         state.select(Some(selected_index));
         StatefulWidget::render(list, inner, buf, &mut state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+
+    #[test]
+    fn test_git_todos_renders_empty_message() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let widget = GitTodos::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 60, 15);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Git TODOs"));
+        assert!(content.contains("No git TODOs found"));
+    }
+
+    #[test]
+    fn test_git_todos_renders_scan_hint_when_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let widget = GitTodos::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 60, 15);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains('r'));
+    }
+
+    #[test]
+    fn test_git_todos_renders_without_panic_small_area() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let widget = GitTodos::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 10, 5);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer); // Should not panic
+    }
+
+    #[test]
+    fn test_git_todos_with_task_renders_title() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let mut task = Task::new("TODO: fix this bug");
+        // Git tasks use description with "git:<file>:<line>" format
+        task.description = Some("git:src/main.rs:42".to_string());
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let theme = Theme::default();
+        let widget = GitTodos::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer); // Should not panic
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Git TODOs"));
+        // Should show the file path in header
+        assert!(content.contains("src/main.rs") || content.contains("main.rs"));
+    }
+
+    #[test]
+    fn test_git_todos_shows_task_title() {
+        use crate::domain::Task;
+
+        let mut model = Model::new();
+        let mut task = Task::new("Fix the auth bug");
+        task.description = Some("git:src/auth.rs:10".to_string());
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let theme = Theme::default();
+        let widget = GitTodos::new(&model, &theme);
+
+        let area = Rect::new(0, 0, 80, 25);
+        let mut buffer = Buffer::empty(area);
+        widget.render(area, &mut buffer);
+
+        let content = buffer_to_string(&buffer);
+        assert!(content.contains("Fix the auth bug"));
     }
 }

@@ -249,3 +249,359 @@ pub fn extract_git_location(description: &str) -> Option<(String, usize)> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Priority, Project, Task, TaskStatus};
+
+    fn make_model() -> Model {
+        Model::new()
+    }
+
+    fn add_task(model: &mut Model, title: &str) -> TaskId {
+        let task = Task::new(title);
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        id
+    }
+
+    // ── kanban_column_tasks ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_kanban_column_todo() {
+        let mut model = make_model();
+        let id = add_task(&mut model, "Task A");
+        let col = model.kanban_column_tasks(0);
+        assert!(col.contains(&id));
+    }
+
+    #[test]
+    fn test_kanban_column_in_progress() {
+        let mut model = make_model();
+        let mut task = Task::new("In progress");
+        task.status = TaskStatus::InProgress;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let col = model.kanban_column_tasks(1);
+        assert!(col.contains(&id));
+    }
+
+    #[test]
+    fn test_kanban_column_blocked() {
+        let mut model = make_model();
+        let mut task = Task::new("Blocked");
+        task.status = TaskStatus::Blocked;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let col = model.kanban_column_tasks(2);
+        assert!(col.contains(&id));
+    }
+
+    #[test]
+    fn test_kanban_column_done() {
+        let mut model = make_model();
+        let mut task = Task::new("Done");
+        task.status = TaskStatus::Done;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.filtering.show_completed = true;
+        model.refresh_visible_tasks();
+        let col = model.kanban_column_tasks(3);
+        assert!(col.contains(&id));
+    }
+
+    #[test]
+    fn test_kanban_column_out_of_range_returns_empty() {
+        let mut model = make_model();
+        add_task(&mut model, "Task");
+        assert!(model.kanban_column_tasks(99).is_empty());
+    }
+
+    // ── eisenhower_quadrant_tasks ────────────────────────────────────────────
+
+    #[test]
+    fn test_eisenhower_eliminate_quadrant() {
+        let mut model = make_model();
+        // Low priority, no due date → "Eliminate" (3)
+        let mut task = Task::new("Low priority, no deadline");
+        task.priority = Priority::Low;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let q = model.eisenhower_quadrant_tasks(3);
+        assert!(q.contains(&id));
+    }
+
+    #[test]
+    fn test_eisenhower_schedule_quadrant() {
+        let mut model = make_model();
+        // High priority, no due date → "Schedule" (1)
+        let mut task = Task::new("Important, no deadline");
+        task.priority = Priority::High;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let q = model.eisenhower_quadrant_tasks(1);
+        assert!(q.contains(&id));
+    }
+
+    #[test]
+    fn test_eisenhower_do_first_quadrant() {
+        let mut model = make_model();
+        // Urgent priority + due today → "Do First" (0)
+        let mut task = Task::new("Urgent and important");
+        task.priority = Priority::Urgent;
+        task.due_date = Some(chrono::Utc::now().date_naive());
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let q = model.eisenhower_quadrant_tasks(0);
+        assert!(q.contains(&id));
+    }
+
+    #[test]
+    fn test_eisenhower_delegate_quadrant() {
+        let mut model = make_model();
+        // Low priority + due today → "Delegate" (2)
+        let mut task = Task::new("Urgent but not important");
+        task.priority = Priority::Low;
+        task.due_date = Some(chrono::Utc::now().date_naive());
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        let q = model.eisenhower_quadrant_tasks(2);
+        assert!(q.contains(&id));
+    }
+
+    #[test]
+    fn test_eisenhower_out_of_range_empty() {
+        let mut model = make_model();
+        add_task(&mut model, "Task");
+        assert!(model.eisenhower_quadrant_tasks(99).is_empty());
+    }
+
+    #[test]
+    fn test_eisenhower_excludes_completed_tasks() {
+        let mut model = make_model();
+        let mut task = Task::new("Done high prio");
+        task.priority = Priority::High;
+        task.status = TaskStatus::Done;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.filtering.show_completed = true;
+        model.refresh_visible_tasks();
+        // Done tasks should be excluded from all quadrants
+        for q in 0..4 {
+            assert!(!model.eisenhower_quadrant_tasks(q).contains(&id));
+        }
+    }
+
+    // ── weekly_planner_day_tasks ─────────────────────────────────────────────
+
+    #[test]
+    fn test_weekly_planner_out_of_range_empty() {
+        let model = make_model();
+        assert!(model.weekly_planner_day_tasks(7).is_empty());
+    }
+
+    #[test]
+    fn test_weekly_planner_task_on_monday() {
+        let mut model = make_model();
+        let today = chrono::Utc::now().date_naive();
+        let week_start =
+            today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+
+        let mut task = Task::new("Monday task");
+        task.due_date = Some(week_start); // Monday
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+
+        let day_tasks = model.weekly_planner_day_tasks(0);
+        assert!(day_tasks.contains(&id));
+    }
+
+    #[test]
+    fn test_weekly_planner_scheduled_date() {
+        let mut model = make_model();
+        let today = chrono::Utc::now().date_naive();
+        let week_start =
+            today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
+        let wednesday = week_start + chrono::Duration::days(2);
+
+        let mut task = Task::new("Scheduled Wednesday");
+        task.scheduled_date = Some(wednesday);
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+
+        let day_tasks = model.weekly_planner_day_tasks(2);
+        assert!(day_tasks.contains(&id));
+    }
+
+    // ── network_tasks ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_network_tasks_empty_model() {
+        let model = make_model();
+        assert!(model.network_tasks().is_empty());
+    }
+
+    #[test]
+    fn test_network_tasks_with_dependency() {
+        let mut model = make_model();
+        let task_a = Task::new("A");
+        let task_b_id = task_a.id;
+        let mut task_c = Task::new("C depends on A");
+        task_c.dependencies.push(task_b_id);
+        let task_c_id = task_c.id;
+
+        model.tasks.insert(task_a.id, task_a);
+        model.tasks.insert(task_c.id, task_c);
+        model.refresh_visible_tasks();
+
+        let net = model.network_tasks();
+        assert!(net.contains(&task_b_id));
+        assert!(net.contains(&task_c_id));
+    }
+
+    #[test]
+    fn test_network_tasks_with_chain() {
+        let mut model = make_model();
+        let task_a = Task::new("Chain start");
+        let task_b = Task::new("Chain end");
+        let a_id = task_a.id;
+        let b_id = task_b.id;
+        // task_a.next_task_id = task_b.id — add via tasks field
+        let mut task_a2 = task_a;
+        task_a2.next_task_id = Some(b_id);
+        model.tasks.insert(a_id, task_a2);
+        model.tasks.insert(b_id, task_b);
+        model.refresh_visible_tasks();
+
+        let net = model.network_tasks();
+        assert!(net.contains(&a_id));
+        assert!(net.contains(&b_id));
+    }
+
+    // ── get_tasks_grouped_by_project ─────────────────────────────────────────
+
+    #[test]
+    fn test_grouped_by_project_no_project() {
+        let mut model = make_model();
+        let id = add_task(&mut model, "Unassigned task");
+        let groups = model.get_tasks_grouped_by_project();
+        let no_project = groups.iter().find(|(pid, _, _)| pid.is_none());
+        assert!(no_project.is_some());
+        assert!(no_project.unwrap().2.contains(&id));
+    }
+
+    #[test]
+    fn test_grouped_by_project_with_project() {
+        let mut model = make_model();
+        let project = Project::new("My Project");
+        let pid = project.id;
+        model.projects.insert(pid, project);
+
+        let mut task = Task::new("Project task");
+        task.project_id = Some(pid);
+        let tid = task.id;
+        model.tasks.insert(tid, task);
+        model.refresh_visible_tasks();
+
+        let groups = model.get_tasks_grouped_by_project();
+        let proj_group = groups.iter().find(|(p, _, _)| *p == Some(pid));
+        assert!(proj_group.is_some(), "should have project group");
+        assert!(proj_group.unwrap().2.contains(&tid));
+        assert_eq!(proj_group.unwrap().1, "My Project");
+    }
+
+    #[test]
+    fn test_grouped_by_project_sorts_no_project_last() {
+        let mut model = make_model();
+        let project = Project::new("Alpha Project");
+        let pid = project.id;
+        model.projects.insert(pid, project);
+
+        let mut t1 = Task::new("Project task");
+        t1.project_id = Some(pid);
+        model.tasks.insert(t1.id, t1);
+
+        let t2 = Task::new("Unassigned");
+        model.tasks.insert(t2.id, t2);
+
+        model.refresh_visible_tasks();
+
+        let groups = model.get_tasks_grouped_by_project();
+        if groups.len() >= 2 {
+            // "No Project" should come last
+            assert!(groups.last().unwrap().0.is_none());
+        }
+    }
+
+    // ── get_git_tasks_grouped_by_file ─────────────────────────────────────────
+
+    #[test]
+    fn test_git_tasks_grouped_empty() {
+        let model = make_model();
+        assert!(model.get_git_tasks_grouped_by_file().is_empty());
+    }
+
+    #[test]
+    fn test_git_tasks_grouped_with_tasks() {
+        let mut model = make_model();
+        let mut task = Task::new("Fix auth bug");
+        task.description = Some("git:src/auth.rs:42".to_string());
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+
+        let groups = model.get_git_tasks_grouped_by_file();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].0, "src/auth.rs");
+        assert!(groups[0]
+            .1
+            .iter()
+            .any(|(tid, line)| *tid == id && *line == 42));
+    }
+
+    #[test]
+    fn test_git_tasks_grouped_multiple_files() {
+        let mut model = make_model();
+
+        let mut t1 = Task::new("Auth fix");
+        t1.description = Some("git:src/auth.rs:10".to_string());
+        let mut t2 = Task::new("Main fix");
+        t2.description = Some("git:src/main.rs:5".to_string());
+        let mut t3 = Task::new("Auth fix 2");
+        t3.description = Some("git:src/auth.rs:20".to_string());
+
+        model.tasks.insert(t1.id, t1);
+        model.tasks.insert(t2.id, t2);
+        model.tasks.insert(t3.id, t3);
+        model.refresh_visible_tasks();
+
+        let groups = model.get_git_tasks_grouped_by_file();
+        assert_eq!(groups.len(), 2);
+
+        let auth_group = groups.iter().find(|(f, _)| f == "src/auth.rs");
+        assert!(auth_group.is_some());
+        assert_eq!(auth_group.unwrap().1.len(), 2);
+        // Should be sorted by line number
+        assert_eq!(auth_group.unwrap().1[0].1, 10);
+        assert_eq!(auth_group.unwrap().1[1].1, 20);
+    }
+
+    #[test]
+    fn test_git_tasks_no_description_excluded() {
+        let mut model = make_model();
+        let task = Task::new("Regular task, no description");
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+        assert!(model.get_git_tasks_grouped_by_file().is_empty());
+    }
+}

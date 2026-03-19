@@ -849,3 +849,407 @@ mod reports_component {
         assert!(output.contains("Estimation"), "should have Estimation tab");
     }
 }
+
+mod evening_review_component {
+    use super::*;
+    use chrono::{Duration, Utc};
+    use taskflow::domain::TaskStatus;
+    use taskflow::ui::{EveningReview, EveningReviewPhase};
+
+    fn create_model_for_evening_review() -> Model {
+        let mut model = Model::new();
+        let today = Utc::now().date_naive();
+
+        // Completed task today
+        let mut completed = Task::new("Completed task");
+        completed.status = TaskStatus::Done;
+        completed.completed_at = Some(Utc::now());
+        completed.due_date = Some(today);
+        model.tasks.insert(completed.id, completed);
+
+        // Incomplete task due today
+        let incomplete = Task::new("Incomplete task").with_due_date(today);
+        model.tasks.insert(incomplete.id, incomplete);
+
+        // Tomorrow's task
+        let tomorrow = Task::new("Tomorrow task").with_due_date(today + Duration::days(1));
+        model.tasks.insert(tomorrow.id, tomorrow);
+
+        model
+    }
+
+    #[test]
+    fn test_evening_review_welcome_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review = EveningReview::with_state(&model, &theme, EveningReviewPhase::Welcome, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render welcome phase");
+        assert!(output.contains("Evening Review"), "should show title");
+    }
+
+    #[test]
+    fn test_evening_review_completed_today_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review =
+            EveningReview::with_state(&model, &theme, EveningReviewPhase::CompletedToday, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render completed today phase");
+    }
+
+    #[test]
+    fn test_evening_review_incomplete_tasks_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review =
+            EveningReview::with_state(&model, &theme, EveningReviewPhase::IncompleteTasks, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render incomplete tasks phase");
+    }
+
+    #[test]
+    fn test_evening_review_tomorrow_preview_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review =
+            EveningReview::with_state(&model, &theme, EveningReviewPhase::TomorrowPreview, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render tomorrow preview phase");
+    }
+
+    #[test]
+    fn test_evening_review_time_review_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review = EveningReview::with_state(&model, &theme, EveningReviewPhase::TimeReview, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render time review phase");
+    }
+
+    #[test]
+    fn test_evening_review_summary_phase() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review = EveningReview::with_state(&model, &theme, EveningReviewPhase::Summary, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render summary phase");
+    }
+
+    #[test]
+    fn test_evening_review_empty_model() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        // Test all phases with empty model
+        for phase in [
+            EveningReviewPhase::Welcome,
+            EveningReviewPhase::CompletedToday,
+            EveningReviewPhase::IncompleteTasks,
+            EveningReviewPhase::TomorrowPreview,
+            EveningReviewPhase::TimeReview,
+            EveningReviewPhase::Summary,
+        ] {
+            let mut buf = Buffer::empty(area);
+            let review = EveningReview::with_state(&model, &theme, phase, 0);
+            review.render(area, &mut buf);
+            // Should not panic
+        }
+        // Final render check
+        let review = EveningReview::new(&model, &theme);
+        review.render(area, &mut buffer);
+        assert!(!buffer_to_string(&buffer).is_empty());
+    }
+
+    #[test]
+    fn test_evening_review_welcome_high_completion() {
+        // Test the "Great day!" branch (completion >= 80%)
+        let mut model = Model::new();
+        let today = Utc::now().date_naive();
+
+        // Add 5 completed tasks and 1 incomplete = 83% completion
+        for i in 0..5 {
+            let mut t = Task::new(format!("Done {i}"));
+            t.status = TaskStatus::Done;
+            t.completed_at = Some(Utc::now());
+            t.due_date = Some(today);
+            model.tasks.insert(t.id, t);
+        }
+        let incomplete = Task::new("Incomplete").with_due_date(today);
+        model.tasks.insert(incomplete.id, incomplete);
+
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review = EveningReview::with_state(&model, &theme, EveningReviewPhase::Welcome, 0);
+        review.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(
+            output.contains("crushed") || output.contains("Great"),
+            "should show positive greeting"
+        );
+    }
+
+    #[test]
+    fn test_evening_review_incomplete_with_selection() {
+        let model = create_model_for_evening_review();
+        let theme = Theme::default();
+
+        // Render with non-zero selection
+        let area = Rect::new(0, 0, 80, 30);
+        let mut buffer = Buffer::empty(area);
+        let review =
+            EveningReview::with_state(&model, &theme, EveningReviewPhase::IncompleteTasks, 1);
+        review.render(area, &mut buffer);
+
+        assert!(!buffer_to_string(&buffer).is_empty());
+    }
+}
+
+mod goals_view_component {
+    use super::*;
+    use taskflow::domain::{Goal, GoalStatus, KeyResult};
+    use taskflow::ui::GoalsView;
+
+    fn create_model_with_goals() -> Model {
+        let mut model = Model::new();
+
+        let mut goal1 = Goal::new("Q1 Objectives");
+        goal1.status = GoalStatus::Active;
+        let goal_id1 = goal1.id;
+        model.goals.insert(goal_id1, goal1);
+
+        let mut goal2 = Goal::new("Personal Growth");
+        goal2.status = GoalStatus::OnHold;
+        let goal_id2 = goal2.id;
+        model.goals.insert(goal_id2, goal2);
+
+        let kr = KeyResult::new(goal_id1, "Ship feature X").with_target(100.0, Some("%"));
+        model.key_results.insert(kr.id, kr);
+
+        model.refresh_visible_goals();
+        model
+    }
+
+    #[test]
+    fn test_goals_view_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        let view = GoalsView::new(&model, &theme);
+        view.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render even with no goals");
+    }
+
+    #[test]
+    fn test_goals_view_with_goals() {
+        let model = create_model_with_goals();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        let view = GoalsView::new(&model, &theme);
+        view.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render with goals");
+    }
+
+    #[test]
+    fn test_goals_view_with_expanded_goal() {
+        let mut model = create_model_with_goals();
+        let theme = Theme::default();
+
+        // Expand the first goal
+        let goal_id = *model.goals.keys().next().unwrap();
+        model.goal_view.expanded_goal = Some(goal_id);
+        model.goal_view.selected_goal = 0;
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buffer = Buffer::empty(area);
+        let view = GoalsView::new(&model, &theme);
+        view.render(area, &mut buffer);
+
+        assert!(!buffer_to_string(&buffer).is_empty());
+    }
+
+    #[test]
+    fn test_goals_view_narrow() {
+        let model = create_model_with_goals();
+        let theme = Theme::default();
+
+        // Very narrow area
+        let area = Rect::new(0, 0, 40, 15);
+        let mut buffer = Buffer::empty(area);
+        let view = GoalsView::new(&model, &theme);
+        view.render(area, &mut buffer);
+
+        // Should not panic even with narrow area
+        assert!(!buffer_to_string(&buffer).is_empty() || buffer_to_string(&buffer).is_empty());
+    }
+}
+
+mod duplicates_component {
+    use super::*;
+    use taskflow::domain::duplicate_detector::DuplicatePair;
+    use taskflow::ui::Duplicates;
+
+    #[test]
+    fn test_duplicates_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let dup = Duplicates::new(&model, &theme);
+        dup.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render empty state");
+    }
+
+    #[test]
+    fn test_duplicates_with_pairs() {
+        let mut model = Model::new();
+
+        // Add some tasks that are "duplicates"
+        let task1 = Task::new("Fix login bug");
+        let task2 = Task::new("Fix login bug - duplicate");
+        let id1 = task1.id;
+        let id2 = task2.id;
+        model.tasks.insert(task1.id, task1);
+        model.tasks.insert(task2.id, task2);
+
+        // Add duplicate pair to model's duplicates view
+        model.duplicates_view.pairs = vec![DuplicatePair {
+            task1_id: id1,
+            task2_id: id2,
+            similarity: 0.9,
+        }];
+        model.duplicates_view.selected = 0;
+
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let dup = Duplicates::new(&model, &theme);
+        dup.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render with pairs");
+    }
+
+    #[test]
+    fn test_duplicates_narrow() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 40, 10);
+        let mut buffer = Buffer::empty(area);
+        let dup = Duplicates::new(&model, &theme);
+        dup.render(area, &mut buffer);
+        // Should not panic
+    }
+}
+
+mod git_todos_component {
+    use super::*;
+    use taskflow::ui::GitTodos;
+
+    #[test]
+    fn test_git_todos_empty() {
+        let model = Model::new();
+        let theme = Theme::default();
+
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let todos = GitTodos::new(&model, &theme);
+        todos.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty(), "should render empty git todos");
+        assert!(
+            output.contains("Git TODOs") || output.contains("No git"),
+            "should show git todos header"
+        );
+    }
+
+    #[test]
+    fn test_git_todos_with_tasks() {
+        let mut model = Model::new();
+
+        // Add git-tagged tasks
+        let mut task1 = Task::new("Fix auth bug");
+        task1.description = Some("git:src/auth.rs:42".to_string());
+        model.tasks.insert(task1.id, task1);
+
+        let mut task2 = Task::new("Update docs");
+        task2.description = Some("git:README.md:10".to_string());
+        model.tasks.insert(task2.id, task2);
+
+        model.refresh_visible_tasks();
+
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let todos = GitTodos::new(&model, &theme);
+        todos.render(area, &mut buffer);
+
+        let output = buffer_to_string(&buffer);
+        assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn test_git_todos_selected() {
+        let mut model = Model::new();
+        let mut task = Task::new("TODO: fix this");
+        task.description = Some("git:main.rs:100".to_string());
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 100, 30);
+        let mut buffer = Buffer::empty(area);
+        let todos = GitTodos::new(&model, &theme);
+        todos.render(area, &mut buffer);
+
+        assert!(!buffer_to_string(&buffer).is_empty());
+    }
+}

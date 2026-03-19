@@ -256,3 +256,196 @@ fn test_calendar_nav_with_no_selected_day() {
     // Should stay None
     assert!(model.calendar_state.selected_day.is_none());
 }
+
+#[test]
+fn test_calendar_prev_month() {
+    let mut model = Model::new();
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+
+    update(
+        &mut model,
+        Message::Navigation(NavigationMessage::CalendarPrevMonth),
+    );
+
+    assert_eq!(model.calendar_state.month, 5);
+    assert_eq!(model.calendar_state.year, 2024);
+}
+
+#[test]
+fn test_calendar_prev_month_wraps_year() {
+    let mut model = Model::new();
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 1;
+    model.calendar_state.selected_day = Some(15);
+
+    update(
+        &mut model,
+        Message::Navigation(NavigationMessage::CalendarPrevMonth),
+    );
+
+    assert_eq!(model.calendar_state.month, 12);
+    assert_eq!(model.calendar_state.year, 2023);
+}
+
+#[test]
+fn test_calendar_next_month() {
+    let mut model = Model::new();
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+
+    update(
+        &mut model,
+        Message::Navigation(NavigationMessage::CalendarNextMonth),
+    );
+
+    assert_eq!(model.calendar_state.month, 7);
+    assert_eq!(model.calendar_state.year, 2024);
+}
+
+#[test]
+fn test_calendar_next_month_wraps_year() {
+    let mut model = Model::new();
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 12;
+    model.calendar_state.selected_day = Some(15);
+
+    update(
+        &mut model,
+        Message::Navigation(NavigationMessage::CalendarNextMonth),
+    );
+
+    assert_eq!(model.calendar_state.month, 1);
+    assert_eq!(model.calendar_state.year, 2025);
+}
+
+#[test]
+fn test_calendar_prev_month_clamps_day() {
+    let mut model = Model::new();
+    // March has 31 days, but February 2024 has 29 days (leap)
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 3;
+    model.calendar_state.selected_day = Some(31); // Day 31 doesn't exist in Feb
+
+    update(
+        &mut model,
+        Message::Navigation(NavigationMessage::CalendarPrevMonth),
+    );
+
+    assert_eq!(model.calendar_state.month, 2);
+    assert_eq!(model.calendar_state.selected_day, Some(29)); // Clamped to last day of Feb
+}
+
+#[test]
+fn test_calendar_up_cross_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 3;
+    model.calendar_state.selected_day = Some(3); // day <= 7, cross-month
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Up));
+
+    // Should move to February 2024
+    assert_eq!(model.calendar_state.month, 2);
+    assert_eq!(model.calendar_state.year, 2024);
+}
+
+#[test]
+fn test_calendar_up_same_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Up));
+
+    assert_eq!(model.calendar_state.month, 6);
+    assert_eq!(model.calendar_state.selected_day, Some(8));
+}
+
+#[test]
+fn test_calendar_up_cross_year() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 1;
+    model.calendar_state.selected_day = Some(5); // day <= 7, cross year
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Up));
+
+    assert_eq!(model.calendar_state.year, 2023);
+    assert_eq!(model.calendar_state.month, 12);
+}
+
+#[test]
+fn test_calendar_down_cross_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6; // June has 30 days
+    model.calendar_state.selected_day = Some(25); // 25 + 7 > 30, cross-month
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Down));
+
+    // Should move to July 2024
+    assert_eq!(model.calendar_state.month, 7);
+    assert_eq!(model.calendar_state.year, 2024);
+}
+
+#[test]
+fn test_calendar_down_same_month() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 6;
+    model.calendar_state.selected_day = Some(15);
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Down));
+
+    assert_eq!(model.calendar_state.month, 6);
+    assert_eq!(model.calendar_state.selected_day, Some(22));
+}
+
+#[test]
+fn test_calendar_down_cross_year() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 12; // December has 31 days
+    model.calendar_state.selected_day = Some(29); // 29 + 7 > 31, cross year
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Down));
+
+    assert_eq!(model.calendar_state.year, 2025);
+    assert_eq!(model.calendar_state.month, 1);
+}
+
+#[test]
+fn test_calendar_up_no_selected_day() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.selected_day = None;
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Up)); // Should not panic
+}
+
+#[test]
+fn test_calendar_down_no_selected_day() {
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.selected_day = None;
+    model.calendar_state.focus_task_list = false;
+
+    update(&mut model, Message::Navigation(NavigationMessage::Down)); // Should not panic
+}

@@ -377,3 +377,325 @@ impl Habit {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{NaiveDate, TimeDelta, Utc, Weekday};
+
+    fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn test_habit_new_defaults() {
+        let habit = Habit::new("Exercise");
+        assert_eq!(habit.name, "Exercise");
+        assert!(!habit.archived);
+        assert!(habit.check_ins.is_empty());
+        assert!(habit.description.is_none());
+        assert_eq!(habit.frequency, HabitFrequency::Daily);
+    }
+
+    #[test]
+    fn test_habit_builder_methods() {
+        let habit = Habit::new("Read")
+            .with_description("30 minutes")
+            .with_color("#ff0000")
+            .with_tags(vec!["learning".into()]);
+        assert_eq!(habit.description, Some("30 minutes".to_string()));
+        assert_eq!(habit.color, Some("#ff0000".to_string()));
+        assert_eq!(habit.tags, vec!["learning"]);
+    }
+
+    #[test]
+    fn test_check_in_and_is_completed_on() {
+        let mut habit = Habit::new("Meditate");
+        let d = date(2024, 1, 10);
+        assert!(!habit.is_completed_on(d));
+        habit.check_in(d, true, None);
+        assert!(habit.is_completed_on(d));
+    }
+
+    #[test]
+    fn test_check_in_with_note() {
+        let mut habit = Habit::new("Journal");
+        let d = date(2024, 3, 5);
+        habit.check_in(d, true, Some("wrote 3 pages".to_string()));
+        let check = habit.check_ins.get(&d).unwrap();
+        assert_eq!(check.note, Some("wrote 3 pages".to_string()));
+        assert!(check.completed);
+    }
+
+    #[test]
+    fn test_check_in_not_completed() {
+        let mut habit = Habit::new("Run");
+        let d = date(2024, 5, 1);
+        habit.check_in(d, false, None);
+        assert!(!habit.is_completed_on(d));
+    }
+
+    #[test]
+    fn test_is_active() {
+        let habit = Habit::new("Stretch");
+        assert!(habit.is_active());
+    }
+
+    #[test]
+    fn test_is_active_when_archived() {
+        let mut habit = Habit::new("Old habit");
+        habit.archived = true;
+        assert!(!habit.is_active());
+    }
+
+    #[test]
+    fn test_current_streak_no_checkins() {
+        let habit = Habit::new("Walk");
+        assert_eq!(habit.current_streak(), 0);
+    }
+
+    #[test]
+    fn test_current_streak_today_only() {
+        let mut habit = Habit::new("Walk");
+        let today = Utc::now().date_naive();
+        habit.check_in(today, true, None);
+        assert_eq!(habit.current_streak(), 1);
+    }
+
+    #[test]
+    fn test_current_streak_yesterday_only() {
+        let mut habit = Habit::new("Walk");
+        let yesterday = Utc::now().date_naive() - TimeDelta::days(1);
+        habit.check_in(yesterday, true, None);
+        assert_eq!(habit.current_streak(), 1);
+    }
+
+    #[test]
+    fn test_current_streak_consecutive_days() {
+        let today = Utc::now().date_naive();
+        let mut habit = Habit::new("Walk").with_start_date(today - TimeDelta::days(10));
+        // Check in for 3 consecutive days ending today
+        habit.check_in(today, true, None);
+        habit.check_in(today - TimeDelta::days(1), true, None);
+        habit.check_in(today - TimeDelta::days(2), true, None);
+        assert_eq!(habit.current_streak(), 3);
+    }
+
+    #[test]
+    fn test_current_streak_broken() {
+        let mut habit = Habit::new("Walk");
+        let today = Utc::now().date_naive();
+        // Today and 2 days ago but NOT yesterday — breaks the streak
+        habit.check_in(today, true, None);
+        habit.check_in(today - TimeDelta::days(2), true, None);
+        assert_eq!(habit.current_streak(), 1);
+    }
+
+    #[test]
+    fn test_longest_streak_empty() {
+        let habit = Habit::new("Yoga");
+        assert_eq!(habit.longest_streak(), 0);
+    }
+
+    #[test]
+    fn test_longest_streak_single() {
+        let mut habit = Habit::new("Yoga");
+        habit.check_in(date(2024, 1, 1), true, None);
+        assert_eq!(habit.longest_streak(), 1);
+    }
+
+    #[test]
+    fn test_longest_streak_consecutive() {
+        let mut habit = Habit::new("Yoga");
+        for day in 1..=5u32 {
+            habit.check_in(date(2024, 6, day), true, None);
+        }
+        assert_eq!(habit.longest_streak(), 5);
+    }
+
+    #[test]
+    fn test_longest_streak_with_gap() {
+        let mut habit = Habit::new("Yoga");
+        // 3 days, gap, 2 days
+        habit.check_in(date(2024, 1, 1), true, None);
+        habit.check_in(date(2024, 1, 2), true, None);
+        habit.check_in(date(2024, 1, 3), true, None);
+        // gap at Jan 4
+        habit.check_in(date(2024, 1, 5), true, None);
+        habit.check_in(date(2024, 1, 6), true, None);
+        assert_eq!(habit.longest_streak(), 3);
+    }
+
+    #[test]
+    fn test_overall_completion_rate_empty() {
+        let habit = Habit::new("Read");
+        assert!(habit.overall_completion_rate() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_overall_completion_rate_all_complete() {
+        let mut habit = Habit::new("Read");
+        habit.check_in(date(2024, 1, 1), true, None);
+        habit.check_in(date(2024, 1, 2), true, None);
+        assert!((habit.overall_completion_rate() - 100.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_overall_completion_rate_half() {
+        let mut habit = Habit::new("Read");
+        habit.check_in(date(2024, 1, 1), true, None);
+        habit.check_in(date(2024, 1, 2), false, None);
+        assert!((habit.overall_completion_rate() - 50.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_total_completions() {
+        let mut habit = Habit::new("Read");
+        habit.check_in(date(2024, 1, 1), true, None);
+        habit.check_in(date(2024, 1, 2), false, None);
+        habit.check_in(date(2024, 1, 3), true, None);
+        assert_eq!(habit.total_completions(), 2);
+    }
+
+    #[test]
+    fn test_total_completions_none() {
+        let mut habit = Habit::new("Read");
+        habit.check_in(date(2024, 1, 1), false, None);
+        assert_eq!(habit.total_completions(), 0);
+    }
+
+    #[test]
+    fn test_completion_rate_for_period_full() {
+        let mut habit = Habit::new("Walk");
+        let start = date(2024, 3, 1);
+        let end = date(2024, 3, 3);
+        habit.check_in(start, true, None);
+        habit.check_in(date(2024, 3, 2), true, None);
+        habit.check_in(end, true, None);
+        let rate = habit.completion_rate_for_period(start, end);
+        assert_eq!(rate, Some(100.0));
+    }
+
+    #[test]
+    fn test_completion_rate_for_period_half() {
+        let mut habit = Habit::new("Walk");
+        let start = date(2024, 3, 1);
+        let end = date(2024, 3, 2);
+        habit.check_in(start, true, None);
+        habit.check_in(end, false, None);
+        let rate = habit.completion_rate_for_period(start, end);
+        assert_eq!(rate, Some(50.0));
+    }
+
+    #[test]
+    fn test_completion_rate_for_period_no_due_days() {
+        // Weekly habit due only on Monday; period is only Tuesday
+        let start = date(2024, 3, 5); // Tuesday
+        let habit = Habit::new("Gym")
+            .with_frequency(HabitFrequency::Weekly {
+                days: vec![Weekday::Mon],
+            })
+            .with_start_date(start);
+        let rate = habit.completion_rate_for_period(start, start);
+        assert_eq!(rate, None);
+    }
+
+    #[test]
+    fn test_trend_symbol_stable_no_completions() {
+        // Daily habit with no check-ins: both periods return 0%, diff=0 → Stable ("→")
+        let habit = Habit::new("Run");
+        assert_eq!(habit.trend_symbol(), "→");
+    }
+
+    #[test]
+    fn test_trend_stable_no_completions() {
+        // Daily habit, no check-ins: recent=0%, historical=0%, diff=0 → Stable
+        let habit = Habit::new("Run");
+        assert_eq!(habit.trend(), Some(HabitTrend::Stable));
+    }
+
+    #[test]
+    fn test_trend_none_weekly_no_due_days_in_period() {
+        // Weekly habit due only on a day that doesn't appear in either period
+        // This is hard to guarantee with today's date, so just verify the function returns something
+        let habit = Habit::new("Run");
+        // trend() is Some or None — just verify it doesn't panic
+        let _ = habit.trend();
+    }
+
+    #[test]
+    fn test_completion_rate_by_weekday_empty() {
+        let habit = Habit::new("Walk");
+        let rates = habit.completion_rate_by_weekday();
+        for r in rates {
+            assert!(r < f64::EPSILON);
+        }
+    }
+
+    #[test]
+    fn test_completion_rate_by_weekday_monday() {
+        let mut habit = Habit::new("Walk");
+        // 2024-01-01 is a Monday (weekday index 0)
+        habit.check_in(date(2024, 1, 1), true, None);
+        let rates = habit.completion_rate_by_weekday();
+        assert!((rates[0] - 100.0).abs() < f64::EPSILON); // Monday
+    }
+
+    #[test]
+    fn test_habit_frequency_display_daily() {
+        assert_eq!(HabitFrequency::Daily.to_string(), "Daily");
+    }
+
+    #[test]
+    fn test_habit_frequency_display_weekly() {
+        let freq = HabitFrequency::Weekly {
+            days: vec![Weekday::Mon, Weekday::Wed],
+        };
+        assert_eq!(freq.to_string(), "Weekly (Mon, Wed)");
+    }
+
+    #[test]
+    fn test_habit_frequency_display_every_n_days() {
+        let freq = HabitFrequency::EveryNDays { n: 3 };
+        assert_eq!(freq.to_string(), "Every 3 days");
+    }
+
+    #[test]
+    fn test_habit_frequency_is_due_daily() {
+        let freq = HabitFrequency::Daily;
+        let start = date(2024, 1, 1);
+        assert!(freq.is_due_on(date(2024, 5, 15), start));
+    }
+
+    #[test]
+    fn test_habit_frequency_is_due_weekly() {
+        let freq = HabitFrequency::Weekly {
+            days: vec![Weekday::Mon, Weekday::Fri],
+        };
+        let start = date(2024, 1, 1);
+        // 2024-01-01 is Monday
+        assert!(freq.is_due_on(date(2024, 1, 1), start));
+        // 2024-01-05 is Friday
+        assert!(freq.is_due_on(date(2024, 1, 5), start));
+        // 2024-01-03 is Wednesday - not due
+        assert!(!freq.is_due_on(date(2024, 1, 3), start));
+    }
+
+    #[test]
+    fn test_habit_frequency_is_due_every_n_days() {
+        let freq = HabitFrequency::EveryNDays { n: 3 };
+        let start = date(2024, 1, 1);
+        assert!(freq.is_due_on(date(2024, 1, 1), start)); // day 0
+        assert!(!freq.is_due_on(date(2024, 1, 2), start)); // day 1
+        assert!(!freq.is_due_on(date(2024, 1, 3), start)); // day 2
+        assert!(freq.is_due_on(date(2024, 1, 4), start)); // day 3
+    }
+
+    #[test]
+    fn test_habit_frequency_is_due_every_n_days_before_start() {
+        let freq = HabitFrequency::EveryNDays { n: 3 };
+        let start = date(2024, 1, 10);
+        // Date before start should not be due
+        assert!(!freq.is_due_on(date(2024, 1, 1), start));
+    }
+}

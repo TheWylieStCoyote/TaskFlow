@@ -736,4 +736,1647 @@ mod pipe_interface_tests {
         let data = req.data.unwrap();
         assert!(data.get("metadata").is_some());
     }
+
+    // ========================================================================
+    // Goal Handler Tests
+    // ========================================================================
+
+    fn make_request(operation: Operation, entity: EntityType) -> PipeRequest {
+        PipeRequest {
+            operation,
+            entity,
+            id: None,
+            data: None,
+            filters: None,
+        }
+    }
+
+    fn make_request_with_data(
+        operation: Operation,
+        entity: EntityType,
+        data: serde_json::Value,
+    ) -> PipeRequest {
+        PipeRequest {
+            operation,
+            entity,
+            id: None,
+            data: Some(data),
+            filters: None,
+        }
+    }
+
+    fn make_request_with_id(operation: Operation, entity: EntityType, id: &str) -> PipeRequest {
+        PipeRequest {
+            operation,
+            entity,
+            id: Some(id.to_string()),
+            data: None,
+            filters: None,
+        }
+    }
+
+    fn make_request_with_id_and_data(
+        operation: Operation,
+        entity: EntityType,
+        id: &str,
+        data: serde_json::Value,
+    ) -> PipeRequest {
+        PipeRequest {
+            operation,
+            entity,
+            id: Some(id.to_string()),
+            data: Some(data),
+            filters: None,
+        }
+    }
+
+    #[test]
+    fn test_goal_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::Goal);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        let data = resp.data.unwrap();
+        assert_eq!(data["total"], 0);
+    }
+
+    #[test]
+    fn test_goal_create_and_list() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Goal,
+            json!({"name": "Q1 Goals", "description": "First quarter objectives"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "create failed: {:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["name"], "Q1 Goals");
+        let goal_id = data["id"].as_str().unwrap().to_string();
+
+        // List should return 1 goal
+        let req = make_request(Operation::List, EntityType::Goal);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+
+        // Get the goal by id
+        let req = make_request_with_id(Operation::Get, EntityType::Goal, &goal_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["name"], "Q1 Goals");
+    }
+
+    #[test]
+    fn test_goal_create_missing_name() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Goal,
+            json!({"description": "No name"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_goal_create_no_data() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Create, EntityType::Goal);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_goal_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::Goal,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_goal_get_invalid_uuid() {
+        let mut model = Model::new();
+        let req = make_request_with_id(Operation::Get, EntityType::Goal, "not-a-uuid");
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_ID");
+    }
+
+    #[test]
+    fn test_goal_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::Goal);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_goal_update() {
+        let mut model = Model::new();
+        // Create goal
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Goal,
+            json!({"name": "Original"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let goal_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        // Update it
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Goal,
+            &goal_id,
+            json!({"name": "Updated", "description": "new desc", "status": "on_hold"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["name"], "Updated");
+    }
+
+    #[test]
+    fn test_goal_update_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Goal,
+            "00000000-0000-0000-0000-000000000000",
+            json!({"name": "X"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_goal_update_missing_id() {
+        let mut model = Model::new();
+        let req = make_request_with_data(Operation::Update, EntityType::Goal, json!({"name": "X"}));
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_goal_delete() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Goal,
+            json!({"name": "To Delete"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let goal_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::Goal, &goal_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.goals.len(), 0);
+    }
+
+    #[test]
+    fn test_goal_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::Goal,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_goal_delete_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Delete, EntityType::Goal);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_saved_filter_not_implemented() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::SavedFilter);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_IMPLEMENTED");
+    }
+
+    #[test]
+    fn test_goal_list_with_filters() {
+        let mut model = Model::new();
+        // Create two goals
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Goal,
+                json!({"name": "Active Goal"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Goal,
+                json!({"name": "Another Goal"}),
+            ),
+        );
+
+        // List with search filter
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Goal,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                search: Some("Active".to_string()),
+                limit: Some(10),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    // ========================================================================
+    // KeyResult Handler Tests
+    // ========================================================================
+
+    fn create_goal_in_model(model: &mut Model) -> String {
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Goal,
+            json!({"name": "Test Goal"}),
+        );
+        let resp = super::super::process_request(model, req);
+        resp.data.unwrap()["id"].as_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn test_key_result_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::KeyResult);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_key_result_create_and_get() {
+        let mut model = Model::new();
+        let goal_id = create_goal_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"goal_id": goal_id, "name": "Increase coverage", "target_value": 80.0, "unit": "%"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        let kr_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Get, EntityType::KeyResult, &kr_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["name"], "Increase coverage");
+    }
+
+    #[test]
+    fn test_key_result_create_missing_goal_id() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"name": "No goal"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_key_result_create_missing_name() {
+        let mut model = Model::new();
+        let goal_id = create_goal_in_model(&mut model);
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"goal_id": goal_id}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_key_result_create_goal_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"goal_id": "00000000-0000-0000-0000-000000000000", "name": "KR"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_key_result_update() {
+        let mut model = Model::new();
+        let goal_id = create_goal_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"goal_id": goal_id, "name": "KR", "target_value": 100.0}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let kr_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::KeyResult,
+            &kr_id,
+            json!({"name": "Updated KR", "current_value": 50.0, "target_value": 90.0}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.as_ref().unwrap()["name"], "Updated KR");
+        assert_eq!(resp.data.as_ref().unwrap()["current_value"], 50.0);
+    }
+
+    #[test]
+    fn test_key_result_delete() {
+        let mut model = Model::new();
+        let goal_id = create_goal_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::KeyResult,
+            json!({"goal_id": goal_id, "name": "KR to delete"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let kr_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::KeyResult, &kr_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.key_results.len(), 0);
+    }
+
+    #[test]
+    fn test_key_result_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::KeyResult,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_key_result_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::KeyResult,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_key_result_update_missing_data() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Update,
+            EntityType::KeyResult,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_goal_delete_cascades_key_results() {
+        let mut model = Model::new();
+        let goal_id = create_goal_in_model(&mut model);
+
+        // Create key result
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::KeyResult,
+                json!({"goal_id": goal_id, "name": "KR"}),
+            ),
+        );
+        assert_eq!(model.key_results.len(), 1);
+
+        // Delete goal
+        let req = make_request_with_id(Operation::Delete, EntityType::Goal, &goal_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["deleted_key_results"], 1);
+        assert_eq!(model.key_results.len(), 0);
+    }
+
+    // ========================================================================
+    // Habit Handler Tests
+    // ========================================================================
+
+    #[test]
+    fn test_habit_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::Habit);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_habit_create_and_list() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "Exercise", "description": "Daily workout", "frequency": "daily"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["name"], "Exercise");
+
+        let req = make_request(Operation::List, EntityType::Habit);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_habit_create_missing_name() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"frequency": "daily"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_habit_create_no_data() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Create, EntityType::Habit);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_habit_create_with_weekly_frequency() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "Weekly habit", "frequency": "weekly"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_habit_create_with_every_n_days_frequency() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "Every 3 days", "frequency": "every_3_days"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_habit_get() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "Meditate"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let habit_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Get, EntityType::Habit, &habit_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["name"], "Meditate");
+    }
+
+    #[test]
+    fn test_habit_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::Habit,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_habit_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::Habit);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_habit_update() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "Walk"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let habit_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Habit,
+            &habit_id,
+            json!({"name": "Run", "description": "5km run", "frequency": "daily", "archived": false}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["name"], "Run");
+    }
+
+    #[test]
+    fn test_habit_update_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Habit,
+            "00000000-0000-0000-0000-000000000000",
+            json!({"name": "X"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_habit_delete() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Habit,
+            json!({"name": "To Delete"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let habit_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::Habit, &habit_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.habits.len(), 0);
+    }
+
+    #[test]
+    fn test_habit_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::Habit,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_habit_update_missing_data() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Update,
+            EntityType::Habit,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_habit_list_with_search_filter() {
+        let mut model = Model::new();
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Habit,
+                json!({"name": "Exercise"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Habit,
+                json!({"name": "Meditate"}),
+            ),
+        );
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Habit,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                search: Some("Exer".to_string()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    // ========================================================================
+    // Project Handler Tests
+    // ========================================================================
+
+    #[test]
+    fn test_project_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::Project);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_project_create_and_list() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "TaskFlow", "description": "Main project", "status": "active"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["name"], "TaskFlow");
+
+        let req = make_request(Operation::List, EntityType::Project);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_project_create_with_parent() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "Parent Project"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let parent_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "Child Project", "parent_id": parent_id}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_project_create_missing_name() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"description": "No name"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_project_get() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "My Project"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let project_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Get, EntityType::Project, &project_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["name"], "My Project");
+    }
+
+    #[test]
+    fn test_project_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::Project,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_project_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::Project);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_project_update() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "Original"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let project_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Project,
+            &project_id,
+            json!({"name": "Updated", "description": "new desc", "status": "on_hold", "color": null}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["name"], "Updated");
+    }
+
+    #[test]
+    fn test_project_update_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Project,
+            "00000000-0000-0000-0000-000000000000",
+            json!({"name": "X"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_project_update_missing_id() {
+        let mut model = Model::new();
+        let req =
+            make_request_with_data(Operation::Update, EntityType::Project, json!({"name": "X"}));
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_project_delete() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::Project,
+            json!({"name": "To Delete"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let project_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::Project, &project_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.projects.len(), 0);
+    }
+
+    #[test]
+    fn test_project_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::Project,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_project_update_missing_data() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Update,
+            EntityType::Project,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_project_list_with_status_filter() {
+        let mut model = Model::new();
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Project,
+                json!({"name": "Active", "status": "active"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::Project,
+                json!({"name": "Archived", "status": "archived"}),
+            ),
+        );
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Project,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                status: Some(vec!["active".to_string()]),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    // ========================================================================
+    // Tag Handler Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tag_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::Tag);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_tag_list_from_tasks() {
+        let mut model = create_test_model(); // has tasks with "test" and "urgent" tags
+        let req = make_request(Operation::List, EntityType::Tag);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        let data = resp.data.unwrap();
+        assert!(data["total"].as_u64().unwrap() >= 2);
+    }
+
+    #[test]
+    fn test_tag_get_existing() {
+        let mut model = create_test_model();
+        let req = make_request_with_id(Operation::Get, EntityType::Tag, "test");
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        let data = resp.data.unwrap();
+        assert_eq!(data["name"], "test");
+        assert!(data["task_count"].as_u64().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_tag_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(Operation::Get, EntityType::Tag, "nonexistent");
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_tag_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::Tag);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_tag_create_invalid() {
+        let mut model = Model::new();
+        let req =
+            make_request_with_data(Operation::Create, EntityType::Tag, json!({"name": "test"}));
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_OPERATION");
+    }
+
+    #[test]
+    fn test_tag_update_invalid() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::Tag,
+            "test",
+            json!({"name": "x"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_OPERATION");
+    }
+
+    #[test]
+    fn test_tag_delete_invalid() {
+        let mut model = Model::new();
+        let req = make_request_with_id(Operation::Delete, EntityType::Tag, "test");
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_OPERATION");
+    }
+
+    #[test]
+    fn test_tag_import_invalid() {
+        let mut model = Model::new();
+        // Import at entity level is intercepted by dispatch's import handler
+        // Test that Create/Update/Delete still return INVALID_OPERATION for tags
+        let req = PipeRequest {
+            operation: Operation::Create,
+            entity: EntityType::Tag,
+            id: None,
+            data: Some(json!({"name": "x"})),
+            filters: None,
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_OPERATION");
+    }
+
+    #[test]
+    fn test_tag_list_with_search_filter() {
+        let mut model = create_test_model();
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Tag,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                search: Some("test".to_string()),
+                sort_by: Some("count".to_string()),
+                sort_order: Some("desc".to_string()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        let data = resp.data.unwrap();
+        assert!(data["total"].as_u64().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_tag_list_sort_by_name_asc() {
+        let mut model = create_test_model();
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Tag,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                sort_by: Some("name".to_string()),
+                sort_order: Some("asc".to_string()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    // ========================================================================
+    // TimeEntry Handler Tests
+    // ========================================================================
+
+    fn create_task_in_model(model: &mut Model) -> String {
+        use taskflow::domain::Task;
+        let task = Task::new("Test task");
+        let id = task.id.0.to_string();
+        model.tasks.insert(task.id, task);
+        id
+    }
+
+    #[test]
+    fn test_time_entry_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::TimeEntry);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_time_entry_create_and_list() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({
+                "task_id": task_id,
+                "started_at": "2025-01-15T10:00:00Z",
+                "ended_at": "2025-01-15T11:30:00Z",
+                "description": "Bug fix"
+            }),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+
+        let req = make_request(Operation::List, EntityType::TimeEntry);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_time_entry_create_with_duration() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z", "duration_minutes": 90}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_time_entry_create_missing_task_id() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"started_at": "2025-01-15T10:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_time_entry_create_task_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": "00000000-0000-0000-0000-000000000000", "started_at": "2025-01-15T10:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_time_entry_create_no_data() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Create, EntityType::TimeEntry);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_time_entry_get() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let entry_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Get, EntityType::TimeEntry, &entry_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_time_entry_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::TimeEntry,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_time_entry_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::TimeEntry);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_time_entry_update() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let entry_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::TimeEntry,
+            &entry_id,
+            json!({
+                "started_at": "2025-01-15T09:00:00Z",
+                "ended_at": "2025-01-15T10:00:00Z",
+                "duration_minutes": 60,
+                "description": "updated"
+            }),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+    }
+
+    #[test]
+    fn test_time_entry_update_clear_fields() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z", "ended_at": "2025-01-15T11:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let entry_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::TimeEntry,
+            &entry_id,
+            json!({"ended_at": null, "duration_minutes": null, "description": null}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_time_entry_update_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::TimeEntry,
+            "00000000-0000-0000-0000-000000000000",
+            json!({"description": "x"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_time_entry_delete() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::TimeEntry,
+            json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let entry_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::TimeEntry, &entry_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.time_entries.len(), 0);
+    }
+
+    #[test]
+    fn test_time_entry_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::TimeEntry,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_time_entry_update_missing_data() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Update,
+            EntityType::TimeEntry,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_time_entry_list_filter_by_task() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        let task_id2 = create_task_in_model(&mut model);
+
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::TimeEntry,
+                json!({"task_id": task_id, "started_at": "2025-01-15T10:00:00Z"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::TimeEntry,
+                json!({"task_id": task_id2, "started_at": "2025-01-15T11:00:00Z"}),
+            ),
+        );
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::TimeEntry,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                project_id: Some(task_id.clone()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    // ========================================================================
+    // WorkLog Handler Tests
+    // ========================================================================
+
+    #[test]
+    fn test_work_log_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::WorkLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_work_log_create_and_list() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": task_id, "content": "Fixed bug in module X"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+
+        let req = make_request(Operation::List, EntityType::WorkLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_work_log_create_missing_task_id() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"content": "No task id"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_work_log_create_missing_content() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": task_id}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_work_log_create_task_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": "00000000-0000-0000-0000-000000000000", "content": "test"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_work_log_create_no_data() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Create, EntityType::WorkLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_work_log_get() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": task_id, "content": "Work done"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let log_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Get, EntityType::WorkLog, &log_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+    }
+
+    #[test]
+    fn test_work_log_get_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Get,
+            EntityType::WorkLog,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_work_log_get_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Get, EntityType::WorkLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_work_log_update() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": task_id, "content": "Original"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let log_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::WorkLog,
+            &log_id,
+            json!({"content": "Updated content"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["content"], "Updated content");
+    }
+
+    #[test]
+    fn test_work_log_update_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id_and_data(
+            Operation::Update,
+            EntityType::WorkLog,
+            "00000000-0000-0000-0000-000000000000",
+            json!({"content": "x"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_work_log_update_missing_id() {
+        let mut model = Model::new();
+        let req = make_request_with_data(
+            Operation::Update,
+            EntityType::WorkLog,
+            json!({"content": "x"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_work_log_delete() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        let req = make_request_with_data(
+            Operation::Create,
+            EntityType::WorkLog,
+            json!({"task_id": task_id, "content": "To delete"}),
+        );
+        let resp = super::super::process_request(&mut model, req);
+        let log_id = resp.data.unwrap()["id"].as_str().unwrap().to_string();
+
+        let req = make_request_with_id(Operation::Delete, EntityType::WorkLog, &log_id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(model.work_logs.len(), 0);
+    }
+
+    #[test]
+    fn test_work_log_delete_not_found() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Delete,
+            EntityType::WorkLog,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_work_log_delete_missing_id() {
+        let mut model = Model::new();
+        let req = make_request(Operation::Delete, EntityType::WorkLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_work_log_update_missing_data() {
+        let mut model = Model::new();
+        let req = make_request_with_id(
+            Operation::Update,
+            EntityType::WorkLog,
+            "00000000-0000-0000-0000-000000000000",
+        );
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_work_log_list_filter_by_task() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        let task_id2 = create_task_in_model(&mut model);
+
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::WorkLog,
+                json!({"task_id": task_id, "content": "log 1"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::WorkLog,
+                json!({"task_id": task_id2, "content": "log 2"}),
+            ),
+        );
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::WorkLog,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                project_id: Some(task_id.clone()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_work_log_list_filter_by_search() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::WorkLog,
+                json!({"task_id": task_id, "content": "Fixed authentication bug"}),
+            ),
+        );
+        super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::WorkLog,
+                json!({"task_id": task_id, "content": "Refactored database module"}),
+            ),
+        );
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::WorkLog,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                search: Some("auth".to_string()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
 }

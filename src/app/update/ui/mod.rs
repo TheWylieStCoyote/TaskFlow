@@ -1038,4 +1038,73 @@ mod duration_tests {
             assert_eq!(parsed, Some(mins), "Roundtrip failed for {mins} minutes");
         }
     }
+
+    #[test]
+    fn test_parse_single_time_24hr() {
+        use chrono::NaiveTime;
+        assert_eq!(
+            parse_single_time("14:30"),
+            NaiveTime::from_hms_opt(14, 30, 0)
+        );
+        assert_eq!(parse_single_time("9:00"), NaiveTime::from_hms_opt(9, 0, 0));
+        assert_eq!(parse_single_time("00:00"), NaiveTime::from_hms_opt(0, 0, 0));
+    }
+
+    #[test]
+    fn test_parse_single_time_12hr_pm() {
+        use chrono::NaiveTime;
+        assert_eq!(
+            parse_single_time("2:30pm"),
+            NaiveTime::from_hms_opt(14, 30, 0)
+        );
+        assert_eq!(
+            parse_single_time("12:00pm"),
+            NaiveTime::from_hms_opt(12, 0, 0)
+        );
+    }
+
+    #[test]
+    fn test_parse_single_time_12hr_am() {
+        use chrono::NaiveTime;
+        assert_eq!(parse_single_time("9am"), NaiveTime::from_hms_opt(9, 0, 0));
+        assert_eq!(
+            parse_single_time("12:00am"),
+            NaiveTime::from_hms_opt(0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn test_parse_single_time_invalid() {
+        assert_eq!(parse_single_time(""), None);
+        assert_eq!(parse_single_time("25:00"), None);
+        assert_eq!(parse_single_time("not-a-time"), None);
+        assert_eq!(parse_single_time("9:60"), None);
+    }
+
+    #[test]
+    fn test_parse_time_range_valid() {
+        use chrono::NaiveTime;
+        let result = parse_time_range("9:00-11:00");
+        assert!(result.is_some());
+        let (start, end) = result.unwrap();
+        assert_eq!(start, NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(end, NaiveTime::from_hms_opt(11, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn test_parse_time_range_with_am_pm() {
+        use chrono::NaiveTime;
+        let result = parse_time_range("9am-11am");
+        assert!(result.is_some());
+        let (start, end) = result.unwrap();
+        assert_eq!(start, NaiveTime::from_hms_opt(9, 0, 0).unwrap());
+        assert_eq!(end, NaiveTime::from_hms_opt(11, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn test_parse_time_range_invalid() {
+        assert_eq!(parse_time_range(""), None);
+        assert_eq!(parse_time_range("9:00"), None); // No range separator
+        assert_eq!(parse_time_range("invalid"), None);
+    }
 }

@@ -285,3 +285,242 @@ impl Model {
             .is_some_and(|task| !task.dependencies.is_empty())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Task, TaskStatus};
+
+    fn make_model_with_hierarchy() -> (Model, TaskId, TaskId, TaskId) {
+        let mut model = Model::new();
+
+        let parent = Task::new("Parent");
+        let parent_id = parent.id;
+
+        let child = Task::new("Child").with_parent(parent_id);
+        let child_id = child.id;
+
+        let grandchild = Task::new("Grandchild").with_parent(child_id);
+        let grandchild_id = grandchild.id;
+
+        model.tasks.insert(parent_id, parent);
+        model.tasks.insert(child_id, child);
+        model.tasks.insert(grandchild_id, grandchild);
+        model.rebuild_caches();
+
+        (model, parent_id, child_id, grandchild_id)
+    }
+
+    #[test]
+    fn test_task_depth_root() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        assert_eq!(model.task_depth(&parent_id), 0);
+    }
+
+    #[test]
+    fn test_task_depth_child() {
+        let (model, _, child_id, _) = make_model_with_hierarchy();
+        assert_eq!(model.task_depth(&child_id), 1);
+    }
+
+    #[test]
+    fn test_task_depth_grandchild() {
+        let (model, _, _, grandchild_id) = make_model_with_hierarchy();
+        assert_eq!(model.task_depth(&grandchild_id), 2);
+    }
+
+    #[test]
+    fn test_has_subtasks_with_children() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        assert!(model.has_subtasks(&parent_id));
+    }
+
+    #[test]
+    fn test_has_subtasks_without_children() {
+        let (model, _, _, grandchild_id) = make_model_with_hierarchy();
+        assert!(!model.has_subtasks(&grandchild_id));
+    }
+
+    #[test]
+    fn test_get_all_descendants() {
+        let (model, parent_id, child_id, grandchild_id) = make_model_with_hierarchy();
+        let descendants = model.get_all_descendants(&parent_id);
+        assert_eq!(descendants.len(), 2);
+        assert!(descendants.contains(&child_id));
+        assert!(descendants.contains(&grandchild_id));
+    }
+
+    #[test]
+    fn test_get_all_ancestors() {
+        let (model, parent_id, child_id, grandchild_id) = make_model_with_hierarchy();
+        let ancestors = model.get_all_ancestors(&grandchild_id);
+        assert_eq!(ancestors.len(), 2);
+        assert!(ancestors.contains(&child_id));
+        assert!(ancestors.contains(&parent_id));
+    }
+
+    #[test]
+    fn test_get_all_ancestors_root_is_empty() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        let ancestors = model.get_all_ancestors(&parent_id);
+        assert!(ancestors.is_empty());
+    }
+
+    #[test]
+    fn test_subtask_progress_no_completion() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        let (completed, total) = model.subtask_progress(&parent_id);
+        assert_eq!(total, 2); // child + grandchild
+        assert_eq!(completed, 0);
+    }
+
+    #[test]
+    fn test_subtask_progress_partial() {
+        let (mut model, parent_id, child_id, _) = make_model_with_hierarchy();
+        model.tasks.get_mut(&child_id).unwrap().status = TaskStatus::Done;
+        let (completed, total) = model.subtask_progress(&parent_id);
+        assert_eq!(total, 2);
+        assert_eq!(completed, 1);
+    }
+
+    #[test]
+    fn test_subtask_percentage_no_subtasks() {
+        let mut model = Model::new();
+        let task = Task::new("Solo task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.rebuild_caches();
+        assert_eq!(model.subtask_percentage(&task_id), None);
+    }
+
+    #[test]
+    fn test_subtask_percentage_with_subtasks() {
+        let (mut model, parent_id, child_id, grandchild_id) = make_model_with_hierarchy();
+        // Complete 1 of 2 descendants
+        model.tasks.get_mut(&child_id).unwrap().status = TaskStatus::Done;
+        // grandchild not done
+        let _ = grandchild_id;
+        let pct = model.subtask_percentage(&parent_id);
+        assert_eq!(pct, Some(50));
+    }
+
+    #[test]
+    fn test_would_create_cycle_self() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        assert!(model.would_create_cycle(&parent_id, &parent_id));
+    }
+
+    #[test]
+    fn test_would_create_cycle_ancestor() {
+        let (model, parent_id, _, grandchild_id) = make_model_with_hierarchy();
+        // Making grandchild a parent of parent would create a cycle
+        assert!(model.would_create_cycle(&parent_id, &grandchild_id));
+    }
+
+    #[test]
+    fn test_would_create_cycle_no_cycle() {
+        let (model, parent_id, _, _) = make_model_with_hierarchy();
+        let unrelated = Task::new("Unrelated");
+        let _ = parent_id;
+        // A fresh task ID not in the model
+        let unrelated_id = unrelated.id;
+        assert!(!model.would_create_cycle(&parent_id, &unrelated_id));
+    }
+
+    #[test]
+    fn test_is_task_blocked_no_deps() {
+        let mut model = Model::new();
+        let task = Task::new("No deps");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        assert!(!model.is_task_blocked(&task_id));
+    }
+
+    #[test]
+    fn test_is_task_blocked_with_incomplete_dep() {
+        let mut model = Model::new();
+        let dep = Task::new("Dependency");
+        let dep_id = dep.id;
+        model.tasks.insert(dep_id, dep);
+
+        let mut task = Task::new("Blocked task");
+        task.dependencies = vec![dep_id];
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        assert!(model.is_task_blocked(&task_id));
+    }
+
+    #[test]
+    fn test_is_task_blocked_with_complete_dep() {
+        let mut model = Model::new();
+        let mut dep = Task::new("Done dep");
+        dep.status = TaskStatus::Done;
+        let dep_id = dep.id;
+        model.tasks.insert(dep_id, dep);
+
+        let mut task = Task::new("Not blocked");
+        task.dependencies = vec![dep_id];
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        assert!(!model.is_task_blocked(&task_id));
+    }
+
+    #[test]
+    fn test_incomplete_dependency_count() {
+        let mut model = Model::new();
+        let dep1 = Task::new("Dep 1"); // Incomplete
+        let dep2 = Task::new("Dep 2"); // Incomplete
+        let dep1_id = dep1.id;
+        let dep2_id = dep2.id;
+        model.tasks.insert(dep1_id, dep1);
+        model.tasks.insert(dep2_id, dep2);
+
+        let mut task = Task::new("Depends on both");
+        task.dependencies = vec![dep1_id, dep2_id];
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        assert_eq!(model.incomplete_dependency_count(&task_id), 2);
+    }
+
+    #[test]
+    fn test_has_dependencies() {
+        let mut model = Model::new();
+        let dep = Task::new("Dep");
+        let dep_id = dep.id;
+        model.tasks.insert(dep_id, dep);
+
+        let mut task = Task::new("With dep");
+        task.dependencies = vec![dep_id];
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        assert!(model.has_dependencies(&task_id));
+    }
+
+    #[test]
+    fn test_has_dependencies_none() {
+        let mut model = Model::new();
+        let task = Task::new("No deps");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        assert!(!model.has_dependencies(&task_id));
+    }
+
+    #[test]
+    fn test_overdue_summary_no_overdue() {
+        let model = Model::new();
+        let (count, tasks) = model.overdue_summary();
+        assert_eq!(count, 0);
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn test_check_overdue_alert_no_overdue() {
+        let mut model = Model::new();
+        model.check_overdue_alert();
+        assert!(!model.alerts.show_overdue);
+    }
+}

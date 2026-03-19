@@ -164,3 +164,201 @@ impl Model {
         self.storage.dirty = true;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::Task;
+
+    fn make_model() -> Model {
+        Model::new()
+    }
+
+    #[test]
+    fn test_start_time_tracking() {
+        let mut model = make_model();
+        let task = Task::new("Track me");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let (entry, stopped) = model.start_time_tracking(task_id);
+
+        assert_eq!(entry.task_id, task_id);
+        assert!(entry.ended_at.is_none()); // Still running
+        assert!(stopped.is_none()); // No previous timer
+        assert!(model.active_time_entry.is_some());
+    }
+
+    #[test]
+    fn test_start_time_tracking_switches_task() {
+        let mut model = make_model();
+        let task_a = Task::new("Task A");
+        let task_b = Task::new("Task B");
+        let a_id = task_a.id;
+        let b_id = task_b.id;
+        model.tasks.insert(a_id, task_a);
+        model.tasks.insert(b_id, task_b);
+
+        // Start tracking task A
+        model.start_time_tracking(a_id);
+        assert!(model.is_tracking_task(&a_id));
+
+        // Start tracking task B - should stop A
+        let (entry_b, stopped) = model.start_time_tracking(b_id);
+
+        assert_eq!(entry_b.task_id, b_id);
+        assert!(stopped.is_some()); // Previous A entry was stopped
+        assert!(model.is_tracking_task(&b_id));
+        assert!(!model.is_tracking_task(&a_id));
+    }
+
+    #[test]
+    fn test_stop_time_tracking() {
+        let mut model = make_model();
+        let task = Task::new("Track me");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        model.start_time_tracking(task_id);
+        assert!(model.active_time_entry.is_some());
+
+        let result = model.stop_time_tracking();
+
+        assert!(result.is_some());
+        assert!(model.active_time_entry.is_none());
+    }
+
+    #[test]
+    fn test_stop_time_tracking_when_none() {
+        let mut model = make_model();
+        let result = model.stop_time_tracking();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_active_time_entry() {
+        let mut model = make_model();
+        assert!(model.active_time_entry().is_none());
+
+        let task = Task::new("Task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.start_time_tracking(task_id);
+
+        assert!(model.active_time_entry().is_some());
+        assert_eq!(model.active_time_entry().unwrap().task_id, task_id);
+    }
+
+    #[test]
+    fn test_is_tracking_task() {
+        let mut model = make_model();
+        let task_a = Task::new("Task A");
+        let task_b = Task::new("Task B");
+        let a_id = task_a.id;
+        let b_id = task_b.id;
+        model.tasks.insert(a_id, task_a);
+        model.tasks.insert(b_id, task_b);
+
+        assert!(!model.is_tracking_task(&a_id));
+        assert!(!model.is_tracking_task(&b_id));
+
+        model.start_time_tracking(a_id);
+
+        assert!(model.is_tracking_task(&a_id));
+        assert!(!model.is_tracking_task(&b_id));
+    }
+
+    #[test]
+    fn test_total_time_for_task_no_entries() {
+        let model = make_model();
+        let task = Task::new("Task");
+        let task_id = task.id;
+        assert_eq!(model.total_time_for_task(&task_id), 0);
+    }
+
+    #[test]
+    fn test_time_entries_for_task() {
+        let mut model = make_model();
+        let task = Task::new("Task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        model.start_time_tracking(task_id);
+        model.stop_time_tracking();
+        // Rebuild cache so time_entries_by_task is populated
+        model.rebuild_caches();
+
+        let entries = model.time_entries_for_task(&task_id);
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn test_delete_time_entry() {
+        let mut model = make_model();
+        let task = Task::new("Task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let (entry, _) = model.start_time_tracking(task_id);
+        let entry_id = entry.id;
+
+        assert!(model.time_entries.contains_key(&entry_id));
+        assert!(model.active_time_entry.is_some());
+
+        model.delete_time_entry(&entry_id);
+
+        assert!(!model.time_entries.contains_key(&entry_id));
+        assert!(model.active_time_entry.is_none()); // Active was cleared
+    }
+
+    #[test]
+    fn test_restore_time_entry_running_with_task() {
+        let mut model = make_model();
+        let task = Task::new("Task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        // Create a running entry
+        let entry = TimeEntry::start(task_id);
+        let entry_id = entry.id;
+
+        model.restore_time_entry(entry);
+
+        // Should become active since task exists and no current active entry
+        assert_eq!(model.active_time_entry, Some(entry_id));
+    }
+
+    #[test]
+    fn test_restore_time_entry_running_without_task() {
+        let mut model = make_model();
+        let task_id = TaskId::new(); // Not in model
+
+        let entry = TimeEntry::start(task_id);
+        model.restore_time_entry(entry);
+
+        // Should NOT become active since task doesn't exist
+        assert!(model.active_time_entry.is_none());
+    }
+
+    #[test]
+    fn test_restore_time_entry_with_active_entry() {
+        let mut model = make_model();
+        let task = Task::new("Task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        // Start one timer
+        model.start_time_tracking(task_id);
+
+        // Try to restore another running entry
+        let task2 = Task::new("Task 2");
+        let task2_id = task2.id;
+        model.tasks.insert(task2_id, task2);
+        let entry2 = TimeEntry::start(task2_id);
+        let entry2_id = entry2.id;
+        model.restore_time_entry(entry2);
+
+        // entry2 should NOT become active (active entry already exists)
+        assert_ne!(model.active_time_entry, Some(entry2_id));
+    }
+}

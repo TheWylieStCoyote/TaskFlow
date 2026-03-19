@@ -41,7 +41,6 @@ use crate::domain::{
     is_context_tag, ProjectId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
-
 /// Cached statistics for the footer display.
 ///
 /// These values are computed once per data change rather than per frame.

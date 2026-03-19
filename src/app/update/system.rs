@@ -701,3 +701,211 @@ fn handle_check_merged_branches(model: &mut Model) {
         plural_s(completed_count)
     ));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{update, Message, SystemMessage};
+    use crate::domain::Task;
+    use crate::storage::BackendType;
+    use tempfile::TempDir;
+
+    fn make_model() -> (Model, TempDir) {
+        let dir = TempDir::new().expect("create temp dir");
+        let path = dir.path().join("data.json");
+        let model = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("init storage");
+        (model, dir)
+    }
+
+    fn send(model: &mut Model, msg: SystemMessage) {
+        update(model, Message::System(msg));
+    }
+
+    #[test]
+    fn test_quit_sets_quitting_state() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::Quit);
+        assert!(matches!(model.running, RunningState::Quitting));
+    }
+
+    #[test]
+    fn test_resize_updates_terminal_size() {
+        let (mut model, _dir) = make_model();
+        send(
+            &mut model,
+            SystemMessage::Resize {
+                width: 120,
+                height: 40,
+            },
+        );
+        assert_eq!(model.terminal_size, (120, 40));
+    }
+
+    #[test]
+    fn test_tick_clears_expired_status_message() {
+        let (mut model, _dir) = make_model();
+        // Set a message with an old timestamp
+        model.alerts.status_message = Some("test".to_string());
+        model.alerts.status_message_set_at =
+            std::time::Instant::now().checked_sub(std::time::Duration::from_secs(10));
+        send(&mut model, SystemMessage::Tick);
+        assert!(model.alerts.status_message.is_none());
+    }
+
+    #[test]
+    fn test_tick_sets_timestamp_for_message_without_one() {
+        let (mut model, _dir) = make_model();
+        model.alerts.status_message = Some("test".to_string());
+        model.alerts.status_message_set_at = None;
+        send(&mut model, SystemMessage::Tick);
+        assert!(model.alerts.status_message_set_at.is_some());
+    }
+
+    #[test]
+    fn test_save_succeeds() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::Save);
+        // No error message means save succeeded
+        assert!(model.alerts.error_message.is_none());
+    }
+
+    #[test]
+    fn test_undo_empty_stack_no_panic() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::Undo);
+        // No undo available, nothing changes
+    }
+
+    #[test]
+    fn test_redo_empty_stack_no_panic() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::Redo);
+    }
+
+    #[test]
+    fn test_export_csv_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        let task = Task::new("Export me");
+        model.tasks.insert(task.id, task);
+        send(&mut model, SystemMessage::ExportCsv);
+        // Should set a status message (success or error)
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_export_ics_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ExportIcs);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_export_chains_dot_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ExportChainsDot);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_export_chains_mermaid_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ExportChainsMermaid);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_export_report_markdown_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ExportReportMarkdown);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_export_report_html_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ExportReportHtml);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_start_import_csv_enters_editing_mode() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::StartImportCsv);
+        assert!(matches!(model.input.mode, crate::ui::InputMode::Editing));
+    }
+
+    #[test]
+    fn test_start_import_ics_enters_editing_mode() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::StartImportIcs);
+        assert!(matches!(model.input.mode, crate::ui::InputMode::Editing));
+    }
+
+    #[test]
+    fn test_cancel_import_clears_pending() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::CancelImport);
+        assert!(model.import.pending.is_none());
+        assert!(!model.import.show_preview);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_confirm_import_with_no_pending_no_panic() {
+        let (mut model, _dir) = make_model();
+        model.import.pending = None;
+        send(&mut model, SystemMessage::ConfirmImport);
+        // No panic
+    }
+
+    #[test]
+    fn test_execute_import_empty_path_sets_message() {
+        let (mut model, _dir) = make_model();
+        // Set up import mode with empty buffer
+        model.input.target =
+            crate::ui::InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv);
+        model.input.buffer.clear();
+        send(&mut model, SystemMessage::ExecuteImport);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_execute_import_nonexistent_file_sets_error() {
+        let (mut model, _dir) = make_model();
+        model.input.target =
+            crate::ui::InputTarget::ImportFilePath(crate::storage::ImportFormat::Csv);
+        model.input.buffer = "/nonexistent/path/to/file.csv".to_string();
+        send(&mut model, SystemMessage::ExecuteImport);
+        assert!(model.alerts.status_message.is_some());
+        let msg = model.alerts.status_message.unwrap();
+        assert!(msg.contains("Failed to open") || msg.contains("failed"));
+    }
+
+    #[test]
+    fn test_refresh_storage_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::RefreshStorage);
+        assert!(model.alerts.status_message.is_some());
+    }
+
+    #[test]
+    fn test_check_merged_branches_no_panic_outside_repo() {
+        let (mut model, dir) = make_model();
+        // Change working directory to temp dir (not a git repo)
+        // We can't easily change cwd in tests, but the function handles
+        // the non-git-repo case gracefully (returns early)
+        let _ = dir; // keep alive
+        send(&mut model, SystemMessage::CheckMergedBranches);
+        // No panic; the function returns early if not in git repo
+    }
+
+    #[test]
+    fn test_scan_git_todos_sets_status_message() {
+        let (mut model, _dir) = make_model();
+        send(&mut model, SystemMessage::ScanGitTodos);
+        // Should always set a status message (even "0 created, 0 skipped")
+        assert!(model.alerts.status_message.is_some());
+    }
+}

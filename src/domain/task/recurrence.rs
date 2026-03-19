@@ -10,8 +10,7 @@ fn default_interval() -> u32 {
 /// Additional options controlling how often and how long a recurring task repeats.
 ///
 /// These options are stored alongside the base [`Recurrence`] pattern on a task
-/// and are used by [`crate::app::update::task::create_next_recurring_task`] to
-/// decide whether to spawn a new occurrence.
+/// and are used by the task update handler to decide whether to spawn a new occurrence.
 ///
 /// # Example
 ///

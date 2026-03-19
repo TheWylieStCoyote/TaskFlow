@@ -36,6 +36,34 @@ use tracing::warn;
 use crate::domain::Priority;
 use crate::storage::BackendType;
 
+/// Settings for the editor/Neovim integration via Unix Domain Socket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditorSettings {
+    /// Enable the editor socket server (default: true)
+    pub enabled: bool,
+    /// Path to the Unix domain socket file; empty string means auto-resolve
+    pub socket_path: String,
+    /// Unix permission bits for the socket file (default: 0o600 = 384)
+    pub socket_permissions: u32,
+    /// Timeout in milliseconds for write-op responses (default: 5000)
+    pub query_timeout_ms: u64,
+    /// Automatically open the TUI when an editor command arrives (default: false)
+    pub auto_open_tui: bool,
+}
+
+impl Default for EditorSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            socket_path: String::new(),
+            socket_permissions: 0o600,
+            query_timeout_ms: 5000,
+            auto_open_tui: false,
+        }
+    }
+}
+
 /// A user-defined task template loaded from `config.toml`.
 ///
 /// Example TOML:
@@ -121,6 +149,10 @@ pub struct Settings {
     /// User-defined task templates loaded from config
     #[serde(default)]
     pub custom_templates: Vec<TemplateConfig>,
+
+    /// Editor / Neovim integration settings
+    #[serde(default)]
+    pub editor: EditorSettings,
 }
 
 impl Default for Settings {
@@ -135,6 +167,7 @@ impl Default for Settings {
             default_priority: "none".to_string(),
             first_run_mode: FirstRunMode::default(),
             custom_templates: Vec::new(),
+            editor: EditorSettings::default(),
         }
     }
 }
@@ -300,6 +333,21 @@ impl Settings {
     #[must_use]
     pub fn default_priority(&self) -> Priority {
         Priority::parse(&self.default_priority).unwrap_or_default()
+    }
+
+    /// Resolve the Unix domain socket path for the editor integration.
+    ///
+    /// Uses `editor.socket_path` if set, otherwise falls back to
+    /// `$XDG_DATA_HOME/taskflow/taskflow.sock`.
+    #[must_use]
+    pub fn socket_path(&self) -> PathBuf {
+        if !self.editor.socket_path.is_empty() {
+            return PathBuf::from(&self.editor.socket_path);
+        }
+        directories::ProjectDirs::from("com", "taskflow", "taskflow").map_or_else(
+            || PathBuf::from("taskflow.sock"),
+            |dirs| dirs.data_dir().join("taskflow.sock"),
+        )
     }
 }
 

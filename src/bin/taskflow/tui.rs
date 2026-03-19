@@ -135,6 +135,23 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     let keybindings = Keybindings::load();
     let theme = Theme::load(&settings.theme);
 
+    // Start editor socket server on Unix when enabled
+    #[cfg(unix)]
+    let (_editor_server, socket_state) = {
+        use std::sync::{mpsc, Arc, Mutex};
+        use taskflow::socket;
+        use taskflow::socket::types::{EditorWriteRequest, ModelSnapshot};
+
+        if settings.editor.enabled {
+            let snapshot_arc = Arc::new(Mutex::new(ModelSnapshot::from_model(&model)));
+            let (write_tx, write_rx) = mpsc::sync_channel::<EditorWriteRequest>(64);
+            let server = socket::start(&settings, write_tx, Arc::clone(&snapshot_arc));
+            (Some(server), Some((write_rx, snapshot_arc)))
+        } else {
+            (None, None)
+        }
+    };
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -143,7 +160,15 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Run the app
-    let result = run_app(&mut terminal, &mut model, &keybindings, &settings, &theme);
+    let result = run_app(
+        &mut terminal,
+        &mut model,
+        &keybindings,
+        &settings,
+        &theme,
+        #[cfg(unix)]
+        socket_state.as_ref(),
+    );
 
     // Save before exit if storage is configured and not in sample data mode
     if model.has_storage() && !model.storage.sample_data_mode && model.storage.dirty {
@@ -182,6 +207,10 @@ fn run_app(
     keybindings: &Keybindings,
     settings: &Settings,
     theme: &Theme,
+    #[cfg(unix)] socket_state: Option<&(
+        std::sync::mpsc::Receiver<taskflow::socket::types::EditorWriteRequest>,
+        std::sync::Arc<std::sync::Mutex<taskflow::socket::types::ModelSnapshot>>,
+    )>,
 ) -> anyhow::Result<()> {
     use std::time::Instant;
 
@@ -236,6 +265,69 @@ fn run_app(
         if last_git_check.elapsed() >= git_check_interval {
             update(model, Message::System(SystemMessage::CheckMergedBranches));
             last_git_check = Instant::now();
+        }
+
+        // Editor socket: refresh snapshot and drain write requests (Unix only)
+        #[cfg(unix)]
+        if let Some((write_rx, snapshot_arc)) = socket_state {
+            use crate::commands::pipe::handlers::dispatch;
+            use taskflow::socket::types::ModelSnapshot;
+
+            // Refresh snapshot so socket thread has an up-to-date view
+            if let Ok(mut snap) = snapshot_arc.lock() {
+                *snap = ModelSnapshot::from_model(model);
+            }
+
+            // Drain pending write requests from the socket thread
+            while let Ok(req) = write_rx.try_recv() {
+                if let Some(task_id) = req.focus_task_id {
+                    // Navigate TUI to the specified task
+                    update(
+                        model,
+                        Message::System(SystemMessage::FocusTaskById(task_id)),
+                    );
+                    let _ = req
+                        .respond_to
+                        .send(taskflow::socket::types::SocketResponse::ok(
+                            serde_json::Value::Null,
+                        ));
+                } else {
+                    // Standard pipe operation — convert PipeEnvelope → PipeRequest via JSON
+                    use crate::commands::pipe::types::PipeRequest;
+                    let pipe_json = match serde_json::to_value(&req.pipe_envelope) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let _ =
+                                req.respond_to
+                                    .send(taskflow::socket::types::SocketResponse::err(
+                                        "SERIALIZATION_ERROR",
+                                        e.to_string(),
+                                    ));
+                            continue;
+                        }
+                    };
+                    match serde_json::from_value::<PipeRequest>(pipe_json) {
+                        Ok(pipe_req) => {
+                            let result = dispatch(model, &pipe_req);
+                            let response = match result {
+                                Ok(data) => taskflow::socket::types::SocketResponse::ok(data),
+                                Err(e) => taskflow::socket::types::SocketResponse::err(
+                                    &e.code, &e.message,
+                                ),
+                            };
+                            let _ = req.respond_to.send(response);
+                        }
+                        Err(e) => {
+                            let _ =
+                                req.respond_to
+                                    .send(taskflow::socket::types::SocketResponse::err(
+                                        "INVALID_REQUEST",
+                                        e.to_string(),
+                                    ));
+                        }
+                    }
+                }
+            }
         }
 
         // Handle events with timeout for potential async operations

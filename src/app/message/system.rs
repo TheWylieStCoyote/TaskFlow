@@ -69,4 +69,6 @@ pub enum SystemMessage {
     CheckMergedBranches,
     /// Scan git repository for TODO/FIXME comments and create tasks
     ScanGitTodos,
+    /// Navigate the TUI task list to a specific task by ID (editor integration)
+    FocusTaskById(String),
 }

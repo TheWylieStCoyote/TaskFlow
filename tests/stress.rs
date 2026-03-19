@@ -38,7 +38,12 @@ const BASE_SEARCH_MS: u128 = 150;
 
 /// Calculate acceptable time threshold based on task count.
 /// Uses O(n log n) scaling assumption for sort operations.
+///
+/// A minimum of 50ms is enforced so that small task counts (e.g. 100 tasks)
+/// don't produce unrealistically tight thresholds (e.g. 14ms) that flake on
+/// loaded CI runners.
 fn threshold_for_count(base_ms: u128, count: usize) -> u128 {
+    const MIN_THRESHOLD_MS: u128 = 50;
     let base_count = 1000_f64;
     let ratio = count as f64 / base_count;
     // Use n*log(n) scaling for realistic complexity
@@ -47,7 +52,8 @@ fn threshold_for_count(base_ms: u128, count: usize) -> u128 {
     } else {
         1.0
     };
-    (base_ms as f64 * ratio * log_factor).ceil() as u128
+    let computed = (base_ms as f64 * ratio * log_factor).ceil() as u128;
+    computed.max(MIN_THRESHOLD_MS)
 }
 
 /// Create a model with n tasks having varied properties.

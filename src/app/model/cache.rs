@@ -41,7 +41,6 @@ use crate::domain::{
     is_context_tag, ProjectId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
-use super::hierarchy::traverse_ancestors;
 
 /// Cached statistics for the footer display.
 ///
@@ -163,9 +162,11 @@ impl TaskCache {
     ///
     /// This computes:
     /// - Child lists per parent (single pass)
-    /// - Depth for each task (walks parent chain, cached)
+    /// - Depth for each task (BFS from roots, O(n) total)
     /// - Subtask progress for each task with children
     pub fn rebuild_hierarchy(&mut self, tasks: &HashMap<TaskId, Task>) {
+        use std::collections::VecDeque;
+
         self.depths.clear();
         self.children.clear();
         self.subtask_progress.clear();
@@ -177,9 +178,33 @@ impl TaskCache {
             }
         }
 
-        // Compute depths for all tasks
-        for task_id in tasks.keys() {
-            self.compute_depth(*task_id, tasks);
+        // Compute depths via BFS from root tasks — O(n) total.
+        // The previous approach called traverse_ancestors() per task which was O(n²)
+        // for deep chains (each call walked all the way to the root without reusing
+        // previously computed depths along the path).
+        let mut queue = VecDeque::new();
+        for (id, task) in tasks {
+            if task.parent_task_id.is_none() {
+                self.depths.insert(*id, 0);
+                queue.push_back(*id);
+            }
+        }
+        while let Some(parent_id) = queue.pop_front() {
+            let parent_depth = self.depths.get(&parent_id).copied().unwrap_or(0);
+            if let Some(children) = self.children.get(&parent_id) {
+                for &child_id in children {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        self.depths.entry(child_id)
+                    {
+                        e.insert(parent_depth + 1);
+                        queue.push_back(child_id);
+                    }
+                }
+            }
+        }
+        // Assign depth 0 to any orphaned tasks whose parent doesn't exist in the map
+        for id in tasks.keys() {
+            self.depths.entry(*id).or_insert(0);
         }
 
         // Compute subtask progress using bottom-up aggregation (O(n) instead of O(n²))
@@ -216,23 +241,6 @@ impl TaskCache {
                 self.subtask_progress.insert(task_id, (completed, total));
             }
         }
-    }
-
-    /// Compute and cache depth for a single task.
-    fn compute_depth(&mut self, task_id: TaskId, tasks: &HashMap<TaskId, Task>) -> usize {
-        // Check cache first
-        if let Some(&depth) = self.depths.get(&task_id) {
-            return depth;
-        }
-
-        let depth = traverse_ancestors(
-            task_id,
-            |id| tasks.get(&id).and_then(|t| t.parent_task_id),
-            |_| {}, // No-op visitor, we just need the count
-        );
-
-        self.depths.insert(task_id, depth);
-        depth
     }
 
     /// Get cached time sum for a task, returning 0 if not cached.

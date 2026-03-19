@@ -75,14 +75,14 @@
 <text x="213.6" y="202.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="202.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="230.4" y="202.5" fill="#585b70" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Total: </text>
-<text x="289.2" y="202.5" fill="#94e2d5" textLength="67.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">170h 51m</text>
+<text x="289.2" y="202.5" fill="#94e2d5" textLength="58.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve" font-weight="bold">193h 3m</text>
 <text x="784.8" y="202.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│└─────────────────────────────────────────────────────────────────┘</text>
 <text x="12.0" y="218.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="218.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">📈  Reports             </text>
 <text x="213.6" y="218.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="218.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="230.4" y="218.5" fill="#585b70" textLength="84.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Avg/task: </text>
-<text x="314.4" y="218.5" fill="#cdd6f4" textLength="470.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">2h 16m                                                  </text>
+<text x="314.4" y="218.5" fill="#cdd6f4" textLength="470.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">2h 34m                                                  </text>
 <text x="784.8" y="218.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│┌ Estimation ─────────────────────────────────────────────────────┐</text>
 <text x="12.0" y="234.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="234.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">🔄  Habits              </text>
@@ -122,15 +122,15 @@
 <text x="20.4" y="298.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">📁  No Project          </text>
 <text x="213.6" y="298.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="298.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="298.5" fill="#cdd6f4" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Frontend UI </text>
-<text x="331.2" y="298.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">40%</text>
+<text x="230.4" y="298.5" fill="#cdd6f4" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">DevOps &amp; Infrastructure </text>
+<text x="432.0" y="298.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">25%</text>
 <text x="784.8" y="298.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│└─────────────────────────────────────────────────────────────────┘</text>
 <text x="12.0" y="314.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="314.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">🕐  Recent              </text>
 <text x="213.6" y="314.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="314.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="314.5" fill="#cdd6f4" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">DevOps &amp; Infrastructure </text>
-<text x="432.0" y="314.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">25%</text>
+<text x="230.4" y="314.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Mobile App </text>
+<text x="322.8" y="314.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">20%</text>
 <text x="784.8" y="314.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│┌ Focus Sessions ─────────────────────────────────────────────────┐</text>
 <text x="12.0" y="330.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="330.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">🎯  Kanban              </text>
@@ -147,8 +147,8 @@
 <text x="20.4" y="346.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">⚡  Eisenhower          </text>
 <text x="213.6" y="346.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="346.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="346.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Side Project: TaskFlow </text>
-<text x="423.6" y="346.5" fill="#f9e2af" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">62%</text>
+<text x="230.4" y="346.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Home &amp; Errands </text>
+<text x="356.4" y="346.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">14%</text>
 <text x="784.8" y="346.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="801.6" y="346.5" fill="#585b70" textLength="84.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">All time: </text>
 <text x="885.6" y="346.5" fill="#cdd6f4" textLength="462.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0 cycles | 0m                                          </text>
@@ -157,8 +157,8 @@
 <text x="20.4" y="362.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">📅  Week                </text>
 <text x="213.6" y="362.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="362.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="362.5" fill="#cdd6f4" textLength="142.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Health &amp; Fitness </text>
-<text x="373.2" y="362.5" fill="#585b70" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0%</text>
+<text x="230.4" y="362.5" fill="#cdd6f4" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Backend API </text>
+<text x="331.2" y="362.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">23%</text>
 <text x="784.8" y="362.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="801.6" y="362.5" fill="#585b70" textLength="201.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Streak: 0 days (best: 0)</text>
 <text x="1347.6" y="362.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
@@ -166,30 +166,30 @@
 <text x="20.4" y="378.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">📊  Timeline            </text>
 <text x="213.6" y="378.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="378.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="378.5" fill="#cdd6f4" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Learning &amp; Growth </text>
-<text x="381.6" y="378.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">17%</text>
+<text x="230.4" y="378.5" fill="#cdd6f4" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Documentation </text>
+<text x="348.0" y="378.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">20%</text>
 <text x="784.8" y="378.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="378.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="394.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="394.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">💤  Snoozed             </text>
 <text x="213.6" y="394.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="394.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="394.5" fill="#cdd6f4" textLength="117.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Documentation </text>
-<text x="348.0" y="394.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">20%</text>
+<text x="230.4" y="394.5" fill="#cdd6f4" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Learning &amp; Growth </text>
+<text x="381.6" y="394.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">17%</text>
 <text x="784.8" y="394.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│└─────────────────────────────────────────────────────────────────┘</text>
 <text x="12.0" y="410.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="410.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">🟩  Heatmap             </text>
 <text x="213.6" y="410.5" fill="#94e2d5" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">█</text>
 <text x="222.0" y="410.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="410.5" fill="#cdd6f4" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Backend API </text>
-<text x="331.2" y="410.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">23%</text>
+<text x="230.4" y="410.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Side Project: TaskFlow </text>
+<text x="423.6" y="410.5" fill="#f9e2af" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">62%</text>
 <text x="784.8" y="410.5" fill="#89b4fa" textLength="571.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│┌ This Week ──────────────────────────────────────────────────────┐</text>
 <text x="12.0" y="426.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="20.4" y="426.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">📈  Forecast            </text>
 <text x="213.6" y="426.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="426.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="426.5" fill="#cdd6f4" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Mobile App </text>
-<text x="322.8" y="426.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">20%</text>
+<text x="230.4" y="426.5" fill="#cdd6f4" textLength="142.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Health &amp; Fitness </text>
+<text x="373.2" y="426.5" fill="#585b70" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">0%</text>
 <text x="784.8" y="426.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="801.6" y="426.5" fill="#585b70" textLength="75.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Created: </text>
 <text x="877.2" y="426.5" fill="#94e2d5" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">142</text>
@@ -198,8 +198,8 @@
 <text x="20.4" y="442.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">🔗  Network             </text>
 <text x="213.6" y="442.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="442.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="230.4" y="442.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Home &amp; Errands </text>
-<text x="356.4" y="442.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">14%</text>
+<text x="230.4" y="442.5" fill="#cdd6f4" textLength="100.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Frontend UI </text>
+<text x="331.2" y="442.5" fill="#f38ba8" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">40%</text>
 <text x="784.8" y="442.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="801.6" y="442.5" fill="#585b70" textLength="92.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Completed: </text>
 <text x="894.0" y="442.5" fill="#a6e3a1" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">5</text>
@@ -239,14 +239,14 @@
 <text x="784.8" y="522.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="522.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="538.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="538.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Frontend UI</text>
-<text x="154.8" y="538.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (10)</text>
+<text x="20.4" y="538.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  DevOps &amp; Infrastru</text>
 <text x="213.6" y="538.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="538.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="538.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="538.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="554.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="554.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  DevOps &amp; Infrastru</text>
+<text x="20.4" y="554.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Mobile App</text>
+<text x="146.4" y="554.5" fill="#585b70" textLength="33.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (5)</text>
 <text x="213.6" y="554.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="554.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="554.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
@@ -259,46 +259,46 @@
 <text x="784.8" y="570.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="570.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="586.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="586.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Side Project: Task</text>
-<text x="213.6" y="586.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="20.4" y="586.5" fill="#cdd6f4" textLength="159.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Home &amp; Errands</text>
+<text x="180.0" y="586.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (7)│</text>
 <text x="222.0" y="586.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="586.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="586.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="602.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="602.5" fill="#cdd6f4" textLength="176.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Health &amp; Fitness</text>
-<text x="196.8" y="602.5" fill="#585b70" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (│</text>
+<text x="20.4" y="602.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Backend API</text>
+<text x="154.8" y="602.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (13)</text>
+<text x="213.6" y="602.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="602.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="602.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="602.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="618.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="618.5" fill="#cdd6f4" textLength="184.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Learning &amp; Growth</text>
-<text x="205.2" y="618.5" fill="#585b70" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │</text>
+<text x="20.4" y="618.5" fill="#cdd6f4" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Documentation</text>
+<text x="171.6" y="618.5" fill="#585b70" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (10)│</text>
 <text x="222.0" y="618.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="618.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="618.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="634.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="634.5" fill="#cdd6f4" textLength="151.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Documentation</text>
-<text x="171.6" y="634.5" fill="#585b70" textLength="50.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (10)│</text>
+<text x="20.4" y="634.5" fill="#cdd6f4" textLength="184.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Learning &amp; Growth</text>
+<text x="205.2" y="634.5" fill="#585b70" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> │</text>
 <text x="222.0" y="634.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="634.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="634.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="650.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="650.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Backend API</text>
-<text x="154.8" y="650.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (13)</text>
+<text x="20.4" y="650.5" fill="#cdd6f4" textLength="193.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Side Project: Task</text>
 <text x="213.6" y="650.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="650.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="650.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="650.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="666.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="666.5" fill="#cdd6f4" textLength="126.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Mobile App</text>
-<text x="146.4" y="666.5" fill="#585b70" textLength="33.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (5)</text>
-<text x="213.6" y="666.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
+<text x="20.4" y="666.5" fill="#cdd6f4" textLength="176.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Health &amp; Fitness</text>
+<text x="196.8" y="666.5" fill="#585b70" textLength="25.2" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (│</text>
 <text x="222.0" y="666.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="666.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="666.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="12.0" y="682.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
-<text x="20.4" y="682.5" fill="#cdd6f4" textLength="159.6" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Home &amp; Errands</text>
-<text x="180.0" y="682.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (7)│</text>
+<text x="20.4" y="682.5" fill="#cdd6f4" textLength="134.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  📁  Frontend UI</text>
+<text x="154.8" y="682.5" fill="#585b70" textLength="42.0" lengthAdjust="spacingAndGlyphs" xml:space="preserve"> (10)</text>
+<text x="213.6" y="682.5" fill="#585b70" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="222.0" y="682.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>
 <text x="784.8" y="682.5" fill="#89b4fa" textLength="16.8" lengthAdjust="spacingAndGlyphs" xml:space="preserve">││</text>
 <text x="1347.6" y="682.5" fill="#89b4fa" textLength="8.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">│</text>

@@ -27,7 +27,8 @@ pub use calendar::CalendarState;
 pub use editors::{DescriptionEditorState, TimeLogEditorState, WorkLogEditorState};
 pub use persistence::{ImportState, StorageState};
 pub use pickers::{
-    CommandPaletteState, KeybindingsEditorState, SavedFilterPickerState, TemplatePickerState,
+    CommandPaletteState, KeybindingsEditorState, QuickOpenState, SavedFilterPickerState,
+    TemplatePickerState,
 };
 pub use pomodoro::PomodoroState;
 pub use reviews::{DailyReviewState, EveningReviewState, WeeklyReviewState};

@@ -65,9 +65,10 @@ pub use types::{
     AlertState, BurndownMode, BurndownState, BurndownTimeWindow, CalendarState,
     CommandPaletteState, DailyReviewState, DescriptionEditorState, DuplicatesViewState,
     EveningReviewState, FilterState, GoalViewState, HabitViewState, ImportState, InputState,
-    KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState, SavedFilterPickerState,
-    StorageState, TaskDetailState, TemplatePickerState, TimeLogEditorState, TimeWindow,
-    TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
+    KeybindingsEditorState, MultiSelectState, PomodoroState, QuickOpenState, RunningState,
+    SavedFilterPickerState, StorageState, TaskDetailState, TemplatePickerState, TimeLogEditorState,
+    TimeWindow, TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState,
+    WorkLogEditorState,
 };
 pub use view_queries::extract_git_location;
 
@@ -395,6 +396,10 @@ pub struct Model {
     /// Command palette state (searchable action launcher)
     pub command_palette: CommandPaletteState,
 
+    // Quick-open fuzzy task picker
+    /// Quick-open picker state (fuzzy cross-view task navigator)
+    pub quick_open: QuickOpenState,
+
     // Task list scroll state
     /// Ratatui ListState for task list scrolling (persists scroll offset).
     /// Uses RefCell for interior mutability during rendering.
@@ -495,6 +500,7 @@ impl Model {
             pending_editor_command: None,
             task_detail: TaskDetailState::default(),
             command_palette: CommandPaletteState::default(),
+            quick_open: QuickOpenState::default(),
             task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
             sidebar_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }

@@ -186,6 +186,8 @@ pub const fn action_to_message(action: &Action) -> Message {
         Action::ShowTaskDetail => Message::Ui(UiMessage::ShowTaskDetail),
         // Command palette
         Action::ShowCommandPalette => Message::Ui(UiMessage::ShowCommandPalette),
+        // Quick-open fuzzy task picker
+        Action::ShowQuickOpen => Message::Ui(UiMessage::ShowQuickOpen),
     }
 }
 

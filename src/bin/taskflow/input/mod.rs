@@ -32,6 +32,11 @@ pub fn handle_key_event(
     model: &mut Model,
     keybindings: &Keybindings,
 ) -> Message {
+    // Handle quick-open picker (before command palette so it gets full keyboard)
+    if model.quick_open.visible {
+        return handle_quick_open_input(key, model);
+    }
+
     // Handle command palette first (highest priority when visible)
     if model.command_palette.visible {
         return handle_command_palette_input(key, model as &mut Model);
@@ -314,6 +319,34 @@ pub fn handle_key_event(
     }
 
     Message::None
+}
+
+/// Handle input for the quick-open fuzzy task picker.
+fn handle_quick_open_input(key: event::KeyEvent, model: &mut Model) -> Message {
+    match key.code {
+        KeyCode::Esc => Message::Ui(UiMessage::HideQuickOpen),
+        KeyCode::Enter => {
+            // Resolve the selected task and jump to it in visible_tasks.
+            if let Some(task_id) = taskflow::app::get_quick_open_task_id(model) {
+                model.quick_open.visible = false;
+                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
+                    model.selected_index = pos;
+                }
+            }
+            Message::Ui(UiMessage::HideQuickOpen)
+        }
+        KeyCode::Up => Message::Ui(UiMessage::QuickOpenUp),
+        KeyCode::Down => Message::Ui(UiMessage::QuickOpenDown),
+        KeyCode::Char('k') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::QuickOpenUp)
+        }
+        KeyCode::Char('j') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::QuickOpenDown)
+        }
+        KeyCode::Backspace => Message::Ui(UiMessage::QuickOpenBackspace),
+        KeyCode::Char(c) => Message::Ui(UiMessage::QuickOpenInput(c)),
+        _ => Message::None,
+    }
 }
 
 /// Handle input for the command palette.

@@ -11,7 +11,7 @@ use crate::config::Theme;
 use crate::ui::components::{
     centered_rect, centered_rect_fixed_height, CommandPalette, ConfirmDialog, DailyReview,
     DescriptionEditor, EveningReview, HabitAnalyticsPopup, HelpPopup, InputDialog, InputMode,
-    InputTarget, KeybindingsEditor, OverdueAlert, QuickCaptureDialog, SavedFilterPicker,
+    InputTarget, KeybindingsEditor, OverdueAlert, QuickCaptureDialog, QuickOpen, SavedFilterPicker,
     StorageErrorAlert, TaskDetail, TemplatePicker, TimeLogEditor, WeeklyReview, WorkLogEditor,
 };
 
@@ -353,6 +353,13 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
             ),
             palette_area,
         );
+    }
+
+    // Render quick-open fuzzy task picker (highest z-order)
+    if model.quick_open.visible {
+        // 60% width, 17 rows: 1 search + 1 separator + 13 results + 2 border
+        let picker_area = centered_rect_fixed_height(60, 17, area);
+        frame.render_widget(QuickOpen::new(model, theme), picker_area);
     }
 }
 

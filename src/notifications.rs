@@ -16,9 +16,22 @@
 //! ```rust,ignore
 //! use taskflow::notifications;
 //!
+//! notifications::set_enabled(true);
 //! notifications::notify_pomodoro_phase("Work session complete! Take a break.");
 //! notifications::notify_overdue_tasks(3);
 //! ```
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Set whether desktop notifications are active at runtime.
+///
+/// Call once at startup based on the user's `notifications_enabled` setting.
+/// This gate applies to all notification functions regardless of Cargo feature state.
+pub fn set_enabled(enabled: bool) {
+    ENABLED.store(enabled, Ordering::Relaxed);
+}
 
 /// Send a desktop notification for a Pomodoro phase transition.
 ///
@@ -57,12 +70,44 @@ pub fn notify_recurring_spawned(title: &str) {
     );
 }
 
+/// Send a desktop notification for tasks due within the next N days.
+pub fn notify_due_soon(count: usize, days: u32) {
+    if count == 0 || days == 0 {
+        return;
+    }
+    let noun = if count == 1 { "task" } else { "tasks" };
+    let period = if days == 1 {
+        "tomorrow".to_string()
+    } else {
+        format!("in {days} days")
+    };
+    send(
+        "TaskFlow – Due Soon",
+        &format!("{count} {noun} due {period}"),
+    );
+}
+
+/// Send a desktop notification when snoozed tasks have become active again.
+pub fn notify_snooze_expired(count: usize) {
+    if count == 0 {
+        return;
+    }
+    let noun = if count == 1 { "task" } else { "tasks" };
+    send(
+        "TaskFlow – Snooze Expired",
+        &format!("{count} snoozed {noun} now due"),
+    );
+}
+
 // ============================================================================
 // Internal dispatch
 // ============================================================================
 
 #[cfg(feature = "desktop-notifications")]
 fn send(summary: &str, body: &str) {
+    if !ENABLED.load(Ordering::Relaxed) {
+        return;
+    }
     use notify_rust::Notification;
     // Fire-and-forget: ignore errors (daemon may be unavailable in SSH sessions etc.)
     let _ = Notification::new()

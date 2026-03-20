@@ -47,6 +47,7 @@
 use std::collections::HashSet;
 
 use crate::domain::{Task, TaskId};
+use chrono;
 
 use super::Model;
 
@@ -127,6 +128,31 @@ impl Model {
             |id| self.tasks.get(&id).and_then(|t| t.parent_task_id),
             |_| {}, // No-op visitor, we just need the count
         )
+    }
+
+    /// Count incomplete tasks due strictly between today and today + `days` (exclusive of today).
+    #[must_use]
+    pub fn count_due_soon(&self, days: u32) -> usize {
+        let today = chrono::Utc::now().date_naive();
+        let cutoff = today + chrono::Duration::days(i64::from(days));
+        self.tasks
+            .values()
+            .filter(|t| {
+                !t.status.is_complete() && t.due_date.is_some_and(|d| d > today && d <= cutoff)
+            })
+            .count()
+    }
+
+    /// Count tasks whose snooze expired today (`snooze_until == today`).
+    ///
+    /// These tasks are now visible but the user may not notice without a notification.
+    #[must_use]
+    pub fn count_snooze_expired_today(&self) -> usize {
+        let today = chrono::Utc::now().date_naive();
+        self.tasks
+            .values()
+            .filter(|t| t.snooze_until == Some(today))
+            .count()
     }
 
     /// Returns overdue task count and the overdue tasks themselves

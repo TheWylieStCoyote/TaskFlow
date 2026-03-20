@@ -118,9 +118,25 @@ pub struct Settings {
     /// What to show when database is empty on first run
     pub first_run_mode: FirstRunMode,
 
+    /// Master on/off switch for desktop notifications (default: true)
+    #[serde(default = "default_true")]
+    pub notifications_enabled: bool,
+
+    /// Days ahead to warn about upcoming due dates (0 = disabled, default: 1)
+    #[serde(default = "default_due_soon_days")]
+    pub due_soon_days: u32,
+
     /// User-defined task templates loaded from config
     #[serde(default)]
     pub custom_templates: Vec<TemplateConfig>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_due_soon_days() -> u32 {
+    1
 }
 
 impl Default for Settings {
@@ -134,6 +150,8 @@ impl Default for Settings {
             auto_save_interval: 300, // 5 minutes
             default_priority: "none".to_string(),
             first_run_mode: FirstRunMode::default(),
+            notifications_enabled: default_true(),
+            due_soon_days: default_due_soon_days(),
             custom_templates: Vec::new(),
         }
     }
@@ -354,6 +372,8 @@ mod tests {
         assert_eq!(settings.auto_save_interval, 300);
         assert_eq!(settings.default_priority, "none");
         assert_eq!(settings.first_run_mode, FirstRunMode::Empty);
+        assert!(settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 1);
     }
 
     #[test]

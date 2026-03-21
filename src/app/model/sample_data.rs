@@ -529,6 +529,85 @@ impl Model {
                 .with_tags(vec!["conference".into(), "travel".into()]),
         ]);
 
+        // ========== GIT TODO TASKS ==========
+        let mut git_todo_tasks = vec![
+            {
+                let mut t = Task::new("Fix authentication token expiry not refreshing")
+                    .with_priority(Priority::High)
+                    .with_project(backend_id)
+                    .with_tags(vec!["git-todo".into(), "fixme".into(), "security".into()])
+                    .with_description("git:src/auth/middleware.rs:147\n\nFile: src/auth/middleware.rs\nLine: 147\nPattern: FIXME\n\n// FIXME: Token refresh silently fails when the refresh endpoint\n// returns a 429 — we swallow the error and log out the user instead.\n// Should retry with exponential backoff.".to_string());
+                t.scheduled_date = Some(days_from_now(1));
+                t
+            },
+            {
+                let mut t = Task::new("Replace hardcoded pagination limit with config value")
+                    .with_priority(Priority::Medium)
+                    .with_project(backend_id)
+                    .with_tags(vec!["git-todo".into(), "todo".into(), "api".into()])
+                    .with_description("git:src/api/handlers/tasks.rs:89\n\nFile: src/api/handlers/tasks.rs\nLine: 89\nPattern: TODO\n\n// TODO: Replace magic number 100 with a value from AppConfig\n// once the config refactor lands (see issue #412).".to_string());
+                t.scheduled_date = Some(days_from_now(3));
+                t
+            },
+            Task::new("Extract inline SQL into query builder")
+                .with_priority(Priority::Medium)
+                .with_project(backend_id)
+                .with_tags(vec!["git-todo".into(), "hack".into(), "database".into()])
+                .with_description("git:src/storage/sqlite/queries.rs:203\n\nFile: src/storage/sqlite/queries.rs\nLine: 203\nPattern: HACK\n\n// HACK: Raw string interpolation to work around diesel not supporting\n// dynamic ORDER BY. Replace with a proper query builder abstraction.".to_string()),
+            {
+                let mut t = Task::new("Debounce search input to avoid excessive re-renders")
+                    .with_priority(Priority::Low)
+                    .with_project(frontend_id)
+                    .with_tags(vec!["git-todo".into(), "todo".into(), "performance".into()])
+                    .with_description("git:src/ui/components/search.rs:54\n\nFile: src/ui/components/search.rs\nLine: 54\nPattern: TODO\n\n// TODO: Add debounce so we don't re-filter the full task list on\n// every keypress — noticeable lag with 500+ tasks.".to_string());
+                t.scheduled_date = Some(days_from_now(7));
+                t
+            },
+            {
+                let mut t = Task::new("Handle missing timezone data in calendar events")
+                    .with_priority(Priority::Medium)
+                    .with_project(frontend_id)
+                    .with_tags(vec!["git-todo".into(), "fixme".into(), "calendar".into()])
+                    .with_description("git:src/ui/components/calendar.rs:312\n\nFile: src/ui/components/calendar.rs\nLine: 312\nPattern: FIXME\n\n// FIXME: Events imported from ICS files without a TZID property\n// are silently treated as UTC, which causes wrong day display for\n// users in non-UTC timezones.".to_string());
+                t.scheduled_date = Some(days_from_now(5));
+                t
+            },
+            Task::new("Add retry logic to backup upload")
+                .with_priority(Priority::High)
+                .with_project(devops_id)
+                .with_tags(vec!["git-todo".into(), "todo".into(), "devops".into()])
+                .with_description("git:scripts/backup.sh:78\n\nFile: scripts/backup.sh\nLine: 78\nPattern: TODO\n\n# TODO: Wrap the S3 upload in a retry loop (max 3 attempts)\n# so a transient network error doesn't silently drop a backup.".to_string()),
+        ];
+        tasks.append(&mut git_todo_tasks);
+
+        // ========== DUPLICATE TASKS ==========
+        tasks.extend(vec![
+            Task::new("Update API documentation")
+                .with_priority(Priority::Medium)
+                .with_project(docs_id)
+                .with_tags(vec!["docs".into(), "api".into()])
+                .with_description(
+                    "Refresh API docs to reflect recent endpoint changes.".to_string(),
+                ),
+            Task::new("Update API docs")
+                .with_priority(Priority::High)
+                .with_project(docs_id)
+                .with_tags(vec!["docs".into(), "api".into()]),
+            Task::new("Schedule dentist")
+                .with_priority(Priority::Medium)
+                .with_project(personal_id)
+                .with_tags(vec!["health".into(), "appointment".into()]),
+            Task::new("Improve search performance")
+                .with_priority(Priority::Medium)
+                .with_project(frontend_id)
+                .with_tags(vec!["performance".into(), "feature".into()])
+                .with_description("Profile and optimize the task search filter loop.".to_string()),
+            Task::new("Optimize search performance")
+                .with_priority(Priority::Low)
+                .with_project(frontend_id)
+                .with_tags(vec!["performance".into()]),
+        ]);
+
         // ========== BLOCKED TASKS ==========
         tasks.extend(vec![
             Task::new("Deploy to production")

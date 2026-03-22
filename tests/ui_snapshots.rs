@@ -94,7 +94,7 @@ mod help_component {
 
         let area = Rect::new(0, 0, 80, 30);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);
@@ -108,7 +108,7 @@ mod help_component {
 
         let area = Rect::new(0, 0, 40, 15);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);

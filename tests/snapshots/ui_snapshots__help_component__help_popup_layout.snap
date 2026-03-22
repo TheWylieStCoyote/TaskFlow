@@ -2,9 +2,11 @@
 source: tests/ui_snapshots.rs
 expression: output
 ---
-┌─────────────────────── Help (press ? or Esc to close) ───────────────────────┐
+┌───────────────── Help (j/k scroll · any other key to close) ─────────────────┐
 │Navigation                                                                    │
 │G         Go to last                                                          │
+│J         Move down                                                           │
+│K         Move up                                                             │
 │Ctrl+d    Page down                                                           │
 │Ctrl+u    Page up                                                             │
 │↓         Move down                                                           │
@@ -29,6 +31,4 @@ expression: output
 │Ctrl+↓    Move task down                                                      │
 │Ctrl+↑    Move task up                                                        │
 │d         Delete task                                                         │
-│e         Edit task title                                                     │
-│i         Show task details                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘

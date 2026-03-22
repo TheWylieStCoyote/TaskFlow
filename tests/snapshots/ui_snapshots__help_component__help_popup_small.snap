@@ -1,11 +1,12 @@
 ---
 source: tests/ui_snapshots.rs
-assertion_line: 113
 expression: output
 ---
-┌─── Help (press ? or Esc to close) ───┐
+┌ Help (j/k scroll · any other key to c┐
 │Navigation                            │
 │G         Go to last                  │
+│J         Move down                   │
+│K         Move up                     │
 │Ctrl+d    Page down                   │
 │Ctrl+u    Page up                     │
 │↓         Move down                   │
@@ -15,6 +16,4 @@ expression: output
 │pagedown  Page down                   │
 │pageup    Page up                     │
 │↑         Move up                     │
-│                                      │
-│Tasks                                 │
 └──────────────────────────────────────┘

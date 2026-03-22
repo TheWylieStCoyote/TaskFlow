@@ -6,11 +6,9 @@ use taskflow::app::{Message, Model, NavigationMessage, UiMessage};
 
 /// Handle calendar view input
 pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<Message> {
-    // Esc exits to task list
+    // Esc returns focus to sidebar
     if key.code == KeyCode::Esc {
-        return Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        )));
+        return Some(Message::Navigation(NavigationMessage::FocusSidebar));
     }
 
     // Tab toggles focus between calendar grid and task list
@@ -63,10 +61,8 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
 /// Handle habits view input
 pub fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
     match key.code {
-        // Exit to task list
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        // Return focus to sidebar
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => Some(Message::Ui(UiMessage::HabitUp)),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::Ui(UiMessage::HabitDown)),
@@ -99,10 +95,8 @@ pub fn handle_goals_view(key: event::KeyEvent, model: &Model) -> Option<Message>
     use taskflow::app::GoalMessage;
 
     match key.code {
-        // Exit to task list
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        // Return focus to sidebar
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => Some(Message::Goal(GoalMessage::NavigateUp)),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::Goal(GoalMessage::NavigateDown)),
@@ -140,9 +134,7 @@ pub fn handle_goals_view(key: event::KeyEvent, model: &Model) -> Option<Message>
 pub fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
         // Exit timeline view
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Scroll time axis
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::TimelineScrollLeft))
@@ -177,9 +169,7 @@ pub fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle kanban view input
 pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::KanbanLeft))
         }
@@ -198,9 +188,7 @@ pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle eisenhower view input
 pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::EisenhowerLeft))
         }
@@ -221,9 +209,7 @@ pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle weekly planner view input
 pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::WeeklyPlannerLeft))
         }
@@ -244,9 +230,7 @@ pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle reports view input
 pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
         _ => None,
@@ -256,9 +240,7 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle network view input
 pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::GoToView(
-            taskflow::app::ViewId::TaskList,
-        ))),
+        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // h/l as aliases for k/j to match other views
         KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::NetworkUp))

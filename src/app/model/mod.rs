@@ -215,6 +215,8 @@ pub struct Model {
     pub show_sidebar: bool,
     /// Whether help overlay is visible
     pub show_help: bool,
+    /// Scroll offset for the help overlay
+    pub help_scroll: u16,
     /// Whether focus mode is active (single-task view)
     pub focus_mode: bool,
     /// Current terminal dimensions (width, height)
@@ -423,6 +425,7 @@ impl Model {
             filtering: FilterState::default(),
             show_sidebar: true,
             show_help: false,
+            help_scroll: 0,
             focus_mode: false,
             terminal_size: (80, 24),
             focus_pane: FocusPane::default(),

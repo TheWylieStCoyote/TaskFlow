@@ -11,7 +11,9 @@ pub fn default_bindings() -> HashMap<String, Action> {
 
     // Navigation
     bindings.insert("j".to_string(), Action::MoveDown);
+    bindings.insert("J".to_string(), Action::MoveDown);
     bindings.insert("k".to_string(), Action::MoveUp);
+    bindings.insert("K".to_string(), Action::MoveUp);
     bindings.insert("down".to_string(), Action::MoveDown);
     bindings.insert("up".to_string(), Action::MoveUp);
     bindings.insert("g".to_string(), Action::MoveFirst);
@@ -65,6 +67,7 @@ pub fn default_bindings() -> HashMap<String, Action> {
     bindings.insert("F".to_string(), Action::ToggleFullScreenFocus);
     bindings.insert("Q".to_string(), Action::AddToFocusQueue);
     bindings.insert("h".to_string(), Action::FocusSidebar);
+    bindings.insert("H".to_string(), Action::FocusSidebar);
     bindings.insert("l".to_string(), Action::FocusTaskList);
     bindings.insert("left".to_string(), Action::FocusSidebar);
     bindings.insert("right".to_string(), Action::FocusTaskList);

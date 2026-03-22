@@ -89,9 +89,23 @@ pub fn handle_key_event(
         return Message::Ui(UiMessage::DismissOverdueAlert);
     }
 
-    // If help is showing, any key closes it
+    // If help is showing, scroll with j/k/arrows/page keys; any other key closes it
     if model.show_help {
-        return Message::Ui(UiMessage::HideHelp);
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Message::Ui(UiMessage::HelpScrollDown),
+            KeyCode::Char('k') | KeyCode::Up => Message::Ui(UiMessage::HelpScrollUp),
+            KeyCode::PageDown | KeyCode::Char('d')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                Message::Ui(UiMessage::HelpPageDown)
+            }
+            KeyCode::PageUp | KeyCode::Char('u')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                Message::Ui(UiMessage::HelpPageUp)
+            }
+            _ => Message::Ui(UiMessage::HideHelp),
+        };
     }
 
     // If focus mode is active, handle special keys

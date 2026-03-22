@@ -26,6 +26,14 @@ pub enum UiMessage {
     ShowHelp,
     /// Hide help overlay
     HideHelp,
+    /// Scroll help overlay down one line
+    HelpScrollDown,
+    /// Scroll help overlay up one line
+    HelpScrollUp,
+    /// Scroll help overlay down one page
+    HelpPageDown,
+    /// Scroll help overlay up one page
+    HelpPageUp,
     /// Toggle focus mode (single-task view with timer)
     ToggleFocusMode,
     /// Toggle full-screen in focus mode (hides header/footer)

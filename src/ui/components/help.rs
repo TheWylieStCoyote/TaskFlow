@@ -37,12 +37,17 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
 pub struct HelpPopup<'a> {
     keybindings: &'a Keybindings,
     theme: &'a Theme,
+    scroll: u16,
 }
 
 impl<'a> HelpPopup<'a> {
     #[must_use]
-    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme) -> Self {
-        Self { keybindings, theme }
+    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme, scroll: u16) -> Self {
+        Self {
+            keybindings,
+            theme,
+            scroll,
+        }
     }
 }
 
@@ -106,12 +111,13 @@ impl Widget for HelpPopup<'_> {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Help (press ? or Esc to close) ")
+                    .title(" Help (j/k scroll · any other key to close) ")
                     .title_alignment(Alignment::Center)
                     .border_style(Style::default().fg(theme.colors.warning.to_color())),
             )
             .wrap(Wrap { trim: false })
-            .alignment(Alignment::Left);
+            .alignment(Alignment::Left)
+            .scroll((self.scroll, 0));
 
         paragraph.render(area, buf);
     }
@@ -231,7 +237,7 @@ mod tests {
     fn test_help_popup_renders_title() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 30);
         let content = buffer_content(&buffer);
 
@@ -242,7 +248,7 @@ mod tests {
     fn test_help_popup_renders_categories() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
@@ -261,7 +267,7 @@ mod tests {
     fn test_help_popup_renders_keybindings() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 

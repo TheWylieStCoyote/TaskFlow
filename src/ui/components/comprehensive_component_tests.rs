@@ -569,7 +569,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 80, 30);
         let content = buffer_content(&buffer);
 
@@ -581,7 +581,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 80, 30);
         let content = buffer_content(&buffer);
 
@@ -594,7 +594,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 90, 40);
         let content = buffer_content(&buffer);
 
@@ -608,7 +608,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 80, 30);
         let content = buffer_content(&buffer);
 
@@ -621,7 +621,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 40, 10);
         // Should handle small areas gracefully
         let _ = buffer_content(&buffer);
@@ -632,7 +632,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 120, 60);
         // Should handle large areas without issues
         let content = buffer_content(&buffer);
@@ -831,7 +831,7 @@ mod tests {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
 
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         // Absolute minimum size
         let buffer = render_widget(help, 20, 5);
         // Should handle minimal size gracefully
@@ -1105,7 +1105,7 @@ mod tests {
         let theme = Theme::default();
 
         let start = std::time::Instant::now();
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(help, 100, 40);
         let elapsed = start.elapsed();
 
@@ -1154,7 +1154,7 @@ mod tests {
         let _ = render_widget(duplicates, 80, 20);
 
         // HelpPopup
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         let _ = render_widget(help, 80, 30);
 
         // TemplatePicker

@@ -20,7 +20,10 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
     // Render help popup
     if model.show_help {
         let popup_area = centered_rect(50, 70, area);
-        frame.render_widget(HelpPopup::new(&model.keybindings, theme), popup_area);
+        frame.render_widget(
+            HelpPopup::new(&model.keybindings, theme, model.help_scroll),
+            popup_area,
+        );
     }
 
     // Render input dialog if in editing mode

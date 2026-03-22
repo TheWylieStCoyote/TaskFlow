@@ -107,7 +107,11 @@ impl Widget for HelpPopup<'_> {
             ]));
         }
 
-        let paragraph = Paragraph::new(help_lines)
+        // Slice lines manually — Paragraph::scroll() does not work reliably with Wrap
+        let visible_lines: Vec<Line<'_>> =
+            help_lines.into_iter().skip(self.scroll as usize).collect();
+
+        let paragraph = Paragraph::new(visible_lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -116,8 +120,7 @@ impl Widget for HelpPopup<'_> {
                     .border_style(Style::default().fg(theme.colors.warning.to_color())),
             )
             .wrap(Wrap { trim: false })
-            .alignment(Alignment::Left)
-            .scroll((self.scroll, 0));
+            .alignment(Alignment::Left);
 
         paragraph.render(area, buf);
     }

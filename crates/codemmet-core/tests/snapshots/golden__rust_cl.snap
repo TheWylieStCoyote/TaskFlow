@@ -1,0 +1,8 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"cl\")"
+---
+== keep ==
+|${1:args}| $0
+== strip ==
+|args| ‸

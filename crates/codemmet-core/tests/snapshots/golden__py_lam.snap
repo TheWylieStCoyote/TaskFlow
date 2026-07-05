@@ -1,0 +1,8 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"lam\")"
+---
+== keep ==
+lambda $1: $0
+== strip ==
+lambda : ‸

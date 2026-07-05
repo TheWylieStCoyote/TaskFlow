@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"trait:Render>fn:draw\")"
+---
+== keep ==
+trait Render {
+    fn draw($1) {
+        $0
+    }
+}
+== strip ==
+trait Render {
+    fn draw() {
+        ‸
+    }
+}

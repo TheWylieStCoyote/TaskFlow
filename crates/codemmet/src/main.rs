@@ -1,18 +1,12 @@
 //! codemmet — Emmet-style abbreviation expansion for programming languages.
 //!
-//! One binary serving both the CLI (`expand`, `wrap`, `list`, `check`) and
-//! the LSP server (`lsp`). Subcommands land in M1/M2; see `PLAN.md`.
+//! One binary serving both the CLI (`expand`, `list`, `check`) and, from M2,
+//! the LSP server (`lsp`) and `wrap`. See `PLAN.md`.
 
-use clap::Parser;
+mod cli;
 
-#[derive(Debug, Parser)]
-#[command(name = "codemmet", version, about)]
-struct Cli {}
+use std::process::ExitCode;
 
-fn main() {
-    let _cli = Cli::parse();
-    println!(
-        "codemmet {}: subcommands arrive in M1 — see PLAN.md",
-        env!("CARGO_PKG_VERSION")
-    );
+fn main() -> ExitCode {
+    cli::run()
 }

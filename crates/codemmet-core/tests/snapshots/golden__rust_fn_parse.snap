@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"fn:parse\")"
+---
+== keep ==
+fn parse($1) {
+    $0
+}
+== strip ==
+fn parse() {
+    ‸
+}

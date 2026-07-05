@@ -1,0 +1,24 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"if+elif+el\")"
+---
+== keep ==
+if ${1:condition} {
+    $2
+}
+else if ${3:condition} {
+    $4
+}
+else {
+    $0
+}
+== strip ==
+if condition {
+    
+}
+else if condition {
+    
+}
+else {
+    ‸
+}

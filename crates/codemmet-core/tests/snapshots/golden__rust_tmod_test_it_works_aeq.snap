@@ -1,0 +1,24 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"tmod>test:it_works>aeq\")"
+---
+== keep ==
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(${1:left}, $0);
+    }
+}
+== strip ==
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        assert_eq!(left, ‸);
+    }
+}

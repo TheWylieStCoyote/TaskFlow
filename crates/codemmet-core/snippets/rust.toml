@@ -7,7 +7,7 @@
 #                         works for anything not starting with "t".
 #   match / matchres    — `matchres` wins for the exact word; match on a variable
 #                         literally named "res" needs `match:res`.
-#   if / ifl, el / elif, pr / prd — safe: the shorter trigger has no ident param.
+#   if / ifl, el / elif, pr / prd / prf — safe: the shorter trigger has no ident param.
 
 [meta]
 language = "rust"
@@ -242,6 +242,16 @@ return $0;
 description = "println! to stdout"
 body = '''
 println!("$0");
+'''
+
+[snippets.prf]
+description = "println! with a format string and arguments"
+params = [
+  { name = "fmt", default = "{}" },
+  { name = "args", default = "value" },
+]
+body = '''
+println!("${fmt}", ${args});$0
 '''
 
 [snippets.prd]

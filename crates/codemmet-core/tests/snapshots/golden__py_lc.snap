@@ -1,0 +1,8 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"lc\")"
+---
+== keep ==
+[${1:expr} for ${2:item} in ${3:iterable}]$0
+== strip ==
+[expr for item in iterable]‸

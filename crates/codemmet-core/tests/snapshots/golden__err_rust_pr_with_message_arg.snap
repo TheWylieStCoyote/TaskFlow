@@ -1,0 +1,5 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "expand_err(\"rust\", \"pr:\\\"hello, world\\\"\")"
+---
+cannot bind arguments for `pr`: too many arguments: 1 given, 0 declared

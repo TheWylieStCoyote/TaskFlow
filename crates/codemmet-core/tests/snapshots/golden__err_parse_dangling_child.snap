@@ -1,0 +1,5 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "expand_err(\"rust\", \"fn:main>\")"
+---
+dangling '>' at byte 7..8

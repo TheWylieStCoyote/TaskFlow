@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"while\")"
+---
+== keep ==
+while ${1:condition} {
+    $0
+}
+== strip ==
+while condition {
+    ‸
+}

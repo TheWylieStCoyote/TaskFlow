@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"let:x+letm:y+letq:z\")"
+---
+== keep ==
+let x = $1;
+let mut y = $2;
+let z = $0?;
+== strip ==
+let x = ;
+let mut y = ;
+let z = ‸?;

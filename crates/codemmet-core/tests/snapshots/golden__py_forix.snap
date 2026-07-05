@@ -1,0 +1,10 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"forix\")"
+---
+== keep ==
+for x in range(${1:10}):
+    $0
+== strip ==
+for x in range(10):
+    ‸

@@ -22,8 +22,24 @@ Delivered as one binary that is both a CLI (`codemmet expand`, `wrap`, `list`,
 Later phases use tree-sitter for context-aware expansion (e.g. `fn` inside an
 `impl` block gains `&self`) and wrap-with-abbreviation.
 
-**Status: early scaffolding.** See [PLAN.md](PLAN.md) for the full design and
-milestone roadmap.
+**Status: M1 complete** — the core engine and CLI work for Rust and Python
+(75 builtin triggers). The LSP server and Neovim plugin are next. See
+[PLAN.md](PLAN.md) for the full design and milestone roadmap.
+
+## CLI
+
+```sh
+codemmet expand --lang rust "fn:main>fori10>prf:\"i={}\",i"
+codemmet expand --lang python --tabstops keep "def:handler>try"
+echo "class:Point>init" | codemmet expand --lang py -
+codemmet list --lang rust          # all triggers with descriptions
+codemmet check                     # validate user snippet overrides
+```
+
+`--tabstops keep` emits LSP snippet syntax (`${1:placeholder}`, `$0`);
+the default `strip` emits plain text (`--json` adds the cursor position).
+User overrides live in `~/.config/codemmet/snippets/<lang>.toml` and can
+override or `disabled = true` any builtin trigger.
 
 ## Abbreviation syntax at a glance
 

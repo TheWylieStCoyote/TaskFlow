@@ -1,0 +1,18 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"try+fin\")"
+---
+== keep ==
+try:
+    $1
+except ${2:Exception} as ${3:exc}:
+    $4
+finally:
+    $0
+== strip ==
+try:
+    
+except Exception as exc:
+    
+finally:
+    ‸

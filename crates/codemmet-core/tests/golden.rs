@@ -15,7 +15,7 @@
 use std::sync::OnceLock;
 
 use codemmet_core::Engine;
-use codemmet_core::context::{ExpansionContext, IndentUnit};
+use codemmet_core::context::{ExpansionContext, IndentUnit, Scope};
 use codemmet_core::lang::registry::Registry;
 use codemmet_core::snippet::render::{CursorPos, TabstopMode};
 
@@ -52,10 +52,11 @@ fn insert_marker(body: &str, cursor: CursorPos) -> String {
     out
 }
 
-/// Expand `abbr` for `lang`; in strip mode the cursor renders as `‸`.
-fn expand(lang: &str, abbr: &str, mode: TabstopMode) -> String {
+/// Expand `abbr` for `lang` in `context`; in strip mode the cursor renders
+/// as `‸`.
+fn expand_in(lang: &str, abbr: &str, context: &ExpansionContext, mode: TabstopMode) -> String {
     let expansion = engine()
-        .expand(abbr, lang, &ctx(), mode)
+        .expand(abbr, lang, context, mode)
         .expect("golden abbreviation should expand");
     match (mode, expansion.cursor) {
         (TabstopMode::Strip, Some(cursor)) => insert_marker(&expansion.body, cursor),
@@ -65,10 +66,15 @@ fn expand(lang: &str, abbr: &str, mode: TabstopMode) -> String {
 
 /// Both modes of one case, formatted for a single snapshot.
 fn case(lang: &str, abbr: &str) -> String {
+    case_in(lang, abbr, &ctx())
+}
+
+/// Both modes of one case in an explicit context, for one snapshot.
+fn case_in(lang: &str, abbr: &str, context: &ExpansionContext) -> String {
     format!(
         "== keep ==\n{}\n== strip ==\n{}",
-        expand(lang, abbr, TabstopMode::Keep),
-        expand(lang, abbr, TabstopMode::Strip),
+        expand_in(lang, abbr, context, TabstopMode::Keep),
+        expand_in(lang, abbr, context, TabstopMode::Strip),
     )
 }
 
@@ -179,6 +185,66 @@ golden!(py_raise, "python", "raise");
 golden!(py_doc, "python", "doc");
 golden!(py_todo, "python", "todo");
 golden!(py_prd, "python", "prd");
+
+// ===== Contextual variants: composition scope (pure `>` nesting) =====
+
+golden!(rust_impl_point_fn_new_ret, "rust", "impl:Point>fn:new>ret");
+golden!(rust_impl_point_rfn_load, "rust", "impl:Point>rfn:load");
+golden!(rust_impl_point_afn_run, "rust", "impl:Point>afn:run");
+golden!(rust_fn_outer_fn_inner, "rust", "fn:outer>fn:inner");
+golden!(rust_match_x_arm2, "rust", "match:x>arm*2");
+golden!(py_class_config_def_load, "python", "class:Config>def:load");
+golden!(py_class_a_adef_run, "python", "class:A>adef:run");
+
+// ===== Contextual variants: buffer context =====
+
+/// A context mimicking a cursor inside an `impl` block's body.
+fn type_body_ctx() -> ExpansionContext {
+    let mut context = ctx();
+    context.scopes = vec![Scope::Root, Scope::TypeBody];
+    context.raw_node_kinds = vec![
+        "source_file".to_owned(),
+        "impl_item".to_owned(),
+        "declaration_list".to_owned(),
+    ];
+    context
+}
+
+#[test]
+fn rust_fn_area_in_type_body_buffer() {
+    insta::assert_snapshot!(
+        "rust_fn_area_in_type_body_buffer",
+        case_in("rust", "fn:area", &type_body_ctx())
+    );
+}
+
+#[test]
+fn ts_variant_fires_on_raw_node_kind() {
+    use codemmet_core::config::loader::{CompiledSnippet, CompiledVariant, SnippetSet};
+    use codemmet_core::snippet::render::render;
+    use codemmet_core::snippet::template::parse_template;
+
+    let set = SnippetSet::from_compiled([CompiledSnippet {
+        trigger: "pr".to_owned(),
+        description: None,
+        params: Vec::new(),
+        template: parse_template("println!(\"$0\");\n").expect("fixture body should parse"),
+        scope: None,
+        variants: vec![CompiledVariant {
+            context: "ts:impl_item".to_owned(),
+            template: parse_template("self.log(\"$0\");\n").expect("fixture body should parse"),
+        }],
+    }]);
+    let abbr = codemmet_core::abbr::parse("pr").expect("abbreviation should parse");
+
+    let fired = render(&abbr, &set, &type_body_ctx(), TabstopMode::Keep)
+        .expect("abbreviation should render");
+    assert_eq!(fired.body, "self.log(\"$0\");");
+
+    // Without `impl_item` among the raw kinds, the default body renders.
+    let plain = render(&abbr, &set, &ctx(), TabstopMode::Keep).expect("abbreviation should render");
+    assert_eq!(plain.body, "println!(\"$0\");");
+}
 
 // ===== Error paths (snapshot the Display of the error) =====
 

@@ -15,8 +15,17 @@ language = "rust"
 [snippets.fn]
 description = "function definition"
 params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
 body = '''
 fn ${name}($1) {
+	${child}
+}
+'''
+
+[[snippets.fn.variants]]
+context = "type-body"
+body = '''
+fn ${name}(&self$1) {
 	${child}
 }
 '''
@@ -24,8 +33,17 @@ fn ${name}($1) {
 [snippets.rfn]
 description = "function returning Result"
 params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
 body = '''
 fn ${name}($1) -> Result<${2:()}, ${3:Box<dyn std::error::Error>}> {
+	${child}
+}
+'''
+
+[[snippets.rfn.variants]]
+context = "type-body"
+body = '''
+fn ${name}(&self$1) -> Result<${2:()}, ${3:Box<dyn std::error::Error>}> {
 	${child}
 }
 '''
@@ -33,14 +51,24 @@ fn ${name}($1) -> Result<${2:()}, ${3:Box<dyn std::error::Error>}> {
 [snippets.afn]
 description = "async function definition"
 params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
 body = '''
 async fn ${name}($1) {
 	${child}
 }
 '''
 
+[[snippets.afn.variants]]
+context = "type-body"
+body = '''
+async fn ${name}(&self$1) {
+	${child}
+}
+'''
+
 [snippets.main]
 description = "main entry point"
+scope = "fn-body"
 body = '''
 fn main() {
 	${child}
@@ -50,6 +78,7 @@ fn main() {
 [snippets.fori]
 description = "for loop over integer range"
 params = [{ name = "var", kind = "ident", default = "i" }, { name = "end", kind = "int", default = "10" }]
+scope = "loop"
 body = '''
 for ${var} in 0..${end} {
 	${child}
@@ -59,6 +88,7 @@ for ${var} in 0..${end} {
 [snippets.fore]
 description = "for-each loop over an iterator"
 params = [{ name = "var", kind = "ident", default = "item" }]
+scope = "loop"
 body = '''
 for ${var} in ${1:iterable} {
 	${child}
@@ -67,6 +97,7 @@ for ${var} in ${1:iterable} {
 
 [snippets.while]
 description = "while loop"
+scope = "loop"
 body = '''
 while ${1:condition} {
 	${child}
@@ -75,6 +106,7 @@ while ${1:condition} {
 
 [snippets.wl]
 description = "while let loop"
+scope = "loop"
 body = '''
 while let ${1:Some(value)} = ${2:expr} {
 	${child}
@@ -83,6 +115,7 @@ while let ${1:Some(value)} = ${2:expr} {
 
 [snippets.loop]
 description = "infinite loop"
+scope = "loop"
 body = '''
 loop {
 	${child}
@@ -91,6 +124,7 @@ loop {
 
 [snippets.if]
 description = "if block"
+scope = "conditional"
 body = '''
 if ${1:condition} {
 	${child}
@@ -99,6 +133,7 @@ if ${1:condition} {
 
 [snippets.ifl]
 description = "if let block"
+scope = "conditional"
 body = '''
 if let ${1:Some(value)} = ${2:expr} {
 	${child}
@@ -107,6 +142,7 @@ if let ${1:Some(value)} = ${2:expr} {
 
 [snippets.el]
 description = "else block"
+scope = "conditional"
 body = '''
 else {
 	${child}
@@ -115,6 +151,7 @@ else {
 
 [snippets.elif]
 description = "else-if block"
+scope = "conditional"
 body = '''
 else if ${1:condition} {
 	${child}
@@ -124,6 +161,7 @@ else if ${1:condition} {
 [snippets.match]
 description = "match expression"
 params = [{ name = "expr", kind = "ident", default = "expr" }]
+scope = "match-body"
 body = '''
 match ${expr} {
 	${child}
@@ -166,6 +204,7 @@ enum ${name} {
 [snippets.trait]
 description = "trait definition"
 params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
 body = '''
 trait ${name} {
 	${child}
@@ -175,6 +214,7 @@ trait ${name} {
 [snippets.impl]
 description = "inherent impl block"
 params = [{ name = "name", kind = "ident", default = "Type" }]
+scope = "type-body"
 body = '''
 impl ${name} {
 	${child}
@@ -183,6 +223,7 @@ impl ${name} {
 
 [snippets.implt]
 description = "trait impl block (impl Trait for Type)"
+scope = "type-body"
 body = '''
 impl ${1:Trait} for ${2:Type} {
 	${child}
@@ -306,6 +347,7 @@ let mut ${1:map} = std::collections::HashMap::new();$0
 [snippets.test]
 description = "test function"
 params = [{ name = "name", kind = "ident", default = "it_works" }]
+scope = "fn-body"
 body = '''
 #[test]
 fn ${name}() {

@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use crate::config::schema::{ParamDef, SnippetDef, SnippetFile};
+use crate::context::Scope;
 use crate::snippet::ir::{Span, Template};
 use crate::snippet::template::{TemplateError, parse_template};
 
@@ -18,6 +19,10 @@ pub struct CompiledSnippet {
     pub params: Vec<ParamDef>,
     /// The default (context-free) template.
     pub template: Template,
+    /// Normalized scope name that `${child}` content lives in, if declared.
+    /// `None` means the snippet is scope-transparent: nested children keep
+    /// the scope this snippet itself expanded in.
+    pub scope: Option<String>,
     /// Context-conditional templates (M3); first match wins.
     pub variants: Vec<CompiledVariant>,
 }
@@ -156,6 +161,37 @@ pub fn parse_snippet_file(origin: &str, text: &str) -> Result<SnippetFile, Confi
     })
 }
 
+/// Parse a normalized scope name (e.g. `"type-body"`) into a [`Scope`].
+///
+/// These are the names the TOML schema accepts for `scope` fields and
+/// variant `context`s; [`Scope::Unknown`] has no name and never parses.
+pub fn parse_scope_name(name: &str) -> Option<Scope> {
+    Some(match name {
+        "root" => Scope::Root,
+        "type-body" => Scope::TypeBody,
+        "fn-body" => Scope::FnBody,
+        "loop" => Scope::Loop,
+        "conditional" => Scope::Conditional,
+        "match-body" => Scope::MatchBody,
+        "try-body" => Scope::TryBody,
+        _ => return None,
+    })
+}
+
+/// The canonical TOML-schema name of a [`Scope`].
+pub const fn scope_name(scope: Scope) -> &'static str {
+    match scope {
+        Scope::Root => "root",
+        Scope::TypeBody => "type-body",
+        Scope::FnBody => "fn-body",
+        Scope::Loop => "loop",
+        Scope::Conditional => "conditional",
+        Scope::MatchBody => "match-body",
+        Scope::TryBody => "try-body",
+        Scope::Unknown => "unknown",
+    }
+}
+
 /// Whether `s` is a trigger WORD: `[A-Za-z_][A-Za-z0-9_]*`.
 fn is_word(s: &str) -> bool {
     let mut chars = s.chars();
@@ -200,8 +236,25 @@ fn compile_snippet(
         .ok_or_else(|| invalid("missing body".to_owned()))?;
     let template = parse_template(body).map_err(snippet_err)?;
 
+    if let Some(scope) = &def.scope
+        && parse_scope_name(scope).is_none()
+    {
+        return Err(invalid(format!(
+            "unknown scope `{scope}` (expected one of root, type-body, \
+             fn-body, loop, conditional, match-body, try-body)"
+        )));
+    }
+
     let mut variants = Vec::with_capacity(def.variants.len());
     for variant in &def.variants {
+        let is_ts = variant.context.starts_with("ts:");
+        if !is_ts && parse_scope_name(&variant.context).is_none() {
+            return Err(invalid(format!(
+                "unknown variant context `{}` (expected a scope name or \
+                 `ts:<node-kind>`)",
+                variant.context
+            )));
+        }
         variants.push(CompiledVariant {
             context: variant.context.clone(),
             template: parse_template(&variant.body).map_err(snippet_err)?,
@@ -244,6 +297,7 @@ fn compile_snippet(
         description: def.description.clone(),
         params: def.params.clone(),
         template,
+        scope: def.scope.clone(),
         variants,
     })
 }
@@ -482,6 +536,94 @@ mod tests {
             ConfigError::Invalid { message, .. }
                 if message == "body references undeclared parameter `name`"
         ));
+    }
+
+    #[test]
+    fn scope_names_round_trip() {
+        for scope in [
+            Scope::Root,
+            Scope::TypeBody,
+            Scope::FnBody,
+            Scope::Loop,
+            Scope::Conditional,
+            Scope::MatchBody,
+            Scope::TryBody,
+        ] {
+            assert_eq!(parse_scope_name(scope_name(scope)), Some(scope));
+        }
+        assert_eq!(parse_scope_name("unknown"), None);
+        assert_eq!(parse_scope_name("TypeBody"), None);
+        assert_eq!(scope_name(Scope::Unknown), "unknown");
+    }
+
+    #[test]
+    fn declared_scope_is_compiled() {
+        let set = compile_one(
+            "user",
+            "[meta]\nlanguage = \"rust\"\n[snippets.impl]\nscope = \"type-body\"\nbody = \"impl X {\\n\\t${child}\\n}\"\n",
+        );
+        let compiled = set.get("impl").expect("impl should compile");
+        assert_eq!(compiled.scope.as_deref(), Some("type-body"));
+    }
+
+    #[test]
+    fn unknown_scope_is_error() {
+        let err = compile_err(
+            "user",
+            "[meta]\nlanguage = \"rust\"\n[snippets.impl]\nscope = \"impl-body\"\nbody = \"impl X {}\"\n",
+        );
+        match err {
+            ConfigError::Invalid {
+                trigger, message, ..
+            } => {
+                assert_eq!(trigger, "impl");
+                assert!(
+                    message.starts_with("unknown scope `impl-body`"),
+                    "unexpected message: {message}"
+                );
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_variant_context_is_error() {
+        let err = compile_err(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.fn]\n",
+                "body = \"fn f() {}\"\n",
+                "[[snippets.fn.variants]]\ncontext = \"impl\"\nbody = \"fn m(&self) {}\"\n",
+            ),
+        );
+        match err {
+            ConfigError::Invalid {
+                trigger, message, ..
+            } => {
+                assert_eq!(trigger, "fn");
+                assert!(
+                    message.starts_with("unknown variant context `impl`"),
+                    "unexpected message: {message}"
+                );
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ts_variant_context_is_accepted() {
+        let set = compile_one(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.fn]\n",
+                "body = \"fn f() {}\"\n",
+                "[[snippets.fn.variants]]\ncontext = \"ts:impl_item\"\nbody = \"fn m(&self) {}\"\n",
+            ),
+        );
+        let compiled = set.get("fn").expect("fn should compile");
+        assert_eq!(compiled.variants[0].context, "ts:impl_item");
     }
 
     #[test]

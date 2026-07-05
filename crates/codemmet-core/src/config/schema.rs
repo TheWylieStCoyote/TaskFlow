@@ -36,6 +36,10 @@ pub struct SnippetDef {
     /// The template body. May be omitted only when `disabled = true`.
     #[serde(default)]
     pub body: Option<String>,
+    /// Normalized scope that `${child}` content lives in (e.g. `"fn-body"`).
+    /// Absent means the snippet is scope-transparent to nested children.
+    #[serde(default)]
+    pub scope: Option<String>,
     /// Context-conditional bodies (M3); first matching variant wins.
     #[serde(default)]
     pub variants: Vec<VariantDef>,

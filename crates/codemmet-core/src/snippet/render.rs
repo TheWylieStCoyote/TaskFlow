@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use crate::abbr::{AbbrNode, Abbreviation};
-use crate::config::loader::{CompiledSnippet, SnippetSet};
+use crate::config::loader::{CompiledSnippet, SnippetSet, parse_scope_name};
 use crate::config::schema::ParamKind;
-use crate::context::ExpansionContext;
-use crate::snippet::ir::Span;
+use crate::context::{ExpansionContext, Scope};
+use crate::snippet::ir::{Span, Template};
 
 /// How tabstops appear in the rendered output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,11 +68,14 @@ pub fn render(
 ) -> Result<Expansion, RenderError> {
     let mut composer = Composer {
         set,
+        raw_node_kinds: &ctx.raw_node_kinds,
         placeholders: Vec::new(),
     };
+    // A top-level node lives in the buffer's innermost scope.
+    let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
     let mut lines = Vec::new();
     for node in &abbr.0 {
-        lines.extend(composer.compose_node(node)?);
+        lines.extend(composer.compose_node(node, scope)?);
     }
     let lines = renumber(lines, &composer.placeholders);
     Ok(materialize(&lines, ctx, mode))
@@ -122,6 +125,8 @@ enum Binding {
 struct Composer<'a> {
     /// The active language's triggers.
     set: &'a SnippetSet,
+    /// Raw syntax-node kinds at the expansion point (`ts:` variant matching).
+    raw_node_kinds: &'a [String],
     /// Placeholder text per allocated tabstop identity.
     placeholders: Vec<Option<String>>,
 }
@@ -134,7 +139,12 @@ impl Composer<'_> {
     }
 
     /// Compose one abbreviation node (including `*n` copies and children).
-    fn compose_node(&mut self, node: &AbbrNode) -> Result<Vec<Line>, RenderError> {
+    ///
+    /// `scope` is the node's effective innermost scope: the buffer scope for
+    /// a top-level node, or the enclosing snippet's declared `scope` (a
+    /// scope-less parent is transparent) for a `>`-nested one. It picks the
+    /// context variant to instantiate.
+    fn compose_node(&mut self, node: &AbbrNode, scope: Scope) -> Result<Vec<Line>, RenderError> {
         let (snippet, remainder) =
             self.set
                 .resolve_word(&node.word)
@@ -143,10 +153,18 @@ impl Composer<'_> {
                     suggestion: suggest(self.set, &node.word),
                 })?;
         let bindings = bind_args(snippet, &node.args, remainder)?;
+        let template = select_template(snippet, scope, self.raw_node_kinds);
+        // Children live in the snippet's declared scope; a scope-less
+        // snippet passes its own effective scope through unchanged.
+        let child_scope = snippet
+            .scope
+            .as_deref()
+            .and_then(parse_scope_name)
+            .unwrap_or(scope);
 
         let mut out = Vec::new();
         for _ in 0..node.repeat {
-            let mut lines = self.instantiate(snippet, &bindings);
+            let mut lines = self.instantiate(template, &bindings);
             if node.children.is_empty() {
                 // A leaf's child slot degrades to a final-cursor candidate.
                 for line in &mut lines {
@@ -163,7 +181,7 @@ impl Composer<'_> {
                 }
                 let mut children = Vec::new();
                 for child in &node.children {
-                    children.extend(self.compose_node(child)?);
+                    children.extend(self.compose_node(child, child_scope)?);
                 }
                 lines = splice_children(lines, children);
             }
@@ -176,16 +194,12 @@ impl Composer<'_> {
     ///
     /// Every unbound parameter and every template-local tabstop index gets a
     /// fresh identity on first occurrence; repeats become mirrors.
-    fn instantiate(
-        &mut self,
-        snippet: &CompiledSnippet,
-        bindings: &[(String, Binding)],
-    ) -> Vec<Line> {
+    fn instantiate(&mut self, template: &Template, bindings: &[(String, Binding)]) -> Vec<Line> {
         let mut param_ids: HashMap<&str, StopId> = HashMap::new();
         let mut index_ids: HashMap<u32, StopId> = HashMap::new();
 
-        let mut lines = Vec::with_capacity(snippet.template.lines.len());
-        for ir_line in &snippet.template.lines {
+        let mut lines = Vec::with_capacity(template.lines.len());
+        for ir_line in &template.lines {
             let mut spans = Vec::with_capacity(ir_line.spans.len());
             for span in &ir_line.spans {
                 spans.push(match span {
@@ -239,6 +253,30 @@ impl Composer<'_> {
             }
         }
     }
+}
+
+/// Pick the template to instantiate for a node in `scope`.
+///
+/// The first matching variant wins; a variant matches when its context is
+/// the scope's normalized name, or when it is `ts:<kind>` and `<kind>` is
+/// one of the buffer's raw node kinds. No match falls back to the default
+/// template. Selection changes only the template — params and description
+/// always come from the snippet itself.
+fn select_template<'s>(
+    snippet: &'s CompiledSnippet,
+    scope: Scope,
+    raw_node_kinds: &[String],
+) -> &'s Template {
+    snippet
+        .variants
+        .iter()
+        .find(|variant| {
+            variant.context.strip_prefix("ts:").map_or_else(
+                || parse_scope_name(&variant.context) == Some(scope),
+                |kind| raw_node_kinds.iter().any(|k| k == kind),
+            )
+        })
+        .map_or(&snippet.template, |variant| &variant.template)
 }
 
 /// Insert composed child lines at the parent's `${child}` slot.
@@ -594,6 +632,7 @@ fn push_escaped_placeholder(out: &mut String, text: &str) {
 mod tests {
     use super::*;
     use crate::abbr::parse;
+    use crate::config::loader::CompiledVariant;
     use crate::config::schema::ParamDef;
     use crate::context::IndentUnit;
     use crate::snippet::template::parse_template;
@@ -612,17 +651,48 @@ mod tests {
             description: None,
             params,
             template: parse_template(body).expect("fixture body should parse"),
+            scope: None,
             variants: Vec::new(),
         }
+    }
+
+    /// Attach a declared `${child}` scope to a fixture snippet.
+    fn scoped(mut snippet: CompiledSnippet, scope: &str) -> CompiledSnippet {
+        snippet.scope = Some(scope.to_owned());
+        snippet
+    }
+
+    /// Attach a context variant to a fixture snippet.
+    fn with_variant(mut snippet: CompiledSnippet, context: &str, body: &str) -> CompiledSnippet {
+        snippet.variants.push(CompiledVariant {
+            context: context.to_owned(),
+            template: parse_template(body).expect("fixture variant should parse"),
+        });
+        snippet
     }
 
     /// Fixtures mirroring the real Rust/Python packs.
     fn fixture_set() -> SnippetSet {
         SnippetSet::from_compiled([
-            snip(
-                "fn",
-                vec![param("name", ParamKind::Ident, None)],
-                "fn ${name}($1) {\n\t${child}\n}\n",
+            scoped(
+                with_variant(
+                    snip(
+                        "fn",
+                        vec![param("name", ParamKind::Ident, None)],
+                        "fn ${name}($1) {\n\t${child}\n}\n",
+                    ),
+                    "type-body",
+                    "fn ${name}(&self$1) {\n\t${child}\n}\n",
+                ),
+                "fn-body",
+            ),
+            scoped(
+                snip(
+                    "impl",
+                    vec![param("name", ParamKind::Ident, Some("Type"))],
+                    "impl ${name} {\n\t${child}\n}\n",
+                ),
+                "type-body",
             ),
             snip(
                 "fori",
@@ -910,5 +980,99 @@ mod tests {
         let tabs = ExpansionContext::plain(String::new(), IndentUnit::Tab);
         let e = expand("fori10>pr", &tabs, TabstopMode::Keep);
         assert_eq!(e.body, "for ${1:i} in 0..10 {\n\tprintln!(\"$0\");\n}");
+    }
+
+    /// A context whose innermost buffer scope is `scope`.
+    fn ctx_in(scope: Scope) -> ExpansionContext {
+        let mut ctx = ctx();
+        ctx.scopes = vec![Scope::Root, scope];
+        ctx
+    }
+
+    #[test]
+    fn variant_fires_from_buffer_scope() {
+        let e = expand("fn:area", &ctx_in(Scope::TypeBody), TabstopMode::Keep);
+        assert_eq!(e.body, "fn area(&self$1) {\n    $0\n}");
+    }
+
+    #[test]
+    fn variant_does_not_fire_at_root() {
+        let e = expand("fn:area", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "fn area($1) {\n    $0\n}");
+    }
+
+    #[test]
+    fn parent_declared_scope_selects_child_variant() {
+        let e = expand("impl:Point>fn:new", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self$1) {\n        $0\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn declared_scope_overrides_buffer_scope_for_children() {
+        // Inside a type body the outer `fn` takes &self, but its declared
+        // "fn-body" scope shields the nested `fn` from the variant.
+        let e = expand(
+            "fn:outer>fn:inner",
+            &ctx_in(Scope::TypeBody),
+            TabstopMode::Keep,
+        );
+        assert_eq!(
+            e.body,
+            "fn outer(&self$1) {\n    fn inner($2) {\n        $0\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn scope_less_parent_is_transparent() {
+        // `if` declares no scope, so `fn` under it still sees TypeBody.
+        let e = expand("impl:Point>if>fn:helper", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    if $1 {\n        fn helper(&self$2) {\n            $0\n        }\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn ts_variant_matches_raw_node_kinds() {
+        let set = SnippetSet::from_compiled([with_variant(
+            snip("pr", vec![], "println!(\"$0\");\n"),
+            "ts:impl_item",
+            "self.log(\"$0\");\n",
+        )]);
+        let mut ctx = ctx();
+        ctx.raw_node_kinds = vec!["source_file".to_owned(), "impl_item".to_owned()];
+        let abbr = parse("pr").expect("abbreviation should parse");
+        let e = render(&abbr, &set, &ctx, TabstopMode::Keep).expect("should render");
+        assert_eq!(e.body, "self.log(\"$0\");");
+
+        // Without the raw kind the default template renders.
+        let plain =
+            render(&abbr, &set, &ctx_in(Scope::Root), TabstopMode::Keep).expect("should render");
+        assert_eq!(plain.body, "println!(\"$0\");");
+    }
+
+    #[test]
+    fn first_matching_variant_wins() {
+        let set = SnippetSet::from_compiled([with_variant(
+            with_variant(snip("pr", vec![], "default$0\n"), "type-body", "first$0\n"),
+            "ts:impl_item",
+            "second$0\n",
+        )]);
+        let mut ctx = ctx_in(Scope::TypeBody);
+        ctx.raw_node_kinds = vec!["impl_item".to_owned()];
+        let abbr = parse("pr").expect("abbreviation should parse");
+        let e = render(&abbr, &set, &ctx, TabstopMode::Keep).expect("should render");
+        assert_eq!(e.body, "first$0");
+    }
+
+    #[test]
+    fn empty_scopes_default_to_root() {
+        let mut ctx = ctx();
+        ctx.scopes.clear();
+        let e = expand("fn:area", &ctx, TabstopMode::Keep);
+        assert_eq!(e.body, "fn area($1) {\n    $0\n}");
     }
 }

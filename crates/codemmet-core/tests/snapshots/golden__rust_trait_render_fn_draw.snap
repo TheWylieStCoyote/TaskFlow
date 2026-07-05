@@ -4,13 +4,13 @@ expression: "case(\"rust\", \"trait:Render>fn:draw\")"
 ---
 == keep ==
 trait Render {
-    fn draw($1) {
+    fn draw(&self$1) {
         $0
     }
 }
 == strip ==
 trait Render {
-    fn draw() {
+    fn draw(&self) {
         ‸
     }
 }

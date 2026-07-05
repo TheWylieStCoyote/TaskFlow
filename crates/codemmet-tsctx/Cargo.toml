@@ -12,12 +12,13 @@ categories.workspace = true
 [dependencies]
 codemmet-core = { workspace = true }
 tree-sitter = { workspace = true }
-
-# Per-language grammar crates land in M3 behind these features, e.g.:
-# tree-sitter-rust = { version = "...", optional = true }
+tree-sitter-python = { workspace = true, optional = true }
+tree-sitter-rust = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["lang-rust", "lang-python"]
+lang-python = ["dep:tree-sitter-python"]
+lang-rust = ["dep:tree-sitter-rust"]
 
 [lints]
 workspace = true

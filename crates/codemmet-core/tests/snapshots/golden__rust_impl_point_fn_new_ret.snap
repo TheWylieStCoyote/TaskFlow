@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"impl:Point>fn:new>ret\")"
+---
+== keep ==
+impl Point {
+    fn new(&self$1) {
+        return $0;
+    }
+}
+== strip ==
+impl Point {
+    fn new(&self) {
+        return ‸;
+    }
+}

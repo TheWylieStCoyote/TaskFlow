@@ -16,21 +16,38 @@ language = "python"
 [snippets.def]
 description = "function definition"
 params = [{ name = "name", kind = "ident", default = "func" }]
+scope = "fn-body"
 body = '''
 def ${name}($1):
+	${child}
+'''
+
+[[snippets.def.variants]]
+context = "type-body"
+body = '''
+def ${name}(self$1):
 	${child}
 '''
 
 [snippets.adef]
 description = "async function definition"
 params = [{ name = "name", kind = "ident", default = "func" }]
+scope = "fn-body"
 body = '''
 async def ${name}($1):
 	${child}
 '''
 
+[[snippets.adef.variants]]
+context = "type-body"
+body = '''
+async def ${name}(self$1):
+	${child}
+'''
+
 [snippets.main]
 description = "main function with __main__ guard"
+scope = "fn-body"
 body = '''
 def main():
 	${child}
@@ -50,6 +67,7 @@ if __name__ == "__main__":
 [snippets.fori]
 description = "for loop over integer range"
 params = [{ name = "var", kind = "ident", default = "i" }, { name = "end", kind = "int", default = "10" }]
+scope = "loop"
 body = '''
 for ${var} in range(${end}):
 	${child}
@@ -58,6 +76,7 @@ for ${var} in range(${end}):
 [snippets.fore]
 description = "for-each loop over an iterable"
 params = [{ name = "var", kind = "ident", default = "item" }]
+scope = "loop"
 body = '''
 for ${var} in ${1:iterable}:
 	${child}
@@ -65,6 +84,7 @@ for ${var} in ${1:iterable}:
 
 [snippets.while]
 description = "while loop"
+scope = "loop"
 body = '''
 while ${1:condition}:
 	${child}
@@ -72,6 +92,7 @@ while ${1:condition}:
 
 [snippets.if]
 description = "if block"
+scope = "conditional"
 body = '''
 if ${1:condition}:
 	${child}
@@ -79,6 +100,7 @@ if ${1:condition}:
 
 [snippets.el]
 description = "else block"
+scope = "conditional"
 body = '''
 else:
 	${child}
@@ -86,6 +108,7 @@ else:
 
 [snippets.elif]
 description = "elif block"
+scope = "conditional"
 body = '''
 elif ${1:condition}:
 	${child}
@@ -94,6 +117,7 @@ elif ${1:condition}:
 [snippets.match]
 description = "match statement"
 params = [{ name = "expr", kind = "ident", default = "expr" }]
+scope = "match-body"
 body = '''
 match ${expr}:
 	${child}
@@ -109,6 +133,7 @@ case ${1:pattern}:
 [snippets.class]
 description = "class definition"
 params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
 body = '''
 class ${name}$1:
 	${child}
@@ -116,6 +141,7 @@ class ${name}$1:
 
 [snippets.init]
 description = "__init__ method"
+scope = "fn-body"
 body = '''
 def __init__(self$1):
 	${child}
@@ -146,6 +172,7 @@ def ${name}(self):
 
 [snippets.try]
 description = "try/except block"
+scope = "try-body"
 body = '''
 try:
 	${child}
@@ -155,6 +182,7 @@ except ${1:Exception} as ${2:exc}:
 
 [snippets.exc]
 description = "except clause"
+scope = "try-body"
 body = '''
 except ${1:Exception} as ${2:exc}:
 	${child}
@@ -162,6 +190,7 @@ except ${1:Exception} as ${2:exc}:
 
 [snippets.fin]
 description = "finally clause"
+scope = "try-body"
 body = '''
 finally:
 	${child}
@@ -239,6 +268,7 @@ body = '''
 [snippets.test]
 description = "test function (pytest style)"
 params = [{ name = "name", kind = "ident", default = "case" }]
+scope = "fn-body"
 body = '''
 def test_${name}():
 	${child}

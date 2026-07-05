@@ -1,0 +1,14 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"match:x>arm*2\")"
+---
+== keep ==
+match x {
+    ${1:pattern} => $2,
+    ${3:pattern} => $0,
+}
+== strip ==
+match x {
+    pattern => ,
+    pattern => ‸,
+}

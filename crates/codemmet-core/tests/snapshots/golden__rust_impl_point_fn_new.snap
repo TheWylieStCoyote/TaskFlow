@@ -4,13 +4,13 @@ expression: "case(\"rust\", \"impl:Point>fn:new\")"
 ---
 == keep ==
 impl Point {
-    fn new($1) {
+    fn new(&self$1) {
         $0
     }
 }
 == strip ==
 impl Point {
-    fn new() {
+    fn new(&self) {
         ‸
     }
 }

@@ -1,0 +1,28 @@
+[package]
+name = "codemmet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "codemmet"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+codemmet-core = { workspace = true }
+codemmet-tsctx = { workspace = true, optional = true }
+
+[features]
+default = ["tree-sitter"]
+# Syntax-aware context via tree-sitter; disable for a minimal text-only build.
+tree-sitter = ["dep:codemmet-tsctx"]
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "codemmet-tsctx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Tree-sitter context provider for codemmet"
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+codemmet-core = { workspace = true }
+tree-sitter = { workspace = true }
+
+# Per-language grammar crates land in M3 behind these features, e.g.:
+# tree-sitter-rust = { version = "...", optional = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true

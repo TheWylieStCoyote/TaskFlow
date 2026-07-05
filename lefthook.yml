@@ -1,0 +1,16 @@
+# Install the hooks once per clone: `lefthook install`
+pre-commit:
+  parallel: true
+  commands:
+    rustfmt:
+      run: cargo fmt --all --check
+    stylua:
+      glob: "*.lua"
+      run: stylua --check {staged_files}
+
+pre-push:
+  commands:
+    clippy:
+      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+    test:
+      run: cargo test --workspace --all-features

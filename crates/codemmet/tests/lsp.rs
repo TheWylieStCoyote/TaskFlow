@@ -1,0 +1,425 @@
+//! End-to-end tests for `codemmet lsp`: the real binary as a child process,
+//! speaking LSP over stdin/stdout with Content-Length framing.
+
+// Expected texts like `${1:i}` are LSP snippet syntax, not format strings.
+#![allow(clippy::literal_string_with_formatting_args)]
+
+use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+
+use serde_json::{Value, json};
+
+/// A unique, existing scratch directory for one test's snippet overrides,
+/// so the developer's real user snippets never leak into assertions.
+fn scratch_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("codemmet-lsp-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir should be creatable");
+    dir
+}
+
+/// A running `codemmet lsp` child plus a framed JSON-RPC client for it.
+struct LspClient {
+    child: Child,
+    stdin: ChildStdin,
+    stdout: BufReader<ChildStdout>,
+    next_id: i64,
+}
+
+impl LspClient {
+    /// Spawn the server and run the initialize handshake.
+    ///
+    /// `encodings` fills `general.positionEncodings`; `extra_options` merges
+    /// into `initializationOptions` next to the scratch `snippets_dir`.
+    fn start(test: &str, encodings: &[&str], extra_options: &Value) -> (Self, Value) {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_codemmet"))
+            .args(["lsp", "--stdio"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("server should spawn");
+        let stdin = child.stdin.take().expect("child stdin should be piped");
+        let stdout = BufReader::new(child.stdout.take().expect("child stdout should be piped"));
+        let mut client = Self {
+            child,
+            stdin,
+            stdout,
+            next_id: 0,
+        };
+
+        let mut options = json!({
+            "snippets_dir": scratch_dir(test).to_str().expect("scratch path is UTF-8"),
+        });
+        if let (Some(base), Some(extra)) = (options.as_object_mut(), extra_options.as_object()) {
+            base.extend(extra.clone());
+        }
+        let initialize_result = client.request(
+            "initialize",
+            &json!({
+                "capabilities": { "general": { "positionEncodings": encodings } },
+                "initializationOptions": options,
+            }),
+        );
+        client.notify("initialized", &json!({}));
+        (client, initialize_result)
+    }
+
+    /// Write one framed message.
+    fn send(&mut self, message: &Value) {
+        let body = message.to_string();
+        write!(self.stdin, "Content-Length: {}\r\n\r\n{body}", body.len())
+            .and_then(|()| self.stdin.flush())
+            .expect("writing to the server should succeed");
+    }
+
+    /// Read one framed message.
+    fn read_message(&mut self) -> Value {
+        let mut content_length: Option<usize> = None;
+        loop {
+            let mut line = String::new();
+            self.stdout
+                .read_line(&mut line)
+                .expect("reading a header line should succeed");
+            let line = line.trim_end();
+            if line.is_empty() {
+                break;
+            }
+            if let Some(value) = line.strip_prefix("Content-Length: ") {
+                content_length = Some(value.parse().expect("Content-Length should be a number"));
+            }
+        }
+        let length = content_length.expect("response should carry Content-Length");
+        let mut body = vec![0u8; length];
+        self.stdout
+            .read_exact(&mut body)
+            .expect("reading the message body should succeed");
+        serde_json::from_slice(&body).expect("message body should be JSON")
+    }
+
+    /// Send a request and return its full response object.
+    fn request_raw(&mut self, method: &str, params: &Value) -> Value {
+        self.next_id += 1;
+        let id = self.next_id;
+        self.send(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }));
+        loop {
+            let message = self.read_message();
+            if message.get("id").and_then(Value::as_i64) == Some(id) {
+                return message;
+            }
+        }
+    }
+
+    /// Send a request that must succeed; returns its `result`.
+    fn request(&mut self, method: &str, params: &Value) -> Value {
+        let mut response = self.request_raw(method, params);
+        assert!(
+            response.get("error").is_none(),
+            "unexpected error response: {response}"
+        );
+        response
+            .as_object_mut()
+            .and_then(|obj| obj.remove("result"))
+            .expect("success response should carry a result")
+    }
+
+    /// Send a request that must fail; returns its `error` object.
+    fn request_err(&mut self, method: &str, params: &Value) -> Value {
+        let mut response = self.request_raw(method, params);
+        response
+            .as_object_mut()
+            .and_then(|obj| obj.remove("error"))
+            .expect("response should carry an error")
+    }
+
+    /// Send a notification.
+    fn notify(&mut self, method: &str, params: &Value) {
+        self.send(&json!({ "jsonrpc": "2.0", "method": method, "params": params }));
+    }
+
+    /// `textDocument/didOpen` with full text.
+    fn open(&mut self, uri: &str, language_id: &str, text: &str) {
+        self.notify(
+            "textDocument/didOpen",
+            &json!({ "textDocument": {
+                "uri": uri, "languageId": language_id, "version": 1, "text": text,
+            }}),
+        );
+    }
+
+    /// `textDocument/completion` at (line, character); returns the result.
+    fn complete(&mut self, uri: &str, line: u32, character: u32) -> Value {
+        self.request(
+            "textDocument/completion",
+            &json!({
+                "textDocument": { "uri": uri },
+                "position": { "line": line, "character": character },
+            }),
+        )
+    }
+
+    /// Shut the server down and assert it exits cleanly.
+    fn shutdown(mut self) {
+        self.request("shutdown", &Value::Null);
+        self.notify("exit", &Value::Null);
+        let status = self.child.wait().expect("server should be waitable");
+        assert_eq!(status.code(), Some(0), "server should exit cleanly");
+    }
+}
+
+/// Items of a completion result that came back as an array.
+fn items(result: &Value) -> &Vec<Value> {
+    result
+        .as_array()
+        .expect("completion result should be an array")
+}
+
+/// The completion items with `kind == Snippet` (15).
+fn snippet_items(result: &Value) -> Vec<&Value> {
+    items(result)
+        .iter()
+        .filter(|item| item["kind"] == json!(15))
+        .collect()
+}
+
+const URI: &str = "file:///test/main.rs";
+const DOC: &str = "fn main() {\n    fori10\n}\n";
+
+#[test]
+fn initialize_advertises_capabilities_and_exits_cleanly() {
+    let (client, result) = LspClient::start("init", &["utf-8", "utf-16"], &json!({}));
+    let capabilities = &result["capabilities"];
+    assert_eq!(capabilities["positionEncoding"], json!("utf-8"));
+    assert_eq!(capabilities["textDocumentSync"], json!(1));
+    assert_eq!(
+        capabilities["completionProvider"]["triggerCharacters"],
+        json!([">", "+", ":", ","])
+    );
+    assert_eq!(
+        capabilities["completionProvider"]["resolveProvider"],
+        json!(false)
+    );
+    assert_eq!(
+        capabilities["executeCommandProvider"]["commands"],
+        json!(["codemmet.expand", "codemmet.wrap"])
+    );
+    assert_eq!(result["serverInfo"]["name"], json!("codemmet"));
+    client.shutdown();
+}
+
+#[test]
+fn completion_expands_fori10_with_exact_text_edit() {
+    let (mut client, _) = LspClient::start("fori10", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let result = client.complete(URI, 1, 10);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    let item = snippets[0];
+    assert_eq!(item["label"], json!("fori10"));
+    assert_eq!(item["insertTextFormat"], json!(2));
+    assert_eq!(item["filterText"], json!("fori10"));
+    assert_eq!(item["sortText"], json!("0fori10"));
+
+    // The text edit replaces exactly `fori10` on line 1.
+    let edit = &item["textEdit"];
+    assert_eq!(
+        edit["range"],
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 10 } })
+    );
+    let new_text = edit["newText"]
+        .as_str()
+        .expect("newText should be a string");
+    assert!(
+        new_text.contains("for ${1:i} in 0..10"),
+        "newText: {new_text}"
+    );
+    // Continuation lines carry the line's base indent.
+    assert_eq!(new_text, "for ${1:i} in 0..10 {\n        $0\n    }");
+
+    // Docs are filled eagerly; the label details show the strip-mode preview.
+    assert_eq!(
+        item["labelDetails"]["description"],
+        json!("for i in 0..10 {")
+    );
+    let docs = item["documentation"]["value"]
+        .as_str()
+        .expect("documentation should be markdown");
+    assert!(docs.starts_with("```rust\n"), "docs: {docs}");
+    client.shutdown();
+}
+
+#[test]
+fn completion_offers_trigger_prefix_discovery() {
+    let (mut client, _) = LspClient::start("prefix", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fo");
+
+    let result = client.complete(URI, 0, 2);
+    let labels: Vec<&str> = items(&result)
+        .iter()
+        .filter(|item| item["kind"] == json!(14))
+        .map(|item| item["label"].as_str().expect("label should be a string"))
+        .collect();
+    assert!(labels.contains(&"fori"), "labels: {labels:?}");
+    assert!(labels.contains(&"fore"), "labels: {labels:?}");
+    client.shutdown();
+}
+
+#[test]
+fn completion_uses_utf16_positions_by_default() {
+    let (mut client, init) = LspClient::start("utf16", &[], &json!({}));
+    assert_eq!(init["capabilities"]["positionEncoding"], json!("utf-16"));
+
+    // `日本` is 2 UTF-16 units but 6 UTF-8 bytes wide.
+    client.open(
+        URI,
+        "rust",
+        "fn main() {\n    let s = \"日本\"; fori10\n}\n",
+    );
+    let result = client.complete(URI, 1, 24);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(
+        snippets[0]["textEdit"]["range"],
+        json!({ "start": { "line": 1, "character": 18 }, "end": { "line": 1, "character": 24 } })
+    );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_expand_returns_range_and_snippet() {
+    let (mut client, _) = LspClient::start("expand", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 10 } }],
+        }),
+    );
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 10 } })
+    );
+    assert_eq!(result["isSnippet"], json!(true));
+    assert_eq!(
+        result["snippet"],
+        json!("for ${1:i} in 0..10 {\n        $0\n    }")
+    );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_expand_without_candidate_is_an_error() {
+    let (mut client, _) = LspClient::start("expand-err", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let error = client.request_err(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 0 } }],
+        }),
+    );
+    let message = error["message"]
+        .as_str()
+        .expect("error should have a message");
+    assert!(message.contains("no abbreviation"), "message: {message}");
+
+    // A render failure surfaces its Display message too.
+    client.open(URI, "rust", "fn main() {\n    forj\n}\n");
+    let error = client.request_err(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 8 } }],
+        }),
+    );
+    let message = error["message"]
+        .as_str()
+        .expect("error should have a message");
+    assert!(message.contains("unknown trigger"), "message: {message}");
+    assert!(
+        message.contains("did you mean `fore`?"),
+        "message: {message}"
+    );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_wrap_splices_selection_into_the_loop() {
+    let (mut client, _) = LspClient::start("wrap", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    println!(\"x\");\n}\n");
+
+    let range =
+        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 1, "character": 18 } });
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.wrap",
+            "arguments": [{ "uri": URI, "range": range, "abbreviation": "fori10" }],
+        }),
+    );
+    assert_eq!(result["range"], range);
+    assert_eq!(result["isSnippet"], json!(true));
+    // The println line sits one level deeper inside the loop, `$0` after it.
+    assert_eq!(
+        result["snippet"],
+        json!("for ${1:i} in 0..10 {\n        println!(\"x\");$0\n    }")
+    );
+    client.shutdown();
+}
+
+#[test]
+fn did_change_full_sync_replaces_the_document() {
+    let (mut client, _) = LspClient::start("didchange", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+    assert_eq!(snippet_items(&client.complete(URI, 1, 10)).len(), 1);
+
+    client.notify(
+        "textDocument/didChange",
+        &json!({
+            "textDocument": { "uri": URI, "version": 2 },
+            "contentChanges": [{ "text": "letq\n" }],
+        }),
+    );
+    let result = client.complete(URI, 0, 4);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(snippets[0]["label"], json!("letq"));
+    client.shutdown();
+}
+
+#[test]
+fn operators_only_gates_bare_words_but_allows_composition() {
+    let (mut client, _) = LspClient::start(
+        "operators-only",
+        &["utf-8"],
+        &json!({ "completion": "operators-only" }),
+    );
+    client.open(URI, "rust", DOC);
+    assert_eq!(client.complete(URI, 1, 10), Value::Null);
+
+    client.notify(
+        "textDocument/didChange",
+        &json!({
+            "textDocument": { "uri": URI, "version": 2 },
+            "contentChanges": [{ "text": "fn:main>pr\n" }],
+        }),
+    );
+    let result = client.complete(URI, 0, 10);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(snippets[0]["label"], json!("fn:main>pr"));
+    client.shutdown();
+}
+
+#[test]
+fn unknown_language_and_unopened_document_complete_to_null() {
+    let (mut client, _) = LspClient::start("unknown-lang", &["utf-8"], &json!({}));
+    client.open(URI, "cobol", DOC);
+    assert_eq!(client.complete(URI, 1, 10), Value::Null);
+    assert_eq!(client.complete("file:///not/open.rs", 0, 0), Value::Null);
+    client.shutdown();
+}

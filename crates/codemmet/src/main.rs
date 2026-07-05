@@ -4,6 +4,8 @@
 //! the LSP server (`lsp`) and `wrap`. See `PLAN.md`.
 
 mod cli;
+mod lsp;
+mod wrap;
 
 use std::process::ExitCode;
 

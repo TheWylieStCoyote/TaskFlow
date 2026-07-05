@@ -22,9 +22,35 @@ Delivered as one binary that is both a CLI (`codemmet expand`, `wrap`, `list`,
 Later phases use tree-sitter for context-aware expansion (e.g. `fn` inside an
 `impl` block gains `&self`) and wrap-with-abbreviation.
 
-**Status: M1 complete** — the core engine and CLI work for Rust and Python
-(75 builtin triggers). The LSP server and Neovim plugin are next. See
+**Status: M2 complete** — the core engine, CLI, LSP server, and Neovim
+plugin work for Rust and Python (75 builtin triggers). Tree-sitter context
+awareness (M3) and the remaining languages (M4) are next. See
 [PLAN.md](PLAN.md) for the full design and milestone roadmap.
+
+## Neovim
+
+Install with lazy.nvim (builds the binary on install):
+
+```lua
+{
+  "<your-github>/codemmet",
+  build = "cargo build --release",
+  ft = { "rust", "python" },
+  opts = {
+    cmd = { "codemmet", "lsp" },              -- or the target/release path
+    keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+  },
+}
+```
+
+Abbreviations appear as snippet completions in any completion setup
+(nvim-cmp, blink.cmp, built-in). `<A-e>` expands the abbreviation before
+the cursor explicitly; select lines and `<leader>cw` wraps them in a
+construct (`fori10`, `if`, `try`, …). `:CodemmetExpand` and
+`:CodemmetWrap` are the command equivalents. Requires Neovim ≥ 0.10.
+
+Any other LSP-capable editor works too: point it at `codemmet lsp` and
+wire `codemmet.expand` / `codemmet.wrap` to keybindings.
 
 ## CLI
 

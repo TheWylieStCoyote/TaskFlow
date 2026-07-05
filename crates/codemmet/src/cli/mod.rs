@@ -7,6 +7,7 @@
 mod check;
 mod expand;
 mod list;
+mod wrap;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -34,15 +35,19 @@ struct Cli {
     command: Command,
 }
 
-/// The available subcommands (M1 scope; `wrap` and `lsp` land in M2).
+/// The available subcommands.
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Expand an abbreviation to code on stdout.
     Expand(expand::ExpandArgs),
+    /// Wrap a selection (stdin) in an expanded abbreviation.
+    Wrap(wrap::WrapArgs),
     /// List every trigger registered for a language.
     List(list::ListArgs),
     /// Validate the user snippet override directory.
     Check,
+    /// Run the LSP server over stdio.
+    Lsp(crate::lsp::LspArgs),
 }
 
 /// Parse arguments and run the selected subcommand.
@@ -51,8 +56,10 @@ pub fn run() -> ExitCode {
     let user_dir = cli.config.or_else(default_user_snippets_dir);
     match cli.command {
         Command::Expand(args) => expand::run(user_dir.as_deref(), &args),
+        Command::Wrap(args) => wrap::run(user_dir.as_deref(), &args),
         Command::List(args) => list::run(user_dir.as_deref(), &args),
         Command::Check => check::run(user_dir.as_deref()),
+        Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), &args),
     }
 }
 

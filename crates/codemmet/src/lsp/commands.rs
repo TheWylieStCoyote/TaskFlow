@@ -4,13 +4,13 @@
 //! `workspace/applyEdit`, because applied edits cannot carry tabstops; the
 //! client deletes the range and hands the snippet to its own expander.
 
-use codemmet_core::context::{ExpansionContext, IndentUnit};
+use codemmet_core::context::{ContextProvider, DocSnapshot, ExpansionContext, IndentUnit};
 use codemmet_core::snippet::render::TabstopMode;
 use lsp_types::{Position, Range, Uri};
 use serde::Deserialize;
 
 use super::line_index::LineIndex;
-use super::{Server, completion, extract};
+use super::{Server, extract};
 
 /// A command failure: the human-readable message for a JSON-RPC error.
 #[derive(Debug)]
@@ -71,8 +71,8 @@ pub struct WrapArgs {
 }
 
 /// Run `codemmet.expand`: expand the abbreviation left of `position`.
-pub fn expand(server: &Server, args: &ExpandArgs) -> Result<serde_json::Value, CommandError> {
-    let doc = server.document(&args.uri)?;
+pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Value, CommandError> {
+    let doc = server.snapshot(&args.uri)?;
     let index = LineIndex::new(&doc.text);
     let offset = index.offset(&doc.text, args.position, server.encoding);
     let (start, candidate) = extract::candidate_at(&doc.text, offset).ok_or_else(|| {
@@ -82,11 +82,15 @@ pub fn expand(server: &Server, args: &ExpandArgs) -> Result<serde_json::Value, C
         )
     })?;
 
-    let lang = server.language(&doc.language_id)?;
-    let ctx = context_for(lang, &doc.text, start, args.formatting_options);
+    let ctx = context_for(
+        server.provider.as_mut(),
+        &doc,
+        offset,
+        args.formatting_options,
+    );
     let expansion = server
         .engine
-        .expand(candidate, lang.profile.id, &ctx, TabstopMode::Keep)
+        .expand(candidate, &doc.language, &ctx, TabstopMode::Keep)
         .map_err(|err| format!("cannot expand `{candidate}`: {err}"))?;
 
     let range = Range {
@@ -97,8 +101,8 @@ pub fn expand(server: &Server, args: &ExpandArgs) -> Result<serde_json::Value, C
 }
 
 /// Run `codemmet.wrap`: wrap the selected text in an expanded abbreviation.
-pub fn wrap(server: &Server, args: &WrapArgs) -> Result<serde_json::Value, CommandError> {
-    let doc = server.document(&args.uri)?;
+pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, CommandError> {
+    let doc = server.snapshot(&args.uri)?;
     let index = LineIndex::new(&doc.text);
     let start = index.offset(&doc.text, args.range.start, server.encoding);
     let end = index
@@ -106,11 +110,15 @@ pub fn wrap(server: &Server, args: &WrapArgs) -> Result<serde_json::Value, Comma
         .max(start);
     let selection = &doc.text[start..end];
 
-    let lang = server.language(&doc.language_id)?;
-    let ctx = context_for(lang, &doc.text, start, args.formatting_options);
+    let ctx = context_for(
+        server.provider.as_mut(),
+        &doc,
+        start,
+        args.formatting_options,
+    );
     let snippet = crate::wrap::wrap(
         &server.engine,
-        lang.profile.id,
+        &doc.language,
         &args.abbreviation,
         selection,
         &ctx,
@@ -120,15 +128,16 @@ pub fn wrap(server: &Server, args: &WrapArgs) -> Result<serde_json::Value, Comma
     Ok(result(args.range, &snippet))
 }
 
-/// Build the expansion context: base indent from the line at `start`,
-/// indent unit from `formatting_options` when given.
+/// Ask the provider for the context at `offset`; the editor's explicit
+/// `formatting_options` override the detected indent unit (scopes and base
+/// indent stay provider-derived).
 fn context_for(
-    lang: &codemmet_core::lang::registry::LanguageSnippets,
-    text: &str,
-    start: usize,
+    provider: &mut dyn ContextProvider,
+    doc: &DocSnapshot,
+    offset: usize,
     formatting_options: Option<FormattingOptions>,
 ) -> ExpansionContext {
-    let mut ctx = completion::expansion_context(lang, text, start);
+    let mut ctx = provider.context_at(doc, offset);
     if let Some(options) = formatting_options {
         ctx.indent_unit = options.indent_unit();
     }

@@ -3,7 +3,7 @@
 
 use codemmet_core::Engine;
 use codemmet_core::abbr::AbbrNode;
-use codemmet_core::context::{ExpansionContext, IndentUnit};
+use codemmet_core::context::{ContextProvider, DocSnapshot, ExpansionContext};
 use codemmet_core::lang::registry::LanguageSnippets;
 use codemmet_core::snippet::render::TabstopMode;
 use lsp_types::{
@@ -18,9 +18,11 @@ use super::{CompletionMode, extract};
 const MAX_PREFIX_ITEMS: usize = 50;
 
 /// Compute completion items for `offset` in `text`, or `None` for a null
-/// response (no candidate, gated off, or unknown language).
+/// response (no candidate, gated off, unknown language, or a cursor inside
+/// a string literal or comment).
 pub fn compute(
     engine: &Engine,
+    provider: &mut dyn ContextProvider,
     text: &str,
     language_id: &str,
     offset: usize,
@@ -35,6 +37,15 @@ pub fn compute(
     if mode == CompletionMode::OperatorsOnly && !extract::has_operator(candidate) {
         return None;
     }
+    let doc = DocSnapshot {
+        language: lang.profile.id.to_owned(),
+        text: text.to_owned(),
+    };
+    let ctx = provider.context_at(&doc, offset);
+    if ctx.in_string_or_comment {
+        // No items at all inside strings/comments, prefix discovery included.
+        return None;
+    }
 
     let mut items = Vec::new();
     let index = LineIndex::new(text);
@@ -42,7 +53,7 @@ pub fn compute(
         start: index.position(text, start, encoding),
         end: index.position(text, offset, encoding),
     };
-    if let Some(item) = expansion_item(engine, lang, text, start, candidate, range) {
+    if let Some(item) = expansion_item(engine, lang, candidate, range, &ctx) {
         items.push(item);
     }
     items.extend(prefix_items(lang, candidate));
@@ -55,22 +66,20 @@ pub fn compute(
 fn expansion_item(
     engine: &Engine,
     lang: &LanguageSnippets,
-    text: &str,
-    start: usize,
     candidate: &str,
     range: Range,
+    ctx: &ExpansionContext,
 ) -> Option<CompletionItem> {
     let ast = codemmet_core::abbr::parse(candidate).ok()?;
     if !ast.0.iter().all(|node| resolves(lang, node)) {
         return None;
     }
 
-    let ctx = expansion_context(lang, text, start);
     let keep = engine
-        .expand(candidate, lang.profile.id, &ctx, TabstopMode::Keep)
+        .expand(candidate, lang.profile.id, ctx, TabstopMode::Keep)
         .ok()?;
     let strip = engine
-        .expand(candidate, lang.profile.id, &ctx, TabstopMode::Strip)
+        .expand(candidate, lang.profile.id, ctx, TabstopMode::Strip)
         .ok()?;
     let first_line = strip.body.lines().next().unwrap_or_default().to_owned();
 
@@ -121,28 +130,11 @@ fn prefix_items(lang: &LanguageSnippets, candidate: &str) -> Vec<CompletionItem>
         .collect()
 }
 
-/// Expansion context for an abbreviation starting at byte `start`:
-/// base indent from the line, indent unit detected or from the profile.
-pub fn expansion_context(lang: &LanguageSnippets, text: &str, start: usize) -> ExpansionContext {
-    let line_start = text[..start.min(text.len())]
-        .rfind('\n')
-        .map_or(0, |i| i + 1);
-    let base_indent: String = text[line_start..]
-        .chars()
-        .take_while(|c| matches!(c, ' ' | '\t'))
-        .collect();
-    let indent_unit = if base_indent.starts_with('\t') {
-        IndentUnit::Tab
-    } else {
-        lang.profile.default_indent.clone()
-    };
-    ExpansionContext::plain(base_indent, indent_unit)
-}
-
 #[cfg(test)]
 // Expected texts like `${1:i}` are LSP snippet syntax, not format strings.
 #[allow(clippy::literal_string_with_formatting_args)]
 mod tests {
+    use codemmet_core::context::{NullContextProvider, WrapSelection};
     use codemmet_core::lang::registry::Registry;
     use lsp_types::Position;
 
@@ -155,12 +147,32 @@ mod tests {
     fn complete(text: &str, language: &str, mode: CompletionMode) -> Option<Vec<CompletionItem>> {
         compute(
             &engine(),
+            &mut NullContextProvider,
             text,
             language,
             text.len(),
             mode,
             PositionEncoding::Utf8,
         )
+    }
+
+    /// A provider that always reports a string/comment position.
+    struct InStringProvider;
+
+    impl ContextProvider for InStringProvider {
+        fn context_at(&mut self, doc: &DocSnapshot, offset: usize) -> ExpansionContext {
+            let mut ctx = NullContextProvider.context_at(doc, offset);
+            ctx.in_string_or_comment = true;
+            ctx
+        }
+
+        fn validate_wrap(
+            &mut self,
+            _doc: &DocSnapshot,
+            range: std::ops::Range<usize>,
+        ) -> WrapSelection {
+            WrapSelection::Valid { range }
+        }
     }
 
     #[test]
@@ -220,6 +232,22 @@ mod tests {
     #[test]
     fn off_mode_yields_none() {
         assert!(complete("fori10", "rust", CompletionMode::Off).is_none());
+    }
+
+    #[test]
+    fn string_or_comment_context_suppresses_all_items() {
+        // `fori10` alone would yield a snippet item and prefix discovery;
+        // a provider reporting a string/comment position suppresses both.
+        let items = compute(
+            &engine(),
+            &mut InStringProvider,
+            "fori10",
+            "rust",
+            6,
+            CompletionMode::Always,
+            PositionEncoding::Utf8,
+        );
+        assert!(items.is_none());
     }
 
     #[test]

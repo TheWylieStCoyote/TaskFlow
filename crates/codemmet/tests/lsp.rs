@@ -190,7 +190,8 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
     let (client, result) = LspClient::start("init", &["utf-8", "utf-16"], &json!({}));
     let capabilities = &result["capabilities"];
     assert_eq!(capabilities["positionEncoding"], json!("utf-8"));
-    assert_eq!(capabilities["textDocumentSync"], json!(1));
+    // 2 = TextDocumentSyncKind::Incremental.
+    assert_eq!(capabilities["textDocumentSync"], json!(2));
     assert_eq!(
         capabilities["completionProvider"]["triggerCharacters"],
         json!([">", "+", ":", ","])
@@ -368,6 +369,166 @@ fn execute_command_wrap_splices_selection_into_the_loop() {
         result["snippet"],
         json!("for ${1:i} in 0..10 {\n        println!(\"x\");$0\n    }")
     );
+    client.shutdown();
+}
+
+/// The `newText` of the only snippet item in a completion result.
+fn snippet_new_text(result: &Value) -> &str {
+    let snippets = snippet_items(result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    snippets[0]["textEdit"]["newText"]
+        .as_str()
+        .expect("newText should be a string")
+}
+
+/// `fn` inside an `impl` body selects the `type-body` variant with `&self`.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn completion_fn_inside_impl_expands_with_self() {
+    let (mut client, _) = LspClient::start("fn-impl", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "impl Point {\n    fn\n}\n");
+
+    let result = client.complete(URI, 1, 6);
+    let new_text = snippet_new_text(&result);
+    assert!(new_text.contains("&self"), "newText: {new_text}");
+
+    // Prefix discovery items still appear alongside the snippet item.
+    let keywords: Vec<&str> = items(&result)
+        .iter()
+        .filter(|item| item["kind"] == json!(14))
+        .map(|item| item["label"].as_str().expect("label should be a string"))
+        .collect();
+    assert!(keywords.contains(&"fn"), "keywords: {keywords:?}");
+    client.shutdown();
+}
+
+/// The same `fn` at the top level stays on the fallback body (no `&self`).
+#[test]
+fn completion_fn_at_top_level_has_no_self() {
+    let (mut client, _) = LspClient::start("fn-top", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn\n");
+
+    let result = client.complete(URI, 0, 2);
+    let new_text = snippet_new_text(&result);
+    assert!(!new_text.contains("&self"), "newText: {new_text}");
+    client.shutdown();
+}
+
+/// A cursor inside a string literal completes to a null result.
+#[test]
+fn completion_inside_string_literal_is_null() {
+    let (mut client, _) = LspClient::start("in-string", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    let s = \"fori10\";\n}\n");
+
+    // Character 19 sits right after `fori10`, inside the quotes.
+    assert_eq!(client.complete(URI, 1, 19), Value::Null);
+    client.shutdown();
+}
+
+/// Python `def` inside a class body selects the `self` variant.
+///
+/// The class body carries statements around the cursor: tree-sitter-python's
+/// error recovery folds a `def` typed directly after `class A:` into the
+/// class *header* (no body yet), where the type-body scope correctly does
+/// not apply.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn completion_def_inside_class_expands_with_self() {
+    let (mut client, _) = LspClient::start("def-class", &["utf-8"], &json!({}));
+    let uri = "file:///test/main.py";
+    client.open(uri, "python", "class A:\n    x = 1\n    def\n    y = 2\n");
+
+    let result = client.complete(uri, 2, 7);
+    let new_text = snippet_new_text(&result);
+    assert!(new_text.contains("(self"), "newText: {new_text}");
+    client.shutdown();
+}
+
+/// `codemmet.expand` goes through the same provider as completion.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_expand_inside_impl_uses_self_variant() {
+    let (mut client, _) = LspClient::start("expand-impl", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "impl Point {\n    fn\n}\n");
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 6 } }],
+        }),
+    );
+    let snippet = result["snippet"]
+        .as_str()
+        .expect("snippet should be a string");
+    assert!(snippet.contains("&self"), "snippet: {snippet}");
+    client.shutdown();
+}
+
+#[test]
+fn did_change_incremental_applies_a_range_edit() {
+    let (mut client, _) = LspClient::start("incremental", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    for\n}\n");
+
+    // Insert `i10` mid-line after `for`, making the line `    fori10`.
+    client.notify(
+        "textDocument/didChange",
+        &json!({
+            "textDocument": { "uri": URI, "version": 2 },
+            "contentChanges": [{
+                "range": {
+                    "start": { "line": 1, "character": 7 },
+                    "end": { "line": 1, "character": 7 },
+                },
+                "text": "i10",
+            }],
+        }),
+    );
+    let result = client.complete(URI, 1, 10);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(snippets[0]["label"], json!("fori10"));
+    let new_text = snippet_new_text(&result);
+    assert!(
+        new_text.contains("for ${1:i} in 0..10"),
+        "newText: {new_text}"
+    );
+    client.shutdown();
+}
+
+#[test]
+fn did_change_applies_multi_change_batches_in_order() {
+    let (mut client, _) = LspClient::start("multi-change", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "pr\n");
+
+    // Ranges of later changes refer to the text after the earlier ones:
+    // `pr` → `fori` → `fori10`.
+    client.notify(
+        "textDocument/didChange",
+        &json!({
+            "textDocument": { "uri": URI, "version": 2 },
+            "contentChanges": [
+                {
+                    "range": {
+                        "start": { "line": 0, "character": 0 },
+                        "end": { "line": 0, "character": 2 },
+                    },
+                    "text": "fori",
+                },
+                {
+                    "range": {
+                        "start": { "line": 0, "character": 4 },
+                        "end": { "line": 0, "character": 4 },
+                    },
+                    "text": "10",
+                },
+            ],
+        }),
+    );
+    let result = client.complete(URI, 0, 6);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(snippets[0]["label"], json!("fori10"));
     client.shutdown();
 }
 

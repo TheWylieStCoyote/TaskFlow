@@ -2,8 +2,10 @@
 //!
 //! Architecture per `PLAN.md`: no async runtime — expansion is pure CPU
 //! work, so one `for msg in &connection.receiver` loop suffices. Documents
-//! use full-text sync; positions cross the wire in UTF-8 when the client
-//! offers it (see [`line_index`]), UTF-16 otherwise.
+//! use incremental sync; positions cross the wire in UTF-8 when the client
+//! offers it (see [`line_index`]), UTF-16 otherwise. Syntax awareness comes
+//! from a [`ContextProvider`]: tree-sitter-backed under the default
+//! `tree-sitter` feature, the scope-blind null provider otherwise.
 
 mod commands;
 mod completion;
@@ -15,7 +17,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use codemmet_core::Engine;
+use codemmet_core::context::{ContextProvider, DocSnapshot};
 use codemmet_core::lang::registry::{LanguageSnippets, Registry};
+#[cfg(feature = "tree-sitter")]
+use codemmet_tsctx::TreeSitterProvider;
 use lsp_server::{Connection, ErrorCode, Message, Request, Response};
 use lsp_types::{
     CompletionOptions, CompletionParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
@@ -58,7 +63,7 @@ struct InitOptions {
     completion: Option<String>,
 }
 
-/// One open document, synced with full-text replacement.
+/// One open document, kept current via incremental sync.
 #[derive(Debug)]
 struct Document {
     /// Full document text.
@@ -79,6 +84,22 @@ struct Server {
     completion_mode: CompletionMode,
     /// The negotiated position encoding.
     encoding: PositionEncoding,
+    /// Syntax awareness for expansion points (`context_at` needs `&mut`
+    /// for its tree cache, so the server owns the provider mutably).
+    provider: Box<dyn ContextProvider>,
+}
+
+/// The best context provider this build carries: tree-sitter under the
+/// default `tree-sitter` feature, the scope-blind null provider otherwise.
+fn default_provider() -> Box<dyn ContextProvider> {
+    #[cfg(feature = "tree-sitter")]
+    {
+        Box::new(TreeSitterProvider::new())
+    }
+    #[cfg(not(feature = "tree-sitter"))]
+    {
+        Box::new(codemmet_core::context::NullContextProvider)
+    }
 }
 
 /// Run `codemmet lsp` over stdio until the client disconnects or exits.
@@ -126,6 +147,7 @@ fn serve(default_user_dir: Option<&Path>) -> anyhow::Result<()> {
         docs: HashMap::new(),
         completion_mode: options.completion_mode(),
         encoding,
+        provider: default_provider(),
     };
 
     for msg in &connection.receiver {
@@ -181,7 +203,9 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
             PositionEncoding::Utf8 => PositionEncodingKind::UTF8,
             PositionEncoding::Utf16 => PositionEncodingKind::UTF16,
         }),
-        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+        text_document_sync: Some(TextDocumentSyncCapability::Kind(
+            TextDocumentSyncKind::INCREMENTAL,
+        )),
         completion_provider: Some(CompletionOptions {
             resolve_provider: Some(false),
             trigger_characters: Some(
@@ -202,7 +226,7 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
 
 impl Server {
     /// Dispatch one client request to its handler.
-    fn handle_request(&self, request: Request) -> Response {
+    fn handle_request(&mut self, request: Request) -> Response {
         match request.method.as_str() {
             "textDocument/completion" => self.handle_completion(request),
             "workspace/executeCommand" => self.handle_execute_command(request),
@@ -215,7 +239,7 @@ impl Server {
     }
 
     /// `textDocument/completion`: items for the abbreviation at the cursor.
-    fn handle_completion(&self, request: Request) -> Response {
+    fn handle_completion(&mut self, request: Request) -> Response {
         let params: CompletionParams = match serde_json::from_value(request.params) {
             Ok(params) => params,
             Err(err) => return invalid_params(request.id, &err),
@@ -230,6 +254,7 @@ impl Server {
         let offset = index.offset(&doc.text, position.position, self.encoding);
         let items = completion::compute(
             &self.engine,
+            self.provider.as_mut(),
             &doc.text,
             &doc.language_id,
             offset,
@@ -243,7 +268,7 @@ impl Server {
     }
 
     /// `workspace/executeCommand`: `codemmet.expand` / `codemmet.wrap`.
-    fn handle_execute_command(&self, request: Request) -> Response {
+    fn handle_execute_command(&mut self, request: Request) -> Response {
         let params: ExecuteCommandParams = match serde_json::from_value(request.params) {
             Ok(params) => params,
             Err(err) => return invalid_params(request.id, &err),
@@ -283,21 +308,32 @@ impl Server {
                 );
             }
             "textDocument/didChange" => {
-                let Ok(mut params) = serde_json::from_value::<DidChangeTextDocumentParams>(params)
+                let Ok(params) = serde_json::from_value::<DidChangeTextDocumentParams>(params)
                 else {
                     return;
                 };
                 let Some(doc) = self.docs.get_mut(&params.text_document.uri) else {
                     return;
                 };
-                // Full sync: the last change carries the whole new text.
                 // Stale (out-of-order) versions are dropped.
-                if params.text_document.version >= doc.version
-                    && let Some(change) = params.content_changes.pop()
-                {
-                    doc.text = change.text;
-                    doc.version = params.text_document.version;
+                if params.text_document.version < doc.version {
+                    return;
                 }
+                for change in params.content_changes {
+                    if let Some(range) = change.range {
+                        // Each range refers to the document as already
+                        // modified by the preceding changes in this batch,
+                        // so re-index before every splice.
+                        let index = LineIndex::new(&doc.text);
+                        let start = index.offset(&doc.text, range.start, self.encoding);
+                        let end = index.offset(&doc.text, range.end, self.encoding).max(start);
+                        doc.text.replace_range(start..end, &change.text);
+                    } else {
+                        // A rangeless change replaces the whole document.
+                        doc.text = change.text;
+                    }
+                }
+                doc.version = params.text_document.version;
             }
             "textDocument/didClose" => {
                 if let Ok(params) = serde_json::from_value::<DidCloseTextDocumentParams>(params) {
@@ -321,6 +357,17 @@ impl Server {
             .registry()
             .language(language_id)
             .ok_or_else(|| CommandError(format!("unsupported language `{language_id}`")))
+    }
+
+    /// An owned snapshot of the document at `uri` for the context provider,
+    /// carrying the canonical profile id (not the raw client `languageId`).
+    fn snapshot(&self, uri: &Uri) -> Result<DocSnapshot, CommandError> {
+        let doc = self.document(uri)?;
+        let lang = self.language(&doc.language_id)?;
+        Ok(DocSnapshot {
+            language: lang.profile.id.to_owned(),
+            text: doc.text.clone(),
+        })
     }
 }
 

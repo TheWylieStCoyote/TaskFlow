@@ -1,0 +1,12 @@
+# Builtin Python snippet pack. Placeholder — the full pack lands with M1.
+
+[meta]
+language = "python"
+
+[snippets.def]
+description = "function definition"
+params = [{ name = "name", kind = "ident", default = "func" }]
+body = '''
+def ${name}($1):
+	${child}
+'''

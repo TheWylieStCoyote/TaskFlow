@@ -1,0 +1,13 @@
+# Builtin Rust snippet pack. Placeholder — the full pack lands with M1.
+
+[meta]
+language = "rust"
+
+[snippets.fn]
+description = "function definition"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+fn ${name}($1) {
+	${child}
+}
+'''

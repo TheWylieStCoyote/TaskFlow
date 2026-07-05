@@ -1,4 +1,13 @@
-# Builtin Rust snippet pack. Placeholder — the full pack lands with M1.
+# Builtin Rust snippet pack.
+#
+# Intentional trigger-prefix overlaps (longest trigger wins during resolution):
+#   let / letm / letq   — glued idents starting with "m"/"q" (e.g. `letmax`) resolve
+#                         to letm/letq, not `let` with var "max". Use `let:max`.
+#   impl / implt        — `implt` wins for the exact word; `impl<ident>` glue still
+#                         works for anything not starting with "t".
+#   match / matchres    — `matchres` wins for the exact word; match on a variable
+#                         literally named "res" needs `match:res`.
+#   if / ifl, el / elif, pr / prd — safe: the shorter trigger has no ident param.
 
 [meta]
 language = "rust"
@@ -10,4 +19,303 @@ body = '''
 fn ${name}($1) {
 	${child}
 }
+'''
+
+[snippets.rfn]
+description = "function returning Result"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+fn ${name}($1) -> Result<${2:()}, ${3:Box<dyn std::error::Error>}> {
+	${child}
+}
+'''
+
+[snippets.afn]
+description = "async function definition"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+async fn ${name}($1) {
+	${child}
+}
+'''
+
+[snippets.main]
+description = "main entry point"
+body = '''
+fn main() {
+	${child}
+}
+'''
+
+[snippets.fori]
+description = "for loop over integer range"
+params = [{ name = "var", kind = "ident", default = "i" }, { name = "end", kind = "int", default = "10" }]
+body = '''
+for ${var} in 0..${end} {
+	${child}
+}
+'''
+
+[snippets.fore]
+description = "for-each loop over an iterator"
+params = [{ name = "var", kind = "ident", default = "item" }]
+body = '''
+for ${var} in ${1:iterable} {
+	${child}
+}
+'''
+
+[snippets.while]
+description = "while loop"
+body = '''
+while ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.wl]
+description = "while let loop"
+body = '''
+while let ${1:Some(value)} = ${2:expr} {
+	${child}
+}
+'''
+
+[snippets.loop]
+description = "infinite loop"
+body = '''
+loop {
+	${child}
+}
+'''
+
+[snippets.if]
+description = "if block"
+body = '''
+if ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.ifl]
+description = "if let block"
+body = '''
+if let ${1:Some(value)} = ${2:expr} {
+	${child}
+}
+'''
+
+[snippets.el]
+description = "else block"
+body = '''
+else {
+	${child}
+}
+'''
+
+[snippets.elif]
+description = "else-if block"
+body = '''
+else if ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.match]
+description = "match expression"
+params = [{ name = "expr", kind = "ident", default = "expr" }]
+body = '''
+match ${expr} {
+	${child}
+}
+'''
+
+[snippets.matchres]
+description = "match on a Result with Ok/Err arms"
+body = '''
+match ${1:expr} {
+	Ok(${2:value}) => $3,
+	Err(${4:err}) => $0,
+}
+'''
+
+[snippets.arm]
+description = "match arm"
+body = '''
+${1:pattern} => $0,
+'''
+
+[snippets.struct]
+description = "struct definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+body = '''
+struct ${name} {
+	${child}
+}
+'''
+
+[snippets.enum]
+description = "enum definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+body = '''
+enum ${name} {
+	${child}
+}
+'''
+
+[snippets.trait]
+description = "trait definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+body = '''
+trait ${name} {
+	${child}
+}
+'''
+
+[snippets.impl]
+description = "inherent impl block"
+params = [{ name = "name", kind = "ident", default = "Type" }]
+body = '''
+impl ${name} {
+	${child}
+}
+'''
+
+[snippets.implt]
+description = "trait impl block (impl Trait for Type)"
+body = '''
+impl ${1:Trait} for ${2:Type} {
+	${child}
+}
+'''
+
+[snippets.mod]
+description = "inline module"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+mod ${name} {
+	${child}
+}
+'''
+
+[snippets.derive]
+description = "derive attribute"
+body = '''
+#[derive(${1:Debug, Clone})]$0
+'''
+
+[snippets.let]
+description = "let binding"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+let ${name} = $0;
+'''
+
+[snippets.letm]
+description = "let mut binding"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+let mut ${name} = $0;
+'''
+
+[snippets.letq]
+description = "let binding from a fallible expression with ?"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+let ${name} = $0?;
+'''
+
+[snippets.const]
+description = "const item"
+params = [{ name = "name", kind = "ident", default = "NAME" }]
+body = '''
+const ${name}: ${1:Type} = $0;
+'''
+
+[snippets.ret]
+description = "return statement"
+body = '''
+return $0;
+'''
+
+[snippets.pr]
+description = "println! to stdout"
+body = '''
+println!("$0");
+'''
+
+[snippets.prd]
+description = "debug-print a value with {:?}"
+body = '''
+println!("{:?}", $0);
+'''
+
+[snippets.epr]
+description = "eprintln! to stderr"
+body = '''
+eprintln!("$0");
+'''
+
+[snippets.use]
+description = "use declaration"
+params = [{ name = "path", default = "path::to::item" }]
+body = '''
+use ${path};$0
+'''
+
+[snippets.doc]
+description = "doc comment line"
+body = '''
+/// $0
+'''
+
+[snippets.todo]
+description = "TODO comment"
+body = '''
+// TODO: $0
+'''
+
+[snippets.cl]
+description = "closure"
+body = '''
+|${1:args}| $0
+'''
+
+[snippets.vec]
+description = "vec! literal"
+body = '''
+vec![$0]
+'''
+
+[snippets.hmap]
+description = "HashMap binding"
+body = '''
+let mut ${1:map} = std::collections::HashMap::new();$0
+'''
+
+[snippets.test]
+description = "test function"
+params = [{ name = "name", kind = "ident", default = "it_works" }]
+body = '''
+#[test]
+fn ${name}() {
+	${child}
+}
+'''
+
+[snippets.tmod]
+description = "test module with cfg(test)"
+body = '''
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	${child}
+}
+'''
+
+[snippets.aeq]
+description = "assert_eq! statement"
+body = '''
+assert_eq!(${1:left}, $0);
 '''

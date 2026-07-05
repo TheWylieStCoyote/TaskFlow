@@ -92,6 +92,16 @@ impl SnippetSet {
         todo!("M1: validate bodies via parse_template, merge per-trigger")
     }
 
+    /// Build a set directly from compiled snippets (fixtures, tests).
+    pub fn from_compiled(snippets: impl IntoIterator<Item = CompiledSnippet>) -> Self {
+        Self {
+            snippets: snippets
+                .into_iter()
+                .map(|s| (s.trigger.clone(), s))
+                .collect(),
+        }
+    }
+
     /// Look up an exact trigger.
     pub fn get(&self, trigger: &str) -> Option<&CompiledSnippet> {
         self.snippets.get(trigger)

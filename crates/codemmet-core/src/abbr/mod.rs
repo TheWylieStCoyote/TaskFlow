@@ -37,7 +37,7 @@ pub struct AbbrNode {
     /// Repetition count from `*n`; `1` when absent.
     pub repeat: u32,
     /// Nodes attached with `>`.
-    pub children: Vec<AbbrNode>,
+    pub children: Vec<Self>,
 }
 
 /// A parse failure with a byte-offset span into the abbreviation text.

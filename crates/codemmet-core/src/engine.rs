@@ -1,10 +1,10 @@
 //! The façade tying parser, registry, and renderer together.
 
 use crate::abbr::ParseError;
-use crate::config::loader::{default_user_snippets_dir, ConfigError};
+use crate::config::loader::{ConfigError, default_user_snippets_dir};
 use crate::context::ExpansionContext;
 use crate::lang::registry::Registry;
-use crate::snippet::render::{render, Expansion, RenderError, TabstopMode};
+use crate::snippet::render::{Expansion, RenderError, TabstopMode, render};
 
 /// Why an expansion request failed.
 #[derive(Debug, thiserror::Error)]

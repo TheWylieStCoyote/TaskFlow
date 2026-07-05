@@ -299,3 +299,13 @@ fn every_builtin_trigger_expands() {
         }
     }
 }
+
+// ===== Climb-up operator (`^`) =====
+
+golden!(
+    rust_climb_fn_main_fori10_pr_ret,
+    "rust",
+    "fn:main>fori10>pr^ret"
+);
+golden!(rust_climb_double, "rust", "main>if>pr^^ret");
+golden!(py_climb, "python", "def:run>if>pr^ret");

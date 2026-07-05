@@ -22,10 +22,13 @@ Delivered as one binary that is both a CLI (`codemmet expand`, `wrap`, `list`,
 Later phases use tree-sitter for context-aware expansion (e.g. `fn` inside an
 `impl` block gains `&self`) and wrap-with-abbreviation.
 
-**Status: M2 complete** — the core engine, CLI, LSP server, and Neovim
-plugin work for Rust and Python (75 builtin triggers). Tree-sitter context
-awareness (M3) and the remaining languages (M4) are next. See
-[PLAN.md](PLAN.md) for the full design and milestone roadmap.
+**Status: all planned milestones (M0–M4) complete.** Supported languages:
+Rust, Python, C, C++ (inherits C), JavaScript, TypeScript (inherits
+JavaScript), and Go — ~250 builtin triggers. Tree-sitter powers
+context-aware expansion (`fn` inside an `impl` block expands with `&self`,
+`def` in a Python class gets `self`), completion suppression inside strings
+and comments, and statement-boundary snapping for wrap selections. See
+[PLAN.md](PLAN.md) for the design document.
 
 ## Neovim
 
@@ -35,7 +38,7 @@ Install with lazy.nvim (builds the binary on install):
 {
   "<your-github>/codemmet",
   build = "cargo build --release",
-  ft = { "rust", "python" },
+  ft = { "rust", "python", "c", "cpp", "javascript", "typescript", "go" },
   opts = {
     cmd = { "codemmet", "lsp" },              -- or the target/release path
     keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
@@ -77,6 +80,7 @@ override or `disabled = true` any builtin trigger.
 | `+`      | sibling statement    | `if+el`                  |
 | `*`      | repeat               | `match:x>arm*3`          |
 | `()`     | group                | `(fori10>pr)+ret`        |
+| `^`      | climb up a level     | `fn:main>fori10>pr^ret`  |
 
 ## Development
 

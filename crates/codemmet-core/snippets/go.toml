@@ -1,0 +1,322 @@
+# Builtin Go snippet pack.
+#
+# Intentional trigger-prefix overlaps (longest trigger wins during resolution):
+#   fn / fnr            — `fnr` wins for the exact word; a plain fn whose name
+#                         starts with "r" (e.g. `fnrun`) resolves to fnr, not
+#                         `fn` with name "run". Use `fn:run`.
+#   for / forc / fore / fori / forr
+#                       — the longer triggers win for their exact words; bare
+#                         `for` has no params so nothing gluey can collide.
+#   if / iface / iferr  — `iface`/`iferr` win for their exact words; `if` has
+#                         no params so nothing gluey can collide.
+#   pr / prf / prd      — safe: `pr` has no params.
+#   el / elif           — safe: `el` has no params.
+# Go has no while: use `forc` (condition-only for) or bare `for`. `let` is
+# the cross-language name for the `:=` short variable declaration. Note the
+# composed `if+el` output needs the `else` joined onto the closing brace by
+# hand — Go's semicolon insertion forbids `else` on its own line, but the
+# snippet engine composes siblings line-wise.
+
+[meta]
+language = "go"
+
+[snippets.fn]
+description = "function definition"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+func ${name}($1) {
+	${child}
+}
+'''
+
+[snippets.fnr]
+description = "function with return type"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+func ${name}($1) ${2:error} {
+	${child}
+}
+'''
+
+[snippets.meth]
+description = "method with receiver"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+func (${1:r} ${2:*Type}) ${name}($3) {
+	${child}
+}
+'''
+
+[snippets.main]
+description = "main entry point"
+scope = "fn-body"
+body = '''
+func main() {
+	${child}
+}
+'''
+
+[snippets.pkg]
+description = "package clause"
+params = [{ name = "name", kind = "ident", default = "main" }]
+body = '''
+package ${name}$0
+'''
+
+[snippets.imp]
+description = "import block"
+body = '''
+import (
+	"${1:fmt}"
+)$0
+'''
+
+[snippets.fori]
+description = "for loop over integer range"
+params = [{ name = "var", kind = "ident", default = "i" }, { name = "end", kind = "int", default = "10" }]
+scope = "loop"
+body = '''
+for ${var} := 0; ${var} < ${end}; ${var}++ {
+	${child}
+}
+'''
+
+[snippets.fore]
+description = "range loop over values"
+params = [{ name = "var", kind = "ident", default = "item" }]
+scope = "loop"
+body = '''
+for _, ${var} := range ${1:items} {
+	${child}
+}
+'''
+
+[snippets.forr]
+description = "range loop with index and value"
+scope = "loop"
+body = '''
+for ${1:i}, ${2:v} := range ${3:items} {
+	${child}
+}
+'''
+
+[snippets.for]
+description = "bare (infinite) for loop"
+scope = "loop"
+body = '''
+for {
+	${child}
+}
+'''
+
+[snippets.forc]
+description = "for loop with condition (Go's while)"
+scope = "loop"
+body = '''
+for ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.if]
+description = "if block"
+scope = "conditional"
+body = '''
+if ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.el]
+description = "else block (join onto the previous `}` by hand)"
+scope = "conditional"
+body = '''
+else {
+	${child}
+}
+'''
+
+[snippets.elif]
+description = "else-if block (join onto the previous `}` by hand)"
+scope = "conditional"
+body = '''
+else if ${1:condition} {
+	${child}
+}
+'''
+
+[snippets.iferr]
+description = "if err != nil guard returning the error"
+scope = "conditional"
+body = '''
+if err != nil {
+	return ${1:err}
+}
+$0
+'''
+
+[snippets.switch]
+description = "switch statement (cases at switch level, per gofmt)"
+params = [{ name = "expr", kind = "ident", default = "value" }]
+scope = "match-body"
+body = '''
+switch ${expr} {
+${child}
+}
+'''
+
+[snippets.case]
+description = "case clause"
+body = '''
+case ${1:value}:
+	${child}
+'''
+
+[snippets.default]
+description = "default clause"
+body = '''
+default:
+	${child}
+'''
+
+[snippets.sel]
+description = "select statement (cases at select level, per gofmt)"
+scope = "match-body"
+body = '''
+select {
+${child}
+}
+'''
+
+[snippets.struct]
+description = "struct type definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+type ${name} struct {
+	${child}
+}
+'''
+
+[snippets.iface]
+description = "interface type definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+type ${name} interface {
+	${child}
+}
+'''
+
+[snippets.let]
+description = "short variable declaration (:=)"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+${name} := $0
+'''
+
+[snippets.const]
+description = "const declaration"
+params = [{ name = "name", kind = "ident", default = "name" }]
+body = '''
+const ${name} = $0
+'''
+
+[snippets.ret]
+description = "return statement"
+body = '''
+return $0
+'''
+
+[snippets.pr]
+description = "fmt.Println call"
+body = '''
+fmt.Println($0)
+'''
+
+[snippets.prf]
+description = "fmt.Printf with a format string and arguments"
+params = [
+  { name = "fmt", default = '%v\n' },
+  { name = "args", default = "value" },
+]
+body = '''
+fmt.Printf("${fmt}", ${args})$0
+'''
+
+[snippets.prd]
+description = "debug-print a value with %+v"
+body = '''
+fmt.Printf("%+v\n", $0)
+'''
+
+[snippets.test]
+description = "test function (testing package)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "fn-body"
+body = '''
+func Test${name}(t *testing.T) {
+	${child}
+}
+'''
+
+[snippets.aeq]
+description = "equality check reporting through t.Errorf"
+params = [
+  { name = "got", kind = "ident", default = "got" },
+  { name = "want", default = "want" },
+]
+body = '''
+if ${got} != ${want} {
+	t.Errorf("got %v, want %v", ${got}, ${want})
+}
+$0
+'''
+
+[snippets.go]
+description = "goroutine over an anonymous function"
+scope = "fn-body"
+body = '''
+go func() {
+	${child}
+}()
+'''
+
+[snippets.defer]
+description = "defer statement"
+body = '''
+defer $0
+'''
+
+[snippets.chan]
+description = "channel binding"
+body = '''
+${1:ch} := make(chan ${2:int})$0
+'''
+
+[snippets.map]
+description = "map binding"
+body = '''
+${1:m} := make(map[${2:string}]${3:int})$0
+'''
+
+[snippets.err]
+description = "errors.New expression"
+body = '''
+errors.New("$0")
+'''
+
+[snippets.doc]
+description = "doc comment line"
+body = '''
+// $0
+'''
+
+[snippets.todo]
+description = "TODO comment"
+body = '''
+// TODO: $0
+'''

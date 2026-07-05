@@ -1,0 +1,104 @@
+# Builtin TypeScript snippet pack. Inherits the JavaScript pack (profile
+# `inherits = "javascript"`): every JS trigger (arrow, class, fore, imp,
+# try, ...) is available here; this pack adds TS-only constructs and
+# overrides `fn`/`afn` with typed signatures.
+# Overrides replace the WHOLE snippet — variants are NOT merged — so the
+# typed `fn`/`afn` overrides re-declare their type-body method variants.
+#
+# Intentional trigger-prefix overlaps (longest trigger wins during resolution):
+#   fn / fng            — `fng` wins for the exact word; a plain fn whose name
+#                         starts with "g" needs `fn:g...`.
+#   imp / impd / impt   — `impd`/`impt` win for their exact words; `imp` binds
+#                         explicitly only (kind = "str", inherited note).
+#   int / typ / enum    — shadow prefixes of real keywords (`interface`,
+#                         `type`, `enum`); completion is offer-only so a
+#                         half-typed keyword merely offers a nonsense item.
+
+[meta]
+language = "typescript"
+
+[snippets.int]
+description = "interface definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+interface ${name} {
+	${child}
+}
+'''
+
+[snippets.typ]
+description = "type alias"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+body = '''
+type ${name} = $0;
+'''
+
+[snippets.enum]
+description = "enum definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+enum ${name} {
+	${child}
+}
+'''
+
+[snippets.fn]
+description = "typed function declaration (overrides JS)"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+function ${name}($1): ${2:void} {
+	${child}
+}
+'''
+
+[[snippets.fn.variants]]
+context = "type-body"
+body = '''
+${name}($1): ${2:void} {
+	${child}
+}
+'''
+
+[snippets.afn]
+description = "typed async function declaration (overrides JS)"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+async function ${name}($1): Promise<${2:void}> {
+	${child}
+}
+'''
+
+[[snippets.afn.variants]]
+context = "type-body"
+body = '''
+async ${name}($1): Promise<${2:void}> {
+	${child}
+}
+'''
+
+[snippets.fng]
+description = "generic function declaration"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+function ${name}<${1:T}>($2): ${3:T} {
+	${child}
+}
+'''
+
+[snippets.asrt]
+description = "as-type assertion"
+body = '''
+${1:value} as $0
+'''
+
+[snippets.impt]
+description = "type-only import"
+params = [{ name = "module", default = "module" }]
+body = '''
+import type { $1 } from "${module}";$0
+'''

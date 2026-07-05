@@ -30,16 +30,39 @@ impl Registry {
 
     /// Load builtin packs, then merge `<dir>/<lang>.toml` user overrides.
     ///
+    /// For a profile with `inherits = Some(parent)` the source order is:
+    /// parent builtin pack, own builtin pack, own user file — so the child's
+    /// builtins override the parent's, and user overrides win over both.
+    /// Only the parent's *builtin* pack is inherited: user files of the
+    /// parent language do NOT affect the child (a user `c.toml` never leaks
+    /// into `cpp`; override `cpp.toml` directly instead).
+    ///
     /// A missing directory or missing per-language file is not an error;
     /// an unreadable or invalid file is.
     pub fn with_user_dir(dir: Option<&Path>) -> Result<Self, ConfigError> {
         let mut languages = HashMap::new();
         for profile in crate::lang::profile::PROFILES {
+            let mut sources: Vec<(String, SnippetFile)> = Vec::new();
+
+            if let Some(parent_id) = profile.inherits {
+                let parent =
+                    crate::lang::profile::find(parent_id).ok_or_else(|| ConfigError::Invalid {
+                        trigger: "meta".to_owned(),
+                        origin: format!("builtin:{}", profile.id),
+                        message: format!("profile inherits unknown language `{parent_id}`"),
+                    })?;
+                let parent_origin = format!("builtin:{}", parent.id);
+                let parent_file = parse_snippet_file(&parent_origin, parent.snippet_source)?;
+                // The parent pack declares the PARENT's language id.
+                check_language(&parent_origin, &parent_file, parent.id)?;
+                sources.push((parent_origin, parent_file));
+            }
+
             let builtin_origin = format!("builtin:{}", profile.id);
             let builtin = parse_snippet_file(&builtin_origin, profile.snippet_source)?;
             check_language(&builtin_origin, &builtin, profile.id)?;
 
-            let mut sources: Vec<(String, SnippetFile)> = vec![(builtin_origin, builtin)];
+            sources.push((builtin_origin, builtin));
             if let Some(dir) = dir {
                 let path = dir.join(format!("{}.toml", profile.id));
                 match std::fs::read_to_string(&path) {
@@ -107,10 +130,13 @@ mod tests {
     }
 
     #[test]
-    fn with_builtins_loads_rust_and_python() {
+    fn with_builtins_loads_every_profile() {
         let registry = Registry::with_builtins().expect("builtin packs should load");
-        assert_eq!(registry.languages().count(), 2);
-        for key in ["rust", "rs", "python", "py"] {
+        assert_eq!(
+            registry.languages().count(),
+            crate::lang::profile::PROFILES.len()
+        );
+        for key in ["rust", "rs", "python", "py", "c", "hpp", "jsx", "mts", "go"] {
             let lang = registry.language(key);
             assert!(lang.is_some(), "language({key}) should resolve");
         }
@@ -118,6 +144,51 @@ mod tests {
         assert_eq!(rust.profile.id, "rust");
         assert!(rust.set.get("fori").is_some());
         assert!(registry.language("cobol").is_none());
+    }
+
+    #[test]
+    fn child_inherits_parent_builtins_and_overrides_them() {
+        let registry = Registry::with_builtins().expect("builtin packs should load");
+        let cpp = &registry.language("cpp").expect("cpp should resolve").set;
+        // Inherited from C untouched.
+        assert!(cpp.get("fori").is_some(), "cpp should inherit C's fori");
+        // Added by the C++ pack.
+        assert!(cpp.get("class").is_some(), "cpp should define class");
+        // Overridden: C++ replaces C's typedef-struct with a plain struct.
+        let cpp_struct = cpp.get("struct").expect("cpp struct should resolve");
+        assert!(
+            !format!("{:?}", cpp_struct.template).contains("typedef struct"),
+            "cpp struct should be the C++ override, not C's typedef form"
+        );
+        // The parent language itself is unaffected by the child pack.
+        let c = &registry.language("c").expect("c should resolve").set;
+        assert!(c.get("class").is_none(), "C must not gain cpp's class");
+    }
+
+    #[test]
+    fn parent_user_files_do_not_affect_child() {
+        let dir = scratch_dir("parent-user");
+        std::fs::write(
+            dir.join("c.toml"),
+            concat!(
+                "[meta]\nlanguage = \"c\"\n",
+                "[snippets.userc]\ndescription = \"user C only\"\nbody = \"user_c();$0\"\n",
+                "[snippets.fori]\ndisabled = true\n",
+            ),
+        )
+        .expect("user pack should be writable");
+
+        let registry = Registry::with_user_dir(Some(&dir)).expect("user dir should load");
+        let c = &registry.language("c").expect("c should resolve").set;
+        assert!(c.get("userc").is_some());
+        assert!(c.get("fori").is_none(), "user file disables C's fori");
+        // cpp inherits only the C *builtin* pack: the user's c.toml neither
+        // adds `userc` to cpp nor disables cpp's inherited `fori`.
+        let cpp = &registry.language("cpp").expect("cpp should resolve").set;
+        assert!(cpp.get("userc").is_none(), "user c.toml must not leak");
+        assert!(cpp.get("fori").is_some(), "cpp keeps the builtin fori");
+
+        std::fs::remove_dir_all(&dir).expect("scratch dir should be removable");
     }
 
     #[test]
@@ -188,6 +259,9 @@ mod tests {
         let dir = std::env::temp_dir().join("codemmet-registry-does-not-exist");
         let registry =
             Registry::with_user_dir(Some(&dir)).expect("missing dir should not be an error");
-        assert_eq!(registry.languages().count(), 2);
+        assert_eq!(
+            registry.languages().count(),
+            crate::lang::profile::PROFILES.len()
+        );
     }
 }

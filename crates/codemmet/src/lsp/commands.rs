@@ -4,7 +4,9 @@
 //! `workspace/applyEdit`, because applied edits cannot carry tabstops; the
 //! client deletes the range and hands the snippet to its own expander.
 
-use codemmet_core::context::{ContextProvider, DocSnapshot, ExpansionContext, IndentUnit};
+use codemmet_core::context::{
+    ContextProvider, DocSnapshot, ExpansionContext, IndentUnit, WrapSelection,
+};
 use codemmet_core::snippet::render::TabstopMode;
 use lsp_types::{Position, Range, Uri};
 use serde::Deserialize;
@@ -101,6 +103,11 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
 }
 
 /// Run `codemmet.wrap`: wrap the selected text in an expanded abbreviation.
+///
+/// The provider validates the selection first: it may snap the range
+/// outward to statement/line boundaries (the *snapped* range is wrapped
+/// and returned, so the client replaces the right region) or reject it
+/// (cross-scope selections), which surfaces as a JSON-RPC error.
 pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, CommandError> {
     let doc = server.snapshot(&args.uri)?;
     let index = LineIndex::new(&doc.text);
@@ -108,12 +115,18 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
     let end = index
         .offset(&doc.text, args.range.end, server.encoding)
         .max(start);
-    let selection = &doc.text[start..end];
+    let snapped = match server.provider.validate_wrap(&doc, start..end) {
+        WrapSelection::Valid { range } => range,
+        WrapSelection::Invalid { reason } => {
+            return Err(CommandError(format!("cannot wrap selection: {reason}")));
+        }
+    };
+    let selection = &doc.text[snapped.clone()];
 
     let ctx = context_for(
         server.provider.as_mut(),
         &doc,
-        start,
+        snapped.start,
         args.formatting_options,
     );
     let snippet = crate::wrap::wrap(
@@ -125,7 +138,11 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
     )
     .map_err(|err| format!("cannot wrap with `{}`: {err}", args.abbreviation))?;
 
-    Ok(result(args.range, &snippet))
+    let range = Range {
+        start: index.position(&doc.text, snapped.start, server.encoding),
+        end: index.position(&doc.text, snapped.end, server.encoding),
+    };
+    Ok(result(range, &snippet))
 }
 
 /// Ask the provider for the context at `offset`; the editor's explicit

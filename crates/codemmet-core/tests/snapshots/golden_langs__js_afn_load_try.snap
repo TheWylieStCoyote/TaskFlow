@@ -1,0 +1,20 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"afn:load>try\")"
+---
+== keep ==
+async function load($1) {
+  try {
+    $2
+  } catch (${3:err}) {
+    $0
+  }
+}
+== strip ==
+async function load() {
+  try {
+    
+  } catch (err) {
+    ‸
+  }
+}

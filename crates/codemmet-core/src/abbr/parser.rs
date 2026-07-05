@@ -12,8 +12,15 @@
 //!   sibling copies, because [`AbbrNode`] has no group concept. A `> group`
 //!   following the element is attached before distribution, so each copy
 //!   receives the children (matching Emmet's `li*3>a` semantics).
-//! - `^` (climb-up) is reserved and rejected with a [`ParseError`] until it
-//!   is implemented in M4.
+//! - `^` (climb-up) ends the current `>`-nesting level: the following chain
+//!   attaches N levels up, where N is the number of consecutive carets.
+//!   Rather than an explicit level stack, the climb count travels up the
+//!   recursion: [`Parser::level`] returns its siblings plus a pending climb
+//!   count; each enclosing `>` in [`Parser::chain_into`] consumes one level,
+//!   and whichever level the count reaches zero at continues parsing there.
+//!   [`Parser::top_group`] (the whole abbreviation, or one `(…)` group)
+//!   clamps counts that would escape it, so extra carets stop at the top
+//!   level and a `^` inside parentheses never climbs out of its group.
 
 use std::ops::Range;
 
@@ -28,7 +35,7 @@ pub fn parse(input: &str) -> Result<Abbreviation, ParseError> {
         return Err(err("empty abbreviation", 0..0));
     }
     let mut parser = Parser { input, pos: 0 };
-    let nodes = parser.group()?;
+    let nodes = parser.top_group()?;
     if parser.pos < input.len() {
         return Err(parser.unexpected_here());
     }
@@ -46,6 +53,16 @@ fn err(message: impl Into<String>, span: Range<usize>) -> ParseError {
 /// True for characters that terminate a raw (unquoted) argument.
 const fn ends_raw_arg(c: char) -> bool {
     matches!(c, '>' | '+' | '*' | ',' | '(' | ')' | '^')
+}
+
+/// How parsing continues after one chain within a level.
+enum Flow {
+    /// No climb: the level inspects the next character (`+`, `^`, `)`, end).
+    Normal,
+    /// A `^` climb ended a nested level. The count is how many levels
+    /// *above the current one* the next chain belongs to; `Climb(0)` means
+    /// it lands at the current level, which parses another chain directly.
+    Climb(u32),
 }
 
 /// The two shapes an `atom` production can take.
@@ -95,28 +112,73 @@ impl Parser<'_> {
         let span = self.here();
         match self.peek() {
             None => err("unexpected end of input", span),
-            Some('^') => err("'^' is reserved for climb-up and not implemented yet", span),
+            Some('^') => err("'^' climb-up must follow an element", span),
             Some(c) if c.is_whitespace() => err("unexpected whitespace", span),
             Some(c) => err(format!("unexpected '{c}'"), span),
         }
     }
 
-    /// `group := chain ( '+' chain )*`
-    fn group(&mut self) -> Result<Vec<AbbrNode>, ParseError> {
-        let mut nodes = self.chain()?;
-        while self.peek() == Some('+') {
-            let op = self.here();
-            self.bump();
-            if self.peek().is_none() {
-                return Err(err("dangling '+'", op));
-            }
-            nodes.extend(self.chain()?);
+    /// A whole climb scope: the full abbreviation or one `(…)` group.
+    ///
+    /// Climb counts that would escape the scope's top level clamp here:
+    /// the remaining carets are absorbed and parsing continues at this
+    /// level (`a^^^b` is `a+b`; a `^` inside parentheses never climbs out).
+    fn top_group(&mut self) -> Result<Vec<AbbrNode>, ParseError> {
+        let (mut nodes, mut climb) = self.level()?;
+        while climb > 0 {
+            let (more, rest) = self.level()?;
+            nodes.extend(more);
+            climb = rest;
         }
         Ok(nodes)
     }
 
-    /// `chain := element ( '>' group )?` where `element := atom ( '*' NUMBER )?`
-    fn chain(&mut self) -> Result<Vec<AbbrNode>, ParseError> {
+    /// One nesting level: `chain ( '+' chain )*`, ended by a climb, `)`, or
+    /// the end of input. Returns the siblings collected at this level plus
+    /// the pending climb count: how many levels above this one the next
+    /// chain belongs to (`0` when the level ended without a climb).
+    fn level(&mut self) -> Result<(Vec<AbbrNode>, u32), ParseError> {
+        let mut nodes = Vec::new();
+        loop {
+            match self.chain_into(&mut nodes)? {
+                // A nested climb landed exactly here: parse the next chain.
+                Flow::Climb(0) => continue,
+                Flow::Climb(pending) => return Ok((nodes, pending)),
+                Flow::Normal => {}
+            }
+            match self.peek() {
+                Some('+') => {
+                    let op = self.here();
+                    self.bump();
+                    if self.peek().is_none() {
+                        return Err(err("dangling '+'", op));
+                    }
+                }
+                Some('^') => return Ok((nodes, self.carets()?)),
+                _ => return Ok((nodes, 0)),
+            }
+        }
+    }
+
+    /// A caret run `'^'+`: consume it and return the climb count.
+    fn carets(&mut self) -> Result<u32, ParseError> {
+        let start = self.pos;
+        let mut count: u32 = 0;
+        while self.eat('^') {
+            count = count.saturating_add(1);
+        }
+        if self.peek().is_none() {
+            return Err(err("dangling '^'", start..self.pos));
+        }
+        Ok(count)
+    }
+
+    /// `chain := element ( '>' level )?` where `element := atom ( '*' NUMBER )?`.
+    ///
+    /// Appends the chain's node(s) to `nodes` and reports how parsing
+    /// continues: [`Flow::Normal`], or [`Flow::Climb`] when the nested level
+    /// ended with `^` carets left over after consuming one for this `>`.
+    fn chain_into(&mut self, nodes: &mut Vec<AbbrNode>) -> Result<Flow, ParseError> {
         let atom = self.atom()?;
         let repeat = if self.peek() == Some('*') {
             let star = self.here();
@@ -125,39 +187,45 @@ impl Parser<'_> {
         } else {
             1
         };
-        let children = if self.peek() == Some('>') {
+        let (children, flow) = if self.peek() == Some('>') {
             let op = self.here();
             self.bump();
             if self.peek().is_none() {
                 return Err(err("dangling '>'", op));
             }
-            self.group()?
+            let (children, climb) = self.level()?;
+            let flow = match climb {
+                0 => Flow::Normal,
+                pending => Flow::Climb(pending - 1),
+            };
+            (children, flow)
         } else {
-            Vec::new()
+            (Vec::new(), Flow::Normal)
         };
-        Ok(match atom {
+        match atom {
             Atom::Node(mut node) => {
                 node.repeat = repeat;
                 node.children = children;
-                vec![node]
+                nodes.push(node);
             }
-            Atom::Group(mut nodes) => {
+            Atom::Group(mut group) => {
                 // `>` after a group nests into the group's last top-level
                 // node (consistent with `a+b>c` nesting into `b`); the group
                 // is never empty, so `last_mut` always matches.
-                if let Some(last) = nodes.last_mut() {
+                if let Some(last) = group.last_mut() {
                     last.children.extend(children);
                 }
                 // Distribute `(…)*n` into n sibling copies.
                 if repeat > 1 {
-                    let copy = nodes.clone();
+                    let copy = group.clone();
                     for _ in 1..repeat {
-                        nodes.extend_from_slice(&copy);
+                        group.extend_from_slice(&copy);
                     }
                 }
-                nodes
+                nodes.extend(group);
             }
-        })
+        }
+        Ok(flow)
     }
 
     /// `atom := node | '(' group ')'`
@@ -166,7 +234,7 @@ impl Parser<'_> {
             Some('(') => {
                 let open = self.here();
                 self.bump();
-                let nodes = self.group()?;
+                let nodes = self.top_group()?;
                 if self.eat(')') {
                     Ok(Atom::Group(nodes))
                 } else if self.peek().is_none() {
@@ -615,10 +683,176 @@ mod tests {
     }
 
     #[test]
-    fn error_caret_is_reserved() {
-        let e = parse_err("a^b");
-        assert!(e.message.contains("reserved"), "message: {}", e.message);
+    fn climb_from_child_to_top() {
+        // `a>b^c`: c climbs out of a's children back to the top level.
+        assert_eq!(
+            parsed("a>b^c"),
+            vec![
+                AbbrNode {
+                    children: vec![word("b")],
+                    ..word("a")
+                },
+                word("c"),
+            ]
+        );
+    }
+
+    #[test]
+    fn climb_one_level_lands_midway() {
+        // `a>b>c^d`: one caret from c's level makes d a sibling of b.
+        assert_eq!(
+            parsed("a>b>c^d"),
+            vec![AbbrNode {
+                children: vec![
+                    AbbrNode {
+                        children: vec![word("c")],
+                        ..word("b")
+                    },
+                    word("d"),
+                ],
+                ..word("a")
+            }]
+        );
+    }
+
+    #[test]
+    fn climb_two_levels() {
+        // `a>b>c^^d`: two carets from c's level put d at the top level.
+        assert_eq!(
+            parsed("a>b>c^^d"),
+            vec![
+                AbbrNode {
+                    children: vec![AbbrNode {
+                        children: vec![word("c")],
+                        ..word("b")
+                    }],
+                    ..word("a")
+                },
+                word("d"),
+            ]
+        );
+    }
+
+    #[test]
+    fn climb_clamps_at_top_level() {
+        // Extra carets past the top level clamp there (Emmet-compatible).
+        assert_eq!(parsed("a^^^b"), vec![word("a"), word("b")]);
+    }
+
+    #[test]
+    fn climb_then_descend_again() {
+        // `a>b^c>d`: after climbing, `>` nests below the landing chain.
+        assert_eq!(
+            parsed("a>b^c>d"),
+            vec![
+                AbbrNode {
+                    children: vec![word("b")],
+                    ..word("a")
+                },
+                AbbrNode {
+                    children: vec![word("d")],
+                    ..word("c")
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn climb_landing_chain_takes_siblings() {
+        // `a>b^c+d`: both c and d are top-level siblings after the climb.
+        assert_eq!(
+            parsed("a>b^c+d"),
+            vec![
+                AbbrNode {
+                    children: vec![word("b")],
+                    ..word("a")
+                },
+                word("c"),
+                word("d"),
+            ]
+        );
+    }
+
+    #[test]
+    fn climb_after_group_starts_at_group_level() {
+        // `x>(a>b)^c`: the inlined group sits at x's child level, so one
+        // caret makes c a top-level sibling of x.
+        assert_eq!(
+            parsed("x>(a>b)^c"),
+            vec![
+                AbbrNode {
+                    children: vec![AbbrNode {
+                        children: vec![word("b")],
+                        ..word("a")
+                    }],
+                    ..word("x")
+                },
+                word("c"),
+            ]
+        );
+    }
+
+    #[test]
+    fn climb_inside_group_clamps_to_group() {
+        // A caret run inside `(…)` never escapes the group's top level.
+        assert_eq!(
+            parsed("x>(a>b^^c)+d"),
+            vec![AbbrNode {
+                children: vec![
+                    AbbrNode {
+                        children: vec![word("b")],
+                        ..word("a")
+                    },
+                    word("c"),
+                    word("d"),
+                ],
+                ..word("x")
+            }]
+        );
+    }
+
+    #[test]
+    fn climb_keeps_repeat_on_previous_element() {
+        // `a>b*2^c`: the climb leaves b's repeat intact and c at the top.
+        assert_eq!(
+            parsed("a>b*2^c"),
+            vec![
+                AbbrNode {
+                    children: vec![AbbrNode {
+                        repeat: 2,
+                        ..word("b")
+                    }],
+                    ..word("a")
+                },
+                word("c"),
+            ]
+        );
+    }
+
+    #[test]
+    fn error_leading_caret() {
+        let e = parse_err("^a");
+        assert_eq!(e.message, "'^' climb-up must follow an element");
+        assert_eq!(e.span, 0..1);
+    }
+
+    #[test]
+    fn error_caret_after_operator() {
+        let e = parse_err("a>^b");
+        assert_eq!(e.message, "'^' climb-up must follow an element");
+        assert_eq!(e.span, 2..3);
+    }
+
+    #[test]
+    fn error_dangling_caret() {
+        let e = parse_err("a^");
+        assert_eq!(e.message, "dangling '^'");
         assert_eq!(e.span, 1..2);
+
+        // The whole caret run is the error span.
+        let e = parse_err("a>b^^");
+        assert_eq!(e.message, "dangling '^'");
+        assert_eq!(e.span, 3..5);
     }
 
     #[test]

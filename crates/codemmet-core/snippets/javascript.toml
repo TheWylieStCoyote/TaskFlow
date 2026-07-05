@@ -1,0 +1,305 @@
+# Builtin JavaScript snippet pack. The TypeScript pack inherits every
+# trigger here.
+#
+# Intentional trigger-prefix overlaps (longest trigger wins during resolution):
+#   fori / forin        — `forin` wins for the exact word; a counted loop whose
+#                         variable starts with "n" needs `fori:n...`.
+#   exp / expd          — `expd` wins for the exact word. `exp` binds its name
+#                         explicitly only (kind = "str"), so typing the real
+#                         keyword `export` never half-matches as `exp` + "ort".
+#   imp / impd          — `impd` wins for the exact word; both bind their
+#                         module param explicitly only (kind = "str"), so the
+#                         keyword `import` never half-matches either.
+#   pr / prd / prom     — safe: `pr` has no params; `prd`/`prom` win exact.
+#   el / elif           — safe: `el` has no params.
+#   jsonp / jsons       — safe: not prefixes of each other.
+# `class`/`get`/`set` shadow real keywords; completion is offer-only so this
+# is safe (same rationale as `str` in the Python pack).
+
+[meta]
+language = "javascript"
+
+[snippets.fn]
+description = "function declaration"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+function ${name}($1) {
+	${child}
+}
+'''
+
+[[snippets.fn.variants]]
+context = "type-body"
+body = '''
+${name}($1) {
+	${child}
+}
+'''
+
+[snippets.afn]
+description = "async function declaration"
+params = [{ name = "name", kind = "ident", default = "name" }]
+scope = "fn-body"
+body = '''
+async function ${name}($1) {
+	${child}
+}
+'''
+
+[[snippets.afn.variants]]
+context = "type-body"
+body = '''
+async ${name}($1) {
+	${child}
+}
+'''
+
+[snippets.arrow]
+description = "arrow function bound to a const"
+params = [{ name = "name", kind = "ident", default = "handler" }]
+scope = "fn-body"
+body = '''
+const ${name} = ($1) => {
+	${child}
+};
+'''
+
+[snippets.fori]
+description = "for loop over integer range"
+params = [{ name = "var", kind = "ident", default = "i" }, { name = "end", kind = "int", default = "10" }]
+scope = "loop"
+body = '''
+for (let ${var} = 0; ${var} < ${end}; ${var}++) {
+	${child}
+}
+'''
+
+[snippets.fore]
+description = "for...of loop"
+params = [{ name = "var", kind = "ident", default = "item" }]
+scope = "loop"
+body = '''
+for (const ${var} of ${1:items}) {
+	${child}
+}
+'''
+
+[snippets.forin]
+description = "for...in loop over object keys"
+params = [{ name = "var", kind = "ident", default = "key" }]
+scope = "loop"
+body = '''
+for (const ${var} in ${1:object}) {
+	${child}
+}
+'''
+
+[snippets.while]
+description = "while loop"
+scope = "loop"
+body = '''
+while (${1:condition}) {
+	${child}
+}
+'''
+
+[snippets.if]
+description = "if block"
+scope = "conditional"
+body = '''
+if (${1:condition}) {
+	${child}
+}
+'''
+
+[snippets.el]
+description = "else block"
+scope = "conditional"
+body = '''
+else {
+	${child}
+}
+'''
+
+[snippets.elif]
+description = "else-if block"
+scope = "conditional"
+body = '''
+else if (${1:condition}) {
+	${child}
+}
+'''
+
+[snippets.switch]
+description = "switch statement"
+params = [{ name = "expr", kind = "ident", default = "value" }]
+scope = "match-body"
+body = '''
+switch (${expr}) {
+	${child}
+}
+'''
+
+[snippets.case]
+description = "case clause with break"
+body = '''
+case ${1:value}:
+	${child}
+	break;
+'''
+
+[snippets.default]
+description = "default clause"
+body = '''
+default:
+	${child}
+'''
+
+[snippets.class]
+description = "class definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+class ${name} {
+	${child}
+}
+'''
+
+[snippets.ctor]
+description = "constructor method"
+scope = "fn-body"
+body = '''
+constructor($1) {
+	${child}
+}
+'''
+
+[snippets.get]
+description = "getter backed by a private-by-convention field"
+params = [{ name = "name", kind = "ident", default = "value" }]
+body = '''
+get ${name}() {
+	return this._${name};$0
+}
+'''
+
+[snippets.set]
+description = "setter backed by a private-by-convention field"
+params = [{ name = "name", kind = "ident", default = "value" }]
+body = '''
+set ${name}(value) {
+	this._${name} = value;$0
+}
+'''
+
+[snippets.ret]
+description = "return statement"
+body = '''
+return $0;
+'''
+
+[snippets.pr]
+description = "console.log call"
+body = '''
+console.log($0);
+'''
+
+[snippets.prd]
+description = "debug-log with object-shorthand label"
+body = '''
+console.log({ $0 });
+'''
+
+[snippets.imp]
+description = "default import"
+params = [{ name = "module", default = "module" }]
+body = '''
+import ${1:name} from "${module}";$0
+'''
+
+[snippets.impd]
+description = "destructured (named) import"
+params = [{ name = "module", default = "module" }]
+body = '''
+import { $1 } from "${module}";$0
+'''
+
+[snippets.exp]
+description = "export a const binding"
+params = [{ name = "name", default = "name" }]
+body = '''
+export const ${name} = $0;
+'''
+
+[snippets.expd]
+description = "export default"
+body = '''
+export default $0;
+'''
+
+[snippets.try]
+description = "try/catch block"
+scope = "try-body"
+body = '''
+try {
+	${child}
+} catch (${1:err}) {
+	$0
+}
+'''
+
+[snippets.test]
+description = "test case (jest/vitest style)"
+params = [{ name = "name", kind = "ident", default = "works" }]
+scope = "fn-body"
+body = '''
+test("${name}", () => {
+	${child}
+});
+'''
+
+[snippets.aeq]
+description = "equality expectation"
+body = '''
+expect(${1:actual}).toBe($0);
+'''
+
+[snippets.doc]
+description = "JSDoc comment line"
+body = '''
+/** $0 */
+'''
+
+[snippets.todo]
+description = "TODO comment"
+body = '''
+// TODO: $0
+'''
+
+[snippets.jsonp]
+description = "JSON.parse expression"
+body = '''
+JSON.parse($0)
+'''
+
+[snippets.jsons]
+description = "JSON.stringify expression"
+body = '''
+JSON.stringify($0)
+'''
+
+[snippets.prom]
+description = "new Promise with executor"
+scope = "fn-body"
+body = '''
+new Promise((resolve, reject) => {
+	${child}
+})
+'''
+
+[snippets.aw]
+description = "await statement"
+body = '''
+await $0;
+'''

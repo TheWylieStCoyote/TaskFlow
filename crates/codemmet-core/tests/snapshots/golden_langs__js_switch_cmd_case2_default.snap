@@ -1,0 +1,26 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"switch:cmd>case*2+default\")"
+---
+== keep ==
+switch (cmd) {
+  case ${1:value}:
+    $2
+    break;
+  case ${3:value}:
+    $4
+    break;
+  default:
+    $0
+}
+== strip ==
+switch (cmd) {
+  case value:
+    
+    break;
+  case value:
+    
+    break;
+  default:
+    ‸
+}

@@ -1,0 +1,10 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"imp:react+impd:\\\"./utils\\\"\")"
+---
+== keep ==
+import ${1:name} from "react";$2
+import { $3 } from "./utils";$0
+== strip ==
+import name from "react";
+import {  } from "./utils";‸

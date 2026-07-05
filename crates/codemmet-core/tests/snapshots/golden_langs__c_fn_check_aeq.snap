@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"c\", \"fn:check>aeq\")"
+---
+== keep ==
+${1:void} check($2) {
+    assert(${3:actual} == $0);
+}
+== strip ==
+void check() {
+    assert(actual == ‸);
+}

@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"go\", \"main>fori10>pr\")"
+---
+== keep ==
+func main() {
+	for ${1:i} := 0; $1 < 10; $1++ {
+		fmt.Println($0)
+	}
+}
+== strip ==
+func main() {
+	for i := 0; i < 10; i++ {
+		fmt.Println(‸)
+	}
+}

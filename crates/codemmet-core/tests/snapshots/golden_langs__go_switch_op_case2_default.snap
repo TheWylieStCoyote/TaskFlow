@@ -1,0 +1,22 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"go\", \"switch:op>case*2+default\")"
+---
+== keep ==
+switch op {
+case ${1:value}:
+	$2
+case ${3:value}:
+	$4
+default:
+	$0
+}
+== strip ==
+switch op {
+case value:
+	
+case value:
+	
+default:
+	‸
+}

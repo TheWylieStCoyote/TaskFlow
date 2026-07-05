@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"c\", \"mallocbuf+free:buf\")"
+---
+== keep ==
+${1:int} *buf = malloc(${2:1} * sizeof($1));$3
+free(buf);
+buf = NULL;$0
+== strip ==
+int *buf = malloc(1 * sizeof(int));
+free(buf);
+buf = NULL;‸

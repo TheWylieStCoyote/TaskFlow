@@ -4,13 +4,29 @@
 //!
 //! ```text
 //! abbr     := group
-//! group    := chain ( '+' chain )*         ; siblings
-//! chain    := element ( '>' group )?       ; '>' attaches following group as children
+//! group    := level ( '^'+ level )*        ; '^' climbs, clamped at this group
+//! level    := chain ( '+' chain )*         ; siblings
+//! chain    := element ( '>' level )?       ; '>' attaches following level as children
 //! element  := atom ( '*' NUMBER )?
 //! atom     := node | '(' group ')'
 //! node     := WORD args?
 //! args     := ':' arg ( ',' arg )*
 //! ```
+//!
+//! `^` (climb-up) ends the current `>`-nesting level and attaches the
+//! following chain N levels up, where N is the number of consecutive carets:
+//! `a>b^c` puts `c` back at the top level, `a>b>c^d` makes `d` a sibling of
+//! `b`. Carets beyond the top level clamp there (`a^^^b` is `a+b`).
+//!
+//! Groups interact with `^` per the flat-distribution design (a `(…)` group
+//! is inlined into its surrounding level, [`AbbrNode`] has no group concept):
+//!
+//! - **After** a group, `^` climbs from the level the group occupies:
+//!   `x>(a>b)^c` puts the group at `x`'s child level, so one caret makes `c`
+//!   a top-level sibling of `x`.
+//! - **Inside** a group, `^` clamps at the group's own top level and never
+//!   escapes the parentheses: `x>(a>b^^c)` keeps `c` inside the group, as a
+//!   sibling of `a` (both children of `x`).
 //!
 //! The parser is language-agnostic: it does **not** split `fori10` into
 //! trigger + glued arg. That resolution needs the active language's trigger

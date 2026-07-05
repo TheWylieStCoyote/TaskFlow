@@ -1,0 +1,28 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"class:User>ctor+get:name+set:name\")"
+---
+== keep ==
+class User {
+  constructor($1) {
+    $2
+  }
+  get name() {
+    return this._name;$3
+  }
+  set name(value) {
+    this._name = value;$0
+  }
+}
+== strip ==
+class User {
+  constructor() {
+    
+  }
+  get name() {
+    return this._name;
+  }
+  set name(value) {
+    this._name = value;‸
+  }
+}

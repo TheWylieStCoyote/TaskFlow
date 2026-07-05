@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"c\", \"dowhile\")"
+---
+== keep ==
+do {
+    $0
+} while (${1:condition});
+== strip ==
+do {
+    ‸
+} while (condition);

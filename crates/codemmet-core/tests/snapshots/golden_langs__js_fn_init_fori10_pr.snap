@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"fn:init>fori10>pr\")"
+---
+== keep ==
+function init($1) {
+  for (let ${2:i} = 0; $2 < 10; $2++) {
+    console.log($0);
+  }
+}
+== strip ==
+function init() {
+  for (let i = 0; i < 10; i++) {
+    console.log(‸);
+  }
+}

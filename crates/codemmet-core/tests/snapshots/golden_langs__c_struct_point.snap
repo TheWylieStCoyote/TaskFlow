@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"c\", \"struct:Point\")"
+---
+== keep ==
+typedef struct {
+    $0
+} Point;
+== strip ==
+typedef struct {
+    ‸
+} Point;

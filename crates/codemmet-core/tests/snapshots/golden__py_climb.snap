@@ -1,0 +1,14 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"def:run>if>pr^ret\")"
+---
+== keep ==
+def run($1):
+    if ${2:condition}:
+        print($3)
+    return $0
+== strip ==
+def run():
+    if condition:
+        print()
+    return ‸

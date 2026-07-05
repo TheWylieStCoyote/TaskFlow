@@ -1,0 +1,129 @@
+# Builtin C++ snippet pack. Inherits the C pack (profile `inherits = "c"`):
+# every C trigger (fn, fori, if, switch, pr, malloc, ...) is available here,
+# and this pack only adds what differs or overrides what C got wrong for C++.
+# Overrides replace the WHOLE snippet (params, scope, variants included);
+# nothing is merged field-by-field.
+#
+# Deliberately inherited unchanged: `pr`/`prf` stay printf (valid C++); use
+# `cout` for iostream printing. C++ methods share function syntax, so `fn`
+# needs no type-body variant.
+#
+# Intentional trigger-prefix overlaps (longest trigger wins during resolution):
+#   fn / fori / fore / free — safe: no trigger is a prefix of another.
+#   class / case            — safe: not prefixes of each other.
+#   us(ing) / uptr / sptr   — safe: no shared prefixes.
+
+[meta]
+language = "cpp"
+
+[snippets.class]
+description = "class definition"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+class ${name} {
+public:
+	${child}
+};
+'''
+
+[snippets.struct]
+description = "struct definition (overrides C's typedef form)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+struct ${name} {
+	${child}
+};
+'''
+
+[snippets.enum]
+description = "scoped enum (overrides C's typedef form)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+scope = "type-body"
+body = '''
+enum class ${name} {
+	${child}
+};
+'''
+
+[snippets.fore]
+description = "range-based for loop"
+params = [{ name = "var", kind = "ident", default = "item" }]
+scope = "loop"
+body = '''
+for (const auto& ${var} : ${1:container}) {
+	${child}
+}
+'''
+
+[snippets.try]
+description = "try/catch block"
+scope = "try-body"
+body = '''
+try {
+	${child}
+} catch (const ${1:std::exception}& ${2:e}) {
+	$0
+}
+'''
+
+[snippets.cout]
+description = "std::cout line"
+body = '''
+std::cout << $0 << '\n';
+'''
+
+[snippets.ns]
+description = "namespace block"
+params = [{ name = "name", kind = "ident", default = "ns" }]
+body = '''
+namespace ${name} {
+
+${child}
+
+}  // namespace ${name}
+'''
+
+[snippets.tpl]
+description = "template parameter list (prefix for a declaration)"
+body = '''
+template <typename ${1:T}>$0
+'''
+
+[snippets.vec]
+description = "std::vector variable"
+body = '''
+std::vector<${1:int}> ${2:values};$0
+'''
+
+[snippets.map]
+description = "std::unordered_map variable"
+body = '''
+std::unordered_map<${1:std::string}, ${2:int}> ${3:map};$0
+'''
+
+[snippets.uptr]
+description = "std::make_unique binding"
+body = '''
+auto ${1:ptr} = std::make_unique<${2:Type}>($3);$0
+'''
+
+[snippets.sptr]
+description = "std::make_shared binding"
+body = '''
+auto ${1:ptr} = std::make_shared<${2:Type}>($3);$0
+'''
+
+[snippets.using]
+description = "using type alias"
+params = [{ name = "name", kind = "ident", default = "Alias" }]
+body = '''
+using ${name} = $0;
+'''
+
+[snippets.lam]
+description = "lambda expression"
+body = '''
+[$1]($2) { $0 }
+'''

@@ -15,10 +15,13 @@ pub struct LanguageProfile {
     pub default_indent: IndentUnit,
     /// The builtin snippet pack, compiled into the binary.
     pub snippet_source: &'static str,
+    /// Language id whose builtin pack this language inherits: that pack is
+    /// compiled BEFORE this language's own pack, so this pack overrides and
+    /// extends it (e.g. C++ inherits C, TypeScript inherits JavaScript).
+    pub inherits: Option<&'static str>,
 }
 
-/// All builtin language profiles. Rust and Python ship in M1; C, C++,
-/// JavaScript, TypeScript, and Go land in M4 (see `PLAN.md`).
+/// All builtin language profiles (see `PLAN.md`).
 pub static PROFILES: &[LanguageProfile] = &[
     LanguageProfile {
         id: "rust",
@@ -26,6 +29,7 @@ pub static PROFILES: &[LanguageProfile] = &[
         extensions: &["rs"],
         default_indent: IndentUnit::Spaces(4),
         snippet_source: include_str!("../../snippets/rust.toml"),
+        inherits: None,
     },
     LanguageProfile {
         id: "python",
@@ -33,6 +37,47 @@ pub static PROFILES: &[LanguageProfile] = &[
         extensions: &["py"],
         default_indent: IndentUnit::Spaces(4),
         snippet_source: include_str!("../../snippets/python.toml"),
+        inherits: None,
+    },
+    LanguageProfile {
+        id: "c",
+        lsp_language_ids: &["c"],
+        extensions: &["c", "h"],
+        default_indent: IndentUnit::Spaces(4),
+        snippet_source: include_str!("../../snippets/c.toml"),
+        inherits: None,
+    },
+    LanguageProfile {
+        id: "cpp",
+        lsp_language_ids: &["cpp"],
+        extensions: &["cpp", "cc", "cxx", "hpp", "hh", "hxx"],
+        default_indent: IndentUnit::Spaces(4),
+        snippet_source: include_str!("../../snippets/cpp.toml"),
+        inherits: Some("c"),
+    },
+    LanguageProfile {
+        id: "javascript",
+        lsp_language_ids: &["javascript", "javascriptreact"],
+        extensions: &["js", "mjs", "cjs", "jsx"],
+        default_indent: IndentUnit::Spaces(2),
+        snippet_source: include_str!("../../snippets/javascript.toml"),
+        inherits: None,
+    },
+    LanguageProfile {
+        id: "typescript",
+        lsp_language_ids: &["typescript", "typescriptreact"],
+        extensions: &["ts", "mts", "cts", "tsx"],
+        default_indent: IndentUnit::Spaces(2),
+        snippet_source: include_str!("../../snippets/typescript.toml"),
+        inherits: Some("javascript"),
+    },
+    LanguageProfile {
+        id: "go",
+        lsp_language_ids: &["go"],
+        extensions: &["go"],
+        default_indent: IndentUnit::Tab,
+        snippet_source: include_str!("../../snippets/go.toml"),
+        inherits: None,
     },
 ];
 

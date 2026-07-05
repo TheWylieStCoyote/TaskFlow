@@ -12,13 +12,31 @@ categories.workspace = true
 [dependencies]
 codemmet-core = { workspace = true }
 tree-sitter = { workspace = true }
+tree-sitter-c = { workspace = true, optional = true }
+tree-sitter-cpp = { workspace = true, optional = true }
+tree-sitter-go = { workspace = true, optional = true }
+tree-sitter-javascript = { workspace = true, optional = true }
 tree-sitter-python = { workspace = true, optional = true }
 tree-sitter-rust = { workspace = true, optional = true }
+tree-sitter-typescript = { workspace = true, optional = true }
 
 [features]
-default = ["lang-rust", "lang-python"]
+default = [
+    "lang-c",
+    "lang-cpp",
+    "lang-go",
+    "lang-javascript",
+    "lang-python",
+    "lang-rust",
+    "lang-typescript",
+]
+lang-c = ["dep:tree-sitter-c"]
+lang-cpp = ["dep:tree-sitter-cpp"]
+lang-go = ["dep:tree-sitter-go"]
+lang-javascript = ["dep:tree-sitter-javascript"]
 lang-python = ["dep:tree-sitter-python"]
 lang-rust = ["dep:tree-sitter-rust"]
+lang-typescript = ["dep:tree-sitter-typescript"]
 
 [lints]
 workspace = true

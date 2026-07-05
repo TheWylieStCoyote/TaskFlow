@@ -372,6 +372,107 @@ fn execute_command_wrap_splices_selection_into_the_loop() {
     client.shutdown();
 }
 
+/// A mid-statement wrap range snaps outward to the whole statement's
+/// lines; the returned range covers the snapped region.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_wrap_snaps_mid_statement_range() {
+    let (mut client, _) = LspClient::start("wrap-snap", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    println!(\"x\");\n}\n");
+
+    // Selection covers only `intln!` in the middle of the statement.
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.wrap",
+            "arguments": [{
+                "uri": URI,
+                "range": { "start": { "line": 1, "character": 6 }, "end": { "line": 1, "character": 12 } },
+                "abbreviation": "fori10",
+            }],
+        }),
+    );
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 1, "character": 18 } })
+    );
+    assert_eq!(
+        result["snippet"],
+        json!("for ${1:i} in 0..10 {\n        println!(\"x\");$0\n    }")
+    );
+    client.shutdown();
+}
+
+/// A fragment of a multi-line statement snaps to all of the statement's
+/// lines, and the wrapped snippet carries every line.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_wrap_snaps_multiline_statement() {
+    let (mut client, _) = LspClient::start("wrap-multiline", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "fn main() {\n    foo(\n        1,\n        2,\n    );\n}\n",
+    );
+
+    // Selection covers only the `1` argument on line 2.
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.wrap",
+            "arguments": [{
+                "uri": URI,
+                "range": { "start": { "line": 2, "character": 8 }, "end": { "line": 2, "character": 9 } },
+                "abbreviation": "fori10",
+            }],
+        }),
+    );
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 4, "character": 6 } })
+    );
+    assert_eq!(
+        result["snippet"],
+        json!(
+            "for ${1:i} in 0..10 {\n        foo(\n            1,\n            2,\n        );$0\n    }"
+        )
+    );
+    client.shutdown();
+}
+
+/// A range from one function's body into the next function's signature is
+/// rejected with a scope-boundary error.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_wrap_cross_function_range_is_an_error() {
+    let (mut client, _) = LspClient::start("wrap-cross", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "fn a() {\n    let x = 1;\n}\nfn b() {\n    let y = 2;\n}\n",
+    );
+
+    let error = client.request_err(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.wrap",
+            "arguments": [{
+                "uri": URI,
+                "range": { "start": { "line": 1, "character": 8 }, "end": { "line": 3, "character": 4 } },
+                "abbreviation": "fori10",
+            }],
+        }),
+    );
+    let message = error["message"]
+        .as_str()
+        .expect("error should have a message");
+    assert!(
+        message.contains("crosses scope boundaries"),
+        "message: {message}"
+    );
+    client.shutdown();
+}
+
 /// The `newText` of the only snippet item in a completion result.
 fn snippet_new_text(result: &Value) -> &str {
     let snippets = snippet_items(result);

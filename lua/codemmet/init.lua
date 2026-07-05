@@ -14,7 +14,7 @@ local M = {}
 
 local defaults = {
   cmd = { "codemmet", "lsp" },
-  filetypes = { "rust", "python" },
+  filetypes = { "rust", "python", "c", "cpp", "javascript", "typescript", "go" },
   keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
   init_options = {},
 }

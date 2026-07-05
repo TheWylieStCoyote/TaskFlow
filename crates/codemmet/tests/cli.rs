@@ -273,7 +273,7 @@ fn check_valid_override_dir_exits_0() {
         .expect("binary should run");
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
     let text = stdout(&out);
-    assert!(text.contains("2 languages"), "stdout was: {text}");
+    assert!(text.contains("7 languages"), "stdout was: {text}");
     assert!(text.contains("triggers"), "stdout was: {text}");
 }
 

@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"c\", \"fn:sum>fori10>prf:\\\"%d\\\\n\\\",i\")"
+---
+== keep ==
+${1:void} sum($2) {
+    for (int ${3:i} = 0; $3 < 10; $3++) {
+        printf("%d\\n", i);$0
+    }
+}
+== strip ==
+void sum() {
+    for (int i = 0; i < 10; i++) {
+        printf("%d\n", i);‸
+    }
+}

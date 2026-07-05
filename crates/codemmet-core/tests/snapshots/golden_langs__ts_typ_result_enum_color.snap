@@ -1,0 +1,14 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"typescript\", \"typ:Result+enum:Color\")"
+---
+== keep ==
+type Result = $1;
+enum Color {
+  $0
+}
+== strip ==
+type Result = ;
+enum Color {
+  ‸
+}

@@ -1,0 +1,18 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"go\", \"test:Parse>aeq\")"
+---
+== keep ==
+func TestParse(t *testing.T) {
+	if ${1:got} != ${2:want} {
+		t.Errorf("got %v, want %v", $1, $2)
+	}
+	$0
+}
+== strip ==
+func TestParse(t *testing.T) {
+	if got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	‸
+}

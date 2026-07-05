@@ -1,0 +1,12 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"go\", \"meth:String\")"
+---
+== keep ==
+func (${1:r} ${2:*Type}) String($3) {
+	$0
+}
+== strip ==
+func (r *Type) String() {
+	‸
+}

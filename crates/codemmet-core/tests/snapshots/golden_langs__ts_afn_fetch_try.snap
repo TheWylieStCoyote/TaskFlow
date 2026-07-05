@@ -1,0 +1,20 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"typescript\", \"afn:fetch>try\")"
+---
+== keep ==
+async function fetch($1): Promise<${2:void}> {
+  try {
+    $3
+  } catch (${4:err}) {
+    $0
+  }
+}
+== strip ==
+async function fetch(): Promise<void> {
+  try {
+    
+  } catch (err) {
+    ‸
+  }
+}

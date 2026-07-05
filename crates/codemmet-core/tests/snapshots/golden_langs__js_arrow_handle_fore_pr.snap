@@ -1,0 +1,16 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"javascript\", \"arrow:handle>fore:item>pr\")"
+---
+== keep ==
+const handle = ($1) => {
+  for (const item of ${2:items}) {
+    console.log($0);
+  }
+};
+== strip ==
+const handle = () => {
+  for (const item of items) {
+    console.log(‸);
+  }
+};

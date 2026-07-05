@@ -1,0 +1,18 @@
+---
+source: crates/codemmet-core/tests/golden_langs.rs
+expression: "case(\"go\", \"struct:Server+iface:Handler\")"
+---
+== keep ==
+type Server struct {
+	$1
+}
+type Handler interface {
+	$0
+}
+== strip ==
+type Server struct {
+	
+}
+type Handler interface {
+	‸
+}

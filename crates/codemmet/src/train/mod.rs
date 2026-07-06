@@ -204,11 +204,9 @@ fn persist(
 
 /// Print a one-line session receipt to stdout.
 fn print_summary(stats: &Stats, due: usize) {
-    let accuracy = if stats.attempts == 0 {
-        0
-    } else {
-        (stats.solved * 100) / stats.attempts
-    };
+    let accuracy = (stats.solved * 100)
+        .checked_div(stats.attempts)
+        .unwrap_or(0);
     let reviews = if due > 0 {
         format!(" · {due} due for review (run `--mode review`)")
     } else {

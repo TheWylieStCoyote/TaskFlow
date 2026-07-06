@@ -281,11 +281,9 @@ fn render_done(frame: &mut Frame, area: Rect, trainer: &Trainer) {
         return;
     }
 
-    let accuracy = if stats.attempts == 0 {
-        0
-    } else {
-        (stats.solved * 100) / stats.attempts
-    };
+    let accuracy = (stats.solved * 100)
+        .checked_div(stats.attempts)
+        .unwrap_or(0);
     let headline = if trainer.mode() == Mode::Lessons {
         "Lessons complete!"
     } else {

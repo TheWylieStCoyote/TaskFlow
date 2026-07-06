@@ -848,3 +848,25 @@ fn execute_command_preview_without_candidate_is_null() {
     assert_eq!(result, Value::Null, "expected null preview, got {result}");
     client.shutdown();
 }
+
+#[test]
+fn execute_command_preview_keeps_on_incomplete_abbreviation() {
+    let (mut client, _) = LspClient::start("preview-keep", &["utf-8"], &json!({}));
+    // `forp` is not a trigger: the abbreviation is present but not renderable,
+    // so the server returns an empty object (`{}`) — the client keeps its
+    // current preview rather than clearing (avoids flicker while typing).
+    client.open(URI, "rust", "fn main() {\n    forp\n}\n");
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.preview",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 8 } }],
+        }),
+    );
+    assert_eq!(
+        result,
+        json!({}),
+        "expected the keep signal `{{}}`, got {result}"
+    );
+    client.shutdown();
+}

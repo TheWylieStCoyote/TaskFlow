@@ -110,11 +110,17 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
 /// Run `codemmet.preview`: the strip-mode expansion of the abbreviation left
 /// of `position`, for a non-committing live preview (e.g. ghost virtual text).
 ///
-/// Returns `{ range, text }` where `range` covers the abbreviation and `text`
-/// is the clean expansion, or JSON `null` when there is no renderable
-/// abbreviation there — the client just clears its preview, rather than seeing
-/// an error. Unlike [`expand`], the base indent is kept: a preview is
-/// display-only (never inserted), so it should show accurately indented code.
+/// Three outcomes, so the client can avoid flicker while you type through
+/// half-finished abbreviations:
+///
+/// - `{ range, text }` — a renderable abbreviation; show this.
+/// - `{}` — an abbreviation is present but not renderable *yet* (a dangling
+///   operator like `fori10>`, an empty argument like `fn:`, an unresolved
+///   child): the client should KEEP its current preview rather than clear.
+/// - `null` — no abbreviation before the cursor at all; the client clears.
+///
+/// Unlike [`expand`], the base indent is kept: a preview is display-only
+/// (never inserted), so it should show accurately indented code.
 pub fn preview(server: &mut Server, args: &ExpandArgs) -> serde_json::Value {
     let Ok(doc) = server.snapshot(&args.uri) else {
         return serde_json::Value::Null;
@@ -134,7 +140,8 @@ pub fn preview(server: &mut Server, args: &ExpandArgs) -> serde_json::Value {
         .engine
         .expand(candidate, &doc.language, &ctx, TabstopMode::Strip)
     else {
-        return serde_json::Value::Null;
+        // A candidate is present but not renderable mid-typing: signal "keep".
+        return serde_json::json!({});
     };
     let range = Range {
         start: index.position(&doc.text, start, server.encoding),

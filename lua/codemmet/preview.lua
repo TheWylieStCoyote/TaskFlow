@@ -86,11 +86,15 @@ local function refresh(bufnr)
     if err or not previewing(bufnr) then
       return
     end
-    if result and result.text then
-      M.show(bufnr, result.range, result.text)
-    else
+    if result == nil or result == vim.NIL then
+      -- No abbreviation before the cursor: clear.
       M.clear(bufnr)
+    elseif result.text then
+      -- A renderable abbreviation: show it.
+      M.show(bufnr, result.range, result.text)
     end
+    -- Otherwise a half-typed abbreviation (`{}`): keep the current preview,
+    -- so it doesn't flicker while you type through incomplete states.
   end)
 end
 

@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Testing
+
+- Property-based fuzzing of the abbreviation parser, the template parser, and
+  the full `expand` pipeline (`proptest`), asserting they never panic on
+  arbitrary or abbreviation-shaped input — runs on stable in CI.
+- A [`cargo-fuzz`](fuzz/) scaffold (`parse`, `expand` targets) for
+  coverage-guided fuzzing.
+- The trainer's TUI event loop is now covered by tests: the loop reads from an
+  injectable event source and draws to a test backend, so scripted key
+  sequences exercise quit, key routing, release-filtering, reveal, and
+  done-screen dismissal without a real terminal.
+
 ## [0.2.0] - 2026-07-06
 
 ### Added

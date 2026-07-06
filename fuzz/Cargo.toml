@@ -1,0 +1,30 @@
+[package]
+name = "codemmet-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+codemmet-core = { path = "../crates/codemmet-core" }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "expand"
+path = "fuzz_targets/expand.rs"
+test = false
+doc = false
+bench = false
+
+# Detach from the parent workspace: this crate builds only under cargo-fuzz (a
+# nightly toolchain with the sanitizer runtime), never in normal CI.
+[workspace]

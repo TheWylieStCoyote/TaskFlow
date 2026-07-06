@@ -2,13 +2,16 @@
 //!
 //! This layer is deliberately thin: it draws the [`Trainer`]'s state and
 //! translates key presses into [`trainer events`](TrEvent). All grading,
-//! progression, and hint logic lives in the state machine, so the TUI holds no
-//! behavior worth unit-testing — it is verified by running it.
+//! progression, and hint logic lives in the state machine. The event loop reads
+//! from an [`EventSource`] and draws to any ratatui backend, so it is driven by
+//! a scripted event stream against a test backend in the tests below; only the
+//! real terminal wiring in [`run`] is left unexercised.
 
 use std::io;
 
-use ratatui::DefaultTerminal;
 use ratatui::Frame;
+use ratatui::Terminal;
+use ratatui::backend::Backend;
 use ratatui::crossterm::event::{self, Event as CEvent, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Style, Stylize};
@@ -18,19 +21,41 @@ use ratatui::widgets::{Block, Paragraph, Wrap};
 use super::exercise::{Direction, Exercise};
 use super::trainer::{Event as TrEvent, Feedback, Mode, Phase, Trainer};
 
+/// A source of terminal events. Abstracted so the loop can be driven by the
+/// real terminal in [`run`] or a scripted sequence in tests. `None` means the
+/// stream is exhausted (the loop exits).
+trait EventSource {
+    fn next_event(&mut self) -> io::Result<Option<CEvent>>;
+}
+
+/// The real terminal: a blocking read that always yields an event.
+struct CrosstermEvents;
+impl EventSource for CrosstermEvents {
+    fn next_event(&mut self) -> io::Result<Option<CEvent>> {
+        event::read().map(Some)
+    }
+}
+
 /// Run the trainer in a ratatui full-screen session, restoring the terminal on
 /// exit (including on panic — [`ratatui::init`] installs a restoring hook).
 pub fn run(trainer: &mut Trainer) -> io::Result<()> {
     let mut terminal = ratatui::init();
-    let result = event_loop(trainer, &mut terminal);
+    let result = event_loop(trainer, &mut terminal, &mut CrosstermEvents);
     ratatui::restore();
     result
 }
 
-fn event_loop(trainer: &mut Trainer, terminal: &mut DefaultTerminal) -> io::Result<()> {
+fn event_loop<B: Backend>(
+    trainer: &mut Trainer,
+    terminal: &mut Terminal<B>,
+    events: &mut impl EventSource,
+) -> io::Result<()> {
     loop {
         terminal.draw(|frame| render(frame, trainer))?;
-        let CEvent::Key(key) = event::read()? else {
+        let Some(event) = events.next_event()? else {
+            break;
+        };
+        let CEvent::Key(key) = event else {
             continue;
         };
         if key.kind != KeyEventKind::Press {
@@ -445,6 +470,97 @@ mod tests {
             .iter()
             .map(ratatui::buffer::Cell::symbol)
             .collect()
+    }
+
+    use ratatui::crossterm::event::KeyEvent;
+
+    /// A scripted event stream for driving `event_loop` headlessly.
+    struct Scripted(std::vec::IntoIter<CEvent>);
+    impl EventSource for Scripted {
+        fn next_event(&mut self) -> std::io::Result<Option<CEvent>> {
+            Ok(self.0.next())
+        }
+    }
+
+    fn press(code: KeyCode) -> CEvent {
+        CEvent::Key(KeyEvent::new(code, KeyModifiers::empty()))
+    }
+    fn ctrl(code: KeyCode) -> CEvent {
+        CEvent::Key(KeyEvent::new(code, KeyModifiers::CONTROL))
+    }
+    fn release(code: KeyCode) -> CEvent {
+        CEvent::Key(KeyEvent::new_with_kind(
+            code,
+            KeyModifiers::empty(),
+            KeyEventKind::Release,
+        ))
+    }
+
+    /// Run `event_loop` against a test backend with a scripted event sequence.
+    fn drive(trainer: &mut Trainer, events: Vec<CEvent>) {
+        let mut terminal = Terminal::new(TestBackend::new(90, 30)).expect("terminal");
+        let mut source = Scripted(events.into_iter());
+        event_loop(trainer, &mut terminal, &mut source).expect("event loop");
+    }
+
+    #[test]
+    fn event_loop_quits_on_escape() {
+        let engine = engine();
+        let mut t = trainer(&engine);
+        drive(&mut t, vec![press(KeyCode::Enter), press(KeyCode::Esc)]);
+        assert!(t.is_done(), "Esc should quit the session");
+    }
+
+    #[test]
+    fn event_loop_routes_keys_and_ignores_releases() {
+        let engine = engine();
+        let mut t = trainer(&engine);
+        // Enter begins the lesson; a Release event is ignored; 'p' then 'r' type.
+        drive(
+            &mut t,
+            vec![
+                press(KeyCode::Enter),
+                release(KeyCode::Char('x')),
+                press(KeyCode::Char('p')),
+                press(KeyCode::Char('r')),
+            ],
+        );
+        // Events ran out (no quit), so the loop exited cleanly mid-exercise.
+        assert!(!t.is_done());
+        assert_eq!(
+            t.input(),
+            "pr",
+            "release ignored, presses routed to the buffer"
+        );
+    }
+
+    #[test]
+    fn event_loop_reveals_via_ctrl_r() {
+        let engine = engine();
+        let mut t = trainer(&engine);
+        drive(
+            &mut t,
+            vec![press(KeyCode::Enter), ctrl(KeyCode::Char('r'))],
+        );
+        assert!(matches!(t.phase(), Phase::Feedback(fb) if fb.revealed));
+    }
+
+    #[test]
+    fn event_loop_dismisses_the_done_screen() {
+        let engine = engine();
+        // Review mode with an empty schedule is Done immediately; the loop draws
+        // the done screen, and any key dismisses it (the is_done branch).
+        let config = Config {
+            language: "rust".to_string(),
+            mode: Mode::Review,
+            level: None,
+            seed: 1,
+            now: 0,
+        };
+        let mut t = Trainer::new(&engine, config, ReviewState::default());
+        assert!(t.is_done());
+        drive(&mut t, vec![press(KeyCode::Char(' '))]);
+        assert!(t.is_done());
     }
 
     #[test]

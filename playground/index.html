@@ -61,12 +61,6 @@
         cursor: pointer;
       }
       .examples button:hover { border-color: var(--accent); color: var(--accent); }
-      .examples .lang {
-        display: inline-block; margin-right: 7px; padding: 1px 6px;
-        border-radius: 999px; background: #313244; color: var(--muted);
-        font-size: 11px;
-      }
-      .examples button:hover .lang { color: var(--fg); }
       pre#out {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -169,11 +163,6 @@
         ["go", "struct:Point+iface:Shape"],
       ];
 
-      const LANG_LABEL = {
-        rust: "rs", python: "py", c: "c", cpp: "c++",
-        javascript: "js", typescript: "ts", go: "go",
-      };
-
       const $ = (id) => document.getElementById(id);
       const abbrEl = $("abbr"), langEl = $("lang"), keepEl = $("keep"), outEl = $("out");
 
@@ -209,17 +198,16 @@
         outEl.textContent = out || "(empty)";
       }
 
+      // Show only the examples for the currently selected language.
       function buildExamples() {
         const box = $("examples");
+        box.replaceChildren();
         for (const [lang, abbr] of EXAMPLES) {
+          if (lang !== langEl.value) continue;
           const b = document.createElement("button");
-          const tag = document.createElement("span");
-          tag.className = "lang";
-          tag.textContent = LANG_LABEL[lang] || lang;
-          b.append(tag, document.createTextNode(abbr));
-          b.title = `${lang}: ${abbr}`;
+          b.textContent = abbr;
+          b.title = abbr;
           b.addEventListener("click", () => {
-            langEl.value = lang;
             abbrEl.value = abbr;
             render();
             abbrEl.focus();
@@ -249,7 +237,10 @@
       }
 
       abbrEl.addEventListener("input", render);
-      langEl.addEventListener("change", render);
+      langEl.addEventListener("change", () => {
+        buildExamples();
+        render();
+      });
       keepEl.addEventListener("change", render);
       buildExamples();
       load();

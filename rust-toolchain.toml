@@ -1,0 +1,8 @@
+# Pin the Rust toolchain so CI and local builds are reproducible and a new
+# stable release can't introduce lints/behavior that break the build without
+# warning. Bump this deliberately (and keep it in sync with the toolchain
+# version referenced in .github/workflows/ci.yml).
+[toolchain]
+channel = "1.93.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

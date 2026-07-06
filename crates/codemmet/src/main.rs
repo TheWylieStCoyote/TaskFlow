@@ -5,6 +5,8 @@
 
 mod cli;
 mod lsp;
+#[cfg(feature = "train")]
+mod train;
 
 use std::process::ExitCode;
 

@@ -51,7 +51,7 @@ struct Cli {
 /// Accessible to the subcommand submodules; the LSP resolves its own sources
 /// separately (project packs are opt-in there).
 #[derive(Debug, Clone, Copy)]
-struct Sources<'a> {
+pub struct Sources<'a> {
     /// The user override directory (`--config` or the platform default).
     user: Option<&'a Path>,
     /// The project override directory (`.codemmet/snippets`), when enabled.
@@ -71,6 +71,9 @@ enum Command {
     Check,
     /// Run the LSP server over stdio.
     Lsp(crate::lsp::LspArgs),
+    /// Practice the abbreviation syntax interactively.
+    #[cfg(feature = "train")]
+    Train(crate::train::TrainArgs),
 }
 
 /// Parse arguments and run the selected subcommand.
@@ -97,11 +100,13 @@ pub fn run() -> ExitCode {
         Command::List(args) => list::run(sources, &args),
         Command::Check => check::run(sources),
         Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), &args),
+        #[cfg(feature = "train")]
+        Command::Train(args) => crate::train::run(sources, &args),
     }
 }
 
 /// Load builtin packs merged with the user and project override directories.
-fn load_registry(sources: Sources) -> Result<Registry, ConfigError> {
+pub fn load_registry(sources: Sources) -> Result<Registry, ConfigError> {
     Registry::with_dirs(sources.user, sources.project)
 }
 

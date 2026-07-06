@@ -24,9 +24,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [features]
-default = ["tree-sitter"]
+default = ["tree-sitter", "train"]
 # Syntax-aware context via tree-sitter; disable for a minimal text-only build.
 tree-sitter = ["dep:codemmet-tsctx"]
+# The interactive syntax trainer (`codemmet train`). Pure Rust today; the T2
+# TUI will add ratatui/crossterm behind this same feature.
+train = []
 
 [lints]
 workspace = true

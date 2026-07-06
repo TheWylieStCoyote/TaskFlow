@@ -406,3 +406,50 @@ fn project_pack_auto_loads_and_no_project_disables_it() {
     std::fs::remove_dir_all(&project).ok();
     std::fs::remove_dir_all(&user).ok();
 }
+
+/// Run `train` with `stdin` piped in, isolated from real user/project packs.
+#[cfg(feature = "train")]
+fn run_train(name: &str, args: &[&str], stdin_text: &str) -> Output {
+    let dir = scratch_dir(name);
+    let mut child = bin()
+        .args(["train", "--no-project"])
+        .args(args)
+        .args(["--config", dir.to_str().expect("scratch path is UTF-8")])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("binary should spawn");
+    child
+        .stdin
+        .take()
+        .expect("stdin is piped")
+        .write_all(stdin_text.as_bytes())
+        .expect("write stdin");
+    child.wait_with_output().expect("process should complete")
+}
+
+#[test]
+#[cfg(feature = "train")]
+fn train_runs_a_session_and_summarizes() {
+    // Quitting immediately still prints a session summary and exits cleanly.
+    let out = run_train(
+        "train-quit",
+        &["--lang", "rust", "--level", "1", "--seed", "1"],
+        ":quit\n",
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(
+        stdout(&out).contains("session:"),
+        "expected a summary, got:\n{}",
+        stdout(&out)
+    );
+}
+
+#[test]
+#[cfg(feature = "train")]
+fn train_rejects_an_out_of_range_level() {
+    let out = run_train("train-bad-level", &["--level", "9"], "");
+    assert_eq!(code(&out), 3);
+    assert!(stderr(&out).contains("between 1 and 7"));
+}

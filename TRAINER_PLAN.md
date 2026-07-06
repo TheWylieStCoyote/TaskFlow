@@ -145,13 +145,25 @@ to `deny.toml`'s allowances if not already covered.
 
 ## Milestones
 
-- **T0 — scaffold:** `train` subcommand behind the `train` feature; the
-  `trainer` core types (`Exercise`, `Session`, `Progress`); seeded PRNG +
-  injectable clock; ratatui/crossterm deps.
-- **T1 — core logic:** reverse + forward exercise generation (auto), the
-  output-equivalence grader, hint derivation. Fully unit-tested with no TUI.
-- **T2 — TUI + lessons:** ratatui event loop, the panel layout, live preview,
-  input handling, hints/show; the guided-lessons mode end to end.
+- **T0 — scaffold ✅ (done):** `train` subcommand behind a default-on `train`
+  cargo feature; the trainer core modules under `crates/codemmet/src/train/`
+  (`rng`, `exercise`, `grade`, `hint`, `session`); seeded `SplitMix64` PRNG.
+  Two deviations from the original sketch, both deliberate:
+  - **ratatui/crossterm deferred to T2.** The T0/T1 core is pure Rust and needs
+    no TUI, so adding the dependencies now would be dead weight. They land with
+    the TUI in T2, behind the same `train` feature.
+  - **A line-based runner (`session`) ships now** instead of a placeholder
+    command, so the core is exercised end to end (and it becomes the non-TTY /
+    piped fallback once the TUI exists).
+- **T1 — core logic ✅ (done):** reverse + forward exercise generation from the
+  real registry, the output-equivalence grader (trailing-whitespace tolerant),
+  and progressive hint derivation — all pure and unit-tested (no TUI). The
+  line runner drives it with `:hint` / `:show` / `:skip` / `:quit`, mixed or
+  single-level (`--level`), reproducible via `--seed`. Session logic is tested
+  headlessly by scripting a `Cursor` of input, plus binary-level CLI tests.
+- **T2 — TUI + lessons:** add ratatui/crossterm; a ratatui event loop, the
+  panel layout, live preview, input handling, hints/show; the guided-lessons
+  mode end to end, over the same core.
 - **T3 — the other modes:** drills, spaced repetition (Leitner + persistence),
   sandbox, stats/streaks, `--reset`.
 - **T4 — content + polish:** hand-authored lesson progression, decoy tuning,

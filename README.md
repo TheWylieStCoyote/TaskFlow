@@ -27,10 +27,16 @@ block gains `&self`) and wrap-with-abbreviation.
 
 ## Try it in your browser
 
-The [**playground**](https://thewyliestcoyote.github.io/codemmit/) runs the real
-engine compiled to WebAssembly — pick a language, type an abbreviation, watch it
-expand. (Build it locally with `just playground-serve`; deploy it with the
-included [Pages workflow](.github/workflows/playground.yml). See
+Two pages run the real engine compiled to WebAssembly, no install needed:
+
+- The [**playground**](https://thewyliestcoyote.github.io/codemmit/) — pick a
+  language, type an abbreviation, watch it expand.
+- The [**trainer**](https://thewyliestcoyote.github.io/codemmit/train.html) —
+  `codemmet train` in the browser: guided lessons, drills, and spaced
+  repetition (progress saved in `localStorage`).
+
+(Build them locally with `just playground-serve`; deploy with the included
+[Pages workflow](.github/workflows/playground.yml). See
 [playground/](playground/README.md).)
 
 ## Documentation

@@ -213,9 +213,11 @@ operators then the trigger vocabulary via mixed reverse/forward exercises,
 graded by output-equivalence against the real engine, across four modes
 (guided lessons, drills, spaced-repetition review, and a free-play sandbox).
 Progress, lifetime stats, and a Leitner review schedule persist under the data
-dir (`--reset` clears them). A pure `Trainer` state machine holds all logic; the
-front ends only render and forward key events. See `TRAINER_PLAN.md` (design)
-and `docs/trainer.md` (user guide).
+dir (`--reset` clears them). A pure `Trainer` state machine (the `codemmet-train`
+library) holds all logic; the front ends only render and forward key events —
+which is why it also runs in the browser: the WASM playground (see `playground/`)
+ships a web trainer (`train.html`) over the same state machine, with progress in
+`localStorage`. See `TRAINER_PLAN.md` (design) and `docs/trainer.md` (user guide).
 
 Deferred features (not built): a packaged VS Code extension (codemmet works
 there via generic LSP today), and a cross-language `base.toml` pack

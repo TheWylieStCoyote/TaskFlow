@@ -1,12 +1,18 @@
 # codemmet playground
 
-A single static page (`index.html`) that runs the **real** codemmet engine in
-the browser via WebAssembly — pick a language, type an abbreviation, see it
-expand live. No build step at runtime and no server-side anything.
+Two static pages that run the **real** codemmet engine in the browser via
+WebAssembly — no build step at runtime and no server-side anything:
 
-`crates/codemmet-wasm` compiles `codemmet-core` (without its native `dirs`
-feature) to `wasm32-unknown-unknown` and exposes a tiny hand-rolled C-ABI, so
-no `wasm-bindgen` toolchain is needed.
+- **`index.html`** — the expansion playground: pick a language, type an
+  abbreviation, see it expand live.
+- **`train.html`** — the full trainer: guided lessons, drills, spaced-repetition
+  review, and a sandbox, driving the same `Trainer` state machine as the CLI.
+  The spaced-repetition schedule persists in `localStorage`.
+
+`crates/codemmet-wasm` compiles `codemmet-core` and `codemmet-train` (without
+the native `dirs` feature) to `wasm32-unknown-unknown` and exposes a tiny
+hand-rolled C-ABI, so no `wasm-bindgen` toolchain is needed. Both pages share
+the one `codemmet.wasm`.
 
 ## Build the wasm
 

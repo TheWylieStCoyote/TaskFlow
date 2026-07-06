@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>codemmet trainer</title>
+    <style>
+      :root {
+        --bg: #1e1e2e;
+        --panel: #181825;
+        --fg: #cdd6f4;
+        --muted: #9399b2;
+        --accent: #89b4fa;
+        --code: #a6e3a1;
+        --ok: #a6e3a1;
+        --err: #f38ba8;
+        --warn: #f9e2af;
+        --border: #313244;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        min-height: 100vh;
+      }
+      main { max-width: 820px; margin: 0 auto; padding: 24px 20px 64px; }
+      a { color: var(--accent); }
+      .topbar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      h1 { margin: 0; font-size: 22px; }
+      h1 .accent { color: var(--accent); }
+      .nav { font-size: 13px; color: var(--muted); }
+      .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 16px 0 8px; }
+      label { color: var(--muted); font-size: 13px; }
+      select, button {
+        background: var(--panel); color: var(--fg);
+        border: 1px solid var(--border); border-radius: 8px;
+        padding: 7px 11px; font-size: 13px; cursor: pointer;
+      }
+      button:hover, select:hover { border-color: var(--accent); }
+      button.primary { background: var(--accent); color: #11111b; border-color: var(--accent); font-weight: 600; }
+      .status {
+        display: flex; gap: 16px; flex-wrap: wrap;
+        font-size: 13px; color: var(--muted);
+        border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 18px;
+      }
+      .status b { color: var(--fg); font-weight: 600; }
+      .card {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 18px 20px; margin-bottom: 14px;
+      }
+      .prompt { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+      pre { margin: 0; font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace; font-size: 14px; tab-size: 4; white-space: pre; overflow-x: auto; }
+      pre.code { color: var(--code); }
+      .choice { display: block; width: 100%; text-align: left; background: #11111b; margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+      .choice:hover { border-color: var(--accent); }
+      .choice .num { color: var(--accent); font-weight: 700; margin-right: 8px; }
+      .answerline {
+        font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace; font-size: 16px;
+        background: #11111b; border: 1px solid var(--border); border-radius: 8px;
+        padding: 10px 12px; margin: 14px 0 6px; min-height: 40px; white-space: pre-wrap; word-break: break-all;
+      }
+      .caret { display: inline-block; width: 8px; background: var(--accent); animation: blink 1s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .hint { color: var(--warn); font-size: 14px; margin: 4px 0; }
+      .message { color: var(--err); font-size: 14px; margin: 8px 0; }
+      .preview { color: var(--muted); font-size: 13px; margin-top: 12px; }
+      .preview pre { color: var(--code); opacity: 0.85; margin-top: 4px; }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+      .keys { color: var(--muted); font-size: 12px; margin-top: 10px; }
+      .big { font-size: 20px; font-weight: 700; }
+      .big.ok { color: var(--ok); }
+      .big.err { color: var(--err); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="topbar">
+        <h1><span class="accent">codemmet</span> trainer</h1>
+        <div class="nav">
+          runs in your browser · <a href="index.html">expansion playground →</a>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div><label>Language</label>
+          <select id="lang">
+            <option value="rust">Rust</option><option value="python">Python</option>
+            <option value="c">C</option><option value="cpp">C++</option>
+            <option value="javascript">JavaScript</option><option value="typescript">TypeScript</option>
+            <option value="go">Go</option>
+          </select></div>
+        <div><label>Mode</label>
+          <select id="mode">
+            <option value="lessons">Lessons</option><option value="drills">Drills</option>
+            <option value="review">Review</option><option value="sandbox">Sandbox</option>
+          </select></div>
+        <div><label>Level</label>
+          <select id="level">
+            <option value="0">All / mixed</option>
+            <option value="1">1 · single triggers</option><option value="2">2 · arguments</option>
+            <option value="3">3 · nesting</option><option value="4">4 · siblings</option>
+            <option value="5">5 · repeat</option><option value="6">6 · climb-up</option>
+            <option value="7">7 · grouping</option>
+          </select></div>
+        <button id="restart" class="primary">Start ▸</button>
+        <button id="reset" title="Clear saved spaced-repetition progress">Reset progress</button>
+      </div>
+
+      <div class="status" id="status"></div>
+      <div id="panel"></div>
+    </main>
+
+    <script type="module">
+      const EV = { advance: 0, submit: 1, hint: 2, reveal: 3, skip: 4, quit: 5, backspace: 6, insert: 7 };
+      const $ = (id) => document.getElementById(id);
+      const enc = new TextEncoder(), dec = new TextDecoder();
+      let x = null;      // wasm exports
+      let handle = 0;    // current trainer
+      let snap = null;   // last snapshot
+
+      // --- wasm string helpers -------------------------------------------------
+      function putStr(s) {
+        const b = enc.encode(s);
+        const p = x.cm_alloc(b.length);
+        new Uint8Array(x.memory.buffer, p, b.length).set(b);
+        return [p, b.length];
+      }
+      function readStr(p) {
+        const n = x.cm_last_len();
+        const s = dec.decode(new Uint8Array(x.memory.buffer, p, n).slice());
+        x.cm_free(p, n);
+        return s;
+      }
+
+      // --- trainer lifecycle ---------------------------------------------------
+      function reviewKey(lang) { return "codemmet.review." + lang; }
+
+      function startTrainer() {
+        if (handle) { x.cmt_free(handle); handle = 0; }
+        const lang = $("lang").value;
+        const level = parseInt($("level").value, 10);
+        const saved = localStorage.getItem(reviewKey(lang));
+        const cfg = {
+          lang,
+          mode: $("mode").value,
+          level: level > 0 ? level : null,
+          seed: (Date.now() ^ (Math.random() * 2 ** 32)) >>> 0,
+          now: Math.floor(Date.now() / 1000),
+          review: saved ? JSON.parse(saved) : null,
+        };
+        const [p, l] = putStr(JSON.stringify(cfg));
+        handle = x.cmt_new(p, l);
+        x.cm_free(p, l);
+        render();
+      }
+
+      function persistReview() {
+        if (!handle) return;
+        const review = readStr(x.cmt_review(handle));
+        localStorage.setItem(reviewKey($("lang").value), review);
+      }
+
+      function send(code, ch = 0) {
+        if (!handle) return;
+        x.cmt_event(handle, code, ch);
+        persistReview();
+        render();
+      }
+
+      // Set the answer buffer to an exact string (clear, then type it).
+      function setInput(str) {
+        const cur = (snap && snap.input) || "";
+        for (let i = 0; i < cur.length; i++) x.cmt_event(handle, EV.backspace, 0);
+        for (const c of str) x.cmt_event(handle, EV.insert, c.codePointAt(0));
+      }
+
+      function readSnap() {
+        snap = JSON.parse(readStr(x.cmt_state(handle)));
+        return snap;
+      }
+
+      // --- rendering -----------------------------------------------------------
+      function el(tag, props = {}, ...kids) {
+        const n = document.createElement(tag);
+        for (const [k, v] of Object.entries(props)) {
+          if (k === "class") n.className = v;
+          else if (k === "text") n.textContent = v;
+          else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+          else n.setAttribute(k, v);
+        }
+        for (const kid of kids) if (kid) n.append(kid);
+        return n;
+      }
+      const codeBlock = (code, cls = "code") => el("pre", { class: cls, text: code });
+
+      function render() {
+        const s = readSnap();
+        // status bar
+        const st = $("status");
+        st.replaceChildren(
+          frag(`Mode: <b>${s.mode}</b>`),
+          s.mode === "sandbox" ? null : frag(`Level: <b>${s.level_num} · ${s.level_title}</b>`),
+          s.mode === "sandbox" ? null : frag(`${s.header}`),
+          frag(`Solved: <b>${s.stats.solved}</b>`),
+          frag(`Streak: <b>${s.stats.streak}</b>`),
+          frag(`Due: <b>${s.due}</b>`),
+        );
+        const panel = $("panel");
+        panel.replaceChildren(...view(s));
+      }
+      function frag(html) { const n = el("span"); n.innerHTML = html; return n; }
+
+      function inputLine(s, placeholder) {
+        const line = el("div", { class: "answerline" });
+        line.append(document.createTextNode(s.input || ""));
+        line.append(el("span", { class: "caret", text: " " }));
+        if (!s.input && placeholder) line.append(el("span", { class: "preview", text: "  " + placeholder }));
+        return line;
+      }
+
+      function hintsAndPreview(s) {
+        const bits = [];
+        for (const h of s.hints) bits.push(el("div", { class: "hint", text: "hint: " + h }));
+        if (s.message) bits.push(el("div", { class: "message", text: s.message }));
+        if (s.preview) bits.push(el("div", { class: "preview" }, document.createTextNode("expands to:"), codeBlock(s.preview)));
+        return bits;
+      }
+
+      function actions(...btns) {
+        const box = el("div", { class: "actions" });
+        for (const b of btns) if (b) box.append(b);
+        return box;
+      }
+      const btn = (label, onClick, primary) =>
+        el("button", { class: primary ? "primary" : "", text: label, onclick: onClick });
+
+      function view(s) {
+        if (s.mode === "sandbox") return sandboxView(s);
+        switch (s.phase) {
+          case "intro": return introView(s);
+          case "answering": return answeringView(s);
+          case "feedback": return feedbackView(s);
+          case "done": return doneView(s);
+          default: return [el("div", { text: "…" })];
+        }
+      }
+
+      function introView(s) {
+        return [el("div", { class: "card" },
+          el("div", { class: "big", text: `Level ${s.level_num} — ${s.level_title}` }),
+          el("p", { class: "prompt", text: s.blurb || "" }),
+          actions(btn("Begin ▸", () => send(EV.advance), true)),
+          el("div", { class: "keys", text: "Enter to begin" }),
+        )];
+      }
+
+      function answeringView(s) {
+        const card = el("div", { class: "card" });
+        if (s.direction === "reverse") {
+          card.append(el("p", { class: "prompt", text: "Write an abbreviation that produces this code:" }));
+          card.append(codeBlock(s.target || ""));
+          card.append(inputLine(s, "type an abbreviation…"));
+        } else if (s.multiple_choice) {
+          card.append(el("p", { class: "prompt" }, frag(`Which output does <b>${escapeHtml(s.abbreviation)}</b> produce?`)));
+          s.choices.forEach((c, i) => {
+            const b = el("button", { class: "choice", onclick: () => { setInput(String(i + 1)); send(EV.submit); } });
+            b.append(el("span", { class: "num", text: (i + 1) + "." }), codeBlock(c));
+            card.append(b);
+          });
+          card.append(inputLine(s, "click a choice, or type its number"));
+        } else {
+          card.append(el("p", { class: "prompt" }, frag(`What does <b>${escapeHtml(s.abbreviation)}</b> expand to? Type the code.`)));
+          card.append(inputLine(s, "type the code…"));
+        }
+        hintsAndPreview(s).forEach((n) => card.append(n));
+        card.append(actions(
+          btn("Submit", () => send(EV.submit), true),
+          btn("Hint", () => send(EV.hint)),
+          btn("Reveal", () => send(EV.reveal)),
+          btn("Skip", () => send(EV.skip)),
+        ));
+        card.append(el("div", { class: "keys", text: "Enter: submit · Tab: hint · Ctrl+R: reveal · Ctrl+K: skip" }));
+        return [card];
+      }
+
+      function feedbackView(s) {
+        const f = s.feedback || {};
+        const head = f.solved
+          ? el("div", { class: "big ok", text: "✓ Correct!" })
+          : el("div", { class: "big err", text: "✗ Revealed" });
+        return [el("div", { class: "card" },
+          head,
+          el("p", { class: "prompt" }, document.createTextNode("a canonical answer: "), el("b", { text: f.answer || "" })),
+          actions(btn("Continue ▸", () => send(EV.advance), true)),
+          el("div", { class: "keys", text: "Enter to continue" }),
+        )];
+      }
+
+      function doneView(s) {
+        const card = el("div", { class: "card" });
+        if (s.mode === "review" && s.stats.presented === 0) {
+          card.append(el("div", { class: "big ok", text: "No reviews due 🎉" }));
+          card.append(el("p", { class: "prompt", text: "Nothing scheduled right now — run lessons or drills to build your schedule, then come back." }));
+        } else {
+          card.append(el("div", { class: "big ok", text: s.mode === "lessons" ? "Lessons complete!" : "Session complete!" }));
+          const acc = s.stats.attempts ? Math.round((s.stats.solved * 100) / s.stats.attempts) : 0;
+          card.append(codeBlock(
+            `Exercises shown:  ${s.stats.presented}\nSolved:           ${s.stats.solved}\n` +
+            `Answer accuracy:  ${acc}%\nBest streak:      ${s.stats.best_streak}`, ""));
+        }
+        card.append(actions(btn("Start again ▸", startTrainer, true)));
+        return [card];
+      }
+
+      function sandboxView(s) {
+        const card = el("div", { class: "card" });
+        card.append(el("p", { class: "prompt", text: "Free play — type an abbreviation and press Enter to expand it." }));
+        card.append(inputLine(s, "e.g. fn:main>fori10>pr"));
+        if (s.message) card.append(el("div", { class: "message", text: s.message }));
+        if (s.preview) card.append(el("div", { class: "preview" }, document.createTextNode("preview:"), codeBlock(s.preview)));
+        const log = [...s.sandbox].reverse();
+        for (const e of log) {
+          card.append(el("div", { class: "preview", style: "margin-top:14px" },
+            frag(`<b>${escapeHtml(e.abbr)}</b> ⟶`), codeBlock(e.output)));
+        }
+        return [card];
+      }
+
+      function escapeHtml(s) {
+        return (s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      }
+
+      // --- keyboard ------------------------------------------------------------
+      document.addEventListener("keydown", (e) => {
+        if (!handle || !snap) return;
+        const typing = snap.phase === "answering" || snap.phase === "sandbox";
+        if (e.key === "Enter") {
+          e.preventDefault();
+          if (typing) send(EV.submit);
+          else if (snap.phase === "done") startTrainer();
+          else send(EV.advance);
+        } else if (!typing) {
+          return;
+        } else if (e.key === "Backspace") {
+          e.preventDefault(); send(EV.backspace);
+        } else if (e.key === "Tab" && snap.phase === "answering") {
+          e.preventDefault(); send(EV.hint);
+        } else if (e.ctrlKey && (e.key === "r" || e.key === "R") && snap.phase === "answering") {
+          e.preventDefault(); send(EV.reveal);
+        } else if (e.ctrlKey && (e.key === "k" || e.key === "K") && snap.phase === "answering") {
+          e.preventDefault(); send(EV.skip);
+        } else if (!e.ctrlKey && !e.metaKey && !e.altKey && [...e.key].length === 1) {
+          e.preventDefault(); send(EV.insert, e.key.codePointAt(0));
+        }
+      });
+
+      $("restart").addEventListener("click", startTrainer);
+      $("reset").addEventListener("click", () => {
+        for (const k of Object.keys(localStorage)) if (k.startsWith("codemmet.review.")) localStorage.removeItem(k);
+        startTrainer();
+      });
+
+      async function load() {
+        try {
+          let instance;
+          try {
+            ({ instance } = await WebAssembly.instantiateStreaming(fetch("codemmet.wasm"), {}));
+          } catch {
+            const bytes = await (await fetch("codemmet.wasm")).arrayBuffer();
+            ({ instance } = await WebAssembly.instantiate(bytes, {}));
+          }
+          x = instance.exports;
+        } catch (err) {
+          $("panel").innerHTML = "<div class='card message'>Failed to load the WebAssembly engine.<br>" + err + "</div>";
+          return;
+        }
+        startTrainer();
+      }
+      load();
+    </script>
+  </body>
+</html>

@@ -67,6 +67,41 @@ binary, for example `cmd = { "/path/to/codemmet/target/release/codemmet", "lsp" 
 See [installation](installation.md) for details, and
 [troubleshooting](troubleshooting.md) if the editor reports `command not found`.
 
+### Local install (no remote repository)
+
+You do not need to publish the repository to GitHub. lazy.nvim loads a plugin
+from a local directory when you give it `dir` instead of a `"owner/repo"`
+string. Point `dir` at your clone and, because `build` leaves the binary inside
+that clone, point `cmd` at the built binary by absolute path:
+
+```lua
+{
+  dir = "/home/you/src/codemmet",             -- your local clone
+  name = "codemmet",
+  build = "cargo build --release -p codemmet", -- builds ./target/release/codemmet
+  ft = {
+    "rust", "python", "c", "cpp",
+    "javascript", "javascriptreact", "typescript", "typescriptreact",
+    "go",
+  },
+  opts = {
+    cmd = { "/home/you/src/codemmet/target/release/codemmet", "lsp" },
+    keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+  },
+}
+```
+
+`name = "codemmet"` makes lazy run `require("codemmet").setup(opts)` (it derives
+the module from the plugin name). If you would rather keep `cmd` short, drop the
+`build` line, run `cargo install --path /home/you/src/codemmet/crates/codemmet`
+yourself, and let `cmd` default to `{ "codemmet", "lsp" }` — then the plugin
+spec only needs `dir`, `name`, `ft`, and `opts.keymaps`.
+
+The same idea works for other managers: packer uses no network for a local
+path if you clone it into its `start`/`opt` directory yourself; with a bare
+`runtimepath` setup, `vim.opt.runtimepath:append("/home/you/src/codemmet")`
+then `require("codemmet").setup({...})` in your `init.lua` is all it takes.
+
 ### `setup()` options
 
 Calling `require("codemmet").setup(opts)` configures the plugin. (With lazy.nvim,

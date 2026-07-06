@@ -308,8 +308,21 @@ fn compile_snippet(
 }
 
 /// The default user snippet directory: `<config>/codemmet/snippets`.
+///
+/// Requires the `dirs` feature (on by default); absent it — e.g. in a WASM
+/// build that has no home directory — this returns `None`.
+#[cfg(feature = "dirs")]
+#[must_use]
 pub fn default_user_snippets_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|d| d.join("codemmet").join("snippets"))
+}
+
+/// The default user snippet directory. Without the `dirs` feature there is no
+/// platform directory to resolve, so this is always `None`.
+#[cfg(not(feature = "dirs"))]
+#[must_use]
+pub fn default_user_snippets_dir() -> Option<PathBuf> {
+    None
 }
 
 #[cfg(test)]

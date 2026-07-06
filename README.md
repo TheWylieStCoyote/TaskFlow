@@ -25,6 +25,14 @@ Delivered as one binary that is both a CLI (`codemmet expand`, `wrap`, `list`,
 It uses tree-sitter for context-aware expansion (e.g. `fn` inside an `impl`
 block gains `&self`) and wrap-with-abbreviation.
 
+## Try it in your browser
+
+The [**playground**](https://thewyliestcoyote.github.io/codemmit/) runs the real
+engine compiled to WebAssembly — pick a language, type an abbreviation, watch it
+expand. (Build it locally with `just playground-serve`; deploy it with the
+included [Pages workflow](.github/workflows/playground.yml). See
+[playground/](playground/README.md).)
+
 ## Documentation
 
 Full guides live in **[docs/](docs/README.md)** — start with

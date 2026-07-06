@@ -23,6 +23,14 @@ snap:
 demo:
     bash demo/render.sh
 
+# Build the browser playground's WebAssembly module
+playground:
+    bash playground/build.sh
+
+# Serve the playground locally at http://localhost:8000
+playground-serve: playground
+    python3 -m http.server -d playground 8000
+
 # Everything CI runs, locally
 ci: lint test
     cargo build --workspace --release

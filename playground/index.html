@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>codemmet playground</title>
+    <style>
+      :root {
+        --bg: #1e1e2e;
+        --panel: #181825;
+        --fg: #cdd6f4;
+        --muted: #9399b2;
+        --accent: #89b4fa;
+        --code: #a6e3a1;
+        --err: #f38ba8;
+        --border: #313244;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        min-height: 100vh;
+      }
+      main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { margin: 0 0 4px; font-size: 26px; }
+      h1 .accent { color: var(--accent); }
+      p.tag { margin: 0 0 24px; color: var(--muted); }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      label { color: var(--muted); font-size: 13px; }
+      select, input[type="text"] {
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 14px;
+      }
+      select:focus, input[type="text"]:focus { outline: 2px solid var(--accent); }
+      #abbr {
+        width: 100%;
+        font-family: ui-monospace, "DejaVu Sans Mono", SFMono-Regular, Menlo, monospace;
+        font-size: 16px;
+        margin: 4px 0 14px;
+      }
+      .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+      .examples button {
+        background: var(--panel);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 5px 12px;
+        font: 12px ui-monospace, monospace;
+        cursor: pointer;
+      }
+      .examples button:hover { border-color: var(--accent); color: var(--accent); }
+      pre#out {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin: 0;
+        min-height: 160px;
+        overflow-x: auto;
+        white-space: pre;
+        font-family: ui-monospace, "DejaVu Sans Mono", SFMono-Regular, Menlo, monospace;
+        font-size: 14px;
+        color: var(--code);
+        tab-size: 4;
+      }
+      pre#out.error { color: var(--err); }
+      pre#out.loading { color: var(--muted); }
+      footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+      footer a { color: var(--accent); }
+      .row { display: flex; align-items: center; gap: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><span class="accent">codemmet</span> playground</h1>
+      <p class="tag">
+        Type an Emmet-style abbreviation, get real code. Runs entirely in your
+        browser — the actual codemmet engine, compiled to WebAssembly.
+      </p>
+
+      <div class="controls">
+        <div class="row">
+          <label for="lang">Language</label>
+          <select id="lang">
+            <option value="rust">Rust</option>
+            <option value="python">Python</option>
+            <option value="c">C</option>
+            <option value="cpp">C++</option>
+            <option value="javascript">JavaScript</option>
+            <option value="typescript">TypeScript</option>
+            <option value="go">Go</option>
+          </select>
+        </div>
+        <div class="row">
+          <input type="checkbox" id="keep" />
+          <label for="keep">Show tabstops (<code>$1</code>, <code>$0</code>)</label>
+        </div>
+      </div>
+
+      <input
+        type="text"
+        id="abbr"
+        spellcheck="false"
+        autocapitalize="off"
+        autocomplete="off"
+        placeholder="fn:main&gt;fori10&gt;pr"
+      />
+
+      <div class="examples" id="examples"></div>
+
+      <pre id="out" class="loading">loading the engine…</pre>
+
+      <footer>
+        Operators: <code>&gt;</code> child · <code>+</code> sibling ·
+        <code>*</code> repeat · <code>^</code> climb-up · <code>( )</code> group.
+        See the <a href="https://github.com/TheWylieStCoyote/codemmit">project &amp; docs</a>
+        for the full syntax, the CLI, editor setup, and the <code>codemmet train</code> trainer.
+      </footer>
+    </main>
+
+    <script type="module">
+      const EXAMPLES = [
+        ["rust", "fn:main>fori10>pr"],
+        ["rust", "fn:handle>match:msg>arm*3^ret"],
+        ["rust", "(fn:main>pr)+fn:helper"],
+        ["python", "def:main>fori:i,10>pr"],
+        ["go", "fn:main>fori:i,10>pr"],
+        ["typescript", "class:Widget>fn:run"],
+      ];
+
+      const $ = (id) => document.getElementById(id);
+      const abbrEl = $("abbr"), langEl = $("lang"), keepEl = $("keep"), outEl = $("out");
+
+      const enc = new TextEncoder();
+      const dec = new TextDecoder();
+      let wasm = null;
+
+      function expand(abbr, lang, keep) {
+        const x = wasm;
+        const a = enc.encode(abbr), l = enc.encode(lang);
+        const ap = x.cm_alloc(a.length), lp = x.cm_alloc(l.length);
+        new Uint8Array(x.memory.buffer, ap, a.length).set(a);
+        new Uint8Array(x.memory.buffer, lp, l.length).set(l);
+        const rp = x.cm_expand(ap, a.length, lp, l.length, keep ? 1 : 0);
+        const rl = x.cm_last_len(), ok = x.cm_last_ok() === 1;
+        const out = dec.decode(new Uint8Array(x.memory.buffer, rp, rl).slice());
+        x.cm_free(ap, a.length);
+        x.cm_free(lp, l.length);
+        x.cm_free(rp, rl);
+        return { ok, out };
+      }
+
+      function render() {
+        if (!wasm) return;
+        const abbr = abbrEl.value.trim();
+        if (!abbr) {
+          outEl.className = "loading";
+          outEl.textContent = "Type an abbreviation above…";
+          return;
+        }
+        const { ok, out } = expand(abbr, langEl.value, keepEl.checked);
+        outEl.className = ok ? "" : "error";
+        outEl.textContent = out || "(empty)";
+      }
+
+      function buildExamples() {
+        const box = $("examples");
+        for (const [lang, abbr] of EXAMPLES) {
+          const b = document.createElement("button");
+          b.textContent = abbr;
+          b.title = `${lang}: ${abbr}`;
+          b.addEventListener("click", () => {
+            langEl.value = lang;
+            abbrEl.value = abbr;
+            render();
+            abbrEl.focus();
+          });
+          box.appendChild(b);
+        }
+      }
+
+      async function load() {
+        try {
+          let instance;
+          try {
+            ({ instance } = await WebAssembly.instantiateStreaming(fetch("codemmet.wasm"), {}));
+          } catch {
+            // Fallback when the server sends the wrong MIME type.
+            const bytes = await (await fetch("codemmet.wasm")).arrayBuffer();
+            ({ instance } = await WebAssembly.instantiate(bytes, {}));
+          }
+          wasm = instance.exports;
+        } catch (err) {
+          outEl.className = "error";
+          outEl.textContent = "Failed to load the WebAssembly engine.\n" + err;
+          return;
+        }
+        abbrEl.value = "fn:main>fori10>pr";
+        render();
+      }
+
+      abbrEl.addEventListener("input", render);
+      langEl.addEventListener("change", render);
+      keepEl.addEventListener("change", render);
+      buildExamples();
+      load();
+    </script>
+  </body>
+</html>

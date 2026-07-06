@@ -1,0 +1,20 @@
+[package]
+name = "codemmet-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "WebAssembly bindings for the codemmet browser playground"
+
+[lib]
+crate-type = ["cdylib"]
+
+# No workspace dependency inheritance here: the playground needs codemmet-core
+# built without its `dirs` feature so it compiles for wasm32-unknown-unknown.
+[dependencies]
+codemmet-core = { path = "../codemmet-core", default-features = false }
+
+[lints]
+workspace = true

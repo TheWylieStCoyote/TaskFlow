@@ -55,7 +55,7 @@ const fn operator_name(op: char) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::train::exercise::{Direction, Level};
+    use crate::exercise::{Direction, Level};
 
     fn exercise(concepts: Vec<Concept>) -> Exercise {
         Exercise {

@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/codemmet",
     "crates/codemmet-core",
+    "crates/codemmet-train",
     "crates/codemmet-tsctx",
     "crates/codemmet-wasm",
 ]

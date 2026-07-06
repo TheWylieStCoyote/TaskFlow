@@ -13,15 +13,15 @@
 //! - [`tui`] is the ratatui full-screen front end; [`session`] is the
 //!   line-based fallback for non-TTY / piped use. Both drive [`trainer`].
 
-mod exercise;
-mod grade;
-mod hint;
-mod lessons;
+// The pure trainer core lives in the `codemmet-train` library so it can also
+// compile to WebAssembly for the browser playground. Re-export the modules the
+// native front ends use under `crate::train::…` so their paths are unchanged.
+#[cfg(test)]
+use codemmet_train::rng;
+use codemmet_train::{exercise, review, trainer};
+
 mod progress;
-mod review;
-mod rng;
 mod session;
-mod trainer;
 mod tui;
 
 use std::io::IsTerminal;

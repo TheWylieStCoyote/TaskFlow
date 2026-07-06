@@ -132,6 +132,7 @@ pub enum Event {
 }
 
 /// The trainer state machine.
+#[derive(Debug)]
 pub struct Trainer<'a> {
     engine: &'a Engine,
     language: String,
@@ -746,7 +747,7 @@ mod tests {
         let engine = engine();
         let mut t = lessons(&engine, Some(Level::Nesting), 3);
         t.handle(Event::Advance);
-        let expected = crate::train::hint::hints(t.exercise().expect("exercise")).len();
+        let expected = crate::hint::hints(t.exercise().expect("exercise")).len();
         assert!(expected >= 1);
         t.handle(Event::Hint);
         assert_eq!(t.revealed_hints().len(), 1);

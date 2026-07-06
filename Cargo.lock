@@ -163,6 +163,7 @@ dependencies = [
  "anyhow",
  "clap",
  "codemmet-core",
+ "codemmet-train",
  "codemmet-tsctx",
  "dirs",
  "lsp-server",
@@ -181,6 +182,15 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
+]
+
+[[package]]
+name = "codemmet-train"
+version = "0.1.0"
+dependencies = [
+ "codemmet-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

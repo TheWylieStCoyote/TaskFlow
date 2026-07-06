@@ -558,9 +558,10 @@ fn swap_leading_trigger(vocab: &Vocab, abbr: &str, rng: &mut Rng) -> Option<Stri
     Some(format!("{}{rest}", sibling.trigger))
 }
 
-/// Build an exercise from a specific, hand-authored abbreviation (curated
-/// lessons). `want` forces the direction; `None` lets it vary by seed. Returns
-/// `None` if the abbreviation does not render for `language`.
+/// Build an exercise from a specific, hand-authored abbreviation.
+///
+/// Used by curated lessons. `want` forces the direction; `None` lets it vary by
+/// seed. Returns `None` if the abbreviation does not render for `language`.
 #[must_use]
 pub fn from_abbreviation(
     engine: &Engine,
@@ -658,7 +659,7 @@ pub fn generate_for_concept(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::train::grade::{Outcome, grade_reverse};
+    use crate::grade::{Outcome, grade_reverse};
     use codemmet_core::context::IndentUnit;
     use codemmet_core::lang::registry::Registry;
 

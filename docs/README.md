@@ -23,6 +23,8 @@ New to codemmet? Read these in order:
 1. **[Installation](installation.md)** — build the binary and put it on your PATH.
 2. **[Tutorials](tutorials.md)** — a hands-on walkthrough from your first
    expansion to wrapping existing code and scripting.
+   Then browse the **[examples cookbook](examples.md)** for longer,
+   real-world abbreviations that combine several operators at once.
 3. **[Editor setup](editors.md)** — use codemmet as you type, in Neovim or any
    LSP-capable editor.
 
@@ -34,6 +36,8 @@ New to codemmet? Read these in order:
   languages, with descriptions.
 - **[CLI reference](cli.md)** — the `expand`, `wrap`, `list`, `check`, and `lsp`
   subcommands, their flags, and exit codes.
+- **[Examples cookbook](examples.md)** — longer, real-world abbreviations that
+  combine nesting, siblings, repeats, and climb-up across languages.
 - **[Custom snippets](snippets.md)** — author your own triggers and override or
   disable the built-in ones with TOML snippet packs.
 - **[Troubleshooting](troubleshooting.md)** — fixes for the most common issues.

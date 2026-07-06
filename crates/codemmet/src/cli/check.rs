@@ -5,33 +5,52 @@ use std::process::ExitCode;
 
 use codemmet_core::lang::profile::PROFILES;
 
-use super::{config_failure, load_registry};
+use super::{Sources, config_failure, load_registry};
 
-/// Run `codemmet check` against `user_dir` (already defaulted by the caller).
+/// Run `codemmet check` against the resolved override directories.
 ///
 /// A missing directory is not an error: builtins are compiled in and there
 /// is simply nothing to validate.
-pub fn run(user_dir: Option<&Path>) -> ExitCode {
-    let Some(dir) = user_dir else {
-        println!("no user snippets directory configured; builtins only");
-        return ExitCode::SUCCESS;
-    };
-    if !dir.exists() {
-        println!("no user snippets at {}", dir.display());
-        return ExitCode::SUCCESS;
+pub fn run(sources: Sources) -> ExitCode {
+    // Preserve the friendly single-directory notes when there is no project
+    // pack to also consider.
+    if sources.project.is_none() {
+        match sources.user {
+            None => {
+                println!("no user snippets directory configured; builtins only");
+                return ExitCode::SUCCESS;
+            }
+            Some(dir) if !dir.exists() => {
+                println!("no user snippets at {}", dir.display());
+                return ExitCode::SUCCESS;
+            }
+            Some(_) => {}
+        }
     }
-    match load_registry(Some(dir)) {
+    match load_registry(sources) {
         Ok(registry) => {
-            warn_misnamed_packs(dir);
+            for dir in [sources.user, sources.project].into_iter().flatten() {
+                if dir.exists() {
+                    warn_misnamed_packs(dir);
+                }
+            }
             let languages = registry.languages().count();
             let triggers: usize = registry.languages().map(|lang| lang.set.len()).sum();
-            println!(
-                "ok: {languages} languages, {triggers} triggers (user snippets: {})",
-                dir.display()
-            );
+            println!("ok: {languages} languages, {triggers} triggers");
+            report_dir("user", sources.user);
+            report_dir("project", sources.project);
             ExitCode::SUCCESS
         }
         Err(err) => config_failure(&err),
+    }
+}
+
+/// Print which override directory is in effect, if any.
+fn report_dir(label: &str, dir: Option<&Path>) {
+    if let Some(dir) = dir
+        && dir.exists()
+    {
+        println!("  {label} snippets: {}", dir.display());
     }
 }
 

@@ -191,6 +191,10 @@ The global `--config <DIR>` option sets the snippet override directory, where yo
 
 Files in this directory are named `<language-id>.toml`, for example `rust.toml` or `go.toml`. Pass `--config <DIR>` to any subcommand to use a different directory. For the full snippet pack schema, see the [custom snippets](snippets.md) guide.
 
+## Project-local packs and `--no-project`
+
+The CLI also auto-loads **project-local** packs: it walks up from the working directory looking for a `.codemmet/snippets/` directory and, if found, merges those packs at the highest priority (project overrides user overrides builtins). This lets a repository ship its own triggers. Pass the global `--no-project` flag to any subcommand to ignore project packs and use only the user and built-in ones. See [custom snippets](snippets.md) for the precedence rules and the LSP's opt-in behavior.
+
 ## Exit codes
 
 | Code | Meaning |

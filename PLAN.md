@@ -193,10 +193,16 @@ the enclosing repeated node, both in snippet bodies and in argument values
 in the IR; `i` is a reserved parameter name. Group-repeat (`(...)*n`) is
 distributed at parse time, so the index applies to `node*n`, not to a group.
 
-Deferred features (not built): project-local snippet packs
-(`.codemmet/snippets/`), a packaged VS Code extension (codemmet works there via
-generic LSP today), and a cross-language `base.toml` pack (per-language packs
-read better; likely dropped rather than built).
+Project-local snippet packs shipped: `.codemmet/snippets/<lang>.toml` discovered
+by walking up from the working directory (CLI, auto-loaded, `--no-project` to
+disable) or the workspace root (LSP, opt-in via the `project_snippets`
+initialization option). They are the highest-priority tier —
+project > user > builtin — via `Registry::with_dirs`. The LSP defaults to off
+because an opened repository is not necessarily trusted.
+
+Deferred features (not built): a packaged VS Code extension (codemmet works
+there via generic LSP today), and a cross-language `base.toml` pack
+(per-language packs read better; likely dropped rather than built).
 
 Deferred performance work (intentionally left at "M3 scale is fine"): the LSP
 server re-parses the whole buffer per edit rather than using tree-sitter

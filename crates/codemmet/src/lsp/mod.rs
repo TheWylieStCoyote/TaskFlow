@@ -18,7 +18,7 @@ use std::process::ExitCode;
 
 use codemmet_core::Engine;
 use codemmet_core::context::{ContextProvider, DocSnapshot};
-use codemmet_core::lang::registry::{LanguageSnippets, Registry};
+use codemmet_core::lang::registry::{LanguageSnippets, Registry, find_project_snippets_dir};
 #[cfg(feature = "tree-sitter")]
 use codemmet_tsctx::TreeSitterProvider;
 use lsp_server::{Connection, ErrorCode, Message, Request, Response};
@@ -61,6 +61,10 @@ struct InitOptions {
     snippets_dir: Option<PathBuf>,
     /// `"always"` | `"operators-only"` | `"off"`.
     completion: Option<String>,
+    /// Opt in to project-local packs (`.codemmet/snippets` under the workspace
+    /// root). Off by default: the editor may open untrusted repositories, and a
+    /// project pack can silently redefine what abbreviations expand to.
+    project_snippets: Option<bool>,
 }
 
 /// One open document, kept current via incremental sync.
@@ -87,6 +91,54 @@ struct Server {
     /// Syntax awareness for expansion points (`context_at` needs `&mut`
     /// for its tree cache, so the server owns the provider mutably).
     provider: Box<dyn ContextProvider>,
+}
+
+/// Convert a `file:` URI string to a filesystem path.
+///
+/// Handles the common `file:///path` (empty authority) and `file://host/path`
+/// forms and percent-decodes the path. Returns `None` for non-`file` URIs.
+fn file_uri_to_path(uri: &str) -> Option<PathBuf> {
+    let rest = uri.strip_prefix("file://")?;
+    // Everything from the first '/' is the path; anything before it is an
+    // authority (host) we don't need for a local path.
+    let path = match rest.find('/') {
+        Some(0) => rest,
+        Some(start) => rest.get(start..)?,
+        None => return None,
+    };
+    Some(PathBuf::from(percent_decode(path)))
+}
+
+/// Percent-decode a URI path component (`%20` → space, etc.).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while let Some(&byte) = bytes.get(i) {
+        if byte == b'%'
+            && let (Some(hi), Some(lo)) = (
+                bytes.get(i + 1).copied().and_then(hex_nibble),
+                bytes.get(i + 2).copied().and_then(hex_nibble),
+            )
+        {
+            out.push(hi * 16 + lo);
+            i += 3;
+        } else {
+            out.push(byte);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A hex digit's value, or `None` if `byte` is not `[0-9a-fA-F]`.
+const fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 /// The best context provider this build carries: tree-sitter under the
@@ -134,10 +186,28 @@ fn serve(default_user_dir: Option<&Path>) -> anyhow::Result<()> {
     )?;
 
     let user_dir = options.snippets_dir.as_deref().or(default_user_dir);
-    let registry = match Registry::with_user_dir(user_dir) {
+    // Project packs are opt-in: only when `project_snippets` is set do we look
+    // for `.codemmet/snippets` under the workspace root the client reported
+    // (a workspace folder, else the deprecated `rootUri`).
+    // `root_uri` is deprecated in favour of `workspace_folders`, but many
+    // clients still send only the former, so we accept it as a fallback.
+    #[allow(deprecated)]
+    let project_dir = if options.project_snippets.unwrap_or(false) {
+        params
+            .workspace_folders
+            .as_deref()
+            .and_then(|folders| folders.first())
+            .map(|folder| folder.uri.as_str())
+            .or_else(|| params.root_uri.as_ref().map(|uri| uri.as_str()))
+            .and_then(file_uri_to_path)
+            .and_then(|root| find_project_snippets_dir(&root))
+    } else {
+        None
+    };
+    let registry = match Registry::with_dirs(user_dir, project_dir.as_deref()) {
         Ok(registry) => registry,
         Err(err) => {
-            // User overrides are broken; stay usable on builtins alone.
+            // Overrides are broken; stay usable on builtins alone.
             eprintln!("codemmet: ignoring user snippets: {err}");
             Registry::with_builtins()?
         }

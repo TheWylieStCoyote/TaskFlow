@@ -42,9 +42,9 @@ impl LspClient {
             next_id: 0,
         };
 
-        let mut options = json!({
-            "snippets_dir": scratch_dir(test).to_str().expect("scratch path is UTF-8"),
-        });
+        let scratch = scratch_dir(test);
+        let scratch_str = scratch.to_str().expect("scratch path is UTF-8");
+        let mut options = json!({ "snippets_dir": scratch_str });
         if let (Some(base), Some(extra)) = (options.as_object_mut(), extra_options.as_object()) {
             base.extend(extra.clone());
         }
@@ -52,6 +52,9 @@ impl LspClient {
             "initialize",
             &json!({
                 "capabilities": { "general": { "positionEncodings": encodings } },
+                // Report the scratch dir as the workspace root; only tests that
+                // set `project_snippets` act on it.
+                "rootUri": format!("file://{scratch_str}"),
                 "initializationOptions": options,
             }),
         );
@@ -737,5 +740,65 @@ fn unknown_language_and_unopened_document_complete_to_null() {
     client.open(URI, "cobol", DOC);
     assert_eq!(client.complete(URI, 1, 10), Value::Null);
     assert_eq!(client.complete("file:///not/open.rs", 0, 0), Value::Null);
+    client.shutdown();
+}
+
+#[test]
+fn project_snippets_opt_in_loads_the_project_pack() {
+    // A project pack under the workspace root overrides the builtin `pr`.
+    let pack_dir = scratch_dir("project-opt-in")
+        .join(".codemmet")
+        .join("snippets");
+    std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
+    std::fs::write(
+        pack_dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
+    )
+    .expect("project pack should be writable");
+
+    let (mut client, _) = LspClient::start(
+        "project-opt-in",
+        &["utf-8"],
+        &json!({ "project_snippets": true }),
+    );
+    client.open(URI, "rust", "fn main() {\n    pr\n}\n");
+    let result = client.complete(URI, 1, 6);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    let new_text = snippets[0]["textEdit"]["newText"]
+        .as_str()
+        .expect("newText should be a string");
+    assert!(
+        new_text.contains("PROJECT!"),
+        "project pack should override pr; newText: {new_text}"
+    );
+    client.shutdown();
+}
+
+#[test]
+fn project_snippets_are_off_by_default() {
+    // The same pack is present, but without the opt-in it must be ignored.
+    let pack_dir = scratch_dir("project-default-off")
+        .join(".codemmet")
+        .join("snippets");
+    std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
+    std::fs::write(
+        pack_dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
+    )
+    .expect("project pack should be writable");
+
+    let (mut client, _) = LspClient::start("project-default-off", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    pr\n}\n");
+    let result = client.complete(URI, 1, 6);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    let new_text = snippets[0]["textEdit"]["newText"]
+        .as_str()
+        .expect("newText should be a string");
+    assert!(
+        new_text.contains("println!"),
+        "default should ignore the project pack; newText: {new_text}"
+    );
     client.shutdown();
 }

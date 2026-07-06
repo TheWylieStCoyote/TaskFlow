@@ -46,6 +46,38 @@ A user pack does not replace the builtin pack. It is **merged over** it:
 This means a small pack that redefines two triggers leaves the other forty
 builtins untouched.
 
+## Project-local packs
+
+A repository can ship its own snippet packs so everyone working in it shares
+the same triggers. Put them in `.codemmet/snippets/<lang>.toml` at (or above)
+the project root — the same file layout as the user directory, just named
+`.codemmet/snippets` inside the project. codemmet walks upward from the working
+directory (or the editor's workspace root) and uses the nearest one it finds.
+
+Project packs are the **highest priority** tier, so the full precedence is:
+
+```
+builtin (+ inherited)  <  user (~/.config/codemmet/snippets)  <  project (.codemmet/snippets)
+```
+
+A project pack overrides a user pack overrides the builtins, and it can
+`disabled = true` any trigger.
+
+How they load differs by entry point, on purpose:
+
+- **CLI: auto-loaded.** `codemmet expand`/`wrap`/`list`/`check` discover
+  `.codemmet/snippets` from the working directory automatically — like a
+  formatter reading its dotfile. Pass `--no-project` to ignore it.
+- **LSP: opt-in.** The editor opens whatever repository you navigate to, so the
+  server loads project packs only when you set the `project_snippets`
+  initialization option (see [editor setup](editors.md)). Snippet packs are
+  inert text — the worst a hostile pack can do is make your abbreviations
+  expand to surprising output, not run code — but the opt-in keeps a freshly
+  cloned repo from silently changing your expansions.
+
+`codemmet check` validates the project pack too and reports it alongside the
+user pack.
+
 ## Your first custom snippet
 
 Create the override directory and a `rust.toml` inside it:

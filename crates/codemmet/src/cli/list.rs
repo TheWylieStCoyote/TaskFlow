@@ -1,11 +1,10 @@
 //! `codemmet list`: enumerate a language's triggers.
 
-use std::path::Path;
 use std::process::ExitCode;
 
 use clap::Args;
 
-use super::{config_failure, load_registry};
+use super::{Sources, config_failure, load_registry};
 
 /// Arguments for `codemmet list`.
 #[derive(Debug, Args)]
@@ -20,8 +19,8 @@ pub struct ListArgs {
 }
 
 /// Run `codemmet list` with `user_dir` as the snippet override directory.
-pub fn run(user_dir: Option<&Path>, args: &ListArgs) -> ExitCode {
-    let registry = match load_registry(user_dir) {
+pub fn run(sources: Sources, args: &ListArgs) -> ExitCode {
+    let registry = match load_registry(sources) {
         Ok(registry) => registry,
         Err(err) => return config_failure(&err),
     };

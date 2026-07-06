@@ -1,7 +1,7 @@
 //! The registry: builtin packs merged with user overrides, per language.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::loader::{ConfigError, SnippetSet, parse_snippet_file};
 use crate::config::schema::SnippetFile;
@@ -41,6 +41,19 @@ impl Registry {
     /// A missing directory or missing per-language file is not an error;
     /// an unreadable or invalid file is.
     pub fn with_user_dir(dir: Option<&Path>) -> Result<Self, ConfigError> {
+        Self::with_dirs(dir, None)
+    }
+
+    /// Load builtin packs, then a user override directory, then a project
+    /// override directory.
+    ///
+    /// Sources merge in increasing priority: inherited ancestor builtins, the
+    /// language's own builtin, `<user>/<lang>.toml`, and finally
+    /// `<project>/<lang>.toml`. So a project pack overrides a user pack, which
+    /// overrides the builtins, and a project pack may `disabled = true` any
+    /// trigger. Both directories are optional; a missing directory or
+    /// per-language file is not an error, but an unreadable or invalid one is.
+    pub fn with_dirs(user: Option<&Path>, project: Option<&Path>) -> Result<Self, ConfigError> {
         let mut languages = HashMap::new();
         for profile in crate::lang::profile::PROFILES {
             let mut sources: Vec<(String, SnippetFile)> = Vec::new();
@@ -56,21 +69,11 @@ impl Registry {
             let builtin_origin = format!("builtin:{}", profile.id);
             let builtin = parse_snippet_file(&builtin_origin, profile.snippet_source)?;
             check_language(&builtin_origin, &builtin, profile.id)?;
-
             sources.push((builtin_origin, builtin));
-            if let Some(dir) = dir {
-                let path = dir.join(format!("{}.toml", profile.id));
-                match std::fs::read_to_string(&path) {
-                    Ok(text) => {
-                        let origin = path.display().to_string();
-                        let user = parse_snippet_file(&origin, &text)?;
-                        check_language(&origin, &user, profile.id)?;
-                        sources.push((origin, user));
-                    }
-                    // A missing directory or per-language file is not an error.
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(source) => return Err(ConfigError::Io { path, source }),
-                }
+
+            // User overrides, then project overrides (highest priority).
+            for dir in [user, project].into_iter().flatten() {
+                push_override_file(&mut sources, dir, profile.id)?;
             }
 
             let refs: Vec<(&str, &SnippetFile)> = sources
@@ -92,6 +95,41 @@ impl Registry {
     pub fn languages(&self) -> impl Iterator<Item = &LanguageSnippets> {
         self.languages.values()
     }
+}
+
+/// Push `<dir>/<lang_id>.toml` onto `sources` if it exists.
+///
+/// A missing directory or file is not an error; an unreadable or invalid file
+/// is. The pack must declare `language = "<lang_id>"`.
+fn push_override_file(
+    sources: &mut Vec<(String, SnippetFile)>,
+    dir: &Path,
+    lang_id: &str,
+) -> Result<(), ConfigError> {
+    let path = dir.join(format!("{lang_id}.toml"));
+    match std::fs::read_to_string(&path) {
+        Ok(text) => {
+            let origin = path.display().to_string();
+            let file = parse_snippet_file(&origin, &text)?;
+            check_language(&origin, &file, lang_id)?;
+            sources.push((origin, file));
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(ConfigError::Io { path, source }),
+    }
+}
+
+/// Find the nearest `.codemmet/snippets` directory at or above `start`.
+///
+/// Walks upward from `start` and returns the first ancestor holding a
+/// `.codemmet/snippets` directory (so the nearest project wins), or `None` up
+/// to the filesystem root.
+pub fn find_project_snippets_dir(start: &Path) -> Option<PathBuf> {
+    start.ancestors().find_map(|dir| {
+        let candidate = dir.join(".codemmet").join("snippets");
+        candidate.is_dir().then_some(candidate)
+    })
 }
 
 /// The ancestor profiles `profile` inherits, transitively, outermost first.
@@ -278,6 +316,56 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).expect("scratch dir should be removable");
+    }
+
+    #[test]
+    fn project_dir_overrides_user_dir() {
+        let user = scratch_dir("tier-user");
+        let project = scratch_dir("tier-project");
+        // User pack sets `pr`; project pack overrides it and disables `epr`.
+        std::fs::write(
+            user.join("rust.toml"),
+            "[meta]\nlanguage = \"rust\"\n[snippets.pr]\ndescription = \"user pr\"\nbody = \"user!()\"\n",
+        )
+        .expect("user pack should be writable");
+        std::fs::write(
+            project.join("rust.toml"),
+            "[meta]\nlanguage = \"rust\"\n[snippets.pr]\ndescription = \"project pr\"\nbody = \"project!()\"\n[snippets.epr]\ndisabled = true\n",
+        )
+        .expect("project pack should be writable");
+
+        let rust = Registry::with_dirs(Some(&user), Some(&project))
+            .expect("dirs should load")
+            .language("rust")
+            .expect("rust resolves")
+            .set
+            .clone();
+        assert_eq!(
+            rust.get("pr").and_then(|s| s.description.as_deref()),
+            Some("project pr"),
+            "project pack should win over the user pack"
+        );
+        assert!(rust.get("epr").is_none(), "project pack should disable epr");
+
+        std::fs::remove_dir_all(&user).ok();
+        std::fs::remove_dir_all(&project).ok();
+    }
+
+    #[test]
+    fn find_project_snippets_dir_walks_up_to_nearest() {
+        let root = scratch_dir("discover");
+        let snippets = root.join(".codemmet").join("snippets");
+        std::fs::create_dir_all(&snippets).expect("snippets dir should be creatable");
+        let nested = root.join("crate").join("src");
+        std::fs::create_dir_all(&nested).expect("nested dir should be creatable");
+
+        assert_eq!(
+            find_project_snippets_dir(&nested).as_deref(),
+            Some(snippets.as_path())
+        );
+        assert!(find_project_snippets_dir(std::env::temp_dir().as_path()).is_none());
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

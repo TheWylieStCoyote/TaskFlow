@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand, ValueEnum};
 use codemmet_core::config::loader::{ConfigError, default_user_snippets_dir};
 use codemmet_core::context::IndentUnit;
-use codemmet_core::lang::registry::Registry;
+use codemmet_core::lang::registry::{Registry, find_project_snippets_dir};
 use codemmet_core::snippet::render::TabstopMode;
 
 /// Exit code for abbreviation parse errors.
@@ -38,8 +38,24 @@ struct Cli {
     #[arg(long, global = true, value_name = "DIR")]
     config: Option<PathBuf>,
 
+    /// Do not auto-load project-local packs (`.codemmet/snippets`).
+    #[arg(long, global = true)]
+    no_project: bool,
+
     #[command(subcommand)]
     command: Command,
+}
+
+/// Snippet override directories, in increasing priority (project wins).
+///
+/// Accessible to the subcommand submodules; the LSP resolves its own sources
+/// separately (project packs are opt-in there).
+#[derive(Debug, Clone, Copy)]
+struct Sources<'a> {
+    /// The user override directory (`--config` or the platform default).
+    user: Option<&'a Path>,
+    /// The project override directory (`.codemmet/snippets`), when enabled.
+    project: Option<&'a Path>,
 }
 
 /// The available subcommands.
@@ -61,18 +77,32 @@ enum Command {
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
     let user_dir = cli.config.or_else(default_user_snippets_dir);
+    // Project packs auto-load from the nearest `.codemmet/snippets` at or above
+    // the working directory, unless `--no-project`. The LSP opts in separately,
+    // so it keeps loading from `user_dir` only.
+    let project_dir = if cli.no_project {
+        None
+    } else {
+        std::env::current_dir()
+            .ok()
+            .and_then(|cwd| find_project_snippets_dir(&cwd))
+    };
+    let sources = Sources {
+        user: user_dir.as_deref(),
+        project: project_dir.as_deref(),
+    };
     match cli.command {
-        Command::Expand(args) => expand::run(user_dir.as_deref(), &args),
-        Command::Wrap(args) => wrap::run(user_dir.as_deref(), &args),
-        Command::List(args) => list::run(user_dir.as_deref(), &args),
-        Command::Check => check::run(user_dir.as_deref()),
+        Command::Expand(args) => expand::run(sources, &args),
+        Command::Wrap(args) => wrap::run(sources, &args),
+        Command::List(args) => list::run(sources, &args),
+        Command::Check => check::run(sources),
         Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), &args),
     }
 }
 
-/// Load builtin packs merged with the user override directory.
-fn load_registry(user_dir: Option<&Path>) -> Result<Registry, ConfigError> {
-    Registry::with_user_dir(user_dir)
+/// Load builtin packs merged with the user and project override directories.
+fn load_registry(sources: Sources) -> Result<Registry, ConfigError> {
+    Registry::with_dirs(sources.user, sources.project)
 }
 
 /// Report a configuration/environment failure and yield exit code 3.

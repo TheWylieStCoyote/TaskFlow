@@ -176,6 +176,7 @@ through `init_options`; both are optional:
 | --- | --- | --- | --- |
 | `snippets_dir` | string | a directory path | Directory of user snippet override packs (`<lang>.toml` files). If omitted, the default platform directory is used. |
 | `completion` | string | `"always"` (default), `"operators-only"`, `"off"` | When to offer expansion completions. |
+| `project_snippets` | boolean | `false` (default), `true` | Load project-local packs from `.codemmet/snippets` under the workspace root. Off by default; see the note below. |
 
 The default snippet directories are:
 
@@ -206,8 +207,20 @@ require("codemmet").setup({
 })
 ```
 
+`project_snippets` is off by default on purpose. The CLI auto-loads
+`.codemmet/snippets` from a repository, but the editor opens whatever project
+you navigate to — including untrusted clones — and a project pack can silently
+redefine what your abbreviations expand to (it cannot run code, but it can
+mislead). Enable it only for workspaces you trust:
+
+```lua
+require("codemmet").setup({
+  init_options = { project_snippets = true },
+})
+```
+
 See [custom snippets](snippets.md) for the snippet pack format that `snippets_dir`
-points at.
+points at, and the precedence rules for project vs user packs.
 
 ### Neovim without the plugin
 

@@ -357,3 +357,52 @@ fn check_missing_dir_exits_0_with_note() {
         stdout(&out)
     );
 }
+
+#[test]
+fn project_pack_auto_loads_and_no_project_disables_it() {
+    // A project pack under `.codemmet/snippets` overrides the builtin `pr`.
+    let user = scratch_dir("proj-user");
+    let project = scratch_dir("proj-root");
+    let snippets = project.join(".codemmet").join("snippets");
+    std::fs::create_dir_all(&snippets).expect("project snippets dir should be creatable");
+    std::fs::write(
+        snippets.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
+    )
+    .expect("project pack should be writable");
+    let nested = project.join("src");
+    std::fs::create_dir_all(&nested).expect("nested dir should be creatable");
+    let user_arg = user.to_str().expect("scratch path is UTF-8");
+
+    // Run from a nested subdir: discovery walks up to the project pack.
+    let out = bin()
+        .current_dir(&nested)
+        .args(["expand", "--lang", "rust", "pr", "--config", user_arg])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "PROJECT!();\n", "project pack should win");
+
+    // --no-project falls back to the builtin println!.
+    let out = bin()
+        .current_dir(&nested)
+        .args([
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "pr",
+            "--config",
+            user_arg,
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(
+        stdout(&out),
+        "println!(\"\");\n",
+        "--no-project ignores the pack"
+    );
+
+    std::fs::remove_dir_all(&project).ok();
+    std::fs::remove_dir_all(&user).ok();
+}

@@ -1,7 +1,6 @@
 //! `codemmet expand`: abbreviation in, rendered code out.
 
 use std::io::Read as _;
-use std::path::Path;
 use std::process::ExitCode;
 
 use clap::Args;
@@ -11,7 +10,7 @@ use codemmet_core::engine::ExpandError;
 use codemmet_core::snippet::render::Expansion;
 
 use super::{
-    EXIT_PARSE, EXIT_RENDER, Tabstops, config_failure, load_registry, resolve_indent_unit,
+    EXIT_PARSE, EXIT_RENDER, Sources, Tabstops, config_failure, load_registry, resolve_indent_unit,
 };
 
 /// Arguments for `codemmet expand`.
@@ -45,8 +44,8 @@ pub struct ExpandArgs {
 }
 
 /// Run `codemmet expand` with `user_dir` as the snippet override directory.
-pub fn run(user_dir: Option<&Path>, args: &ExpandArgs) -> ExitCode {
-    let registry = match load_registry(user_dir) {
+pub fn run(sources: Sources, args: &ExpandArgs) -> ExitCode {
+    let registry = match load_registry(sources) {
         Ok(registry) => registry,
         Err(err) => return config_failure(&err),
     };

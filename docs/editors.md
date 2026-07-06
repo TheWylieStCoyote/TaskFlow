@@ -114,6 +114,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw" }` | Key bindings to install. Set either field to `false` to disable that binding. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` | `false` | Show a live ghost-line preview of the expansion while you type (see below). |
+| `notes_file` | `string` | `<data>/codemmet/notes.md` | Where `:CodemmetNote` appends dogfooding notes. |
 
 On setup, a `FileType` autocommand starts the server with `vim.lsp.start` for each
 configured filetype. Completion then flows through whatever completion UI you use.
@@ -135,6 +136,7 @@ The plugin also defines three user commands:
 | `:CodemmetExpand` | no | Expand the abbreviation before the cursor. |
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
+| `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled

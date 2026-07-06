@@ -14,3 +14,15 @@ end, { range = true, desc = "Wrap the given lines in a codemmet abbreviation" })
 vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()
 end, { desc = "Toggle the codemmet live ghost-line preview in this buffer" })
+
+vim.api.nvim_create_user_command("CodemmetNote", function(cmd)
+  if vim.trim(cmd.args) ~= "" then
+    require("codemmet").note(cmd.args)
+    return
+  end
+  vim.ui.input({ prompt = "codemmet note: " }, function(input)
+    if input then
+      require("codemmet").note(input)
+    end
+  end)
+end, { nargs = "*", desc = "Append a timestamped codemmet dogfooding note" })

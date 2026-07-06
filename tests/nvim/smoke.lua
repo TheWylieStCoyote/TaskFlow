@@ -185,5 +185,27 @@ io.write("smoke: preview scenario passed\n")
 
 reset_state()
 
+-- Scenario 6: :CodemmetNote appends a context-tagged entry to the notes file.
+local notes = require("codemmet.notes")
+local notes_file = vim.fn.tempname() .. "-notes.md"
+notes.set_file(notes_file)
+local note_buf = rust_buf("note", { "    let mut x = 3;" })
+vim.api.nvim_win_set_cursor(0, { 1, 4 })
+require("codemmet").note("fori should accept a step")
+
+if vim.uv.fs_stat(notes_file) == nil then
+  fail("note: notes file was not created at " .. notes_file, note_buf)
+end
+local contents = table.concat(vim.fn.readfile(notes_file), "\n")
+if not contents:find("fori should accept a step", 1, true) then
+  fail("note: the note text was not written", note_buf)
+end
+if not (contents:find("[rust]", 1, true) and contents:find("let mut x = 3;", 1, true)) then
+  fail("note: entry missing the language tag or line context", note_buf)
+end
+io.write("smoke: note scenario passed\n")
+
+reset_state()
+
 io.write("SMOKE OK\n")
 os.exit(0)

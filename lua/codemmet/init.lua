@@ -12,6 +12,7 @@ local M = {}
 ---@field keymaps? codemmet.KeymapOpts
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
 ---@field preview? boolean show a live ghost-line preview while typing (default false)
+---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
 
 local defaults = {
   cmd = { "codemmet", "lsp" },
@@ -47,6 +48,7 @@ end
 ---@param opts? codemmet.SetupOpts
 function M.setup(opts)
   local config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  require("codemmet.notes").set_file(config.notes_file)
   local group = vim.api.nvim_create_augroup("codemmet", { clear = true })
 
   vim.api.nvim_create_autocmd("FileType", {
@@ -93,6 +95,12 @@ end
 ---Toggle the live ghost-line preview for the current buffer.
 function M.toggle_preview()
   require("codemmet.preview").toggle()
+end
+
+---Append a dogfooding note (with the current buffer's context) to the notes file.
+---@param text string
+function M.note(text)
+  require("codemmet.notes").note(text)
 end
 
 return M

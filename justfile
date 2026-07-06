@@ -19,6 +19,10 @@ test:
 snap:
     cargo insta review
 
+# Regenerate the README demo GIF (needs ffmpeg + a DejaVu Sans Mono font)
+demo:
+    bash demo/render.sh
+
 # Everything CI runs, locally
 ci: lint test
     cargo build --workspace --release

@@ -2,6 +2,10 @@
 
 Emmet-style abbreviation expansion for programming languages.
 
+<p align="center">
+  <img src="demo/demo.gif" alt="codemmet expanding abbreviations into Rust and Go code" width="720">
+</p>
+
 Type a terse abbreviation, get structured code with tabstops:
 
 ```

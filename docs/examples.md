@@ -133,6 +133,87 @@ def sync():
 A straight chain of `>` operators: function, then a `for … in` loop, then a
 `try`/`except` inside the loop body.
 
+## C: `main` with a counted loop
+
+```sh
+codemmet expand --lang c 'main>fori10>prf:"%d\n",i'
+```
+
+```c
+int main(void) {
+    for (int i = 0; i < 10; i++) {
+        printf("%d\n", i);
+    }
+    return 0;
+}
+```
+
+`main` scaffolds `int main(void)` complete with its `return 0`, and the `>`
+nests a C-style counted `for` loop. `fori10` fills the loop bound with the
+glued argument `10`; `prf:"%d\n",i` passes an explicit format string and value
+to `printf`.
+
+## C: a `switch` with cases and a default
+
+```sh
+codemmet expand --lang c "switch:cmd>case+case+default"
+```
+
+```c
+switch (cmd) {
+    case value:
+        
+        break;
+    case value:
+        
+        break;
+    default:
+        
+        break;
+}
+```
+
+The `>` nests the clauses inside the switch, and `+` lays out two `case`
+clauses and a `default` as siblings. Each `case` ships with its own `break`.
+
+## C++: a class with a method
+
+```sh
+codemmet expand --lang cpp "class:Widget>fn:area>ret"
+```
+
+```cpp
+class Widget {
+public:
+    void area() {
+        return ;
+    }
+};
+```
+
+`class:Widget` opens the class with a `public:` section, and the `>` nests a
+method whose body holds a `return`. C++ inherits every C trigger and adds its
+own on top, so `class`, `fn`, and `ret` all compose here.
+
+## C++: a vector and a range-based `for` loop
+
+```sh
+codemmet expand --lang cpp "fn:process>vec>fore>cout"
+```
+
+```cpp
+void process() {
+    std::vector<int> values;
+    for (const auto& item : container) {
+        std::cout <<  << '\n';
+    }
+}
+```
+
+A straight chain: the function declares a `std::vector`, then a range-based
+`for` loop iterates it, and `cout` prints each item. `vec`, `fore` (the
+range-based form), and `cout` are all C++ additions over the inherited C pack.
+
 ## Go: an idiomatic function with an error guard
 
 ```sh
@@ -153,6 +234,47 @@ func load() {
 Three siblings inside the function body, joined with `+`: a short variable
 declaration, the classic `if err != nil { return err }` guard, and a final
 `return`. Go's expansions indent with tabs, matching `gofmt`.
+
+## JavaScript: a class with a constructor and a method
+
+```sh
+codemmet expand --lang javascript "class:Store>ctor+fn:add"
+```
+
+```javascript
+class Store {
+  constructor() {
+    
+  }
+  add() {
+    
+  }
+}
+```
+
+The class holds two members joined with `+`: a constructor and a method. Notice
+`add()` has no `function` keyword — a `fn` composed inside a class picks the
+method form, the same context awareness the Rust `impl` example showed, here in
+a different language.
+
+## JavaScript: an async function with `try`/`await`
+
+```sh
+codemmet expand --lang javascript "afn:load>try>aw"
+```
+
+```javascript
+async function load() {
+  try {
+    await ;
+  } catch (err) {
+
+  }
+}
+```
+
+`afn` opens an `async function`, the `>` nests a `try`/`catch`, and `aw` drops
+an `await` statement inside the `try`.
 
 ## TypeScript: a class with a constructor and an async method
 

@@ -137,5 +137,53 @@ if not wrap_indented then
 end
 io.write("smoke: wrap-indent scenario passed\n")
 
+reset_state()
+
+-- Scenario 5: live ghost-line preview. Headless nvim can't hold insert mode
+-- (so the TextChangedI-driven path can't run here), but we exercise both halves
+-- directly: the real `codemmet.preview` round-trip returns the clean expansion,
+-- and `preview.show` renders it as virtual lines without editing the buffer.
+local preview = require("codemmet.preview")
+local preview_buf = rust_buf("preview", { "fn main() {", "    fori10", "}" })
+local client = vim.lsp.get_clients({ name = "codemmet", bufnr = preview_buf })[1]
+
+local captured
+require("codemmet.lsp").exec(client, preview_buf, "codemmet.preview", {
+  -- Cursor at the end of line 2 ("    fori10" = 10 columns), 0-based line 1.
+  { uri = vim.uri_from_bufnr(preview_buf), position = { line = 1, character = 10 } },
+}, function(err, result)
+  captured = { err = err, result = result }
+end)
+local got = vim.wait(5000, function()
+  return captured ~= nil
+end, 50)
+if not got or captured.err or not (captured.result and captured.result.text) then
+  fail("preview: codemmet.preview did not return an expansion", preview_buf)
+end
+if not captured.result.text:find("for i in 0..10 {", 1, true) then
+  fail("preview: expansion was not the clean strip form: " .. captured.result.text, preview_buf)
+end
+
+preview.show(preview_buf, captured.result.range, captured.result.text)
+local preview_ns = vim.api.nvim_create_namespace("codemmet_preview")
+local marks = vim.api.nvim_buf_get_extmarks(preview_buf, preview_ns, 0, -1, { details = true })
+local rendered = false
+for _, mark in ipairs(marks) do
+  local virt = mark[4] and mark[4].virt_lines
+  if virt and virt[1] and virt[1][1] and virt[1][1][1]:find("for i in 0..10 {", 1, true) then
+    rendered = true
+  end
+end
+if not rendered then
+  fail("preview: no ghost virtual line was rendered", preview_buf)
+end
+-- The preview never edits the buffer.
+if vim.api.nvim_buf_get_lines(preview_buf, 1, 2, false)[1] ~= "    fori10" then
+  fail("preview: the buffer text should be unchanged by the preview", preview_buf)
+end
+io.write("smoke: preview scenario passed\n")
+
+reset_state()
+
 io.write("SMOKE OK\n")
 os.exit(0)

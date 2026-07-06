@@ -200,6 +200,12 @@ initialization option). They are the highest-priority tier —
 project > user > builtin — via `Registry::with_dirs`. The LSP defaults to off
 because an opened repository is not necessarily trusted.
 
+Live ghost-line preview shipped: a read-only `codemmet.preview` command returns
+the clean (strip-mode) expansion of the abbreviation before the cursor, and the
+Neovim plugin (opt-in `preview = true`, or `:CodemmetPreviewToggle`) renders it
+as dimmed virtual lines below the current line while typing — no buffer edit and
+no completion menu.
+
 Deferred features (not built): a packaged VS Code extension (codemmet works
 there via generic LSP today), and a cross-language `base.toml` pack
 (per-language packs read better; likely dropped rather than built).

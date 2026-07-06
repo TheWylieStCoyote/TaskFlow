@@ -113,6 +113,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
 | `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw" }` | Key bindings to install. Set either field to `false` to disable that binding. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
+| `preview` | `boolean` | `false` | Show a live ghost-line preview of the expansion while you type (see below). |
 
 On setup, a `FileType` autocommand starts the server with `vim.lsp.start` for each
 configured filetype. Completion then flows through whatever completion UI you use.
@@ -127,16 +128,41 @@ The key bindings are installed buffer-locally when the server attaches
 | `keymaps.expand` | `<A-e>` | insert and normal | Expand the abbreviation immediately before the cursor. |
 | `keymaps.wrap` | `<leader>cw` | visual | Wrap the selected lines in an abbreviation (prompts for it). |
 
-The plugin also defines two user commands:
+The plugin also defines three user commands:
 
 | Command | Range | Action |
 | --- | --- | --- |
 | `:CodemmetExpand` | no | Expand the abbreviation before the cursor. |
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
+| `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled
 action through its user command or by calling the Lua function directly.
+
+### Live preview
+
+With `preview = true`, the plugin shows the expansion as **dimmed virtual lines
+below the current line** while you type an abbreviation in insert mode — no
+buffer edit, no completion menu required. It updates as you type (debounced) and
+clears when you accept the abbreviation, leave insert mode, or move away.
+
+```lua
+require("codemmet").setup({ preview = true })
+```
+
+The preview is off by default because it updates on every keystroke; enable it
+globally as above, or toggle it per buffer at runtime:
+
+```vim
+:CodemmetPreviewToggle
+```
+
+Under the hood this uses a read-only `codemmet.preview` server command that
+returns the clean (strip-mode) expansion of the abbreviation before the cursor,
+so it works in any client that can call `workspace/executeCommand` and render
+virtual text — the shipped Neovim plugin renders it with `nvim_buf_set_extmark`
+virtual lines.
 
 ### Wrapping a selection
 

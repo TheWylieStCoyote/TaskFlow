@@ -199,7 +199,7 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
     );
     assert_eq!(
         capabilities["executeCommandProvider"]["commands"],
-        json!(["codemmet.expand", "codemmet.wrap"])
+        json!(["codemmet.expand", "codemmet.wrap", "codemmet.preview"])
     );
     assert_eq!(result["serverInfo"]["name"], json!("codemmet"));
     client.shutdown();
@@ -800,5 +800,51 @@ fn project_snippets_are_off_by_default() {
         new_text.contains("println!"),
         "default should ignore the project pack; newText: {new_text}"
     );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_preview_returns_clean_expansion() {
+    let (mut client, _) = LspClient::start("preview", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.preview",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 10 } }],
+        }),
+    );
+    // The range covers the abbreviation, and `text` is clean strip-mode code
+    // (no snippet markers) with the line's base indent kept for the preview.
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 10 } })
+    );
+    let text = result["text"]
+        .as_str()
+        .expect("preview text should be a string");
+    assert!(text.contains("for i in 0..10 {"), "text: {text}");
+    assert!(
+        !text.contains('$'),
+        "preview text should have no tabstop markers: {text}"
+    );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_preview_without_candidate_is_null() {
+    let (mut client, _) = LspClient::start("preview-null", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    // Line 2 is the closing brace: no abbreviation before the cursor.
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.preview",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 0 } }],
+        }),
+    );
+    assert_eq!(result, Value::Null, "expected null preview, got {result}");
     client.shutdown();
 }

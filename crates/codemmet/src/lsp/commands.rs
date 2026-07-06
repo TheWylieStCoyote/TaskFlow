@@ -107,6 +107,42 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
     Ok(result(range, &expansion.body))
 }
 
+/// Run `codemmet.preview`: the strip-mode expansion of the abbreviation left
+/// of `position`, for a non-committing live preview (e.g. ghost virtual text).
+///
+/// Returns `{ range, text }` where `range` covers the abbreviation and `text`
+/// is the clean expansion, or JSON `null` when there is no renderable
+/// abbreviation there — the client just clears its preview, rather than seeing
+/// an error. Unlike [`expand`], the base indent is kept: a preview is
+/// display-only (never inserted), so it should show accurately indented code.
+pub fn preview(server: &mut Server, args: &ExpandArgs) -> serde_json::Value {
+    let Ok(doc) = server.snapshot(&args.uri) else {
+        return serde_json::Value::Null;
+    };
+    let index = LineIndex::new(&doc.text);
+    let offset = index.offset(&doc.text, args.position, server.encoding);
+    let Some((start, candidate)) = extract::candidate_at(&doc.text, offset) else {
+        return serde_json::Value::Null;
+    };
+    let ctx = context_for(
+        server.provider.as_mut(),
+        &doc,
+        offset,
+        args.formatting_options,
+    );
+    let Ok(expansion) = server
+        .engine
+        .expand(candidate, &doc.language, &ctx, TabstopMode::Strip)
+    else {
+        return serde_json::Value::Null;
+    };
+    let range = Range {
+        start: index.position(&doc.text, start, server.encoding),
+        end: index.position(&doc.text, offset, server.encoding),
+    };
+    serde_json::json!({ "range": range, "text": expansion.body })
+}
+
 /// Run `codemmet.wrap`: wrap the selected text in an expanded abbreviation.
 ///
 /// The provider validates the selection first: it may snap the range

@@ -287,7 +287,11 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
             ..CompletionOptions::default()
         }),
         execute_command_provider: Some(ExecuteCommandOptions {
-            commands: vec!["codemmet.expand".to_owned(), "codemmet.wrap".to_owned()],
+            commands: vec![
+                "codemmet.expand".to_owned(),
+                "codemmet.wrap".to_owned(),
+                "codemmet.preview".to_owned(),
+            ],
             ..ExecuteCommandOptions::default()
         }),
         ..ServerCapabilities::default()
@@ -350,6 +354,9 @@ impl Server {
             }
             "codemmet.wrap" => {
                 command_args(params.arguments).and_then(|args| commands::wrap(self, &args))
+            }
+            "codemmet.preview" => {
+                command_args(params.arguments).map(|args| commands::preview(self, &args))
             }
             other => Err(CommandError(format!("unknown command `{other}`"))),
         };

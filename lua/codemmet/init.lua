@@ -11,6 +11,7 @@ local M = {}
 ---@field filetypes? string[] filetypes the server is started for
 ---@field keymaps? codemmet.KeymapOpts
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
+---@field preview? boolean show a live ghost-line preview while typing (default false)
 
 local defaults = {
   cmd = { "codemmet", "lsp" },
@@ -27,6 +28,7 @@ local defaults = {
   },
   keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
   init_options = {},
+  preview = false,
 }
 
 ---Expand the abbreviation immediately before the cursor.
@@ -81,8 +83,16 @@ function M.setup(opts)
           M.wrap()
         end, { buffer = ev.buf, desc = "codemmet: wrap selection" })
       end
+      if config.preview then
+        require("codemmet.preview").attach(ev.buf)
+      end
     end,
   })
+end
+
+---Toggle the live ghost-line preview for the current buffer.
+function M.toggle_preview()
+  require("codemmet.preview").toggle()
 end
 
 return M

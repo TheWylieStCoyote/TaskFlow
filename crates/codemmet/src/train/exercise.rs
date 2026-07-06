@@ -149,13 +149,38 @@ pub enum Direction {
     Forward,
 }
 
-/// A concept an exercise touches, used for hints (and, later, spaced repetition).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A concept an exercise touches: used for hints and as a spaced-repetition
+/// item (hence the ordering and serde derives).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum Concept {
     /// A trigger word.
     Trigger(String),
     /// A composition operator character.
     Operator(char),
+}
+
+impl Concept {
+    /// A stable key for use as a map key in persisted review state.
+    #[must_use]
+    pub fn key(&self) -> String {
+        match self {
+            Self::Trigger(t) => format!("t:{t}"),
+            Self::Operator(op) => format!("o:{op}"),
+        }
+    }
+
+    /// The level whose exercises best drill this concept.
+    #[must_use]
+    pub const fn level(&self) -> Level {
+        match self {
+            Self::Trigger(_) => Level::Arguments,
+            Self::Operator('>') => Level::Nesting,
+            Self::Operator('+') => Level::Siblings,
+            Self::Operator('*') => Level::Repeat,
+            Self::Operator('^') => Level::ClimbUp,
+            Self::Operator(_) => Level::Grouping,
+        }
+    }
 }
 
 /// A single generated exercise.
@@ -455,6 +480,42 @@ pub fn generate(
         }
     }
     None
+}
+
+/// Generate an exercise that drills a specific concept (for spaced repetition).
+///
+/// A trigger item yields an exercise built around that exact trigger; an
+/// operator item yields a normal exercise at the operator's level. Returns
+/// `None` when the concept can no longer be rendered (e.g. a trigger the pack
+/// dropped).
+#[must_use]
+pub fn generate_for_concept(
+    engine: &Engine,
+    language: &str,
+    concept: &Concept,
+    ctx: &ExpansionContext,
+    rng: &mut Rng,
+) -> Option<Exercise> {
+    let Concept::Trigger(name) = concept else {
+        return generate(engine, language, concept.level(), ctx, rng);
+    };
+    let set = &engine.registry().language(language)?.set;
+    let snippet = set.get(name)?;
+    let vocab = Vocab::from_set(set);
+    let generator = Gen {
+        engine,
+        language,
+        ctx,
+    };
+    let mut concepts = Vec::new();
+    let abbr = call(snippet, rng, &mut concepts);
+    let target = generator.render(&abbr)?;
+    let level = if snippet.params.is_empty() {
+        Level::SingleTrigger
+    } else {
+        Level::Arguments
+    };
+    Some(generator.finish(&vocab, level, abbr, target, concepts, rng))
 }
 
 #[cfg(test)]

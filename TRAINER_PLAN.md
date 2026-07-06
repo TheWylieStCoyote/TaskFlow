@@ -176,8 +176,21 @@ to `deny.toml`'s allowances if not already covered.
   use (or `--plain`). Tested headlessly: state-machine transitions via scripted
   events, TUI render across every phase via ratatui's `TestBackend`, and key
   mapping — no live terminal required.
-- **T3 — the other modes:** drills, spaced repetition (Leitner + persistence),
-  sandbox, stats/streaks, `--reset`.
+- **T3 — the other modes ✅ (done):** a `Mode` (`--mode lessons|drills|review|
+  sandbox`) threads through the state machine. **Drills** run endless
+  randomized exercises at a fixed level or mixed; **sandbox** is a scored-free
+  REPL that expands whatever you type (with a scrollback and live preview);
+  **review** replays only the spaced-repetition items that are due. Spaced
+  repetition (`review.rs`) tracks each concept in Leitner boxes with day-scaled
+  intervals and an injected clock; a clean solve promotes, a miss/reveal demotes
+  to box 1. Progress (`progress.rs`) persists lifetime stats, completed lessons,
+  and the per-language schedule as JSON under the data dir (`dirs`), loaded
+  best-effort and written back after each session; `--reset` clears it and
+  `--data-file` overrides the location. The session summary reports how many
+  items are now due. Tested headlessly: Leitner scheduling with an injected
+  clock, save/load round-trips, and per-mode state-machine flows (drills never
+  self-terminate, review drains its queue then finishes, sandbox logs
+  expansions), plus binary-level runs of every mode.
 - **T4 — content + polish:** hand-authored lesson progression, decoy tuning,
   a `docs/trainer.md` user guide linked from the docs index, and a note in
   `PLAN.md`.

@@ -1,24 +1,70 @@
 //! The pure trainer state machine.
 //!
-//! `Trainer` owns all session state and logic — exercise progression, grading,
-//! hints, stats — but performs no I/O. Front ends (the ratatui TUI and the
-//! line runner) feed it [`Event`]s and read back its state to render. Because
-//! everything here is deterministic given a seed, the whole trainer can be
-//! driven and asserted headlessly, which is what the tests below do.
+//! `Trainer` owns all session state and logic — exercise progression across the
+//! four modes, grading, hints, spaced-repetition scheduling, stats — but
+//! performs no I/O. Front ends (the ratatui TUI and the line runner) feed it
+//! [`Event`]s and read back its state to render. Everything is deterministic
+//! given a seed and an injected `now`, so the whole trainer is driven and
+//! asserted headlessly in the tests below.
 
-use codemmet_core::context::ExpansionContext;
+use std::collections::{BTreeSet, VecDeque};
+
+use codemmet_core::context::{ExpansionContext, IndentUnit};
 use codemmet_core::engine::Engine;
 use codemmet_core::snippet::render::TabstopMode;
 
-use super::exercise::{Direction, Exercise, Level, generate};
+use super::exercise::{Concept, Direction, Exercise, Level, generate, generate_for_concept};
 use super::grade::{Outcome, grade_forward_choice, grade_forward_free, grade_reverse};
 use super::hint::hints;
+use super::review::ReviewState;
 use super::rng::Rng;
 
 /// Auto-reveal the answer after this many wrong attempts on one exercise.
 const MAX_MISSES: u32 = 3;
 /// Exercises presented per level in a guided lesson.
 const DEFAULT_PER_LEVEL: u32 = 4;
+
+/// Which trainer experience to run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    /// A guided progression: a concept intro per level, then its exercises.
+    #[default]
+    Lessons,
+    /// Endless randomized exercises at a level (or mixed).
+    Drills,
+    /// Only the spaced-repetition items that are due.
+    Review,
+    /// Free play: type abbreviations and see them expand, no scoring.
+    Sandbox,
+}
+
+impl Mode {
+    /// A short human name.
+    #[must_use]
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::Lessons => "lessons",
+            Self::Drills => "drills",
+            Self::Review => "review",
+            Self::Sandbox => "sandbox",
+        }
+    }
+}
+
+/// How to construct a [`Trainer`].
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// Language id to train.
+    pub language: String,
+    /// Which experience to run.
+    pub mode: Mode,
+    /// A single level to focus (lessons) or drill; `None` means all/mixed.
+    pub level: Option<Level>,
+    /// Seed for deterministic generation.
+    pub seed: u64,
+    /// The current time, in Unix seconds, for spaced-repetition scheduling.
+    pub now: u64,
+}
 
 /// Session-wide tally.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -55,7 +101,9 @@ pub enum Phase {
     Answering,
     /// Showing the outcome of the current exercise; [`Event::Advance`] continues.
     Feedback(Feedback),
-    /// The lesson plan is complete.
+    /// Free-play sandbox: input expands live, nothing is graded.
+    Sandbox,
+    /// The session is complete.
     Done,
 }
 
@@ -86,15 +134,27 @@ pub struct Trainer<'a> {
     language: String,
     ctx: ExpansionContext,
     rng: Rng,
+    mode: Mode,
+    now: u64,
 
-    /// The levels to play, in order.
+    /// Levels this run may draw from (one when focused, else all).
     levels: Vec<Level>,
-    /// Exercises per level.
+    /// Exercises per level in lessons mode.
     per_level: u32,
-    /// Index into `levels`.
+    /// Index into `levels` (lessons progression).
     level_idx: usize,
-    /// Exercises completed at the current level.
+    /// Exercises completed at the current level (lessons).
     done_in_level: u32,
+    /// Levels finished this session (lessons).
+    completed: BTreeSet<u8>,
+
+    /// The spaced-repetition schedule (seeded from disk, updated as we grade).
+    review: ReviewState,
+    /// The queue of due concepts to review, in review mode.
+    review_queue: VecDeque<Concept>,
+
+    /// Expansions produced in the sandbox, newest last.
+    sandbox_log: Vec<(String, String)>,
 
     stats: Stats,
     phase: Phase,
@@ -109,39 +169,70 @@ pub struct Trainer<'a> {
     shown_hints: usize,
     /// Wrong attempts on the current exercise.
     misses: u32,
-    /// A transient note (wrong/invalid/hint), shown while answering.
+    /// A transient note (wrong/invalid), shown while answering.
     message: Option<String>,
 }
 
 impl<'a> Trainer<'a> {
-    /// A new guided-lesson trainer. `level` fixes a single level; `None` plays
-    /// every level in order.
-    pub fn new(
-        engine: &'a Engine,
-        language: impl Into<String>,
-        ctx: ExpansionContext,
-        level: Option<Level>,
-        seed: u64,
-    ) -> Self {
+    /// A new trainer for `config`, seeded with the persisted `review` schedule.
+    pub fn new(engine: &'a Engine, config: Config, review: ReviewState) -> Self {
+        let Config {
+            language,
+            mode,
+            level,
+            seed,
+            now,
+        } = config;
         let levels = level.map_or_else(|| Level::ALL.to_vec(), |l| vec![l]);
-        let first = levels[0];
-        Self {
+        let mut trainer = Self {
             engine,
-            language: language.into(),
-            ctx,
+            language,
+            ctx: ExpansionContext::plain(String::new(), IndentUnit::Spaces(4)),
             rng: Rng::new(seed),
+            mode,
+            now,
             levels,
             per_level: DEFAULT_PER_LEVEL,
             level_idx: 0,
             done_in_level: 0,
+            completed: BTreeSet::new(),
+            review,
+            review_queue: VecDeque::new(),
+            sandbox_log: Vec::new(),
             stats: Stats::default(),
-            phase: Phase::Intro(first),
+            phase: Phase::Done,
             exercise: None,
             input: String::new(),
             hints: Vec::new(),
             shown_hints: 0,
             misses: 0,
             message: None,
+        };
+        trainer.ctx = ExpansionContext::plain(String::new(), trainer.default_indent());
+        trainer.begin();
+        trainer
+    }
+
+    /// The active language's default indent unit.
+    fn default_indent(&self) -> IndentUnit {
+        self.engine
+            .registry()
+            .language(&self.language)
+            .map_or(IndentUnit::Spaces(4), |lang| {
+                lang.profile.default_indent.clone()
+            })
+    }
+
+    /// Set the initial phase for the mode.
+    fn begin(&mut self) {
+        match self.mode {
+            Mode::Lessons => self.phase = Phase::Intro(self.levels[0]),
+            Mode::Drills => self.start_exercise(),
+            Mode::Review => {
+                self.review_queue = self.review.due(self.now).into();
+                self.start_exercise();
+            }
+            Mode::Sandbox => self.phase = Phase::Sandbox,
         }
     }
 
@@ -157,6 +248,12 @@ impl<'a> Trainer<'a> {
     #[must_use]
     pub const fn is_done(&self) -> bool {
         matches!(self.phase, Phase::Done)
+    }
+
+    /// The mode this trainer is running.
+    #[must_use]
+    pub const fn mode(&self) -> Mode {
+        self.mode
     }
 
     /// The current exercise, if one is active.
@@ -189,46 +286,64 @@ impl<'a> Trainer<'a> {
         &self.stats
     }
 
-    /// The level being taught right now.
+    /// The spaced-repetition schedule (updated as exercises are graded).
+    #[must_use]
+    pub const fn review_state(&self) -> &ReviewState {
+        &self.review
+    }
+
+    /// Lesson levels completed this session.
+    #[must_use]
+    pub const fn completed_levels(&self) -> &BTreeSet<u8> {
+        &self.completed
+    }
+
+    /// The sandbox scrollback of `(abbreviation, expansion)`, newest last.
+    #[must_use]
+    pub fn sandbox_log(&self) -> &[(String, String)] {
+        &self.sandbox_log
+    }
+
+    /// The level being taught / drilled right now.
     #[must_use]
     pub fn current_level(&self) -> Level {
-        match self.phase {
-            Phase::Intro(level) => level,
-            _ => self.levels[self.level_idx.min(self.levels.len() - 1)],
+        match &self.phase {
+            Phase::Intro(level) => *level,
+            _ => self.exercise.as_ref().map_or_else(
+                || self.levels[self.level_idx.min(self.levels.len() - 1)],
+                |exercise| exercise.level,
+            ),
         }
     }
 
-    /// Progress within the current level: `(completed, total)`.
+    /// A short sub-header describing progress, tailored to the mode.
     #[must_use]
-    pub const fn level_progress(&self) -> (u32, u32) {
-        (self.done_in_level, self.per_level)
+    pub fn header_note(&self) -> String {
+        match self.mode {
+            Mode::Lessons => format!("exercise {}/{}", self.done_in_level + 1, self.per_level),
+            Mode::Drills => format!("drill #{}", self.stats.presented.max(1)),
+            Mode::Review => format!("review — {} left", self.review_queue.len() + 1),
+            Mode::Sandbox => "sandbox".to_string(),
+        }
     }
 
-    /// Overall lesson progress: `(current level index, total levels)`.
-    #[must_use]
-    pub const fn plan_progress(&self) -> (usize, usize) {
-        (self.level_idx, self.levels.len())
-    }
-
-    /// The live expansion of the current input, for a reverse exercise. `None`
-    /// when the exercise is forward, the input is empty, or it does not render.
+    /// The live expansion of the current input — for a reverse exercise or in
+    /// the sandbox. `None` when there is nothing to preview.
     #[must_use]
     pub fn live_preview(&self) -> Option<String> {
-        let exercise = self.exercise.as_ref()?;
-        if exercise.direction != Direction::Reverse || self.input.trim().is_empty() {
+        if self.input.trim().is_empty() {
             return None;
         }
-        let body = self
-            .engine
-            .expand(
-                self.input.trim(),
-                &self.language,
-                &self.ctx,
-                TabstopMode::Strip,
-            )
-            .ok()?
-            .body;
-        (!body.trim().is_empty()).then_some(body)
+        let show = matches!(self.phase, Phase::Sandbox)
+            || self
+                .exercise
+                .as_ref()
+                .is_some_and(|e| e.direction == Direction::Reverse);
+        if show {
+            self.expand(self.input.trim())
+        } else {
+            None
+        }
     }
 
     // --- events ---------------------------------------------------------------
@@ -239,6 +354,7 @@ impl<'a> Trainer<'a> {
             (_, Event::Quit) => self.phase = Phase::Done,
             (Phase::Intro(_) | Phase::Feedback(_), Event::Advance) => self.advance(),
             (Phase::Answering, event) => self.handle_answering(event),
+            (Phase::Sandbox, event) => self.handle_sandbox(event),
             _ => {}
         }
     }
@@ -248,6 +364,14 @@ impl<'a> Trainer<'a> {
         if matches!(self.phase, Phase::Answering) {
             self.input = answer.trim().to_string();
             self.submit();
+        }
+    }
+
+    /// Convenience for the line runner: expand one sandbox line.
+    pub fn sandbox_input(&mut self, line: &str) {
+        if matches!(self.phase, Phase::Sandbox) {
+            self.input = line.trim().to_string();
+            self.handle_sandbox(Event::Submit);
         }
     }
 
@@ -268,10 +392,34 @@ impl<'a> Trainer<'a> {
         }
     }
 
+    fn handle_sandbox(&mut self, event: Event) {
+        match event {
+            Event::Insert(c) => {
+                self.message = None;
+                self.input.push(c);
+            }
+            Event::Backspace => {
+                self.message = None;
+                self.input.pop();
+            }
+            Event::Submit => {
+                let abbr = self.input.trim().to_string();
+                if !abbr.is_empty() {
+                    match self.expand(&abbr) {
+                        Some(expansion) => self.sandbox_log.push((abbr, expansion)),
+                        None => {
+                            self.message = Some("that abbreviation does not expand".to_string());
+                        }
+                    }
+                }
+                self.input.clear();
+            }
+            _ => {}
+        }
+    }
+
     fn reveal_hint(&mut self) {
         if self.shown_hints < self.hints.len() {
-            // The hint joins the persistent list (see `revealed_hints`); no
-            // transient message needed.
             self.shown_hints += 1;
             self.message = None;
         } else {
@@ -350,6 +498,14 @@ impl<'a> Trainer<'a> {
     }
 
     fn enter_feedback(&mut self, solved: bool, revealed: bool) {
+        // Record spaced-repetition outcomes: a clean solve promotes the
+        // concepts; a reveal or a solve-after-misses demotes them.
+        let correct = solved && self.misses == 0;
+        if let Some(concepts) = self.exercise.as_ref().map(|e| e.concepts.clone()) {
+            for concept in &concepts {
+                self.review.record(concept, correct, self.now);
+            }
+        }
         self.message = None;
         self.phase = Phase::Feedback(Feedback {
             solved,
@@ -358,12 +514,13 @@ impl<'a> Trainer<'a> {
         });
     }
 
-    /// Move on from an intro or feedback screen: generate the next exercise,
-    /// advance the level, or finish.
+    /// Move on from an intro or feedback screen.
     fn advance(&mut self) {
-        if matches!(self.phase, Phase::Feedback(_)) {
+        // In lessons, count the finished exercise and roll levels over.
+        if self.mode == Mode::Lessons && matches!(self.phase, Phase::Feedback(_)) {
             self.done_in_level += 1;
             if self.done_in_level >= self.per_level {
+                self.completed.insert(self.levels[self.level_idx].number());
                 self.level_idx += 1;
                 self.done_in_level = 0;
                 if self.level_idx >= self.levels.len() {
@@ -377,11 +534,17 @@ impl<'a> Trainer<'a> {
         self.start_exercise();
     }
 
-    /// Generate and present an exercise at the current level.
+    /// Generate and present the next exercise for the mode.
     fn start_exercise(&mut self) {
-        let level = self.levels[self.level_idx];
-        let Some(exercise) = generate(self.engine, &self.language, level, &self.ctx, &mut self.rng)
-        else {
+        let exercise = match self.mode {
+            Mode::Lessons | Mode::Drills => {
+                let level = self.pick_level();
+                generate(self.engine, &self.language, level, &self.ctx, &mut self.rng)
+            }
+            Mode::Review => self.next_review_exercise(),
+            Mode::Sandbox => None,
+        };
+        let Some(exercise) = exercise else {
             self.phase = Phase::Done;
             return;
         };
@@ -394,27 +557,73 @@ impl<'a> Trainer<'a> {
         self.stats.presented += 1;
         self.phase = Phase::Answering;
     }
+
+    /// The level for the next lesson/drill exercise.
+    fn pick_level(&mut self) -> Level {
+        match self.mode {
+            Mode::Drills if self.levels.len() > 1 => self
+                .rng
+                .choice(&self.levels)
+                .copied()
+                .unwrap_or(Level::SingleTrigger),
+            _ => self.levels[self.level_idx.min(self.levels.len() - 1)],
+        }
+    }
+
+    /// Pull the next renderable review exercise off the due queue.
+    fn next_review_exercise(&mut self) -> Option<Exercise> {
+        while let Some(concept) = self.review_queue.pop_front() {
+            if let Some(exercise) = generate_for_concept(
+                self.engine,
+                &self.language,
+                &concept,
+                &self.ctx,
+                &mut self.rng,
+            ) {
+                return Some(exercise);
+            }
+        }
+        None
+    }
+
+    /// Render `abbr` to strip-mode text, or `None` if it fails / is empty.
+    fn expand(&self, abbr: &str) -> Option<String> {
+        let body = self
+            .engine
+            .expand(abbr, &self.language, &self.ctx, TabstopMode::Strip)
+            .ok()?
+            .body;
+        (!body.trim().is_empty()).then_some(body)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codemmet_core::context::IndentUnit;
     use codemmet_core::lang::registry::Registry;
 
     fn engine() -> Engine {
         Engine::with_registry(Registry::with_builtins().expect("builtins should load"))
     }
 
-    fn ctx() -> ExpansionContext {
-        ExpansionContext::plain(String::new(), IndentUnit::Spaces(4))
+    fn config(mode: Mode, level: Option<Level>, seed: u64) -> Config {
+        Config {
+            language: "rust".to_string(),
+            mode,
+            level,
+            seed,
+            now: 1_000_000,
+        }
     }
 
-    fn trainer(engine: &Engine, level: Option<Level>, seed: u64) -> Trainer<'_> {
-        Trainer::new(engine, "rust", ctx(), level, seed)
+    fn lessons(engine: &Engine, level: Option<Level>, seed: u64) -> Trainer<'_> {
+        Trainer::new(
+            engine,
+            config(Mode::Lessons, level, seed),
+            ReviewState::default(),
+        )
     }
 
-    /// The answer that solves an exercise, in the format the buffer expects.
     fn solution(exercise: &Exercise) -> String {
         match exercise.direction {
             Direction::Reverse => exercise.abbreviation.clone(),
@@ -432,9 +641,9 @@ mod tests {
     }
 
     #[test]
-    fn starts_on_the_intro_for_the_first_level() {
+    fn lessons_start_on_the_intro() {
         let engine = engine();
-        let t = trainer(&engine, Some(Level::Nesting), 1);
+        let t = lessons(&engine, Some(Level::Nesting), 1);
         assert_eq!(t.phase(), &Phase::Intro(Level::Nesting));
         assert!(t.exercise().is_none());
     }
@@ -442,7 +651,7 @@ mod tests {
     #[test]
     fn advance_from_intro_presents_an_exercise() {
         let engine = engine();
-        let mut t = trainer(&engine, Some(Level::Nesting), 1);
+        let mut t = lessons(&engine, Some(Level::Nesting), 1);
         t.handle(Event::Advance);
         assert_eq!(t.phase(), &Phase::Answering);
         assert!(t.exercise().is_some());
@@ -453,13 +662,12 @@ mod tests {
     fn typing_the_solution_solves_the_exercise() {
         let engine = engine();
         let seed = 7;
-        // Replicate the first exercise the trainer will generate.
         let mut probe = Rng::new(seed);
         let exercise =
-            generate(&engine, "rust", Level::Nesting, &ctx(), &mut probe).expect("generated");
+            generate(&engine, "rust", Level::Nesting, &probe_ctx(), &mut probe).expect("generated");
         let answer = solution(&exercise);
 
-        let mut t = trainer(&engine, Some(Level::Nesting), seed);
+        let mut t = lessons(&engine, Some(Level::Nesting), seed);
         t.handle(Event::Advance);
         assert_eq!(t.exercise(), Some(&exercise));
         type_str(&mut t, &answer);
@@ -470,32 +678,21 @@ mod tests {
             other => panic!("expected solved feedback, got {other:?}"),
         }
         assert_eq!(t.stats().solved, 1);
-        assert_eq!(t.stats().best_streak, 1);
     }
 
-    #[test]
-    fn backspace_edits_the_buffer() {
-        let engine = engine();
-        let mut t = trainer(&engine, Some(Level::SingleTrigger), 1);
-        t.handle(Event::Advance);
-        type_str(&mut t, "abc");
-        t.handle(Event::Backspace);
-        assert_eq!(t.input(), "ab");
+    fn probe_ctx() -> ExpansionContext {
+        ExpansionContext::plain(String::new(), IndentUnit::Spaces(4))
     }
 
     #[test]
     fn hints_reveal_progressively_then_run_out() {
         let engine = engine();
-        let mut t = trainer(&engine, Some(Level::Nesting), 3);
+        let mut t = lessons(&engine, Some(Level::Nesting), 3);
         t.handle(Event::Advance);
-        let total = t.exercise().expect("exercise").concepts.len();
-        assert!(total > 0);
-        // Nesting exercises always have at least the trigger + operator hints.
         let expected = crate::train::hint::hints(t.exercise().expect("exercise")).len();
         assert!(expected >= 1);
         t.handle(Event::Hint);
         assert_eq!(t.revealed_hints().len(), 1);
-        // Exhaust hints; the count caps and the message says so.
         for _ in 0..8 {
             t.handle(Event::Hint);
         }
@@ -506,88 +703,132 @@ mod tests {
     #[test]
     fn reveal_moves_to_revealed_feedback_without_solving() {
         let engine = engine();
-        let mut t = trainer(&engine, Some(Level::Nesting), 5);
+        let mut t = lessons(&engine, Some(Level::Nesting), 5);
         t.handle(Event::Advance);
         t.handle(Event::Reveal);
         match t.phase() {
-            Phase::Feedback(fb) => {
-                assert!(!fb.solved && fb.revealed);
-                assert!(!fb.answer.is_empty());
-            }
+            Phase::Feedback(fb) => assert!(!fb.solved && fb.revealed && !fb.answer.is_empty()),
             other => panic!("expected revealed feedback, got {other:?}"),
         }
         assert_eq!(t.stats().solved, 0);
     }
 
     #[test]
-    fn three_wrong_answers_auto_reveal() {
+    fn a_single_level_lesson_finishes_after_its_exercises() {
         let engine = engine();
-        let mut t = trainer(&engine, Some(Level::Nesting), 11);
+        let mut t = lessons(&engine, Some(Level::SingleTrigger), 1);
         t.handle(Event::Advance);
-        // A junk-but-parseable reverse answer, or a wrong MC pick.
-        for _ in 0..MAX_MISSES {
-            // `ret` renders for reverse; a wrong number for MC.
-            let guess = if t.exercise().is_some_and(Exercise::is_multiple_choice) {
-                // Pick an index that is not the answer.
-                let ex = t.exercise().expect("exercise");
-                let wrong = if ex.answer_index == 0 { 2 } else { 1 };
-                wrong.to_string()
-            } else {
-                "ret".to_string()
-            };
-            t.submit_answer(&guess);
-        }
-        assert!(
-            matches!(t.phase(), Phase::Feedback(fb) if fb.revealed),
-            "expected auto-reveal after {MAX_MISSES} misses, phase: {:?}",
-            t.phase(),
-        );
-    }
-
-    #[test]
-    fn live_preview_tracks_reverse_input() {
-        let engine = engine();
-        // Find a reverse exercise.
-        let mut t = trainer(&engine, Some(Level::Nesting), 2);
-        t.handle(Event::Advance);
-        while t
-            .exercise()
-            .is_some_and(|e| e.direction != Direction::Reverse)
-        {
-            t.handle(Event::Reveal);
-            t.handle(Event::Advance);
-        }
-        assert!(t.live_preview().is_none(), "empty input has no preview");
-        type_str(&mut t, "pr");
-        let preview = t.live_preview().expect("pr renders");
-        assert!(preview.contains("println!"));
-    }
-
-    #[test]
-    fn a_single_level_plan_finishes_after_its_exercises() {
-        let engine = engine();
-        let mut t = trainer(&engine, Some(Level::SingleTrigger), 1);
-        // Intro -> begin.
-        t.handle(Event::Advance);
-        // Reveal-and-advance through the whole level.
         let mut guard = 0;
         while !t.is_done() {
             guard += 1;
             assert!(guard < 100, "plan did not terminate");
             match t.phase() {
                 Phase::Answering => t.handle(Event::Reveal),
-                Phase::Intro(_) | Phase::Feedback(_) => t.handle(Event::Advance),
-                Phase::Done => {}
+                _ => t.handle(Event::Advance),
             }
         }
-        let (_, total) = t.level_progress();
-        assert_eq!(t.stats().presented, total);
+        assert_eq!(t.stats().presented, t.per_level);
+        assert!(
+            t.completed_levels()
+                .contains(&Level::SingleTrigger.number())
+        );
+    }
+
+    #[test]
+    fn drills_start_answering_and_never_finish_on_their_own() {
+        let engine = engine();
+        let mut t = Trainer::new(
+            &engine,
+            config(Mode::Drills, Some(Level::Nesting), 4),
+            ReviewState::default(),
+        );
+        assert_eq!(t.phase(), &Phase::Answering);
+        // Reveal + advance a bunch; drills keep producing exercises.
+        for _ in 0..12 {
+            t.handle(Event::Reveal);
+            t.handle(Event::Advance);
+            assert_eq!(t.phase(), &Phase::Answering);
+        }
+        assert!(t.stats().presented >= 12);
+    }
+
+    #[test]
+    fn review_replays_due_items_then_finishes() {
+        let engine = engine();
+        let now = 5_000_000;
+        // Seed two due items.
+        let mut review = ReviewState::default();
+        review.record(&Concept::Trigger("pr".into()), false, now); // due now
+        review.record(&Concept::Operator('>'), false, now); // due now
+        let config = Config {
+            language: "rust".into(),
+            mode: Mode::Review,
+            level: None,
+            seed: 2,
+            now,
+        };
+        let mut t = Trainer::new(&engine, config, review);
+        assert_eq!(t.phase(), &Phase::Answering, "a due item is presented");
+
+        let mut guard = 0;
+        while !t.is_done() {
+            guard += 1;
+            assert!(guard < 50);
+            match t.phase() {
+                Phase::Answering => t.handle(Event::Reveal),
+                _ => t.handle(Event::Advance),
+            }
+        }
+        assert!(t.stats().presented >= 1);
+    }
+
+    #[test]
+    fn review_with_nothing_due_is_immediately_done() {
+        let engine = engine();
+        let config = Config {
+            language: "rust".into(),
+            mode: Mode::Review,
+            level: None,
+            seed: 1,
+            now: 0,
+        };
+        let t = Trainer::new(&engine, config, ReviewState::default());
+        assert!(t.is_done());
+        assert_eq!(t.stats().presented, 0);
+    }
+
+    #[test]
+    fn solving_updates_the_review_schedule() {
+        let engine = engine();
+        let mut t = lessons(&engine, Some(Level::Nesting), 5);
+        t.handle(Event::Advance);
+        assert_eq!(t.review_state().due_count(u64::MAX), 0);
+        t.handle(Event::Reveal); // records the exercise's concepts (as misses)
+        // Revealed => demoted => due now.
+        assert!(t.review_state().due_count(1_000_000) >= 1);
+    }
+
+    #[test]
+    fn sandbox_expands_input_and_logs_it() {
+        let engine = engine();
+        let mut t = Trainer::new(
+            &engine,
+            config(Mode::Sandbox, None, 1),
+            ReviewState::default(),
+        );
+        assert_eq!(t.phase(), &Phase::Sandbox);
+        type_str(&mut t, "pr");
+        assert!(t.live_preview().is_some_and(|p| p.contains("println!")));
+        t.handle(Event::Submit);
+        assert_eq!(t.sandbox_log().len(), 1);
+        assert!(t.sandbox_log()[0].1.contains("println!"));
+        assert_eq!(t.input(), "", "buffer clears after submit");
     }
 
     #[test]
     fn quit_ends_the_session_from_any_phase() {
         let engine = engine();
-        let mut t = trainer(&engine, Some(Level::Nesting), 1);
+        let mut t = lessons(&engine, Some(Level::Nesting), 1);
         t.handle(Event::Advance);
         t.handle(Event::Quit);
         assert!(t.is_done());

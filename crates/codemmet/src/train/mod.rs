@@ -3,32 +3,60 @@
 //! The trainer is split into a pure, testable core and a thin front end:
 //!
 //! - [`exercise`] generates exercises by composing real triggers and rendering
-//!   them through the [`Engine`](codemmet_core::engine::Engine), so an exercise
-//!   can never disagree with actual expansion.
+//!   them through the [`Engine`], so an exercise can never disagree with
+//!   actual expansion.
 //! - [`grade`] scores answers by output-equivalence.
 //! - [`hint`] derives progressive hints from an exercise's concepts.
-//! - [`trainer`] is the pure state machine tying it together.
+//! - [`review`] is the spaced-repetition schedule; [`progress`] persists it,
+//!   completed lessons, and lifetime stats under the data directory.
+//! - [`trainer`] is the pure state machine tying it together across modes.
 //! - [`tui`] is the ratatui full-screen front end; [`session`] is the
 //!   line-based fallback for non-TTY / piped use. Both drive [`trainer`].
 
 mod exercise;
 mod grade;
 mod hint;
+mod progress;
+mod review;
 mod rng;
 mod session;
 mod trainer;
 mod tui;
 
 use std::io::IsTerminal;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use codemmet_core::context::ExpansionContext;
 use codemmet_core::engine::Engine;
 
 use crate::cli::{EXIT_CONFIG, Sources, load_registry};
 use exercise::Level;
-use trainer::{Stats, Trainer};
+use trainer::{Config, Mode, Stats, Trainer};
+
+/// The trainer mode, as a CLI value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum ModeArg {
+    /// Guided progression through the levels (default).
+    Lessons,
+    /// Endless randomized exercises.
+    Drills,
+    /// Only spaced-repetition items that are due.
+    Review,
+    /// Free play: type abbreviations and see them expand.
+    Sandbox,
+}
+
+impl From<ModeArg> for Mode {
+    fn from(value: ModeArg) -> Self {
+        match value {
+            ModeArg::Lessons => Self::Lessons,
+            ModeArg::Drills => Self::Drills,
+            ModeArg::Review => Self::Review,
+            ModeArg::Sandbox => Self::Sandbox,
+        }
+    }
+}
 
 /// Arguments for the `train` subcommand.
 #[derive(Debug, clap::Args)]
@@ -37,7 +65,12 @@ pub struct TrainArgs {
     #[arg(long, default_value = "rust")]
     lang: String,
 
-    /// Restrict to a single level (1-7); otherwise all levels are taught in order.
+    /// What to run.
+    #[arg(long, value_enum, default_value_t = ModeArg::Lessons)]
+    mode: ModeArg,
+
+    /// Focus a single level (1-7); otherwise lessons cover all levels in order
+    /// and drills mix them.
     #[arg(long, value_name = "N")]
     level: Option<u8>,
 
@@ -48,18 +81,27 @@ pub struct TrainArgs {
     /// Use the line-based interface instead of the full-screen TUI.
     #[arg(long)]
     plain: bool,
+
+    /// Progress file (default: `<data-dir>/codemmet/trainer.json`).
+    #[arg(long, value_name = "FILE")]
+    data_file: Option<PathBuf>,
+
+    /// Delete saved progress and exit.
+    #[arg(long)]
+    reset: bool,
 }
 
 /// Run the trainer.
 pub fn run(sources: Sources<'_>, args: &TrainArgs) -> ExitCode {
-    let level = if let Some(n) = args.level {
-        let Some(level) = Level::from_number(n) else {
-            eprintln!("error: --level must be between 1 and 7");
-            return ExitCode::from(EXIT_CONFIG);
-        };
-        Some(level)
-    } else {
-        None
+    let data_path = args.data_file.clone().or_else(progress::default_path);
+
+    if args.reset {
+        return reset(data_path.as_deref());
+    }
+
+    let level = match parse_level(args.level) {
+        Ok(level) => level,
+        Err(code) => return code,
     };
 
     let registry = match load_registry(sources) {
@@ -71,14 +113,22 @@ pub fn run(sources: Sources<'_>, args: &TrainArgs) -> ExitCode {
     };
     let engine = Engine::with_registry(registry);
 
-    let Some(lang) = engine.registry().language(&args.lang) else {
+    if engine.registry().language(&args.lang).is_none() {
         eprintln!("error: unknown language `{}`", args.lang);
         return ExitCode::from(EXIT_CONFIG);
-    };
-    let ctx = ExpansionContext::plain(String::new(), lang.profile.default_indent.clone());
-    let seed = args.seed.unwrap_or_else(clock_seed);
+    }
 
-    let mut trainer = Trainer::new(&engine, args.lang.clone(), ctx, level, seed);
+    let now = now_unix();
+    let mut saved = data_path.as_deref().map(progress::load).unwrap_or_default();
+    let config = Config {
+        language: args.lang.clone(),
+        mode: args.mode.into(),
+        level,
+        seed: args.seed.unwrap_or_else(clock_seed),
+        now,
+    };
+    let review = saved.review_for(&args.lang);
+    let mut trainer = Trainer::new(&engine, config, review);
 
     // Full-screen TUI when attached to a terminal; the line runner otherwise
     // (piped input, redirected output, or an explicit `--plain`).
@@ -98,21 +148,82 @@ pub fn run(sources: Sources<'_>, args: &TrainArgs) -> ExitCode {
         eprintln!("error: {err}");
         return ExitCode::from(EXIT_CONFIG);
     }
-    print_summary(trainer.stats());
+
+    let due = trainer.review_state().due_count(now);
+    persist(&mut saved, &args.lang, &trainer, data_path.as_deref());
+    print_summary(trainer.stats(), due);
     ExitCode::SUCCESS
 }
 
+/// Parse `--level`, returning the level or an exit code on error.
+fn parse_level(level: Option<u8>) -> Result<Option<Level>, ExitCode> {
+    level.map_or(Ok(None), |n| {
+        Level::from_number(n).map(Some).ok_or_else(|| {
+            eprintln!("error: --level must be between 1 and 7");
+            ExitCode::from(EXIT_CONFIG)
+        })
+    })
+}
+
+/// Handle `--reset`.
+fn reset(path: Option<&std::path::Path>) -> ExitCode {
+    let Some(path) = path else {
+        eprintln!("error: no data directory; nothing to reset");
+        return ExitCode::from(EXIT_CONFIG);
+    };
+    match progress::reset(path) {
+        Ok(()) => {
+            println!("progress reset ({})", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("error: could not reset progress: {err}");
+            ExitCode::from(EXIT_CONFIG)
+        }
+    }
+}
+
+/// Fold the finished session into `saved` and write it back (best effort).
+fn persist(
+    saved: &mut progress::Progress,
+    language: &str,
+    trainer: &Trainer,
+    path: Option<&std::path::Path>,
+) {
+    let Some(path) = path else {
+        return;
+    };
+    saved.lifetime.absorb(trainer.stats());
+    saved.set_review(language, trainer.review_state().clone());
+    saved.mark_completed(language, trainer.completed_levels());
+    if let Err(err) = progress::save(path, saved) {
+        eprintln!("warning: could not save progress: {err}");
+    }
+}
+
 /// Print a one-line session receipt to stdout.
-fn print_summary(stats: &Stats) {
+fn print_summary(stats: &Stats, due: usize) {
     let accuracy = if stats.attempts == 0 {
         0
     } else {
         (stats.solved * 100) / stats.attempts
     };
+    let reviews = if due > 0 {
+        format!(" · {due} due for review (run `--mode review`)")
+    } else {
+        String::new()
+    };
     println!(
-        "session: {} solved of {} shown · {accuracy}% of answers correct · best streak {}",
+        "session: {} solved of {} shown · {accuracy}% of answers correct · best streak {}{reviews}",
         stats.solved, stats.presented, stats.best_streak
     );
+}
+
+/// The current time in Unix seconds (0 if the clock is before the epoch).
+fn now_unix() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// A best-effort seed from the wall clock; falls back to a constant if the

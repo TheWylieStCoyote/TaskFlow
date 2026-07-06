@@ -46,6 +46,15 @@ pub fn run_plain<R: BufRead, W: Write>(
                 out.flush()?;
                 advance_or_quit(trainer, input)?;
             }
+            Phase::Sandbox => {
+                sandbox_screen(trainer, out)?;
+                write!(out, "sandbox> ")?;
+                out.flush()?;
+                match read_line(input)? {
+                    Some(line) if !is_quit(line.trim()) => trainer.sandbox_input(&line),
+                    _ => trainer.handle(Event::Quit),
+                }
+            }
             Phase::Done => break,
         }
     }
@@ -95,13 +104,12 @@ fn prompt<W: Write>(trainer: &Trainer, out: &mut W) -> std::io::Result<()> {
         return Ok(());
     };
     let level = trainer.current_level();
-    let (done, total) = trainer.level_progress();
     writeln!(
         out,
-        "── level {} · {} — exercise {}/{total} ──",
+        "── level {} · {} — {} ──",
         level.number(),
         level.title(),
-        done + 1,
+        trainer.header_note(),
     )?;
     match exercise.direction {
         Direction::Reverse => {
@@ -126,6 +134,18 @@ fn prompt<W: Write>(trainer: &Trainer, out: &mut W) -> std::io::Result<()> {
             exercise.abbreviation
         ),
     }
+}
+
+/// The sandbox: the most recent expansion, then any note.
+fn sandbox_screen<W: Write>(trainer: &Trainer, out: &mut W) -> std::io::Result<()> {
+    if let Some((abbr, expansion)) = trainer.sandbox_log().last() {
+        writeln!(out, "  `{abbr}` ⟶")?;
+        indented(expansion, out)?;
+    }
+    if let Some(message) = trainer.message() {
+        writeln!(out, "  {message}")?;
+    }
+    Ok(())
 }
 
 fn feedback_screen<W: Write>(feedback: &Feedback, out: &mut W) -> std::io::Result<()> {
@@ -171,7 +191,9 @@ fn indented<W: Write>(text: &str, out: &mut W) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::train::exercise::{Exercise, Level, generate};
+    use crate::train::review::ReviewState;
     use crate::train::rng::Rng;
+    use crate::train::trainer::{Config, Mode};
     use codemmet_core::context::{ExpansionContext, IndentUnit};
     use codemmet_core::engine::Engine;
     use codemmet_core::lang::registry::Registry;
@@ -183,6 +205,17 @@ mod tests {
 
     fn ctx() -> ExpansionContext {
         ExpansionContext::plain(String::new(), IndentUnit::Spaces(4))
+    }
+
+    fn trainer(engine: &Engine, mode: Mode, level: Option<Level>, seed: u64) -> Trainer<'_> {
+        let config = Config {
+            language: "rust".to_string(),
+            mode,
+            level,
+            seed,
+            now: 1_000_000,
+        };
+        Trainer::new(engine, config, ReviewState::default())
     }
 
     fn solution(exercise: &Exercise) -> String {
@@ -205,11 +238,11 @@ mod tests {
     #[test]
     fn quitting_at_the_intro_ends_cleanly() {
         let engine = engine();
-        let mut trainer = Trainer::new(&engine, "rust", ctx(), Some(Level::SingleTrigger), 1);
-        let text = drive(&mut trainer, ":quit\n");
+        let mut t = trainer(&engine, Mode::Lessons, Some(Level::SingleTrigger), 1);
+        let text = drive(&mut t, ":quit\n");
         assert!(text.contains("codemmet trainer"));
-        assert!(trainer.is_done());
-        assert_eq!(trainer.stats().solved, 0);
+        assert!(t.is_done());
+        assert_eq!(t.stats().solved, 0);
     }
 
     #[test]
@@ -221,20 +254,29 @@ mod tests {
             generate(&engine, "rust", Level::Nesting, &ctx(), &mut probe).expect("generated");
         let answer = solution(&exercise);
 
-        let mut trainer = Trainer::new(&engine, "rust", ctx(), Some(Level::Nesting), seed);
+        let mut t = trainer(&engine, Mode::Lessons, Some(Level::Nesting), seed);
         // Enter to begin, then the answer; EOF then stops at the feedback screen.
-        let text = drive(&mut trainer, &format!("\n{answer}\n"));
+        let text = drive(&mut t, &format!("\n{answer}\n"));
         assert!(text.contains("✓ correct"), "output:\n{text}");
-        assert_eq!(trainer.stats().solved, 1);
+        assert_eq!(t.stats().solved, 1);
     }
 
     #[test]
     fn hint_then_show_reveals_the_answer() {
         let engine = engine();
-        let mut trainer = Trainer::new(&engine, "rust", ctx(), Some(Level::Nesting), 3);
-        let text = drive(&mut trainer, "\n:hint\n:show\n");
+        let mut t = trainer(&engine, Mode::Lessons, Some(Level::Nesting), 3);
+        let text = drive(&mut t, "\n:hint\n:show\n");
         assert!(text.contains("hint:"), "output:\n{text}");
         assert!(text.contains("answer:"), "output:\n{text}");
-        assert_eq!(trainer.stats().solved, 0);
+        assert_eq!(t.stats().solved, 0);
+    }
+
+    #[test]
+    fn sandbox_expands_lines_until_quit() {
+        let engine = engine();
+        let mut t = trainer(&engine, Mode::Sandbox, None, 1);
+        let text = drive(&mut t, "pr\n:quit\n");
+        assert!(text.contains("println!"), "output:\n{text}");
+        assert_eq!(t.sandbox_log().len(), 1);
     }
 }

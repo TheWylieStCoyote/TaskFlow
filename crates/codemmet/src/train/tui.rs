@@ -16,7 +16,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Paragraph, Wrap};
 
 use super::exercise::{Direction, Exercise};
-use super::trainer::{Event as TrEvent, Feedback, Phase, Trainer};
+use super::trainer::{Event as TrEvent, Feedback, Mode, Phase, Trainer};
 
 /// Run the trainer in a ratatui full-screen session, restoring the terminal on
 /// exit (including on panic — [`ratatui::init`] installs a restoring hook).
@@ -69,6 +69,12 @@ fn apply_key(trainer: &mut Trainer, code: KeyCode, mods: KeyModifiers) -> bool {
             KeyCode::Char(c) if !ctrl && !c.is_control() => trainer.handle(TrEvent::Insert(c)),
             _ => {}
         },
+        Phase::Sandbox => match code {
+            KeyCode::Enter => trainer.handle(TrEvent::Submit),
+            KeyCode::Backspace => trainer.handle(TrEvent::Backspace),
+            KeyCode::Char(c) if !ctrl && !c.is_control() => trainer.handle(TrEvent::Insert(c)),
+            _ => {}
+        },
         _ => {}
     }
     false
@@ -89,22 +95,26 @@ fn render(frame: &mut Frame, trainer: &Trainer) {
         Phase::Intro(_) => render_intro(frame, body, trainer),
         Phase::Answering => render_answering(frame, body, trainer),
         Phase::Feedback(feedback) => render_feedback(frame, body, feedback),
+        Phase::Sandbox => render_sandbox(frame, body, trainer),
         Phase::Done => render_done(frame, body, trainer),
     }
 }
 
 fn render_title(frame: &mut Frame, area: Rect, trainer: &Trainer) {
-    let level = trainer.current_level();
-    let (idx, total) = trainer.plan_progress();
     let stats = trainer.stats();
+    let middle = if trainer.mode() == Mode::Sandbox {
+        "  free play — expand anything   ".to_string()
+    } else {
+        format!(
+            "  {} · {} · {}   ",
+            trainer.mode().title(),
+            trainer.current_level().title(),
+            trainer.header_note()
+        )
+    };
     let line = Line::from(vec![
         " codemmet trainer ".bold().on_blue().white(),
-        Span::raw(format!(
-            "  level {}/{} · {}   ",
-            (idx + 1).min(total),
-            total,
-            level.title()
-        )),
+        Span::raw(middle),
         Span::styled(
             format!("solved {} · streak {}", stats.solved, stats.streak),
             Style::new().dim(),
@@ -120,6 +130,7 @@ fn render_footer(frame: &mut Frame, area: Rect, trainer: &Trainer) {
             "Enter: submit    Tab: hint    Ctrl+R: reveal    Ctrl+K: skip    Esc: quit"
         }
         Phase::Feedback(_) => "Enter: continue    Esc: quit",
+        Phase::Sandbox => "Enter: expand    Esc: quit",
         Phase::Done => "press any key to exit",
     };
     frame.render_widget(Paragraph::new(Line::from(keys).dim()), area);
@@ -165,8 +176,7 @@ fn render_answering(frame: &mut Frame, area: Rect, trainer: &Trainer) {
             Style::new().red(),
         )));
     }
-    let (done, total) = trainer.level_progress();
-    let title = format!(" Exercise {}/{total} ", done + 1);
+    let title = format!(" {} ", trainer.header_note());
     frame.render_widget(
         Paragraph::new(Text::from(lines))
             .block(Block::bordered().title(title))
@@ -252,13 +262,37 @@ fn render_feedback(frame: &mut Frame, area: Rect, feedback: &Feedback) {
 
 fn render_done(frame: &mut Frame, area: Rect, trainer: &Trainer) {
     let stats = trainer.stats();
+    // Review mode with nothing shown means the queue was empty.
+    if trainer.mode() == Mode::Review && stats.presented == 0 {
+        let lines = vec![
+            Line::from("No reviews due 🎉").green().bold(),
+            Line::raw(""),
+            Line::raw("Nothing is scheduled right now — come back later,"),
+            Line::raw("or run lessons or drills to build up your schedule."),
+            Line::raw(""),
+            Line::from("Press any key to exit.").dim(),
+        ];
+        frame.render_widget(
+            Paragraph::new(Text::from(lines))
+                .block(Block::bordered().title(" Review "))
+                .wrap(Wrap { trim: false }),
+            area,
+        );
+        return;
+    }
+
     let accuracy = if stats.attempts == 0 {
         0
     } else {
         (stats.solved * 100) / stats.attempts
     };
+    let headline = if trainer.mode() == Mode::Lessons {
+        "Lessons complete!"
+    } else {
+        "Session complete!"
+    };
     let lines = vec![
-        Line::from("Lessons complete!").green().bold(),
+        Line::from(headline).green().bold(),
         Line::raw(""),
         Line::raw(format!("Exercises shown:  {}", stats.presented)),
         Line::raw(format!("Solved:           {}", stats.solved)),
@@ -272,6 +306,61 @@ fn render_done(frame: &mut Frame, area: Rect, trainer: &Trainer) {
             .block(Block::bordered().title(" Session summary "))
             .wrap(Wrap { trim: false }),
         area,
+    );
+}
+
+/// Free-play sandbox: a scrollback of past expansions, the input, and a live
+/// preview of the current buffer.
+fn render_sandbox(frame: &mut Frame, area: Rect, trainer: &Trainer) {
+    let [log, input, preview] = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(3),
+        Constraint::Length(8),
+    ])
+    .areas(area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (abbr, expansion) in trainer.sandbox_log() {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{abbr} "), Style::new().bold()),
+            Span::styled("⟶", Style::new().dim()),
+        ]));
+        for line in expansion.lines() {
+            lines.push(Line::styled(format!("  {line}"), Style::new().cyan()));
+        }
+        lines.push(Line::raw(""));
+    }
+    if let Some(message) = trainer.message() {
+        lines.push(Line::from(Span::styled(
+            message.to_string(),
+            Style::new().red(),
+        )));
+    }
+    if lines.is_empty() {
+        lines.push(Line::from("Type an abbreviation and press Enter to expand it.").dim());
+    }
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .block(Block::bordered().title(" Sandbox "))
+            .wrap(Wrap { trim: false }),
+        log,
+    );
+
+    let buffer = format!("{}█", trainer.input());
+    frame.render_widget(
+        Paragraph::new(Line::from(buffer)).block(Block::bordered().title(" Abbreviation ")),
+        input,
+    );
+
+    let text = trainer.live_preview().map_or_else(
+        || Text::from(Line::from("preview appears as you type").dim()),
+        Text::from,
+    );
+    frame.render_widget(
+        Paragraph::new(text)
+            .block(Block::bordered().title(" Live preview "))
+            .wrap(Wrap { trim: false }),
+        preview,
     );
 }
 
@@ -314,7 +403,8 @@ fn prompt_lines(exercise: &Exercise, lines: &mut Vec<Line<'static>>) {
 mod tests {
     use super::*;
     use crate::train::exercise::Level;
-    use codemmet_core::context::{ExpansionContext, IndentUnit};
+    use crate::train::review::ReviewState;
+    use crate::train::trainer::Config;
     use codemmet_core::engine::Engine;
     use codemmet_core::lang::registry::Registry;
     use ratatui::Terminal;
@@ -325,8 +415,25 @@ mod tests {
     }
 
     fn trainer(engine: &Engine) -> Trainer<'_> {
-        let ctx = ExpansionContext::plain(String::new(), IndentUnit::Spaces(4));
-        Trainer::new(engine, "rust", ctx, Some(Level::Nesting), 5)
+        let config = Config {
+            language: "rust".to_string(),
+            mode: Mode::Lessons,
+            level: Some(Level::Nesting),
+            seed: 5,
+            now: 1_000_000,
+        };
+        Trainer::new(engine, config, ReviewState::default())
+    }
+
+    fn sandbox(engine: &Engine) -> Trainer<'_> {
+        let config = Config {
+            language: "rust".to_string(),
+            mode: Mode::Sandbox,
+            level: None,
+            seed: 1,
+            now: 0,
+        };
+        Trainer::new(engine, config, ReviewState::default())
     }
 
     /// Render one frame to an in-memory backend and return its text.
@@ -402,5 +509,19 @@ mod tests {
         let mut t = trainer(&engine);
         assert!(apply_key(&mut t, KeyCode::Esc, KeyModifiers::empty()));
         assert!(t.is_done());
+    }
+
+    #[test]
+    fn sandbox_renders_and_expands_input() {
+        let engine = engine();
+        let mut t = sandbox(&engine);
+        assert!(draw(&t).contains("Sandbox"));
+        for c in "pr".chars() {
+            apply_key(&mut t, KeyCode::Char(c), KeyModifiers::empty());
+        }
+        // Live preview shows the expansion before submitting.
+        assert!(draw(&t).contains("println!"));
+        apply_key(&mut t, KeyCode::Enter, KeyModifiers::empty());
+        assert_eq!(t.sandbox_log().len(), 1);
     }
 }

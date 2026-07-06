@@ -164,6 +164,7 @@ dependencies = [
  "clap",
  "codemmet-core",
  "codemmet-tsctx",
+ "dirs",
  "lsp-server",
  "lsp-types",
  "ratatui",

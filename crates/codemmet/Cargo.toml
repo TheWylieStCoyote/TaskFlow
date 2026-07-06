@@ -18,6 +18,7 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 codemmet-core = { workspace = true }
 codemmet-tsctx = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
 lsp-server = { workspace = true }
 lsp-types = { workspace = true }
 ratatui = { version = "0.29", optional = true }
@@ -31,7 +32,7 @@ tree-sitter = ["dep:codemmet-tsctx"]
 # The interactive syntax trainer (`codemmet train`): a ratatui full-screen TUI
 # with a line-based fallback for non-TTY / piped use. The pure trainer core has
 # no TUI dependency; only the front end pulls in ratatui (+ its crossterm).
-train = ["dep:ratatui"]
+train = ["dep:ratatui", "dep:dirs"]
 
 [lints]
 workspace = true

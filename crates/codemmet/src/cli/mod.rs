@@ -27,7 +27,12 @@ pub const EXIT_CONFIG: u8 = 3;
 
 /// Emmet-style abbreviation expansion for programming languages.
 #[derive(Debug, Parser)]
-#[command(name = "codemmet", version, about)]
+#[command(
+    name = "codemmet",
+    version,
+    long_version = env!("CODEMMET_LONG_VERSION"),
+    about
+)]
 struct Cli {
     /// Snippet override directory (default: `<config>/codemmet/snippets`).
     #[arg(long, global = true, value_name = "DIR")]

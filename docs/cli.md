@@ -12,7 +12,12 @@ The available subcommands are:
 | `check` | Validate the user snippet override directory. |
 | `lsp` | Run the Language Server Protocol server over standard input and output. |
 
-Every command accepts `-h` or `--help`. The top-level command also accepts `-V` or `--version`.
+Every command accepts `-h` or `--help`. The top-level command also reports its
+version two ways: `-V` prints the short version (`codemmet 0.1.0`), and
+`--version` prints the full version including the git commit it was built from
+(`codemmet 0.1.0 (1b87ea9)`). A build made with uncommitted changes is marked
+`-dirty` (`codemmet 0.1.0 (1b87ea9-dirty)`); a build with no git checkout (for
+example, installed from crates.io) shows just `codemmet 0.1.0`.
 
 ## expand
 

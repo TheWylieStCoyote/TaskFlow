@@ -61,6 +61,12 @@
         cursor: pointer;
       }
       .examples button:hover { border-color: var(--accent); color: var(--accent); }
+      .examples .lang {
+        display: inline-block; margin-right: 7px; padding: 1px 6px;
+        border-radius: 999px; background: #313244; color: var(--muted);
+        font-size: 11px;
+      }
+      .examples button:hover .lang { color: var(--fg); }
       pre#out {
         background: var(--panel);
         border: 1px solid var(--border);
@@ -134,13 +140,39 @@
 
     <script type="module">
       const EXAMPLES = [
+        // Rust — from simple to a whole module (nesting, siblings, repeat,
+        // climb-up, grouping, and the ${i} repetition index).
         ["rust", "fn:main>fori10>pr"],
         ["rust", "fn:handle>match:msg>arm*3^ret"],
-        ["rust", "(fn:main>pr)+fn:helper"],
+        ["rust", "enum:Shape+impl:Shape>fn:area"],
+        ["rust", "tmod>test:case${i}*3"],
+        ["rust", "mod:app>((struct:Point)+(impl:Point>((fn:x>ret)+(fn:y>ret))))"],
+        // Python
         ["python", "def:main>fori:i,10>pr"],
-        ["go", "fn:main>fori:i,10>pr"],
+        ["python", "class:Widget>(def:init+def:run)"],
+        ["python", "try>pr^pr"],
+        // C
+        ["c", "fn:main>fori:i,10>pr"],
+        ["c", "struct:Point"],
+        // C++
+        ["cpp", "ns:app>class:Widget>fn:run"],
+        ["cpp", "fn:main>vec+ret"],
+        // JavaScript
+        ["javascript", "fn:main>fori:i,10>pr"],
+        ["javascript", "class:Widget>ctor"],
+        // TypeScript
         ["typescript", "class:Widget>fn:run"],
+        ["typescript", "int:Shape+fng:identity"],
+        // Go
+        ["go", "fn:main>fori:i,10>pr"],
+        ["go", "fn:run>iferr"],
+        ["go", "struct:Point+iface:Shape"],
       ];
+
+      const LANG_LABEL = {
+        rust: "rs", python: "py", c: "c", cpp: "c++",
+        javascript: "js", typescript: "ts", go: "go",
+      };
 
       const $ = (id) => document.getElementById(id);
       const abbrEl = $("abbr"), langEl = $("lang"), keepEl = $("keep"), outEl = $("out");
@@ -181,7 +213,10 @@
         const box = $("examples");
         for (const [lang, abbr] of EXAMPLES) {
           const b = document.createElement("button");
-          b.textContent = abbr;
+          const tag = document.createElement("span");
+          tag.className = "lang";
+          tag.textContent = LANG_LABEL[lang] || lang;
+          b.append(tag, document.createTextNode(abbr));
           b.title = `${lang}: ${abbr}`;
           b.addEventListener("click", () => {
             langEl.value = lang;

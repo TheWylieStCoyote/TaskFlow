@@ -3,6 +3,13 @@ all-features = true
 
 [advisories]
 yanked = "deny"
+ignore = [
+    # `paste` is flagged unmaintained (the author archived it), but it is a
+    # compile-time-only proc-macro helper with no runtime surface, pulled in
+    # transitively by ratatui (the `train` feature's TUI). No action needed
+    # until ratatui migrates off it.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 allow = [

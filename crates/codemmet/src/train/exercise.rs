@@ -103,6 +103,41 @@ impl Level {
             Self::Grouping => "grouping ( )",
         }
     }
+
+    /// A teaching blurb shown on the lesson's intro screen.
+    #[must_use]
+    pub const fn blurb(self) -> &'static str {
+        match self {
+            Self::SingleTrigger => {
+                "A trigger is a short keyword that expands to a construct.\n\
+                 Type the trigger on its own, e.g. `pr` or `ret`."
+            }
+            Self::Arguments => {
+                "Triggers take arguments. Glue them on (`fori10`, `fn:main`) or pass\n\
+                 them explicitly after a colon, comma-separated (`fori:i,10`)."
+            }
+            Self::Nesting => {
+                "`>` nests the right side inside the left as its child:\n\
+                 `fn:main>pr` puts a println inside a main function."
+            }
+            Self::Siblings => {
+                "`+` places two constructs side by side, as siblings:\n\
+                 `if+el` yields an if followed by an else."
+            }
+            Self::Repeat => {
+                "`*n` repeats a construct n times, each with its own tabstops:\n\
+                 `arm*3` produces three match arms."
+            }
+            Self::ClimbUp => {
+                "`^` climbs back up out of the current child, so the next construct\n\
+                 is a sibling of the parent: `fn:main>pr^ret`."
+            }
+            Self::Grouping => {
+                "`( )` groups a whole subtree so operators apply to it as a unit:\n\
+                 `(fn:main>pr)+ret` — the group, then a sibling."
+            }
+        }
+    }
 }
 
 /// The exercise direction.

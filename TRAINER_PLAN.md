@@ -161,9 +161,21 @@ to `deny.toml`'s allowances if not already covered.
   line runner drives it with `:hint` / `:show` / `:skip` / `:quit`, mixed or
   single-level (`--level`), reproducible via `--seed`. Session logic is tested
   headlessly by scripting a `Cursor` of input, plus binary-level CLI tests.
-- **T2 — TUI + lessons:** add ratatui/crossterm; a ratatui event loop, the
-  panel layout, live preview, input handling, hints/show; the guided-lessons
-  mode end to end, over the same core.
+- **T2 — TUI + lessons ✅ (done):** the trainer core was refactored into a pure
+  `Trainer` state machine (`trainer.rs`) — events in, renderable state out —
+  that both front ends drive, so grading/progression/hint logic lives in one
+  place. A ratatui full-screen front end (`tui.rs`) renders it: a title bar with
+  level/streak, an exercise panel (prompt or multiple-choice), an answer box
+  with a live cursor, a bottom panel with staged hints and the reverse-mode
+  live preview, and a key-hint footer; keys map to events per phase
+  (Enter/Tab/Ctrl+R/Ctrl+K/Esc). The guided-lessons mode runs end to end: a
+  concept intro per level, then a set of exercises, advancing level by level to
+  a summary screen. ratatui (with its crossterm) is now pulled in by the
+  `train` feature; the line runner (`session.rs`) was rewritten as a thin driver
+  over the same state machine and is the automatic fallback for non-TTY / piped
+  use (or `--plain`). Tested headlessly: state-machine transitions via scripted
+  events, TUI render across every phase via ratatui's `TestBackend`, and key
+  mapping — no live terminal required.
 - **T3 — the other modes:** drills, spaced repetition (Leitner + persistence),
   sandbox, stats/streaks, `--reset`.
 - **T4 — content + polish:** hand-authored lesson progression, decoy tuning,

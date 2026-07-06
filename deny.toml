@@ -16,6 +16,14 @@ allow = [
     "Zlib",
 ]
 
+# `option-ext` (pulled in transitively by `dirs` → `dirs-sys`) is MPL-2.0.
+# MPL-2.0 is file-level copyleft: using the crate unmodified as a dependency
+# imposes nothing on our own MIT/Apache-2.0 sources. Scope the allowance to
+# just this crate so a future MPL-2.0 dependency is still flagged for review.
+[[licenses.exceptions]]
+allow = ["MPL-2.0"]
+crate = "option-ext"
+
 [bans]
 multiple-versions = "warn"
 

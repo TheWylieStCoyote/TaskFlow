@@ -271,6 +271,129 @@ fn handle($1) {
 }
 ```
 
+## A whole module: a struct, an impl with two methods, and a test module
+
+This one scaffolds an entire module in a single abbreviation, combining every
+operator: argument binding, nesting, grouping, siblings, climb-up, and repetition
+with the `${i}` index.
+
+```sh
+codemmet expand --lang rust 'mod:shapes>((struct:Rect)+(impl:Rect>((fn:area>ret)+(fn:scale>fori:i,10>pr^ret)))+(tmod>test:case${i}*3))'
+```
+
+> Note the **single quotes**: `${i}` is the repetition-index variable, and a
+> shell would try to expand `${i}` itself inside double quotes. See
+> [troubleshooting](../troubleshooting.md).
+
+```rust
+mod shapes {
+    struct Rect {
+        
+    }
+    impl Rect {
+        fn area(&self) {
+            return ;
+        }
+        fn scale(&self) {
+            for i in 0..10 {
+                println!("");
+            }
+            return ;
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn case1() {
+            
+        }
+        #[test]
+        fn case2() {
+            
+        }
+        #[test]
+        fn case3() {
+            
+        }
+    }
+}
+```
+
+What's happening, from the outside in:
+
+- `mod:shapes>` opens a module and nests everything after it inside.
+- The outer group `((struct:Rect)+(impl:Rect>…)+(tmod>…))` holds the module's
+  three members. **Each sibling that has its own children is wrapped in its own
+  parentheses.** That is the key technique: a bare `A>x + B` would fold `B` in as
+  another child of `A`, because `>` keeps attaching everything up to the next
+  `)` or `^`. Wrapping each chain — `(A>x)+(B>y)` — makes them true siblings.
+  (The [impl example above](#an-impl-block-with-a-deeply-nested-method-climbing-back-out-to-a-sibling)
+  reaches the same shape with `^` climb-up instead; either works.)
+- `struct:Rect` is the first member — a struct with a tabstop where its fields go.
+- `impl:Rect>((fn:area>ret)+(fn:scale>…))` is the second member: an `impl` with
+  two method siblings, again each parenthesized. Both methods gain `&self`
+  because a `fn` composed **inside an `impl`** selects the method variant — this
+  is context awareness from the composition scope alone, with no editor or
+  tree-sitter involved.
+- `fn:area>ret` nests a `return` in the first method's body.
+- `fn:scale>fori:i,10>pr^ret` builds the second method's body: a `for` loop
+  (`fori:i,10` binds the loop variable `i` and bound `10` explicitly) containing
+  a `println!`, then `^` climbs out of the loop so the `return` lands **after**
+  the loop, still inside `scale`.
+- `tmod>test:case${i}*3` is the third member: the built-in test-module scaffold
+  (`#[cfg(test)] mod tests { use super::*; … }`) with `test` repeated three
+  times. `${i}` stamps the 1-based copy number into each name, so you get
+  `case1`, `case2`, `case3` instead of three identically-named functions.
+
+In `keep` mode the tabstops are numbered in document order across the entire
+tree, with a single `$0` final cursor:
+
+```sh
+codemmet expand --lang rust --tabstops keep 'mod:shapes>((struct:Rect)+(impl:Rect>((fn:area>ret)+(fn:scale>fori:i,10>pr^ret)))+(tmod>test:case${i}*3))'
+```
+
+```rust
+mod shapes {
+    struct Rect {
+        $1
+    }
+    impl Rect {
+        fn area(&self$2) {
+            return $3;
+        }
+        fn scale(&self$4) {
+            for i in 0..10 {
+                println!("$5");
+            }
+            return $6;
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn case1() {
+            $7
+        }
+        #[test]
+        fn case2() {
+            $8
+        }
+        #[test]
+        fn case3() {
+            $0
+        }
+    }
+}
+```
+
+From one line of abbreviation, that is a 33-line module skeleton with nine
+tabstops to jump through — the struct body first (`$1`), then each method and
+its `return`, then the three test bodies, ending on `$0` in the last test.
+
 ## See also
 
 - [Examples overview](README.md) and the per-language pages.

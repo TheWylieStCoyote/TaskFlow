@@ -9,6 +9,10 @@ If an operator is unfamiliar, read the [abbreviation syntax](../syntax.md)
 reference first: `>` nests a child, `+` adds a sibling, `*` repeats, `^` climbs
 back up out of a nesting level, and `()` groups.
 
+For intricate abbreviations that combine many of these at once — deep nesting,
+multi-level climb-up, repetition, grouping, and context variants — with a full
+step-by-step breakdown of each, see the **[advanced examples](advanced.md)**.
+
 ## By language
 
 | Language | Examples |

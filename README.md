@@ -11,16 +11,24 @@ fn:main>fori10>pr        (in a Rust buffer)
 ```rust
 fn main() {
     for i in 0..10 {
-        println!("|");
+        println!("");
     }
 }
 ```
 
-Planned language support: Rust, Python, C, C++, JavaScript, TypeScript, Go.
 Delivered as one binary that is both a CLI (`codemmet expand`, `wrap`, `list`,
 `check`) and an LSP server (`codemmet lsp`), plus a Neovim plugin in this repo.
-Later phases use tree-sitter for context-aware expansion (e.g. `fn` inside an
-`impl` block gains `&self`) and wrap-with-abbreviation.
+It uses tree-sitter for context-aware expansion (e.g. `fn` inside an `impl`
+block gains `&self`) and wrap-with-abbreviation.
+
+## Documentation
+
+Full guides live in **[docs/](docs/README.md)** — start with
+[installation](docs/installation.md), then the [tutorials](docs/tutorials.md)
+and [editor setup](docs/editors.md). Reference: [abbreviation
+syntax](docs/syntax.md), [language reference](docs/languages.md), [CLI
+reference](docs/cli.md), [custom snippets](docs/snippets.md), and
+[troubleshooting](docs/troubleshooting.md).
 
 **Status: all planned milestones (M0–M4) complete.** Supported languages:
 Rust, Python, C, C++ (inherits C), JavaScript, TypeScript (inherits

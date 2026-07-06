@@ -20,6 +20,7 @@ use std::ops::Range;
 use codemmet_core::context::{
     DocSnapshot, ExpansionContext, IndentUnit, NullContextProvider, Scope, WrapSelection,
 };
+use codemmet_core::lang::profile;
 use tree_sitter::{Node, Tree};
 
 pub use codemmet_core::context::ContextProvider;
@@ -333,9 +334,9 @@ fn clamp_offset(text: &str, offset: usize) -> usize {
     offset
 }
 
-/// First indented, non-blank line decides the indent unit; `Spaces(4)`
-/// when the document has no indented lines yet.
-fn detect_indent_unit(text: &str) -> IndentUnit {
+/// First indented, non-blank line decides the indent unit; `None` when
+/// the document has no indented lines yet.
+fn detect_indent_unit(text: &str) -> Option<IndentUnit> {
     for line in text.lines() {
         let content = line.trim_start_matches([' ', '\t']);
         if content.is_empty() || content.len() == line.len() {
@@ -343,11 +344,22 @@ fn detect_indent_unit(text: &str) -> IndentUnit {
         }
         let ws = &line[..line.len() - content.len()];
         if ws.starts_with('\t') {
-            return IndentUnit::Tab;
+            return Some(IndentUnit::Tab);
         }
-        return IndentUnit::Spaces(u8::try_from(ws.len()).unwrap_or(u8::MAX));
+        return Some(IndentUnit::Spaces(
+            u8::try_from(ws.len()).unwrap_or(u8::MAX),
+        ));
     }
-    IndentUnit::Spaces(4)
+    None
+}
+
+/// Indent unit for `doc`: detected from the text when it has indented
+/// lines, else the language profile's default, else `Spaces(4)` for
+/// unknown languages.
+fn indent_unit_for(doc: &DocSnapshot) -> IndentUnit {
+    detect_indent_unit(&doc.text)
+        .or_else(|| profile::find(&doc.language).map(|p| p.default_indent.clone()))
+        .unwrap_or(IndentUnit::Spaces(4))
 }
 
 /// Tree-sitter-backed [`ContextProvider`] with a per-language tree cache.
@@ -459,7 +471,7 @@ impl ContextProvider for TreeSitterProvider {
             }
         }
 
-        let indent_unit = detect_indent_unit(text);
+        let indent_unit = indent_unit_for(doc);
         let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
         let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
         let line = &text[line_start..line_end];
@@ -1082,6 +1094,51 @@ mod tests {
             let c = ctx("go", "package main\n\nvar s = `he§llo`\n");
             assert!(c.in_string_or_comment);
         }
+
+        #[test]
+        fn space_indented_doc_beats_profile_default() {
+            // The Go profile says Tab, but a document already indented with
+            // four spaces keeps its own detected unit.
+            let c = ctx(
+                "go",
+                "package main\n\nfunc main() {\n    x := 1\n    §\n}\n",
+            );
+            assert_eq!(c.indent_unit, IndentUnit::Spaces(4));
+        }
+    }
+
+    /// Indent unit reported for a fixture with a `§` cursor marker.
+    fn indent_unit_at(language: &str, fixture: &str) -> IndentUnit {
+        let (doc, offset) = doc_at(language, fixture);
+        TreeSitterProvider::new()
+            .context_at(&doc, offset)
+            .indent_unit
+    }
+
+    #[test]
+    fn flat_go_doc_falls_back_to_profile_tab() {
+        assert_eq!(indent_unit_at("go", "package main\n§\n"), IndentUnit::Tab);
+    }
+
+    #[test]
+    fn flat_javascript_doc_falls_back_to_profile_two_spaces() {
+        assert_eq!(
+            indent_unit_at("javascript", "const x = 1;\n§\n"),
+            IndentUnit::Spaces(2)
+        );
+    }
+
+    #[test]
+    fn flat_rust_doc_falls_back_to_profile_four_spaces() {
+        assert_eq!(
+            indent_unit_at("rust", "fn main() {}\n§\n"),
+            IndentUnit::Spaces(4)
+        );
+    }
+
+    #[test]
+    fn flat_unknown_language_doc_falls_back_to_four_spaces() {
+        assert_eq!(indent_unit_at("cobol", "x = 1\n§\n"), IndentUnit::Spaces(4));
     }
 
     #[test]

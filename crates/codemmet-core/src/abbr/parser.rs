@@ -29,12 +29,25 @@ use super::{AbbrNode, Abbreviation, ParseError};
 /// Maximum accepted `*n` repeat count.
 const MAX_REPEAT: u32 = 100;
 
+/// Maximum weighted node count an abbreviation may materialize.
+///
+/// Group distribution clones subtrees at parse time, so nested `(…)*n`
+/// multiplies: `((a*100)*100)*100` would materialize 10^4 nodes rendering
+/// 10^6 copies. Nodes are charged by their render weight (repeat count,
+/// times the subtree for distributed copies), so oversized inputs fail
+/// during the parse instead of exhausting memory.
+const MAX_NODES: usize = 10_000;
+
 /// Parse an abbreviation like `fn:main>fori10>pr` into its AST.
 pub fn parse(input: &str) -> Result<Abbreviation, ParseError> {
     if input.is_empty() {
         return Err(err("empty abbreviation", 0..0));
     }
-    let mut parser = Parser { input, pos: 0 };
+    let mut parser = Parser {
+        input,
+        pos: 0,
+        nodes: 0,
+    };
     let nodes = parser.top_group()?;
     if parser.pos < input.len() {
         return Err(parser.unexpected_here());
@@ -73,10 +86,24 @@ enum Atom {
     Group(Vec<AbbrNode>),
 }
 
+/// Render-copy weight of a node: its repeat count times itself plus its
+/// subtree. This is what one distributed clone of the node costs.
+fn node_weight(node: &AbbrNode) -> usize {
+    let children = node
+        .children
+        .iter()
+        .fold(0usize, |sum, c| sum.saturating_add(node_weight(c)));
+    usize::try_from(node.repeat)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(children.saturating_add(1))
+}
+
 /// Scanner state: the input text and the current byte offset.
 struct Parser<'a> {
     input: &'a str,
     pos: usize,
+    /// Weighted count of materialized nodes, capped at [`MAX_NODES`].
+    nodes: usize,
 }
 
 impl Parser<'_> {
@@ -173,6 +200,18 @@ impl Parser<'_> {
         Ok(count)
     }
 
+    /// Record `weight` materialized nodes; fail past [`MAX_NODES`].
+    ///
+    /// `span` points at the offending `*n` number (or the whole input when
+    /// the overflow has no single repeat to blame).
+    fn charge_nodes(&mut self, weight: usize, span: &Range<usize>) -> Result<(), ParseError> {
+        self.nodes = self.nodes.saturating_add(weight);
+        if self.nodes > MAX_NODES {
+            return Err(err("abbreviation too large", span.clone()));
+        }
+        Ok(())
+    }
+
     /// `chain := element ( '>' level )?` where `element := atom ( '*' NUMBER )?`.
     ///
     /// Appends the chain's node(s) to `nodes` and reports how parsing
@@ -180,12 +219,14 @@ impl Parser<'_> {
     /// ended with `^` carets left over after consuming one for this `>`.
     fn chain_into(&mut self, nodes: &mut Vec<AbbrNode>) -> Result<Flow, ParseError> {
         let atom = self.atom()?;
-        let repeat = if self.peek() == Some('*') {
+        let (repeat, repeat_span) = if self.peek() == Some('*') {
             let star = self.here();
             self.bump();
-            self.repeat_count(star)?
+            let start = self.pos;
+            let n = self.repeat_count(star)?;
+            (n, start..self.pos)
         } else {
-            1
+            (1, 0..self.input.len())
         };
         let (children, flow) = if self.peek() == Some('>') {
             let op = self.here();
@@ -204,6 +245,7 @@ impl Parser<'_> {
         };
         match atom {
             Atom::Node(mut node) => {
+                self.charge_nodes(usize::try_from(repeat).unwrap_or(usize::MAX), &repeat_span)?;
                 node.repeat = repeat;
                 node.children = children;
                 nodes.push(node);
@@ -215,10 +257,16 @@ impl Parser<'_> {
                 if let Some(last) = group.last_mut() {
                     last.children.extend(children);
                 }
-                // Distribute `(…)*n` into n sibling copies.
+                // Distribute `(…)*n` into n sibling copies, charging each
+                // copy's full subtree weight so nested distribution fails
+                // fast instead of materializing the clones.
                 if repeat > 1 {
+                    let weight = group
+                        .iter()
+                        .fold(0usize, |sum, n| sum.saturating_add(node_weight(n)));
                     let copy = group.clone();
                     for _ in 1..repeat {
+                        self.charge_nodes(weight, &repeat_span)?;
                         group.extend_from_slice(&copy);
                     }
                 }
@@ -900,5 +948,31 @@ mod tests {
         let e = parse_err(r"f:a\");
         assert_eq!(e.message, "dangling escape");
         assert_eq!(e.span, 3..4);
+    }
+
+    #[test]
+    fn error_nested_group_distribution_over_node_cap() {
+        // 10^4 nodes rendering 10^6 copies: must fail at parse time, at
+        // the outermost `*n` number.
+        let e = parse_err("((a*100)*100)*100");
+        assert_eq!(e.message, "abbreviation too large");
+        assert_eq!(e.span, 14..17);
+    }
+
+    #[test]
+    fn group_distribution_at_cap_still_parses() {
+        // Weighted count 10,000 sits exactly at the cap.
+        let nodes = parsed("(a*100)*100");
+        assert_eq!(nodes.len(), 100);
+        assert!(nodes.iter().all(|n| n.repeat == 100));
+    }
+
+    #[test]
+    fn nested_node_repeats_parse_without_distribution() {
+        // Plain `*n` chains multiply at render time, not parse time; the
+        // renderer's line budget owns that case.
+        let nodes = parsed("a*100>b*100>c*100");
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].repeat, 100);
     }
 }

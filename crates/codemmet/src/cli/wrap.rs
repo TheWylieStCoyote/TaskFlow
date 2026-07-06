@@ -8,17 +8,26 @@ use clap::{Args, ValueEnum};
 use codemmet_core::Engine;
 use codemmet_core::context::{ExpansionContext, IndentUnit};
 use codemmet_core::engine::ExpandError;
+use codemmet_core::snippet::render::TabstopMode;
 
 use super::{EXIT_PARSE, EXIT_RENDER, config_failure, load_registry};
-use crate::wrap::{WrapError, strip_snippet_markers, wrap};
 
-/// Tabstop handling for the wrapped output.
+/// Tabstop handling for the wrapped output (mirrors [`TabstopMode`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Tabstops {
     /// Emit LSP snippet syntax (`${1:placeholder}`, `$0`).
     Keep,
     /// Emit plain text; placeholders become their text, markers vanish.
     Strip,
+}
+
+impl From<Tabstops> for TabstopMode {
+    fn from(value: Tabstops) -> Self {
+        match value {
+            Tabstops::Keep => Self::Keep,
+            Tabstops::Strip => Self::Strip,
+        }
+    }
 }
 
 /// Arguments for `codemmet wrap`.
@@ -74,20 +83,23 @@ pub fn run(user_dir: Option<&Path>, args: &WrapArgs) -> ExitCode {
 
     let engine = Engine::with_registry(registry);
     let ctx = ExpansionContext::plain(args.base_indent.clone(), indent_unit);
-    match wrap(&engine, &args.lang, &args.abbr, selection, &ctx) {
-        Ok(snippet) => {
-            match args.tabstops {
-                Tabstops::Keep => println!("{snippet}"),
-                Tabstops::Strip => println!("{}", strip_snippet_markers(&snippet)),
-            }
+    match engine.expand_wrap(
+        &args.abbr,
+        &args.lang,
+        &ctx,
+        args.tabstops.into(),
+        selection,
+    ) {
+        Ok(expansion) => {
+            println!("{}", expansion.body);
             ExitCode::SUCCESS
         }
         Err(err) => {
             eprintln!("error: cannot wrap with `{}`: {err}", args.abbr);
             let code = match err {
-                WrapError::Expand(ExpandError::Parse(_)) => EXIT_PARSE,
-                WrapError::Expand(ExpandError::Render(_)) | WrapError::NoCursor => EXIT_RENDER,
-                WrapError::Expand(ExpandError::UnknownLanguage(_)) => super::EXIT_CONFIG,
+                ExpandError::Parse(_) => EXIT_PARSE,
+                ExpandError::Render(_) => EXIT_RENDER,
+                ExpandError::UnknownLanguage(_) => super::EXIT_CONFIG,
             };
             ExitCode::from(code)
         }

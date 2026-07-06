@@ -278,6 +278,52 @@ fn check_valid_override_dir_exits_0() {
 }
 
 #[test]
+fn check_warns_about_misnamed_pack_files() {
+    let dir = scratch_dir("check-misnamed");
+    std::fs::write(
+        dir.join("rs.toml"),
+        "[meta]\nlanguage = \"rust\"\n\n[snippets.zz]\nbody = \"zz($0)\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(stdout(&out).contains("ok:"), "stdout was: {}", stdout(&out));
+    let err = stderr(&out);
+    assert!(
+        err.contains("does not match any language pack name"),
+        "stderr was: {err}"
+    );
+    assert!(err.contains("rs.toml"), "stderr was: {err}");
+}
+
+#[test]
+fn check_correctly_named_pack_emits_no_warning() {
+    let dir = scratch_dir("check-well-named");
+    std::fs::write(
+        dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n\n[snippets.zz]\nbody = \"zz($0)\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(stderr(&out), "");
+}
+
+#[test]
 fn check_invalid_toml_exits_3() {
     let dir = scratch_dir("check-invalid");
     std::fs::write(dir.join("rust.toml"), "not toml [").expect("override pack should be writable");

@@ -39,6 +39,14 @@ pub use parser::parse;
 
 use std::ops::Range;
 
+/// Canonical set of operator characters on the abbreviation surface — the
+/// single source of truth for code that scans abbreviation text without
+/// parsing it (candidate extraction, operator gating).
+///
+/// Mirrors the grammar above: `>` child, `+` sibling, `*` repeat, `:` args,
+/// `,` arg separator, `(`/`)` groups, `^` climb-up.
+pub const OPERATOR_CHARS: &[char] = &['>', '+', '*', ':', ',', '(', ')', '^'];
+
 /// A parsed abbreviation: the top-level sibling chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Abbreviation(pub Vec<AbbrNode>);

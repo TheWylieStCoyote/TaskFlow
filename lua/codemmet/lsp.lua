@@ -70,6 +70,49 @@ function M.range_to_bytes(bufnr, range, offset_encoding)
   return start_row, start_col, end_row, end_col
 end
 
+---Convert a byte index at a character boundary within a line to an LSP character offset.
+---@param line string
+---@param byte_index integer 0-based byte index, at a character boundary
+---@param offset_encoding string "utf-8"|"utf-16"|"utf-32"
+---@return integer
+local function byte_to_character(line, byte_index, offset_encoding)
+  byte_index = math.min(byte_index, #line)
+  if offset_encoding == "utf-8" then
+    return byte_index
+  end
+  if has_011 then
+    return vim.str_utfindex(line, offset_encoding, byte_index)
+  end
+  ---@diagnostic disable-next-line: param-type-mismatch
+  local ok, utf32, utf16 = pcall(vim.str_utfindex, line, byte_index)
+  if not ok then
+    return byte_index
+  end
+  return offset_encoding == "utf-16" and utf16 or utf32
+end
+
+---The cursor as an LSP position. In normal mode the cursor sits ON the last character
+---(e.g. right after leaving insert mode), while `make_position_params` reports the
+---position of the character under the cursor — so advance one character past it, or the
+---server would see the abbreviation minus its final character. Insert mode is unchanged.
+---@param bufnr integer
+---@param offset_encoding string
+---@return lsp.Position
+local function cursor_position(bufnr, offset_encoding)
+  local position = vim.lsp.util.make_position_params(0, offset_encoding).position
+  if not vim.api.nvim_get_mode().mode:find("n") then
+    return position
+  end
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
+  if col >= #line then
+    return position -- empty line, or cursor already past the text ('virtualedit')
+  end
+  -- Byte length of the (possibly multibyte) character under the cursor.
+  local char_len = #vim.fn.strpart(line, col, 1, true)
+  return { line = row - 1, character = byte_to_character(line, col + char_len, offset_encoding) }
+end
+
 ---LSP character offset of the end of a buffer line.
 ---@param bufnr integer
 ---@param row integer 0-based line index
@@ -124,7 +167,7 @@ function M.expand()
     return
   end
 
-  local position = vim.lsp.util.make_position_params(0, client.offset_encoding).position
+  local position = cursor_position(bufnr, client.offset_encoding)
   M.exec(client, bufnr, "codemmet.expand", {
     {
       uri = vim.uri_from_bufnr(bufnr),

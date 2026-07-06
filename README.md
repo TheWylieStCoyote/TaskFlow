@@ -38,7 +38,11 @@ Install with lazy.nvim (builds the binary on install):
 {
   "<your-github>/codemmet",
   build = "cargo build --release",
-  ft = { "rust", "python", "c", "cpp", "javascript", "typescript", "go" },
+  ft = {
+    "rust", "python", "c", "cpp",
+    "javascript", "javascriptreact", "typescript", "typescriptreact",
+    "go",
+  },
   opts = {
     cmd = { "codemmet", "lsp" },              -- or the target/release path
     keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
@@ -75,7 +79,7 @@ override or `disabled = true` any builtin trigger.
 | Operator | Meaning              | Example                  |
 | -------- | -------------------- | ------------------------ |
 | `word`   | trigger + glued args | `fori10`                 |
-| `:`, `,` | explicit args        | `fn:main`, `td:"a, b"`   |
+| `:`, `,` | explicit args        | `fn:main`, `use:"std::fmt"` |
 | `>`      | nest as child        | `fn:main>fori10`         |
 | `+`      | sibling statement    | `if+el`                  |
 | `*`      | repeat               | `match:x>arm*3`          |

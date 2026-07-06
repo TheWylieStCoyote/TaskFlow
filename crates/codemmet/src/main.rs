@@ -5,7 +5,6 @@
 
 mod cli;
 mod lsp;
-mod wrap;
 
 use std::process::ExitCode;
 

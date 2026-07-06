@@ -115,8 +115,10 @@ pub trait ContextProvider {
 
 /// Syntax-unaware provider used until tree-sitter support lands (M3).
 ///
-/// Indentation is inferred from the line containing `offset`; scope is
-/// always [`Scope::Root`]; every wrap selection is accepted as-is.
+/// Indentation is inferred from the line containing `offset`, falling
+/// back to the language profile's default indent (then four spaces for
+/// unknown languages); scope is always [`Scope::Root`]; every wrap
+/// selection is accepted as-is.
 #[derive(Debug, Default)]
 pub struct NullContextProvider;
 
@@ -132,7 +134,10 @@ impl ContextProvider for NullContextProvider {
         let indent_unit = if base_indent.starts_with('\t') {
             IndentUnit::Tab
         } else {
-            IndentUnit::Spaces(4)
+            // Nothing detected on the line: fall back to the language
+            // profile's default, then to four spaces for unknown languages.
+            crate::lang::profile::find(&doc.language)
+                .map_or(IndentUnit::Spaces(4), |p| p.default_indent.clone())
         };
         ExpansionContext::plain(base_indent, indent_unit)
     }
@@ -157,6 +162,27 @@ mod tests {
         assert_eq!(ctx.base_indent, "    ");
         assert_eq!(ctx.indent_unit, IndentUnit::Spaces(4));
         assert_eq!(ctx.scopes, vec![Scope::Root]);
+    }
+
+    #[test]
+    fn null_provider_flat_go_doc_uses_profile_tab() {
+        let doc = DocSnapshot {
+            language: "go".into(),
+            text: "package main\n\n".into(),
+        };
+        let ctx = NullContextProvider.context_at(&doc, doc.text.len());
+        assert_eq!(ctx.indent_unit, IndentUnit::Tab);
+        assert_eq!(ctx.base_indent, "");
+    }
+
+    #[test]
+    fn null_provider_unknown_language_defaults_to_four_spaces() {
+        let doc = DocSnapshot {
+            language: "cobol".into(),
+            text: "x = 1\n".into(),
+        };
+        let ctx = NullContextProvider.context_at(&doc, doc.text.len());
+        assert_eq!(ctx.indent_unit, IndentUnit::Spaces(4));
     }
 
     #[test]

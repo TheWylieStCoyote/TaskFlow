@@ -4,7 +4,7 @@ use crate::abbr::ParseError;
 use crate::config::loader::{ConfigError, default_user_snippets_dir};
 use crate::context::ExpansionContext;
 use crate::lang::registry::Registry;
-use crate::snippet::render::{Expansion, RenderError, TabstopMode, render};
+use crate::snippet::render::{Expansion, RenderError, TabstopMode, render, render_with_selection};
 
 /// Why an expansion request failed.
 #[derive(Debug, thiserror::Error)]
@@ -55,6 +55,30 @@ impl Engine {
             .ok_or_else(|| ExpandError::UnknownLanguage(language.to_string()))?;
         let ast = crate::abbr::parse(abbr)?;
         Ok(render(&ast, &lang.set, ctx, mode)?)
+    }
+
+    /// Expand `abbr` with `selection` wrapped at its final cursor.
+    ///
+    /// Identical to [`Engine::expand`] except that the selection is spliced
+    /// into the composed IR where `$0` would land (see
+    /// [`render_with_selection`]), so escaping, mirrors, indentation, and
+    /// tabstop renumbering all match normal expansion.
+    pub fn expand_wrap(
+        &self,
+        abbr: &str,
+        language: &str,
+        ctx: &ExpansionContext,
+        mode: TabstopMode,
+        selection: &str,
+    ) -> Result<Expansion, ExpandError> {
+        let lang = self
+            .registry
+            .language(language)
+            .ok_or_else(|| ExpandError::UnknownLanguage(language.to_string()))?;
+        let ast = crate::abbr::parse(abbr)?;
+        Ok(render_with_selection(
+            &ast, &lang.set, ctx, mode, selection,
+        )?)
     }
 
     /// The underlying registry, for listings and completion.

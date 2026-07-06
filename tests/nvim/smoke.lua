@@ -49,10 +49,18 @@ local function rust_buf(name, lines)
   return bufnr
 end
 
--- Scenario 1: expand "fori10" at the cursor.
+---Leave any active snippet session / insert mode before the next scenario.
+local function reset_state()
+  if vim.snippet.active() then
+    vim.snippet.stop()
+  end
+  vim.cmd("stopinsert")
+end
+
+-- Scenario 1: expand "fori10" with a realistic normal-mode cursor — after <Esc> the
+-- cursor sits ON the last typed character ("0", byte column 5), not one past it.
 local expand_buf = rust_buf("expand", { "fori10" })
-vim.wo.virtualedit = "onemore" -- let the normal-mode cursor sit right after "fori10"
-vim.api.nvim_win_set_cursor(0, { 1, 6 })
+vim.api.nvim_win_set_cursor(0, { 1, 5 })
 require("codemmet").expand()
 
 local expanded = vim.wait(5000, function()
@@ -63,11 +71,7 @@ if not expanded then
 end
 io.write("smoke: expand scenario passed\n")
 
--- Reset editor state before the wrap scenario.
-if vim.snippet.active() then
-  vim.snippet.stop()
-end
-vim.cmd("stopinsert")
+reset_state()
 
 -- Scenario 2: wrap a println line in "fori10" (abbreviation passed programmatically
 -- to bypass the interactive vim.ui.input prompt).
@@ -82,6 +86,56 @@ if not wrapped then
   fail("wrap: buffer never contained the println nested inside the for loop", wrap_buf)
 end
 io.write("smoke: wrap scenario passed\n")
+
+reset_state()
+
+-- Scenario 3: expand an abbreviation on an already-indented line; the snippet's
+-- continuation lines must pick up the base indent exactly once (a server that bakes
+-- base_indent into the LSP snippet would double-indent here).
+local indent_buf = rust_buf("indent", { "fn main() {", "    fori10", "}" })
+vim.api.nvim_win_set_cursor(0, { 2, 9 }) -- normal-mode cursor ON the trailing "0"
+require("codemmet").expand()
+
+local indent_expected = {
+  "fn main() {",
+  "    for i in 0..10 {",
+  "        ",
+  "    }",
+  "}",
+}
+local indented = vim.wait(5000, function()
+  return vim.deep_equal(vim.api.nvim_buf_get_lines(indent_buf, 0, -1, false), indent_expected)
+end, 50)
+if not indented then
+  fail("indent: buffer never matched the expected indented expansion", indent_buf)
+end
+io.write("smoke: indent scenario passed\n")
+
+reset_state()
+
+-- Scenario 4: wrap an already-indented line; the server's range starts after the
+-- existing indent, so the leading whitespace survives and the wrapped construct
+-- keeps its position (a column-0 range would land the loop flush left).
+local wrap_indent_buf = rust_buf("wrap-indent", { "fn main() {", '    println!("x");', "}" })
+require("codemmet").wrap({ abbreviation = "fori10", line1 = 2, line2 = 2 })
+
+local wrap_indent_expected = {
+  "fn main() {",
+  "    for i in 0..10 {",
+  '        println!("x");',
+  "    }",
+  "}",
+}
+local wrap_indented = vim.wait(5000, function()
+  return vim.deep_equal(
+    vim.api.nvim_buf_get_lines(wrap_indent_buf, 0, -1, false),
+    wrap_indent_expected
+  )
+end, 50)
+if not wrap_indented then
+  fail("wrap-indent: buffer never matched the expected indented wrap", wrap_indent_buf)
+end
+io.write("smoke: wrap-indent scenario passed\n")
 
 io.write("SMOKE OK\n")
 os.exit(0)

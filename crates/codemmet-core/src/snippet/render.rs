@@ -9,6 +9,14 @@ use crate::config::schema::ParamKind;
 use crate::context::{ExpansionContext, Scope};
 use crate::snippet::ir::{Span, Template};
 
+/// Maximum number of composed lines per expansion.
+///
+/// Repeat counts multiply through nesting (`if*100>if*100>…`), so without a
+/// budget a few dozen bytes of abbreviation can demand billions of lines.
+/// The composer checks the running total after every template instantiation
+/// and fails fast with [`RenderError::TooLarge`].
+const MAX_COMPOSED_LINES: usize = 10_000;
+
 /// How tabstops appear in the rendered output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabstopMode {
@@ -57,6 +65,12 @@ pub enum RenderError {
         /// What went wrong.
         message: String,
     },
+    /// Composition exceeded the expansion size budget.
+    #[error("expansion too large (more than {limit} lines)")]
+    TooLarge {
+        /// The line budget that was exceeded (`MAX_COMPOSED_LINES`).
+        limit: usize,
+    },
 }
 
 /// Render a parsed abbreviation against a language's snippet set.
@@ -66,10 +80,52 @@ pub fn render(
     ctx: &ExpansionContext,
     mode: TabstopMode,
 ) -> Result<Expansion, RenderError> {
+    let (lines, placeholders) = compose(abbr, set, ctx)?;
+    let lines = renumber(lines, &placeholders);
+    Ok(materialize(&lines, ctx, mode))
+}
+
+/// Render an abbreviation with `selection` wrapped at its final cursor.
+///
+/// Composition, tabstop renumbering, and materialization are identical to
+/// [`render`]; the only difference is one IR rewrite in between. The
+/// selection is dedented (common literal whitespace prefix of its non-empty
+/// lines) and injected as plain literal text where the surviving final
+/// cursor would land: the last `$0` candidate in document order, or — like
+/// the renumbering fallback — the end of the last line when the composition
+/// carries none. A fresh final cursor follows the selection's last
+/// character, so `$0` (keep mode) or [`Expansion::cursor`] (strip mode)
+/// sits immediately after the wrapped text.
+///
+/// The selection's first line splices inline at the injection point;
+/// subsequent lines become new lines at the injection line's depth (blank
+/// selection lines stay blank). Because the selection enters the IR as
+/// literal text, keep-mode escaping, strip-mode passthrough, mirrors, and
+/// base-indent handling all behave exactly as in normal rendering.
+pub fn render_with_selection(
+    abbr: &Abbreviation,
+    set: &SnippetSet,
+    ctx: &ExpansionContext,
+    mode: TabstopMode,
+    selection: &str,
+) -> Result<Expansion, RenderError> {
+    let (lines, placeholders) = compose(abbr, set, ctx)?;
+    let lines = inject_selection(lines, selection);
+    let lines = renumber(lines, &placeholders);
+    Ok(materialize(&lines, ctx, mode))
+}
+
+/// Compose an abbreviation into the line IR plus its placeholder table.
+fn compose(
+    abbr: &Abbreviation,
+    set: &SnippetSet,
+    ctx: &ExpansionContext,
+) -> Result<(Vec<Line>, Vec<Option<String>>), RenderError> {
     let mut composer = Composer {
         set,
         raw_node_kinds: &ctx.raw_node_kinds,
         placeholders: Vec::new(),
+        composed_lines: 0,
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -77,8 +133,7 @@ pub fn render(
     for node in &abbr.0 {
         lines.extend(composer.compose_node(node, scope)?);
     }
-    let lines = renumber(lines, &composer.placeholders);
-    Ok(materialize(&lines, ctx, mode))
+    Ok((lines, composer.placeholders))
 }
 
 /// A tabstop identity: an index into the composer's placeholder table.
@@ -129,6 +184,10 @@ struct Composer<'a> {
     raw_node_kinds: &'a [String],
     /// Placeholder text per allocated tabstop identity.
     placeholders: Vec<Option<String>>,
+    /// Running count of instantiated lines, checked against
+    /// [`MAX_COMPOSED_LINES`]. Splicing only ever merges lines, so this is
+    /// an upper bound on the final line count.
+    composed_lines: usize,
 }
 
 impl Composer<'_> {
@@ -165,6 +224,14 @@ impl Composer<'_> {
         let mut out = Vec::new();
         for _ in 0..node.repeat {
             let mut lines = self.instantiate(template, &bindings);
+            // Fail fast: repeat counts multiply through nesting, so the
+            // budget must trip during composition, not on a finished Vec.
+            self.composed_lines = self.composed_lines.saturating_add(lines.len());
+            if self.composed_lines > MAX_COMPOSED_LINES {
+                return Err(RenderError::TooLarge {
+                    limit: MAX_COMPOSED_LINES,
+                });
+            }
             if node.children.is_empty() {
                 // A leaf's child slot degrades to a final-cursor candidate.
                 for line in &mut lines {
@@ -323,6 +390,91 @@ fn splice_children(mut lines: Vec<Line>, mut children: Vec<Line>) -> Vec<Line> {
     }
     lines.splice(li..li, children);
     lines
+}
+
+/// Replace the surviving final-cursor candidate with the dedented selection
+/// followed by a fresh final cursor.
+///
+/// The injection point is the last [`CSpan::Final`] in document order — the
+/// exact occurrence [`renumber`] would keep as `$0` — or, when none exists,
+/// the end of the last line (mirroring `renumber`'s append fallback). The
+/// selection's first line splices inline between the spans surrounding the
+/// injection point; subsequent lines become new [`Line`]s at the injection
+/// line's depth, with blank selection lines as empty-span (truly blank)
+/// lines.
+fn inject_selection(mut lines: Vec<Line>, selection: &str) -> Vec<Line> {
+    let target = lines.iter().enumerate().rev().find_map(|(li, line)| {
+        line.spans
+            .iter()
+            .rposition(|s| matches!(s, CSpan::Final))
+            .map(|si| (li, si, true))
+    });
+    let (li, si, had_final) = target.unwrap_or_else(|| {
+        if lines.is_empty() {
+            lines.push(Line {
+                depth: 0,
+                spans: Vec::new(),
+            });
+        }
+        let li = lines.len() - 1;
+        (li, lines[li].spans.len(), false)
+    });
+
+    let line = lines.remove(li);
+    let depth = line.depth;
+    let mut spans = line.spans;
+    let suffix = spans.split_off(si + usize::from(had_final));
+    if had_final {
+        spans.pop(); // the final cursor being replaced
+    }
+
+    let dedented = dedent(selection);
+    let mut replacement = Vec::new();
+    for (i, sel_line) in dedented.split('\n').enumerate() {
+        if i > 0 {
+            replacement.push(Line { depth, spans });
+            spans = Vec::new();
+        }
+        if !sel_line.is_empty() {
+            spans.push(CSpan::Text(sel_line.to_owned()));
+        }
+    }
+    spans.push(CSpan::Final);
+    spans.extend(suffix);
+    replacement.push(Line { depth, spans });
+
+    lines.splice(li..li, replacement);
+    lines
+}
+
+/// Strip the common leading whitespace of `text`'s non-empty lines.
+///
+/// The common prefix is literal (byte-for-byte, tabs and spaces are not
+/// width-equated). Blank and whitespace-only lines do not contribute to the
+/// prefix; the strip applies only to lines that actually carry it.
+fn dedent(text: &str) -> String {
+    let mut common: Option<&str> = None;
+    for line in text.split('\n') {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let stripped = line.trim_start_matches([' ', '\t']);
+        let indent = &line[..line.len() - stripped.len()];
+        common = Some(common.map_or(indent, |prev| {
+            let len = prev
+                .bytes()
+                .zip(indent.bytes())
+                .take_while(|(a, b)| a == b)
+                .count();
+            &prev[..len]
+        }));
+    }
+    let common = common.unwrap_or("");
+    let lines: Vec<&str> = text
+        .split('\n')
+        .map(|line| line.strip_prefix(common).unwrap_or(line))
+        .collect();
+    lines.join("\n")
 }
 
 /// Bind a node's explicit and glued arguments to a snippet's parameters.
@@ -1074,5 +1226,195 @@ mod tests {
         ctx.scopes.clear();
         let e = expand("fn:area", &ctx, TabstopMode::Keep);
         assert_eq!(e.body, "fn area($1) {\n    $0\n}");
+    }
+
+    #[test]
+    fn nested_repeats_over_budget_fail_fast() {
+        // ~10^6 composed lines without the budget; must fail quickly.
+        let abbr = parse("if*100>if*100>if*100").expect("abbreviation should parse");
+        let err = render(&abbr, &fixture_set(), &ctx(), TabstopMode::Keep)
+            .expect_err("over-budget expansion should fail");
+        assert_eq!(
+            err,
+            RenderError::TooLarge {
+                limit: MAX_COMPOSED_LINES
+            }
+        );
+    }
+
+    #[test]
+    fn large_but_under_budget_expansion_renders() {
+        // 10 * (3 + 100) = 1,030 composed lines: well under the budget.
+        let e = expand("if*10>stmt*100", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body.lines().count(), 10 * 102);
+    }
+
+    /// Wrap `selection` into `abbr` against the shared fixture set.
+    fn wrap_expand(
+        abbr: &str,
+        selection: &str,
+        ctx: &ExpansionContext,
+        mode: TabstopMode,
+    ) -> Expansion {
+        let abbr = parse(abbr).expect("abbreviation should parse");
+        render_with_selection(&abbr, &fixture_set(), ctx, mode, selection)
+            .expect("wrap fixture should render")
+    }
+
+    #[test]
+    fn wrap_single_line_into_block_keep() {
+        let e = wrap_expand("fori10", "println!(\"x\");", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "for ${1:i} in 0..10 {\n    println!(\"x\");$0\n}");
+        assert!(e.is_snippet);
+    }
+
+    #[test]
+    fn wrap_single_line_into_block_strip() {
+        let e = wrap_expand("fori10", "println!(\"x\");", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "for i in 0..10 {\n    println!(\"x\");\n}");
+        assert_eq!(
+            e.cursor,
+            Some(CursorPos {
+                line: 1,
+                character: 18
+            })
+        );
+    }
+
+    #[test]
+    fn wrap_multi_line_selection_dedents_and_reindents_at_injection_depth() {
+        let e = wrap_expand(
+            "fori10",
+            "    a();\n        b();\n    c();",
+            &ctx(),
+            TabstopMode::Keep,
+        );
+        assert_eq!(
+            e.body,
+            "for ${1:i} in 0..10 {\n    a();\n        b();\n    c();$0\n}"
+        );
+    }
+
+    #[test]
+    fn wrap_continuation_lines_get_base_indent_in_inline_construct() {
+        // The old bin-layer walker dropped the hanging indent here: `pr`
+        // puts `$0` mid-line at depth 0, and only materialize knows the
+        // base indent that later selection lines must carry.
+        let base = ExpansionContext::plain("    ".to_owned(), IndentUnit::Spaces(4));
+        let e = wrap_expand("pr", "a();\nb();", &base, TabstopMode::Keep);
+        assert_eq!(e.body, "println!(\"a();\n    b();$0\");");
+    }
+
+    #[test]
+    fn wrap_base_indent_applies_to_block_continuation_lines() {
+        let base = ExpansionContext::plain("    ".to_owned(), IndentUnit::Spaces(4));
+        let e = wrap_expand("fori10", "a();\nb();", &base, TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "for ${1:i} in 0..10 {\n        a();\n        b();$0\n    }"
+        );
+    }
+
+    #[test]
+    fn wrap_selection_into_inline_construct_mid_line() {
+        let e = wrap_expand("pr", "x + y", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "println!(\"x + y$0\");");
+    }
+
+    #[test]
+    fn wrap_selection_dollars_and_backslashes_escape_in_keep_pass_in_strip() {
+        let keep = wrap_expand(
+            "fori10",
+            "let s = \"$HOME\\\\\";",
+            &ctx(),
+            TabstopMode::Keep,
+        );
+        assert_eq!(
+            keep.body,
+            "for ${1:i} in 0..10 {\n    let s = \"\\$HOME\\\\\\\\\";$0\n}"
+        );
+        let strip = wrap_expand(
+            "fori10",
+            "let s = \"$HOME\\\\\";",
+            &ctx(),
+            TabstopMode::Strip,
+        );
+        assert_eq!(
+            strip.body,
+            "for i in 0..10 {\n    let s = \"$HOME\\\\\";\n}"
+        );
+    }
+
+    #[test]
+    fn wrap_mirrors_render_placeholder_text_in_strip_mode() {
+        // The condition mirrors into the body; a reverse snippet parser
+        // (the old bin-layer walker) loses the mirror's text because bare
+        // `$n` carries no placeholder. The IR path renders it.
+        let set = SnippetSet::from_compiled([snip(
+            "wl",
+            vec![param("cond", ParamKind::Ident, Some("ready"))],
+            "while ${cond} {\n\tlog(${cond});\n\t${child}\n}\n",
+        )]);
+        let abbr = parse("wl").expect("abbreviation should parse");
+        let e = render_with_selection(&abbr, &set, &ctx(), TabstopMode::Strip, "step();")
+            .expect("wrap fixture should render");
+        assert_eq!(e.body, "while ready {\n    log(ready);\n    step();\n}");
+        assert_eq!(
+            e.cursor,
+            Some(CursorPos {
+                line: 2,
+                character: 11
+            })
+        );
+        let keep = render_with_selection(&abbr, &set, &ctx(), TabstopMode::Keep, "step();")
+            .expect("wrap fixture should render");
+        assert_eq!(
+            keep.body,
+            "while ${1:ready} {\n    log($1);\n    step();$0\n}"
+        );
+    }
+
+    #[test]
+    fn wrap_without_final_cursor_falls_back_to_end_of_last_line() {
+        let e = wrap_expand("stmt", "x();", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "stmt();x();$0");
+    }
+
+    #[test]
+    fn wrap_blank_selection_lines_stay_blank() {
+        let e = wrap_expand("fori10", "a();\n\nb();", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "for ${1:i} in 0..10 {\n    a();\n\n    b();$0\n}");
+    }
+
+    #[test]
+    fn wrap_earlier_final_candidates_still_demote() {
+        let e = wrap_expand("arm*3", "x", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "${1:pattern} => $2,\n${3:pattern} => $4,\n${5:pattern} => x$0,"
+        );
+    }
+
+    #[test]
+    fn wrap_enforces_composition_budget() {
+        let abbr = parse("if*100>if*100>if*100").expect("abbreviation should parse");
+        let err = render_with_selection(&abbr, &fixture_set(), &ctx(), TabstopMode::Keep, "x")
+            .expect_err("over-budget wrap should fail");
+        assert_eq!(
+            err,
+            RenderError::TooLarge {
+                limit: MAX_COMPOSED_LINES
+            }
+        );
+    }
+
+    #[test]
+    fn dedent_strips_common_literal_prefix_only() {
+        assert_eq!(dedent("    a\n      b\n    c"), "a\n  b\nc");
+        assert_eq!(dedent("\ta\n\t\tb"), "a\n\tb");
+        assert_eq!(dedent("a\n    b"), "a\n    b");
+        assert_eq!(dedent("    a\n\n    b"), "a\n\nb");
+        // Tabs and spaces never width-equate: no common prefix here.
+        assert_eq!(dedent("\ta\n    b"), "\ta\n    b");
     }
 }

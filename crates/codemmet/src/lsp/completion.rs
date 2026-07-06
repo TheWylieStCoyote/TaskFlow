@@ -41,11 +41,16 @@ pub fn compute(
         language: lang.profile.id.to_owned(),
         text: text.to_owned(),
     };
-    let ctx = provider.context_at(&doc, offset);
+    let mut ctx = provider.context_at(&doc, offset);
     if ctx.in_string_or_comment {
         // No items at all inside strings/comments, prefix discovery included.
         return None;
     }
+    // LSP snippet clients (VS Code, Neovim's `vim.snippet`) re-indent snippet
+    // continuation lines from the insertion position, so a server-side base
+    // indent would be applied twice. Render with an empty base indent;
+    // nesting depth still uses the provider's indent unit.
+    ctx.base_indent = String::new();
 
     let mut items = Vec::new();
     let index = LineIndex::new(text);
@@ -192,9 +197,9 @@ mod tests {
         };
         assert_eq!(edit.range.start, Position::new(1, 4));
         assert_eq!(edit.range.end, Position::new(1, 10));
-        assert!(edit.new_text.contains("for ${1:i} in 0..10"));
-        // Continuation lines carry the cursor line's base indent.
-        assert!(edit.new_text.ends_with("\n    }"));
+        // Continuation lines carry only relative depth: the snippet client
+        // re-indents them from the insertion position, so no base indent.
+        assert_eq!(edit.new_text, "for ${1:i} in 0..10 {\n    $0\n}");
     }
 
     #[test]
@@ -261,11 +266,9 @@ mod tests {
         let Some(CompletionTextEdit::Edit(edit)) = &snippet.text_edit else {
             panic!("expected a plain text edit");
         };
-        assert!(
-            edit.new_text.contains("\n\t\tprintln!"),
-            "{}",
-            edit.new_text
-        );
+        // One tab of relative depth; the cursor line's own tab is not baked in.
+        assert!(edit.new_text.contains("\n\tprintln!"), "{}", edit.new_text);
+        assert!(!edit.new_text.contains("\n\t\t"), "{}", edit.new_text);
     }
 
     #[test]

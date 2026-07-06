@@ -84,12 +84,17 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
         )
     })?;
 
-    let ctx = context_for(
+    let mut ctx = context_for(
         server.provider.as_mut(),
         &doc,
         offset,
         args.formatting_options,
     );
+    // LSP snippet clients (VS Code, Neovim's `vim.snippet`) re-indent snippet
+    // continuation lines from the insertion position, so a server-side base
+    // indent would be applied twice. Render with an empty base indent;
+    // nesting depth still uses the provider's indent unit.
+    ctx.base_indent = String::new();
     let expansion = server
         .engine
         .expand(candidate, &doc.language, &ctx, TabstopMode::Keep)
@@ -105,9 +110,12 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
 /// Run `codemmet.wrap`: wrap the selected text in an expanded abbreviation.
 ///
 /// The provider validates the selection first: it may snap the range
-/// outward to statement/line boundaries (the *snapped* range is wrapped
-/// and returned, so the client replaces the right region) or reject it
-/// (cross-scope selections), which surfaces as a JSON-RPC error.
+/// outward to statement/line boundaries (the *snapped* range is wrapped)
+/// or reject it (cross-scope selections), which surfaces as a JSON-RPC
+/// error. The returned range starts at the snapped region's first
+/// non-whitespace byte, so the client deletes only from the indent onward:
+/// the original leading whitespace survives in the buffer and the snippet
+/// client re-indents continuation lines from that position.
 pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, CommandError> {
     let doc = server.snapshot(&args.uri)?;
     let index = LineIndex::new(&doc.text);
@@ -121,28 +129,44 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
             return Err(CommandError(format!("cannot wrap selection: {reason}")));
         }
     };
+    // The full snapped text, leading whitespace included: the renderer
+    // dedents the selection's common indent itself.
     let selection = &doc.text[snapped.clone()];
 
-    let ctx = context_for(
+    let mut ctx = context_for(
         server.provider.as_mut(),
         &doc,
         snapped.start,
         args.formatting_options,
     );
-    let snippet = crate::wrap::wrap(
-        &server.engine,
-        &doc.language,
-        &args.abbreviation,
-        selection,
-        &ctx,
-    )
-    .map_err(|err| format!("cannot wrap with `{}`: {err}", args.abbreviation))?;
+    // LSP snippet clients (VS Code, Neovim's `vim.snippet`) re-indent snippet
+    // continuation lines from the insertion position, so a server-side base
+    // indent would be applied twice. Render with an empty base indent;
+    // nesting depth still uses the provider's indent unit.
+    ctx.base_indent = String::new();
+    let expansion = server
+        .engine
+        .expand_wrap(
+            &args.abbreviation,
+            &doc.language,
+            &ctx,
+            TabstopMode::Keep,
+            selection,
+        )
+        .map_err(|err| format!("cannot wrap with `{}`: {err}", args.abbreviation))?;
 
+    // Advance past the first line's leading whitespace so the replacement
+    // starts where the wrapped construct should sit.
+    let content_start = snapped.start
+        + doc.text[snapped.clone()]
+            .bytes()
+            .take_while(|&b| b == b' ' || b == b'\t')
+            .count();
     let range = Range {
-        start: index.position(&doc.text, snapped.start, server.encoding),
+        start: index.position(&doc.text, content_start, server.encoding),
         end: index.position(&doc.text, snapped.end, server.encoding),
     };
-    Ok(result(range, &snippet))
+    Ok(result(range, &expansion.body))
 }
 
 /// Ask the provider for the context at `offset`; the editor's explicit

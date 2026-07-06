@@ -235,8 +235,10 @@ fn completion_expands_fori10_with_exact_text_edit() {
         new_text.contains("for ${1:i} in 0..10"),
         "newText: {new_text}"
     );
-    // Continuation lines carry the line's base indent.
-    assert_eq!(new_text, "for ${1:i} in 0..10 {\n        $0\n    }");
+    // Continuation lines carry only relative depth: LSP snippet clients
+    // re-indent them from the insertion position, so baking the base indent
+    // in server-side would double-indent.
+    assert_eq!(new_text, "for ${1:i} in 0..10 {\n    $0\n}");
 
     // Docs are filled eagerly; the label details show the strip-mode preview.
     assert_eq!(
@@ -304,10 +306,10 @@ fn execute_command_expand_returns_range_and_snippet() {
         json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 10 } })
     );
     assert_eq!(result["isSnippet"], json!(true));
-    assert_eq!(
-        result["snippet"],
-        json!("for ${1:i} in 0..10 {\n        $0\n    }")
-    );
+    // Continuation lines carry only relative depth: LSP snippet clients
+    // re-indent them from the insertion position, so baking the base indent
+    // in server-side would double-indent.
+    assert_eq!(result["snippet"], json!("for ${1:i} in 0..10 {\n    $0\n}"));
     client.shutdown();
 }
 
@@ -362,12 +364,56 @@ fn execute_command_wrap_splices_selection_into_the_loop() {
             "arguments": [{ "uri": URI, "range": range, "abbreviation": "fori10" }],
         }),
     );
-    assert_eq!(result["range"], range);
+    // The returned range starts after the line's indent, so the leading
+    // whitespace survives in the buffer and the snippet needs no base prefix.
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 18 } })
+    );
     assert_eq!(result["isSnippet"], json!(true));
     // The println line sits one level deeper inside the loop, `$0` after it.
     assert_eq!(
         result["snippet"],
-        json!("for ${1:i} in 0..10 {\n        println!(\"x\");$0\n    }")
+        json!("for ${1:i} in 0..10 {\n    println!(\"x\");$0\n}")
+    );
+    client.shutdown();
+}
+
+/// Wrapping a deeper-indented selection starts the returned range at the
+/// indent width (the leading whitespace is not part of the replacement)
+/// and the snippet carries no base prefix on any line.
+#[test]
+fn execute_command_wrap_indented_selection_starts_after_the_indent() {
+    let (mut client, _) = LspClient::start("wrap-indented", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "fn main() {\n    if true {\n        println!(\"y\");\n    }\n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.wrap",
+            "arguments": [{
+                "uri": URI,
+                "range": { "start": { "line": 2, "character": 0 }, "end": { "line": 2, "character": 22 } },
+                "abbreviation": "fori10",
+            }],
+        }),
+    );
+    // The wrapped line is indented 8 columns; the range starts there.
+    assert_eq!(
+        result["range"],
+        json!({ "start": { "line": 2, "character": 8 }, "end": { "line": 2, "character": 22 } })
+    );
+    let snippet = result["snippet"]
+        .as_str()
+        .expect("snippet should be a string");
+    assert_eq!(snippet, "for ${1:i} in 0..10 {\n    println!(\"y\");$0\n}");
+    assert!(
+        snippet.lines().all(|line| !line.starts_with("        ")),
+        "no line should carry the old 8-column base prefix: {snippet}"
     );
     client.shutdown();
 }
@@ -394,11 +440,11 @@ fn execute_command_wrap_snaps_mid_statement_range() {
     );
     assert_eq!(
         result["range"],
-        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 1, "character": 18 } })
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 1, "character": 18 } })
     );
     assert_eq!(
         result["snippet"],
-        json!("for ${1:i} in 0..10 {\n        println!(\"x\");$0\n    }")
+        json!("for ${1:i} in 0..10 {\n    println!(\"x\");$0\n}")
     );
     client.shutdown();
 }
@@ -429,13 +475,11 @@ fn execute_command_wrap_snaps_multiline_statement() {
     );
     assert_eq!(
         result["range"],
-        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 4, "character": 6 } })
+        json!({ "start": { "line": 1, "character": 4 }, "end": { "line": 4, "character": 6 } })
     );
     assert_eq!(
         result["snippet"],
-        json!(
-            "for ${1:i} in 0..10 {\n        foo(\n            1,\n            2,\n        );$0\n    }"
-        )
+        json!("for ${1:i} in 0..10 {\n    foo(\n        1,\n        2,\n    );$0\n}")
     );
     client.shutdown();
 }
@@ -512,6 +556,21 @@ fn completion_fn_at_top_level_has_no_self() {
     let result = client.complete(URI, 0, 2);
     let new_text = snippet_new_text(&result);
     assert!(!new_text.contains("&self"), "newText: {new_text}");
+    client.shutdown();
+}
+
+/// Literal apostrophes earlier on the line (a Rust lifetime) do not open a
+/// quoted region, so the candidate after them still extracts and completes.
+#[test]
+fn completion_works_after_a_lifetime_annotation() {
+    let (mut client, _) = LspClient::start("lifetime", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "fn main() {\n    let x: &'a str = y; pr\n}\n");
+
+    // Cursor right after `pr` at the end of line 1.
+    let result = client.complete(URI, 1, 26);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    assert_eq!(snippets[0]["label"], json!("pr"));
     client.shutdown();
 }
 

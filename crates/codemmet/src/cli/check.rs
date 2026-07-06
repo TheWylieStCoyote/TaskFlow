@@ -1,7 +1,9 @@
 //! `codemmet check`: validate the user snippet override directory.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+use codemmet_core::lang::profile::PROFILES;
 
 use super::{config_failure, load_registry};
 
@@ -20,6 +22,7 @@ pub fn run(user_dir: Option<&Path>) -> ExitCode {
     }
     match load_registry(Some(dir)) {
         Ok(registry) => {
+            warn_misnamed_packs(dir);
             let languages = registry.languages().count();
             let triggers: usize = registry.languages().map(|lang| lang.set.len()).sum();
             println!(
@@ -29,5 +32,42 @@ pub fn run(user_dir: Option<&Path>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(err) => config_failure(&err),
+    }
+}
+
+/// Warn (stderr) about `*.toml` files in `dir` whose stem is not a known
+/// profile id: the loader only looks up `<profile-id>.toml`, so a misnamed
+/// pack (`rs.toml`, `Rust.toml`) silently never loads.
+fn warn_misnamed_packs(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut misnamed: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path.extension().is_some_and(|ext| ext == "toml")
+                && !path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(|stem| PROFILES.iter().any(|profile| profile.id == stem))
+        })
+        .collect();
+    misnamed.sort();
+    if misnamed.is_empty() {
+        return;
+    }
+    let mut expected: Vec<String> = PROFILES
+        .iter()
+        .map(|profile| format!("{}.toml", profile.id))
+        .collect();
+    expected.sort_unstable();
+    let expected = expected.join(", ");
+    for path in misnamed {
+        eprintln!(
+            "warning: {} does not match any language pack name (expected one of: {expected})",
+            path.display()
+        );
     }
 }

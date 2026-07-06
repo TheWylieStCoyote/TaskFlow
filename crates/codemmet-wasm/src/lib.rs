@@ -19,6 +19,10 @@ use codemmet_core::context::{ExpansionContext, IndentUnit};
 use codemmet_core::engine::Engine;
 use codemmet_core::lang::registry::Registry;
 use codemmet_core::snippet::render::TabstopMode;
+use codemmet_train::exercise::{Direction, Level};
+use codemmet_train::review::ReviewState;
+use codemmet_train::trainer::{Config, Event, Mode, Phase, Trainer};
+use serde::{Deserialize, Serialize};
 
 /// The engine, built once from the compiled-in builtin packs.
 fn engine() -> &'static Engine {
@@ -87,9 +91,14 @@ pub unsafe extern "C" fn cm_expand(
     let abbr = unsafe { str_from(abbr, abbr_len) };
     let lang = unsafe { str_from(lang, lang_len) };
     let (ok, text) = expand(&abbr, &lang, keep != 0);
-
     LAST_OK.store(u32::from(ok), Ordering::Relaxed);
-    let mut boxed = text.into_bytes().into_boxed_slice();
+    return_string(text)
+}
+
+/// Move `s` into a freshly allocated buffer JS reads (length in [`cm_last_len`])
+/// and frees with [`cm_free`]; records the length.
+fn return_string(s: String) -> *mut u8 {
+    let mut boxed = s.into_bytes().into_boxed_slice();
     LAST_LEN.store(boxed.len(), Ordering::Relaxed);
     let ptr = boxed.as_mut_ptr();
     std::mem::forget(boxed);
@@ -129,6 +138,235 @@ fn indent_for(lang: &str) -> IndentUnit {
         })
 }
 
+// --- trainer -----------------------------------------------------------------
+
+/// A trainer handle is an opaque pointer to a boxed [`Trainer`] bound to the
+/// static engine. JavaScript holds it as an integer.
+type Handle = *mut Trainer<'static>;
+
+/// Config for [`cmt_new`], parsed from JSON.
+#[derive(Deserialize)]
+struct WasmConfig {
+    lang: String,
+    mode: String,
+    level: Option<u8>,
+    seed: u64,
+    now: u64,
+    /// The persisted spaced-repetition schedule (from localStorage), if any.
+    review: Option<ReviewState>,
+}
+
+/// Create a trainer from a JSON config and return an opaque handle.
+///
+/// # Safety
+/// `cfg`/`cfg_len` must point to readable UTF-8 (as written after
+/// [`cm_alloc`]). The returned handle must be freed with [`cmt_free`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cmt_new(cfg: *const u8, cfg_len: usize) -> Handle {
+    let json = unsafe { str_from(cfg, cfg_len) };
+    let cfg: WasmConfig = serde_json::from_str(&json).unwrap_or_else(|_| WasmConfig {
+        lang: "rust".to_string(),
+        mode: "lessons".to_string(),
+        level: None,
+        seed: 0,
+        now: 0,
+        review: None,
+    });
+    let mode = match cfg.mode.as_str() {
+        "drills" => Mode::Drills,
+        "review" => Mode::Review,
+        "sandbox" => Mode::Sandbox,
+        _ => Mode::Lessons,
+    };
+    let config = Config {
+        language: cfg.lang,
+        mode,
+        level: cfg.level.and_then(Level::from_number),
+        seed: cfg.seed,
+        now: cfg.now,
+    };
+    let trainer = Trainer::new(engine(), config, cfg.review.unwrap_or_default());
+    Box::into_raw(Box::new(trainer))
+}
+
+/// Feed an event to the trainer. `code`: 0 advance, 1 submit, 2 hint, 3 reveal,
+/// 4 skip, 5 quit, 6 backspace, 7 insert (`ch` is the Unicode scalar).
+///
+/// # Safety
+/// `handle` must be a live handle from [`cmt_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cmt_event(handle: Handle, code: u32, ch: u32) {
+    let Some(trainer) = (unsafe { handle.as_mut() }) else {
+        return;
+    };
+    let event = match code {
+        0 => Event::Advance,
+        1 => Event::Submit,
+        2 => Event::Hint,
+        3 => Event::Reveal,
+        4 => Event::Skip,
+        5 => Event::Quit,
+        6 => Event::Backspace,
+        7 => match char::from_u32(ch) {
+            Some(c) => Event::Insert(c),
+            None => return,
+        },
+        _ => return,
+    };
+    trainer.handle(event);
+}
+
+/// The current trainer state as a JSON [`Snapshot`]. The returned buffer's
+/// length is [`cm_last_len`]; free it with [`cm_free`].
+///
+/// # Safety
+/// `handle` must be a live handle from [`cmt_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cmt_state(handle: Handle) -> *mut u8 {
+    let json = unsafe { handle.as_ref() }
+        .map(|trainer| serde_json::to_string(&snapshot(trainer)).unwrap_or_default())
+        .unwrap_or_default();
+    return_string(json)
+}
+
+/// The trainer's spaced-repetition schedule as JSON (for persistence). The
+/// returned buffer's length is [`cm_last_len`]; free it with [`cm_free`].
+///
+/// # Safety
+/// `handle` must be a live handle from [`cmt_new`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cmt_review(handle: Handle) -> *mut u8 {
+    let json = unsafe { handle.as_ref() }
+        .map(|trainer| serde_json::to_string(trainer.review_state()).unwrap_or_default())
+        .unwrap_or_default();
+    return_string(json)
+}
+
+/// Free a trainer handle from [`cmt_new`].
+///
+/// # Safety
+/// `handle` must be a live handle from [`cmt_new`], freed at most once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cmt_free(handle: Handle) {
+    if !handle.is_null() {
+        drop(unsafe { Box::from_raw(handle) });
+    }
+}
+
+/// A renderable view of the trainer, serialized to JSON for the browser UI.
+#[derive(Serialize)]
+struct Snapshot {
+    phase: &'static str,
+    mode: &'static str,
+    is_done: bool,
+    level_num: u8,
+    level_title: &'static str,
+    header: String,
+    blurb: Option<&'static str>,
+    direction: Option<&'static str>,
+    target: Option<String>,
+    abbreviation: Option<String>,
+    multiple_choice: bool,
+    choices: Vec<String>,
+    input: String,
+    hints: Vec<String>,
+    message: Option<String>,
+    preview: Option<String>,
+    feedback: Option<FeedbackView>,
+    sandbox: Vec<SandboxEntry>,
+    stats: StatsView,
+    due: usize,
+}
+
+#[derive(Serialize)]
+struct FeedbackView {
+    solved: bool,
+    revealed: bool,
+    answer: String,
+}
+
+#[derive(Serialize)]
+struct SandboxEntry {
+    abbr: String,
+    output: String,
+}
+
+#[derive(Serialize)]
+struct StatsView {
+    presented: u32,
+    solved: u32,
+    attempts: u32,
+    streak: u32,
+    best_streak: u32,
+}
+
+fn snapshot(trainer: &Trainer) -> Snapshot {
+    let phase = match trainer.phase() {
+        Phase::Intro(_) => "intro",
+        Phase::Answering => "answering",
+        Phase::Feedback(_) => "feedback",
+        Phase::Sandbox => "sandbox",
+        Phase::Done => "done",
+    };
+    let level = trainer.current_level();
+    let exercise = trainer.exercise();
+    let direction = exercise.map(|e| match e.direction {
+        Direction::Reverse => "reverse",
+        Direction::Forward => "forward",
+    });
+    let target = exercise
+        .filter(|e| e.direction == Direction::Reverse)
+        .map(|e| e.target.clone());
+    let abbreviation = exercise
+        .filter(|e| e.direction == Direction::Forward)
+        .map(|e| e.abbreviation.clone());
+    let feedback = match trainer.phase() {
+        Phase::Feedback(f) => Some(FeedbackView {
+            solved: f.solved,
+            revealed: f.revealed,
+            answer: f.answer.clone(),
+        }),
+        _ => None,
+    };
+    let stats = trainer.stats();
+    Snapshot {
+        phase,
+        mode: trainer.mode().title(),
+        is_done: trainer.is_done(),
+        level_num: level.number(),
+        level_title: level.title(),
+        header: trainer.header_note(),
+        blurb: matches!(trainer.phase(), Phase::Intro(_)).then(|| level.blurb()),
+        direction,
+        target,
+        abbreviation,
+        multiple_choice: exercise
+            .is_some_and(codemmet_train::exercise::Exercise::is_multiple_choice),
+        choices: exercise.map(|e| e.choices.clone()).unwrap_or_default(),
+        input: trainer.input().to_string(),
+        hints: trainer.revealed_hints().to_vec(),
+        message: trainer.message().map(str::to_string),
+        preview: trainer.live_preview(),
+        feedback,
+        sandbox: trainer
+            .sandbox_log()
+            .iter()
+            .map(|(abbr, output)| SandboxEntry {
+                abbr: abbr.clone(),
+                output: output.clone(),
+            })
+            .collect(),
+        stats: StatsView {
+            presented: stats.presented,
+            solved: stats.solved,
+            attempts: stats.attempts,
+            streak: stats.streak,
+            best_streak: stats.best_streak,
+        },
+        due: trainer.due_count(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +396,31 @@ mod tests {
     #[test]
     fn indent_falls_back_for_unknown_language() {
         assert_eq!(indent_for("klingon"), IndentUnit::Spaces(4));
+    }
+
+    #[test]
+    fn snapshot_tracks_the_trainer_across_phases() {
+        let config = Config {
+            language: "rust".to_string(),
+            mode: Mode::Lessons,
+            level: Level::from_number(3),
+            seed: 1,
+            now: 0,
+        };
+        let mut trainer = Trainer::new(engine(), config, ReviewState::default());
+
+        let intro = snapshot(&trainer);
+        assert_eq!(intro.phase, "intro");
+        assert!(intro.blurb.is_some());
+
+        trainer.handle(Event::Advance);
+        let answering = snapshot(&trainer);
+        assert_eq!(answering.phase, "answering");
+        assert!(answering.direction.is_some());
+
+        trainer.handle(Event::Reveal);
+        let feedback = snapshot(&trainer);
+        assert_eq!(feedback.phase, "feedback");
+        assert!(feedback.feedback.is_some_and(|f| f.revealed));
     }
 }

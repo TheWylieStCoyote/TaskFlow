@@ -321,7 +321,7 @@ pub fn default_user_snippets_dir() -> Option<PathBuf> {
 /// platform directory to resolve, so this is always `None`.
 #[cfg(not(feature = "dirs"))]
 #[must_use]
-pub fn default_user_snippets_dir() -> Option<PathBuf> {
+pub const fn default_user_snippets_dir() -> Option<PathBuf> {
     None
 }
 

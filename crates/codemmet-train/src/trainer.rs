@@ -299,6 +299,12 @@ impl<'a> Trainer<'a> {
         &self.review
     }
 
+    /// How many spaced-repetition items are due as of this session's clock.
+    #[must_use]
+    pub fn due_count(&self) -> usize {
+        self.review.due_count(self.now)
+    }
+
     /// Lesson levels completed this session.
     #[must_use]
     pub const fn completed_levels(&self) -> &BTreeSet<u8> {

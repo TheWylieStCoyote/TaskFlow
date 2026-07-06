@@ -15,6 +15,9 @@ crate-type = ["cdylib"]
 # built without its `dirs` feature so it compiles for wasm32-unknown-unknown.
 [dependencies]
 codemmet-core = { path = "../codemmet-core", default-features = false }
+codemmet-train = { path = "../codemmet-train" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

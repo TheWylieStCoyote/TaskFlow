@@ -213,6 +213,9 @@ name = "codemmet-wasm"
 version = "0.1.0"
 dependencies = [
  "codemmet-core",
+ "codemmet-train",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

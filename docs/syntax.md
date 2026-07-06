@@ -133,8 +133,14 @@ repeated). It works both inside an explicit argument and inside a snippet
 body. For example, `test:case${i}*3` names three test functions in order:
 
 ```sh
-codemmet expand --lang rust "test:case${i}*3"
+codemmet expand --lang rust 'test:case${i}*3'
 ```
+
+> **Quote it with single quotes.** `${i}` looks like a shell variable, so in a
+> double-quoted argument bash and zsh replace it with the (usually empty)
+> variable `i` before codemmet runs — you would get `test:case*3` and three
+> functions all named `case`. Single quotes pass `${i}` through literally. In
+> an editor this does not apply; you type the abbreviation directly.
 
 ```rust
 #[test]

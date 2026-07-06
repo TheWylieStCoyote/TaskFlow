@@ -30,12 +30,13 @@ impl Registry {
 
     /// Load builtin packs, then merge `<dir>/<lang>.toml` user overrides.
     ///
-    /// For a profile with `inherits = Some(parent)` the source order is:
-    /// parent builtin pack, own builtin pack, own user file — so the child's
-    /// builtins override the parent's, and user overrides win over both.
-    /// Only the parent's *builtin* pack is inherited: user files of the
-    /// parent language do NOT affect the child (a user `c.toml` never leaks
-    /// into `cpp`; override `cpp.toml` directly instead).
+    /// The `inherits` chain is followed transitively, outermost first: for a
+    /// profile with `inherits = Some(parent)` the source order is every
+    /// ancestor's builtin pack (grandparent before parent), then the profile's
+    /// own builtin pack, then its user file — so nearer packs override farther
+    /// ones, and user overrides win over all builtins. Only *builtin* packs are
+    /// inherited: user files of an ancestor language do NOT affect the child (a
+    /// user `c.toml` never leaks into `cpp`; override `cpp.toml` directly).
     ///
     /// A missing directory or missing per-language file is not an error;
     /// an unreadable or invalid file is.
@@ -44,18 +45,12 @@ impl Registry {
         for profile in crate::lang::profile::PROFILES {
             let mut sources: Vec<(String, SnippetFile)> = Vec::new();
 
-            if let Some(parent_id) = profile.inherits {
-                let parent =
-                    crate::lang::profile::find(parent_id).ok_or_else(|| ConfigError::Invalid {
-                        trigger: "meta".to_owned(),
-                        origin: format!("builtin:{}", profile.id),
-                        message: format!("profile inherits unknown language `{parent_id}`"),
-                    })?;
-                let parent_origin = format!("builtin:{}", parent.id);
-                let parent_file = parse_snippet_file(&parent_origin, parent.snippet_source)?;
-                // The parent pack declares the PARENT's language id.
-                check_language(&parent_origin, &parent_file, parent.id)?;
-                sources.push((parent_origin, parent_file));
+            // Inherited builtin packs, outermost ancestor first.
+            for ancestor in inheritance_chain(profile)? {
+                let origin = format!("builtin:{}", ancestor.id);
+                let file = parse_snippet_file(&origin, ancestor.snippet_source)?;
+                check_language(&origin, &file, ancestor.id)?;
+                sources.push((origin, file));
             }
 
             let builtin_origin = format!("builtin:{}", profile.id);
@@ -97,6 +92,37 @@ impl Registry {
     pub fn languages(&self) -> impl Iterator<Item = &LanguageSnippets> {
         self.languages.values()
     }
+}
+
+/// The ancestor profiles `profile` inherits, transitively, outermost first.
+///
+/// Errors if an `inherits` id is unknown or the chain contains a cycle.
+fn inheritance_chain(
+    profile: &'static LanguageProfile,
+) -> Result<Vec<&'static LanguageProfile>, ConfigError> {
+    let mut chain = Vec::new();
+    let mut seen = vec![profile.id];
+    let mut current = profile;
+    while let Some(parent_id) = current.inherits {
+        if seen.contains(&parent_id) {
+            return Err(ConfigError::Invalid {
+                trigger: "meta".to_owned(),
+                origin: format!("builtin:{}", profile.id),
+                message: format!("inheritance cycle through `{parent_id}`"),
+            });
+        }
+        let parent = crate::lang::profile::find(parent_id).ok_or_else(|| ConfigError::Invalid {
+            trigger: "meta".to_owned(),
+            origin: format!("builtin:{}", current.id),
+            message: format!("profile inherits unknown language `{parent_id}`"),
+        })?;
+        seen.push(parent_id);
+        chain.push(parent);
+        current = parent;
+    }
+    // Collected nearest-first; reverse so the outermost ancestor comes first.
+    chain.reverse();
+    Ok(chain)
 }
 
 /// Verify a pack's `meta.language` matches the profile it is loaded for.

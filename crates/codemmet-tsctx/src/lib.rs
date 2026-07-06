@@ -29,10 +29,164 @@ pub use codemmet_core::context::ContextProvider;
 ///
 /// `language_id` values are canonical profile ids (`"rust"`, `"python"`).
 pub fn supports(language_id: &str) -> bool {
-    language_for(language_id).is_some()
+    spec_for(language_id).is_some()
 }
 
-/// Grammar registry: canonical language id → compiled-in grammar.
+/// Field names that hold a scope-bearing node's body/suite. Most
+/// constructs expose their suite via `body`; `if` constructs use
+/// `consequence`. Shared verbatim across every language today.
+#[cfg(any(
+    feature = "lang-rust",
+    feature = "lang-python",
+    feature = "lang-c",
+    feature = "lang-cpp",
+    feature = "lang-javascript",
+    feature = "lang-typescript",
+    feature = "lang-go",
+))]
+const BODY_FIELDS: &[&str] = &["body", "consequence"];
+
+/// Block-like named child kinds scanned as a body fallback when neither
+/// `body` nor `consequence` is present. Shared across languages.
+#[cfg(any(
+    feature = "lang-rust",
+    feature = "lang-python",
+    feature = "lang-c",
+    feature = "lang-cpp",
+    feature = "lang-javascript",
+    feature = "lang-typescript",
+    feature = "lang-go",
+))]
+const BLOCK_KINDS: &[&str] = &[
+    "block",
+    "declaration_list",
+    "match_block",
+    "class_body",
+    "statement_block",
+    "compound_statement",
+    "field_declaration_list",
+    "enumerator_list",
+    "interface_body",
+    "enum_body",
+];
+
+/// Node kinds whose named children are statements/items — the containers
+/// wrap snapping aligns selections against. Shared across languages; the
+/// kinds are distinct enough that cross-language collisions are harmless.
+#[cfg(any(
+    feature = "lang-rust",
+    feature = "lang-python",
+    feature = "lang-c",
+    feature = "lang-cpp",
+    feature = "lang-javascript",
+    feature = "lang-typescript",
+    feature = "lang-go",
+))]
+const CONTAINER_KINDS: &[&str] = &[
+    // Roots: rust/go, python, c/cpp, js/ts.
+    "source_file",
+    "module",
+    "translation_unit",
+    "program",
+    // Statement blocks: rust/python/go, js/ts, c/cpp.
+    "block",
+    "statement_block",
+    "compound_statement",
+    // Item/member lists.
+    "declaration_list",
+    "field_declaration_list",
+    "class_body",
+    "interface_body",
+    "enum_body",
+    "enumerator_list",
+    "match_block",
+    // Switch internals: js/ts, c/cpp, go.
+    "switch_body",
+    "switch_case",
+    "switch_default",
+    "case_statement",
+    "expression_case",
+    "type_case",
+    "communication_case",
+    "default_case",
+];
+
+/// All per-language knowledge in one place: the grammar plus the kind
+/// tables the tree walk consults.
+///
+/// Adding a language means adding one `LangSpec` and one arm in
+/// [`spec_for`] — there are no scattered `match language` sites left to
+/// keep in sync, so it is no longer possible to add a language's scopes
+/// while silently forgetting its string kinds.
+struct LangSpec {
+    /// Constructs the compiled-in tree-sitter grammar for this language.
+    grammar: fn() -> tree_sitter::Language,
+    /// Raw node kind → normalized [`Scope`]. Kinds absent from the table
+    /// contribute only to `raw_node_kinds`; [`Scope::Unknown`] is never
+    /// produced.
+    scopes: &'static [(&'static str, Scope)],
+    /// String-literal node kinds (comments are matched by kind substring
+    /// instead, which also covers doc comments).
+    string_kinds: &'static [&'static str],
+    /// Field names holding a scope-bearing node's body/suite.
+    body_fields: &'static [&'static str],
+    /// Block-like named child kinds used as a body fallback.
+    block_kinds: &'static [&'static str],
+    /// Node kinds whose named children are statements/items.
+    container_kinds: &'static [&'static str],
+}
+
+impl LangSpec {
+    /// Map a raw node kind to its normalized [`Scope`], if any.
+    fn scope_for(&self, kind: &str) -> Option<Scope> {
+        self.scopes
+            .iter()
+            .find(|&&(k, _)| k == kind)
+            .map(|&(_, scope)| scope)
+    }
+
+    /// Whether `kind` is one of this language's string-literal kinds.
+    fn is_string_kind(&self, kind: &str) -> bool {
+        self.string_kinds.contains(&kind)
+    }
+
+    /// Whether `kind` is a container (its named children are statements).
+    fn is_container_kind(&self, kind: &str) -> bool {
+        self.container_kinds.contains(&kind)
+    }
+
+    /// Start byte of the body/block child of a scope-bearing node, if
+    /// present.
+    ///
+    /// Checks the body fields first, then scans for a block-like named
+    /// child (Go's `struct_type` has an unnamed `field_declaration_list`),
+    /// and finally for a bare `{` token (Go's switch/select statements
+    /// carry their cases directly). `None` means the body is missing
+    /// entirely (half-typed construct), which callers treat as "already
+    /// inside".
+    fn body_start(&self, node: Node<'_>) -> Option<usize> {
+        for &field in self.body_fields {
+            if let Some(child) = node.child_by_field_name(field) {
+                return Some(child.start_byte());
+            }
+        }
+        let mut cursor = node.walk();
+        if let Some(child) = node
+            .named_children(&mut cursor)
+            .find(|c| self.block_kinds.contains(&c.kind()))
+        {
+            return Some(child.start_byte());
+        }
+        let mut cursor = node.walk();
+        node.children(&mut cursor)
+            .find(|c| c.kind() == "{")
+            .map(|c| c.start_byte())
+    }
+}
+
+/// Per-language spec for `language`, or `None` when this build carries no
+/// grammar for it. The `#[cfg(feature = "lang-…")]` arms live here and
+/// nowhere else.
 ///
 /// (`const` is only possible in the degenerate zero-feature build, so the
 /// lint is silenced for that configuration.)
@@ -48,206 +202,199 @@ pub fn supports(language_id: &str) -> bool {
     )),
     allow(clippy::missing_const_for_fn)
 )]
-fn language_for(id: &str) -> Option<tree_sitter::Language> {
-    match id {
-        #[cfg(feature = "lang-rust")]
-        "rust" => Some(tree_sitter_rust::LANGUAGE.into()),
-        #[cfg(feature = "lang-python")]
-        "python" => Some(tree_sitter_python::LANGUAGE.into()),
-        #[cfg(feature = "lang-c")]
-        "c" => Some(tree_sitter_c::LANGUAGE.into()),
-        #[cfg(feature = "lang-cpp")]
-        "cpp" => Some(tree_sitter_cpp::LANGUAGE.into()),
-        #[cfg(feature = "lang-javascript")]
-        "javascript" => Some(tree_sitter_javascript::LANGUAGE.into()),
-        #[cfg(feature = "lang-typescript")]
-        "typescript" => Some(tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
-        #[cfg(feature = "lang-go")]
-        "go" => Some(tree_sitter_go::LANGUAGE.into()),
-        _ => None,
-    }
-}
-
-/// Map a raw node kind to a normalized [`Scope`] for `language`.
-///
-/// Kinds absent from the table contribute only to `raw_node_kinds`;
-/// [`Scope::Unknown`] is never produced.
-fn scope_for_kind(language: &str, kind: &str) -> Option<Scope> {
+fn spec_for(language: &str) -> Option<&'static LangSpec> {
     match language {
-        "rust" => match kind {
-            "impl_item" | "trait_item" => Some(Scope::TypeBody),
-            "function_item" | "closure_expression" => Some(Scope::FnBody),
-            "for_expression" | "while_expression" | "loop_expression" => Some(Scope::Loop),
-            "if_expression" => Some(Scope::Conditional),
-            "match_expression" => Some(Scope::MatchBody),
-            _ => None,
-        },
-        "python" => match kind {
-            "class_definition" => Some(Scope::TypeBody),
-            "function_definition" => Some(Scope::FnBody),
-            "for_statement" | "while_statement" => Some(Scope::Loop),
-            "if_statement" => Some(Scope::Conditional),
-            "match_statement" => Some(Scope::MatchBody),
-            "try_statement" => Some(Scope::TryBody),
-            _ => None,
-        },
-        "c" => c_scope(kind),
-        "cpp" => cpp_scope(kind),
-        "javascript" => js_scope(kind),
-        "typescript" => ts_scope(kind),
-        "go" => go_scope(kind),
+        #[cfg(feature = "lang-rust")]
+        "rust" => Some(&RUST),
+        #[cfg(feature = "lang-python")]
+        "python" => Some(&PYTHON),
+        #[cfg(feature = "lang-c")]
+        "c" => Some(&C),
+        #[cfg(feature = "lang-cpp")]
+        "cpp" => Some(&CPP),
+        #[cfg(feature = "lang-javascript")]
+        "javascript" => Some(&JAVASCRIPT),
+        #[cfg(feature = "lang-typescript")]
+        "typescript" => Some(&TYPESCRIPT),
+        #[cfg(feature = "lang-go")]
+        "go" => Some(&GO),
         _ => None,
     }
 }
 
-/// C scope table (also the base of the C++ table).
-fn c_scope(kind: &str) -> Option<Scope> {
-    match kind {
-        "function_definition" => Some(Scope::FnBody),
-        "for_statement" | "while_statement" | "do_statement" => Some(Scope::Loop),
-        "if_statement" => Some(Scope::Conditional),
-        "switch_statement" => Some(Scope::MatchBody),
-        "struct_specifier" | "enum_specifier" | "union_specifier" => Some(Scope::TypeBody),
-        _ => None,
-    }
-}
+#[cfg(feature = "lang-rust")]
+static RUST: LangSpec = LangSpec {
+    grammar: || tree_sitter_rust::LANGUAGE.into(),
+    scopes: &[
+        ("impl_item", Scope::TypeBody),
+        ("trait_item", Scope::TypeBody),
+        ("function_item", Scope::FnBody),
+        ("closure_expression", Scope::FnBody),
+        ("for_expression", Scope::Loop),
+        ("while_expression", Scope::Loop),
+        ("loop_expression", Scope::Loop),
+        ("if_expression", Scope::Conditional),
+        ("match_expression", Scope::MatchBody),
+    ],
+    string_kinds: &["string_literal", "raw_string_literal", "char_literal"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
 
-/// C++ scope table: everything C has, plus classes/lambdas/try.
-/// `namespace_definition` deliberately maps to no scope.
-fn cpp_scope(kind: &str) -> Option<Scope> {
-    match kind {
-        "class_specifier" => Some(Scope::TypeBody),
-        "lambda_expression" => Some(Scope::FnBody),
-        "try_statement" => Some(Scope::TryBody),
-        _ => c_scope(kind),
-    }
-}
+#[cfg(feature = "lang-python")]
+static PYTHON: LangSpec = LangSpec {
+    grammar: || tree_sitter_python::LANGUAGE.into(),
+    scopes: &[
+        ("class_definition", Scope::TypeBody),
+        ("function_definition", Scope::FnBody),
+        ("for_statement", Scope::Loop),
+        ("while_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("match_statement", Scope::MatchBody),
+        ("try_statement", Scope::TryBody),
+    ],
+    string_kinds: &["string", "string_content", "concatenated_string"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
 
-/// JavaScript scope table (also the base of the TypeScript table).
+/// C scopes are also the base of the C++ table below.
+#[cfg(feature = "lang-c")]
+static C: LangSpec = LangSpec {
+    grammar: || tree_sitter_c::LANGUAGE.into(),
+    scopes: &[
+        ("function_definition", Scope::FnBody),
+        ("for_statement", Scope::Loop),
+        ("while_statement", Scope::Loop),
+        ("do_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("switch_statement", Scope::MatchBody),
+        ("struct_specifier", Scope::TypeBody),
+        ("enum_specifier", Scope::TypeBody),
+        ("union_specifier", Scope::TypeBody),
+    ],
+    string_kinds: &["string_literal", "char_literal"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
+
+/// C++ = every C scope, plus classes/lambdas/try. `namespace_definition`
+/// deliberately maps to no scope. The C kinds are spelled out here rather
+/// than delegated so the whole table reads in one place.
+#[cfg(feature = "lang-cpp")]
+static CPP: LangSpec = LangSpec {
+    grammar: || tree_sitter_cpp::LANGUAGE.into(),
+    scopes: &[
+        // C++-specific.
+        ("class_specifier", Scope::TypeBody),
+        ("lambda_expression", Scope::FnBody),
+        ("try_statement", Scope::TryBody),
+        // Inherited from C.
+        ("function_definition", Scope::FnBody),
+        ("for_statement", Scope::Loop),
+        ("while_statement", Scope::Loop),
+        ("do_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("switch_statement", Scope::MatchBody),
+        ("struct_specifier", Scope::TypeBody),
+        ("enum_specifier", Scope::TypeBody),
+        ("union_specifier", Scope::TypeBody),
+    ],
+    string_kinds: &["string_literal", "char_literal", "raw_string_literal"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
+
+/// JavaScript scopes are also the base of the TypeScript table below.
 ///
 /// Both `class_declaration` and its `class_body` map to [`Scope::TypeBody`]
 /// (class *expressions* have no `class_declaration` wrapper); the walk in
 /// `context_at` collapses the wrapper/body pair to a single scope.
-fn js_scope(kind: &str) -> Option<Scope> {
-    match kind {
-        "function_declaration"
-        | "function_expression"
-        | "arrow_function"
-        | "method_definition"
-        | "generator_function_declaration" => Some(Scope::FnBody),
-        "class_declaration" | "class_body" => Some(Scope::TypeBody),
-        "for_statement" | "for_in_statement" | "while_statement" | "do_statement" => {
-            Some(Scope::Loop)
-        }
-        "if_statement" => Some(Scope::Conditional),
-        "switch_statement" => Some(Scope::MatchBody),
-        "try_statement" => Some(Scope::TryBody),
-        _ => None,
-    }
-}
+#[cfg(feature = "lang-javascript")]
+static JAVASCRIPT: LangSpec = LangSpec {
+    grammar: || tree_sitter_javascript::LANGUAGE.into(),
+    scopes: &[
+        ("function_declaration", Scope::FnBody),
+        ("function_expression", Scope::FnBody),
+        ("arrow_function", Scope::FnBody),
+        ("method_definition", Scope::FnBody),
+        ("generator_function_declaration", Scope::FnBody),
+        ("class_declaration", Scope::TypeBody),
+        ("class_body", Scope::TypeBody),
+        ("for_statement", Scope::Loop),
+        ("for_in_statement", Scope::Loop),
+        ("while_statement", Scope::Loop),
+        ("do_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("switch_statement", Scope::MatchBody),
+        ("try_statement", Scope::TryBody),
+    ],
+    string_kinds: &["string", "template_string"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
 
-/// TypeScript scope table: JavaScript plus interfaces and enums.
-fn ts_scope(kind: &str) -> Option<Scope> {
-    match kind {
-        "interface_declaration" | "enum_declaration" => Some(Scope::TypeBody),
-        _ => js_scope(kind),
-    }
-}
+/// TypeScript = every JavaScript scope, plus interfaces and enums. The
+/// JavaScript kinds are spelled out here rather than delegated so the
+/// whole table reads in one place.
+#[cfg(feature = "lang-typescript")]
+static TYPESCRIPT: LangSpec = LangSpec {
+    grammar: || tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+    scopes: &[
+        // TypeScript-specific.
+        ("interface_declaration", Scope::TypeBody),
+        ("enum_declaration", Scope::TypeBody),
+        // Inherited from JavaScript.
+        ("function_declaration", Scope::FnBody),
+        ("function_expression", Scope::FnBody),
+        ("arrow_function", Scope::FnBody),
+        ("method_definition", Scope::FnBody),
+        ("generator_function_declaration", Scope::FnBody),
+        ("class_declaration", Scope::TypeBody),
+        ("class_body", Scope::TypeBody),
+        ("for_statement", Scope::Loop),
+        ("for_in_statement", Scope::Loop),
+        ("while_statement", Scope::Loop),
+        ("do_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("switch_statement", Scope::MatchBody),
+        ("try_statement", Scope::TryBody),
+    ],
+    string_kinds: &["string", "template_string"],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
 
-/// Go scope table.
-fn go_scope(kind: &str) -> Option<Scope> {
-    match kind {
-        "function_declaration" | "method_declaration" | "func_literal" => Some(Scope::FnBody),
-        "for_statement" => Some(Scope::Loop),
-        "if_statement" => Some(Scope::Conditional),
-        "expression_switch_statement" | "type_switch_statement" | "select_statement" => {
-            Some(Scope::MatchBody)
-        }
-        "struct_type" | "interface_type" => Some(Scope::TypeBody),
-        _ => None,
-    }
-}
-
-/// String-literal node kinds per language (comments are matched by kind
-/// substring instead, which also covers doc comments).
-fn is_string_kind(language: &str, kind: &str) -> bool {
-    match language {
-        "rust" => matches!(
-            kind,
-            "string_literal" | "raw_string_literal" | "char_literal"
-        ),
-        "python" => matches!(kind, "string" | "string_content" | "concatenated_string"),
-        "c" => matches!(kind, "string_literal" | "char_literal"),
-        "cpp" => matches!(
-            kind,
-            "string_literal" | "char_literal" | "raw_string_literal"
-        ),
-        "javascript" | "typescript" => matches!(kind, "string" | "template_string"),
-        "go" => matches!(
-            kind,
-            "interpreted_string_literal" | "raw_string_literal" | "rune_literal"
-        ),
-        _ => false,
-    }
-}
-
-/// Start byte of the body/block child of a scope-bearing node, if present.
-///
-/// Most constructs across the grammars expose their suite via a `body`
-/// field; `if` constructs use `consequence`. As a fallback scan for a
-/// block-like named child (Go's `struct_type` has an unnamed
-/// `field_declaration_list`), and finally for a bare `{` token (Go's
-/// switch/select statements carry their cases directly). `None` means the
-/// body is missing entirely (half-typed construct), which callers treat
-/// as "already inside".
-fn body_start(node: Node<'_>) -> Option<usize> {
-    for field in ["body", "consequence"] {
-        if let Some(child) = node.child_by_field_name(field) {
-            return Some(child.start_byte());
-        }
-    }
-    let mut cursor = node.walk();
-    if let Some(child) = node.named_children(&mut cursor).find(|c| {
-        matches!(
-            c.kind(),
-            "block"
-                | "declaration_list"
-                | "match_block"
-                | "class_body"
-                | "statement_block"
-                | "compound_statement"
-                | "field_declaration_list"
-                | "enumerator_list"
-                | "interface_body"
-                | "enum_body"
-        )
-    }) {
-        return Some(child.start_byte());
-    }
-    let mut cursor = node.walk();
-    node.children(&mut cursor)
-        .find(|c| c.kind() == "{")
-        .map(|c| c.start_byte())
-}
-
-/// Node kinds whose named children are statements/items — the containers
-/// wrap snapping aligns selections against. The set is shared across
-/// languages; the kinds are distinct enough that collisions are harmless.
-fn is_container_kind(kind: &str) -> bool {
-    matches!(
-        kind,
-        // Roots: rust/go, python, c/cpp, js/ts.
-        "source_file" | "module" | "translation_unit" | "program"
-        // Statement blocks: rust/python/go, js/ts, c/cpp.
-        | "block" | "statement_block" | "compound_statement"
-        // Item/member lists.
-        | "declaration_list" | "field_declaration_list" | "class_body"
-        | "interface_body" | "enum_body" | "enumerator_list" | "match_block"
-        // Switch internals: js/ts, c/cpp, go.
-        | "switch_body" | "switch_case" | "switch_default" | "case_statement"
-        | "expression_case" | "type_case" | "communication_case" | "default_case"
-    )
-}
+#[cfg(feature = "lang-go")]
+static GO: LangSpec = LangSpec {
+    grammar: || tree_sitter_go::LANGUAGE.into(),
+    scopes: &[
+        ("function_declaration", Scope::FnBody),
+        ("method_declaration", Scope::FnBody),
+        ("func_literal", Scope::FnBody),
+        ("for_statement", Scope::Loop),
+        ("if_statement", Scope::Conditional),
+        ("expression_switch_statement", Scope::MatchBody),
+        ("type_switch_statement", Scope::MatchBody),
+        ("select_statement", Scope::MatchBody),
+        ("struct_type", Scope::TypeBody),
+        ("interface_type", Scope::TypeBody),
+    ],
+    string_kinds: &[
+        "interpreted_string_literal",
+        "raw_string_literal",
+        "rune_literal",
+    ],
+    body_fields: BODY_FIELDS,
+    block_kinds: BLOCK_KINDS,
+    container_kinds: CONTAINER_KINDS,
+};
 
 /// One end of a wrap selection, resolved against the tree.
 #[derive(Debug, Clone, Copy)]
@@ -261,15 +408,15 @@ enum Endpoint<'t> {
 }
 
 /// Resolve `offset` to the statement (or container gap) holding it.
-fn endpoint_at(root: Node<'_>, offset: usize) -> Endpoint<'_> {
+fn endpoint_at<'t>(spec: &LangSpec, root: Node<'t>, offset: usize) -> Endpoint<'t> {
     let mut node = root
         .named_descendant_for_byte_range(offset, offset)
         .unwrap_or(root);
-    if is_container_kind(node.kind()) {
+    if spec.is_container_kind(node.kind()) {
         return Endpoint::Floating(node);
     }
     while let Some(parent) = node.parent() {
-        if is_container_kind(parent.kind()) {
+        if spec.is_container_kind(parent.kind()) {
             break;
         }
         node = parent;
@@ -334,9 +481,19 @@ fn clamp_offset(text: &str, offset: usize) -> usize {
     offset
 }
 
-/// First indented, non-blank line decides the indent unit; `None` when
-/// the document has no indented lines yet.
+/// Detect the document's indent unit by scanning *every* line, not just
+/// the first indented one; `None` when the document has no indented lines
+/// yet (leaving [`indent_unit_for`]'s profile fallback intact).
+///
+/// A leading tab wins: any line whose leading whitespace begins with a tab
+/// makes the whole file [`IndentUnit::Tab`]. Otherwise the unit is the
+/// SMALLEST positive space-run width among lines indented with spaces only
+/// (one indent level is the shallowest indent seen), so a deeper
+/// continuation line no longer inflates the result. Lines that mix a tab
+/// after leading spaces are ignored for width (their tab does not begin
+/// the run, so it cannot be trusted as a level).
 fn detect_indent_unit(text: &str) -> Option<IndentUnit> {
+    let mut smallest: Option<usize> = None;
     for line in text.lines() {
         let content = line.trim_start_matches([' ', '\t']);
         if content.is_empty() || content.len() == line.len() {
@@ -346,11 +503,13 @@ fn detect_indent_unit(text: &str) -> Option<IndentUnit> {
         if ws.starts_with('\t') {
             return Some(IndentUnit::Tab);
         }
-        return Some(IndentUnit::Spaces(
-            u8::try_from(ws.len()).unwrap_or(u8::MAX),
-        ));
+        if ws.contains('\t') {
+            // Leading spaces followed by a tab: width is untrustworthy.
+            continue;
+        }
+        smallest = Some(smallest.map_or(ws.len(), |n| n.min(ws.len())));
     }
-    None
+    smallest.map(|n| IndentUnit::Spaces(u8::try_from(n).unwrap_or(u8::MAX)))
 }
 
 /// Indent unit for `doc`: detected from the text when it has indented
@@ -382,11 +541,13 @@ impl TreeSitterProvider {
         self.parses
     }
 
-    /// Parse `doc` (or reuse the cached tree when language + text match).
+    /// Parse `doc` (or reuse the cached tree when language + text match)
+    /// using `spec`'s grammar.
     ///
-    /// `None` for unsupported languages or parser failure.
-    fn tree_for(&mut self, doc: &DocSnapshot) -> Option<Tree> {
-        let language = language_for(&doc.language)?;
+    /// `None` on parser failure. The language is already known supported
+    /// because the caller resolved `spec` via [`spec_for`].
+    fn tree_for(&mut self, doc: &DocSnapshot, spec: &LangSpec) -> Option<Tree> {
+        let language = (spec.grammar)();
         let mut hasher = DefaultHasher::new();
         doc.text.hash(&mut hasher);
         let hash = hasher.finish();
@@ -407,7 +568,10 @@ impl TreeSitterProvider {
 
 impl ContextProvider for TreeSitterProvider {
     fn context_at(&mut self, doc: &DocSnapshot, offset: usize) -> ExpansionContext {
-        let Some(tree) = self.tree_for(doc) else {
+        let Some(spec) = spec_for(&doc.language) else {
+            return NullContextProvider.context_at(doc, offset);
+        };
+        let Some(tree) = self.tree_for(doc, spec) else {
             return NullContextProvider.context_at(doc, offset);
         };
         let text = doc.text.as_str();
@@ -445,16 +609,15 @@ impl ContextProvider for TreeSitterProvider {
             raw_node_kinds.push(kind.to_string());
             // A cursor sitting exactly before the opening quote/delimiter
             // (offset == start_byte) is not "inside" the literal.
-            if offset > node.start_byte()
-                && (kind.contains("comment") || is_string_kind(&doc.language, kind))
+            if offset > node.start_byte() && (kind.contains("comment") || spec.is_string_kind(kind))
             {
                 in_string_or_comment = true;
             }
-            if let Some(scope) = scope_for_kind(&doc.language, kind) {
+            if let Some(scope) = spec.scope_for(kind) {
                 // The scope only counts once the cursor is inside the
                 // construct's body, not its header/signature. A missing
                 // body (broken parse mid-typing) counts anyway.
-                if body_start(node).is_none_or(|body| offset >= body) {
+                if spec.body_start(node).is_none_or(|body| offset >= body) {
                     // A wrapper and its own body node (JS `class_declaration`
                     // containing `class_body`) both map to the same scope;
                     // collapse the pair to one entry. Only a *direct* parent
@@ -507,12 +670,16 @@ impl ContextProvider for TreeSitterProvider {
         let text = doc.text.as_str();
         let start = clamp_offset(text, range.start);
         let end = clamp_offset(text, range.end.max(range.start));
-        let Some(tree) = self.tree_for(doc) else {
-            // No grammar for this language (or the parse failed): fall
-            // back to plain whole-line snapping.
-            return WrapSelection::Valid {
-                range: extend_to_lines(text, start, end),
-            };
+        // No grammar for this language (or the parse failed): fall back to
+        // plain whole-line snapping.
+        let line_snap = || WrapSelection::Valid {
+            range: extend_to_lines(text, start, end),
+        };
+        let Some(spec) = spec_for(&doc.language) else {
+            return line_snap();
+        };
+        let Some(tree) = self.tree_for(doc, spec) else {
+            return line_snap();
         };
         if start >= end {
             return WrapSelection::Invalid {
@@ -524,7 +691,10 @@ impl ContextProvider for TreeSitterProvider {
         let node_range = |node: Node<'_>| node.start_byte()..node.end_byte();
         // `end` is exclusive, so the last byte inside the selection is at
         // `end - 1` (mid-char bytes are fine for tree queries).
-        let snapped = match (endpoint_at(root, start), endpoint_at(root, end - 1)) {
+        let snapped = match (
+            endpoint_at(spec, root, start),
+            endpoint_at(spec, root, end - 1),
+        ) {
             (Endpoint::Statement(s), Endpoint::Statement(e)) => {
                 if s.id() == e.id() || encloses(s, e) {
                     node_range(s)
@@ -1113,6 +1283,41 @@ mod tests {
         TreeSitterProvider::new()
             .context_at(&doc, offset)
             .indent_unit
+    }
+
+    #[test]
+    fn detect_indent_unit_uses_smallest_level_not_first_line() {
+        // A deep continuation line (8) precedes the real indent level (4);
+        // the smallest positive run wins, so the unit is Spaces(4).
+        assert_eq!(
+            detect_indent_unit("fn f() {\n        cont\n    real\n}\n"),
+            Some(IndentUnit::Spaces(4))
+        );
+    }
+
+    #[test]
+    fn detect_indent_unit_tab_wins_over_later_spaces() {
+        // First indented line is a tab; a later space-indented line must
+        // not override the tab verdict.
+        assert_eq!(
+            detect_indent_unit("\ttabbed\n    spaced\n"),
+            Some(IndentUnit::Tab)
+        );
+    }
+
+    #[test]
+    fn detect_indent_unit_ignores_space_then_tab_width() {
+        // The space-then-tab line's width is untrustworthy and skipped;
+        // the clean two-space line decides the unit.
+        assert_eq!(
+            detect_indent_unit("  clean\n  \tmixed\n"),
+            Some(IndentUnit::Spaces(2))
+        );
+    }
+
+    #[test]
+    fn detect_indent_unit_none_when_flat() {
+        assert_eq!(detect_indent_unit("a\nb\nc\n"), None);
     }
 
     #[test]

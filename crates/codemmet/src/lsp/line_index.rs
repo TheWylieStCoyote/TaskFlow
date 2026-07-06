@@ -26,14 +26,28 @@ pub struct LineIndex {
 
 impl LineIndex {
     /// Index `text`'s line starts.
+    ///
+    /// Per the LSP spec, `\r\n`, a lone `\r`, and a lone `\n` all end a line:
+    /// `\r\n` is one break, and a `\r` not followed by `\n` ends a line too.
     pub fn new(text: &str) -> Self {
         let mut line_starts = vec![0];
-        line_starts.extend(
-            text.bytes()
-                .enumerate()
-                .filter(|&(_, b)| b == b'\n')
-                .map(|(i, _)| i + 1),
-        );
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\n' => {
+                    line_starts.push(i + 1);
+                    i += 1;
+                }
+                b'\r' => {
+                    // A `\r\n` is a single break; a lone `\r` ends a line too.
+                    let step = usize::from(bytes.get(i + 1) == Some(&b'\n')) + 1;
+                    line_starts.push(i + step);
+                    i += step;
+                }
+                _ => i += 1,
+            }
+        }
         Self {
             line_starts,
             len: text.len(),
@@ -175,5 +189,44 @@ mod tests {
         let idx = LineIndex::new(text);
         assert_eq!(idx.offset(text, pos(0, 99), PositionEncoding::Utf8), 2);
         assert_eq!(idx.offset(text, pos(1, 1), PositionEncoding::Utf8), 5);
+    }
+
+    #[test]
+    fn lone_cr_and_lf_each_start_a_new_line() {
+        // `a\rb\nc` is three lines: `a`, `b`, `c` at byte starts 0, 2, 4.
+        let text = "a\rb\nc";
+        let idx = LineIndex::new(text);
+        assert_eq!(idx.offset(text, pos(0, 0), PositionEncoding::Utf8), 0);
+        assert_eq!(idx.offset(text, pos(1, 0), PositionEncoding::Utf8), 2);
+        assert_eq!(idx.offset(text, pos(2, 0), PositionEncoding::Utf8), 4);
+        // Position (1, 0) resolves to the byte offset of `b`.
+        assert_eq!(idx.position(text, 2, PositionEncoding::Utf8), pos(1, 0));
+    }
+
+    #[test]
+    fn crlf_is_a_single_break() {
+        // `a\r\nb` is two lines: `a` and `b` at byte starts 0 and 3.
+        let text = "a\r\nb";
+        let idx = LineIndex::new(text);
+        assert_eq!(idx.offset(text, pos(0, 99), PositionEncoding::Utf8), 1);
+        assert_eq!(idx.offset(text, pos(1, 0), PositionEncoding::Utf8), 3);
+        assert_eq!(idx.position(text, 3, PositionEncoding::Utf8), pos(1, 0));
+    }
+
+    #[test]
+    fn offset_round_trips_across_mixed_line_endings() {
+        // Lone CR, CRLF, and LF terminators in one document.
+        let text = "a\rbb\r\nccc\nd";
+        let idx = LineIndex::new(text);
+        // Round-trip holds for every line-content offset (offsets inside a
+        // terminator snap to the preceding line's content and are excluded).
+        for offset in [0, 2, 3, 6, 7, 8, 10] {
+            let position = idx.position(text, offset, PositionEncoding::Utf8);
+            assert_eq!(
+                idx.offset(text, position, PositionEncoding::Utf8),
+                offset,
+                "offset {offset} should round-trip via {position:?}"
+            );
+        }
     }
 }

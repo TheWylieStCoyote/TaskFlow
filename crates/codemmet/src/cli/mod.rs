@@ -12,9 +12,11 @@ mod wrap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use codemmet_core::config::loader::{ConfigError, default_user_snippets_dir};
+use codemmet_core::context::IndentUnit;
 use codemmet_core::lang::registry::Registry;
+use codemmet_core::snippet::render::TabstopMode;
 
 /// Exit code for abbreviation parse errors.
 pub const EXIT_PARSE: u8 = 1;
@@ -72,4 +74,51 @@ fn load_registry(user_dir: Option<&Path>) -> Result<Registry, ConfigError> {
 fn config_failure(err: &dyn std::fmt::Display) -> ExitCode {
     eprintln!("error: {err}");
     ExitCode::from(EXIT_CONFIG)
+}
+
+/// Tabstop handling for rendered output (mirrors [`TabstopMode`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Tabstops {
+    /// Emit LSP snippet syntax (`${1:placeholder}`, `$0`).
+    Keep,
+    /// Emit plain text; placeholders become their text, markers vanish.
+    Strip,
+}
+
+impl From<Tabstops> for TabstopMode {
+    fn from(value: Tabstops) -> Self {
+        match value {
+            Tabstops::Keep => Self::Keep,
+            Tabstops::Strip => Self::Strip,
+        }
+    }
+}
+
+/// Parse a `--indent` value: `"\t"` or a non-empty run of spaces.
+fn parse_indent(text: &str) -> Result<IndentUnit, String> {
+    if text == "\t" {
+        return Ok(IndentUnit::Tab);
+    }
+    if !text.is_empty() && text.bytes().all(|b| b == b' ') {
+        return u8::try_from(text.len())
+            .map(IndentUnit::Spaces)
+            .map_err(|_| format!("--indent is too wide: {} spaces (max 255)", text.len()));
+    }
+    Err(format!(
+        "invalid --indent {text:?}: expected a single tab or a run of spaces"
+    ))
+}
+
+/// Resolve the indent unit for `lang`: parse `indent_flag` if given, otherwise
+/// fall back to the language profile's default. Errors on an unknown language
+/// or an unparseable `--indent` value (both exit-code-3 conditions).
+fn resolve_indent_unit(
+    registry: &Registry,
+    lang: &str,
+    indent_flag: Option<&str>,
+) -> Result<IndentUnit, String> {
+    let Some(language) = registry.language(lang) else {
+        return Err(format!("unknown language `{lang}`"));
+    };
+    indent_flag.map_or_else(|| Ok(language.profile.default_indent.clone()), parse_indent)
 }

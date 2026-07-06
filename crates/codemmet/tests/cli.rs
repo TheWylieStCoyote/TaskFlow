@@ -5,19 +5,14 @@
 #![allow(clippy::literal_string_with_formatting_args)]
 
 use std::io::Write as _;
-use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
+
+mod common;
+use common::scratch_dir;
 
 /// A `Command` for the compiled `codemmet` binary.
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_codemmet"))
-}
-
-/// A unique, existing scratch directory for one test.
-fn scratch_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("codemmet-cli-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("scratch dir should be creatable");
-    dir
 }
 
 /// Run the binary with `args`, pointing `--config` at an empty scratch dir so

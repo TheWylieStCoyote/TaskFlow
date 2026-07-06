@@ -1,7 +1,6 @@
 //! The façade tying parser, registry, and renderer together.
 
 use crate::abbr::ParseError;
-use crate::config::loader::{ConfigError, default_user_snippets_dir};
 use crate::context::ExpansionContext;
 use crate::lang::registry::Registry;
 use crate::snippet::render::{Expansion, RenderError, TabstopMode, render, render_with_selection};
@@ -27,16 +26,11 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Engine with builtin packs merged with the default user override dir
-    /// (`<config>/codemmet/snippets`).
-    pub fn new() -> Result<Self, ConfigError> {
-        let dir = default_user_snippets_dir();
-        Ok(Self {
-            registry: Registry::with_user_dir(dir.as_deref())?,
-        })
-    }
-
     /// Engine over an explicitly constructed registry.
+    ///
+    /// Build the [`Registry`] with [`Registry::with_user_dir`] (passing
+    /// [`default_user_snippets_dir`](crate::config::loader::default_user_snippets_dir)
+    /// for the standard config location) or [`Registry::with_builtins`].
     pub const fn with_registry(registry: Registry) -> Self {
         Self { registry }
     }

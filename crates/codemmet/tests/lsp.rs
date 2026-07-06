@@ -5,18 +5,12 @@
 #![allow(clippy::literal_string_with_formatting_args)]
 
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
-use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::{Value, json};
 
-/// A unique, existing scratch directory for one test's snippet overrides,
-/// so the developer's real user snippets never leak into assertions.
-fn scratch_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("codemmet-lsp-{name}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("scratch dir should be creatable");
-    dir
-}
+mod common;
+use common::scratch_dir;
 
 /// A running `codemmet lsp` child plus a framed JSON-RPC client for it.
 struct LspClient {
@@ -240,10 +234,11 @@ fn completion_expands_fori10_with_exact_text_edit() {
     // in server-side would double-indent.
     assert_eq!(new_text, "for ${1:i} in 0..10 {\n    $0\n}");
 
-    // Docs are filled eagerly; the label details show the strip-mode preview.
+    // Docs are filled eagerly; the label detail is the leading trigger's
+    // own human description.
     assert_eq!(
         item["labelDetails"]["description"],
-        json!("for i in 0..10 {")
+        json!("for loop over integer range")
     );
     let docs = item["documentation"]["value"]
         .as_str()

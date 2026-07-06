@@ -113,11 +113,11 @@ fn ${name}(&self$1) {
 
 Single-threaded `for msg in connection.receiver` loop over `lsp-server`. State: `Engine`, doc store (Full sync in M2 → Incremental in M3 for tree-sitter `InputEdit`s), `Box<dyn ContextProvider>`, config from `initializationOptions`.
 
-Capabilities: `textDocumentSync: Full`, `completionProvider { resolveProvider: true, triggerCharacters: [">", "+", ":", ","] }`, `executeCommandProvider { commands: ["codemmet.expand", "codemmet.wrap"] }`.
+Capabilities: `textDocumentSync: Incremental` (M2 shipped Full; M3 moved to Incremental), `completionProvider { resolveProvider: false, triggerCharacters: [">", "+", ":", ","] }`, `executeCommandProvider { commands: ["codemmet.expand", "codemmet.wrap"] }`. **Shipped note:** `resolveProvider` is `false` — the expansion is already computed cheaply, so documentation is attached to each item eagerly rather than via a `completionItem/resolve` round-trip.
 
-**Completion flow:** scan left from cursor over the abbreviation charset (quote-aware, stop at whitespace, ~200-char cap). If the candidate parses and all triggers resolve, offer ONE snippet item: `insertTextFormat: Snippet`, **server-computed `textEdit`** replacing the abbreviation range (never trust client word boundaries — the emmet-ls lesson), `filterText` = abbreviation, docs filled lazily in `completionItem/resolve`. Also offer trigger-prefix discovery items mid-composition.
+**Completion flow:** scan left from cursor over the abbreviation charset (quote-aware — a quote only opens a quoted region after `:`/`,`, so host-language apostrophes like Rust lifetimes don't swallow the line; stop at whitespace, ~200-char cap). If the candidate parses and all triggers resolve, offer ONE snippet item: `insertTextFormat: Snippet`, **server-computed `textEdit`** replacing the abbreviation range (never trust client word boundaries — the emmet-ls lesson), `filterText` = abbreviation, documentation attached eagerly. **Shipped note:** the snippet is rendered with `base_indent` zeroed — LSP snippet clients re-indent continuation lines from the insertion position, so baking the base indent in would double it. Also offer trigger-prefix discovery items mid-composition. Operator gating (`completion = "operators-only"`) uses the canonical operator set exported from `codemmet-core::abbr` (`OPERATOR_CHARS`), so climb-up (`^`) and grouping count.
 
-**Commands** (because `workspace/applyEdit` can't carry tabstops): `codemmet.expand {uri, position}` and `codemmet.wrap {uri, range, abbreviation}` **return** `{ range, snippet, isSnippet }`; the client deletes the range and calls its snippet expander. Wrap: dedent selection to depth 0, inject at `${child}`, re-indent (naive line-based in M2; tree-sitter boundary snapping in M4). Editor passes `shiftwidth`/`expandtab` in command args.
+**Commands** (because `workspace/applyEdit` can't carry tabstops): `codemmet.expand {uri, position}` and `codemmet.wrap {uri, range, abbreviation}` **return** `{ range, snippet, isSnippet }`; the client deletes the range and calls its snippet expander. **Shipped note:** wrap is not string-spliced — the core exposes `render_with_selection` / `Engine::expand_wrap`, which dedents the selection and splices it into the composed IR at the final-cursor position, so escaping, mirrors, indentation, and tabstop renumbering all flow through the normal pipeline (this replaced an earlier string-search-for-`$0` approach that diverged on mirrors). Tree-sitter snaps the selection to statement boundaries first; the returned range starts after the first line's leading whitespace so the construct keeps its indentation. Editor passes `shiftwidth`/`expandtab` in command args.
 
 ## Tree-sitter Seam (defined in M1, never reworked)
 
@@ -143,7 +143,7 @@ codemmet check                # validate user snippet TOMLs
 codemmet lsp [--stdio]
 ```
 
-Flags: `--lang` (required, accepts extensions), `--indent`, `--base-indent`, `--tabstops keep|strip` (default strip), `--json` (`{text, cursor, tabstops}` for non-LSP editors). Exit codes: 0 ok, 1 parse error, 2 unknown trigger (with suggestion), 3 config error. Diagnostics on stderr only.
+Flags: `--lang` (required, accepts extensions), `--indent`, `--base-indent`, `--tabstops keep|strip` (default strip), `--json`. **Shipped note:** `--json` emits `{text, cursor, is_snippet}` (not the `tabstops` array originally sketched) — in strip mode `cursor` is a `{line, character}` byte position and `is_snippet` is false; in keep mode `text` carries the LSP snippet syntax and `cursor` is null. `check` also warns on stderr about `*.toml` files in the override directory whose names don't match a language pack. Exit codes: 0 ok, 1 parse error, 2 unknown trigger (with suggestion) / render error, 3 config or unknown-language error. Diagnostics on stderr only.
 
 ## Neovim Plugin (same repo, nvim ≥ 0.10)
 
@@ -162,7 +162,9 @@ Flags: `--lang` (required, accepts extensions), `--indent`, `--base-indent`, `--
 - **M1 — Core engine + CLI (Rust & Python):** abbr lexer/parser; TOML loader + validation; body parser → IR; composer/renderer with tabstop renumbering; `NullContextProvider`; rust.toml + python.toml packs; `expand`/`list`/`check` subcommands.
 - **M2 — LSP + Neovim plugin:** lsp-server loop, doc store, completion, `codemmet.expand`, naive `codemmet.wrap`; Lua plugin with keymaps.
 - **M3 — Tree-sitter context:** codemmet-tsctx; contextual variants (`fn` in impl, `def` in class); string/comment suppression; tree-based indent; incremental sync.
-- **M4 — Wrap + remaining languages + polish:** tree-sitter wrap snapping; `^` operator; C/C++/JS/TS/Go packs (TS←JS, C++←C inheritance); `completionItem/resolve` docs; release binaries (cargo-dist or plain workflow); user docs.
+- **M4 — Wrap + remaining languages + polish:** tree-sitter wrap snapping; `^` operator; C/C++/JS/TS/Go packs (TS←JS, C++←C inheritance); release binaries (plain GitHub Actions workflow on `v*` tags); user docs (shipped under `docs/`, with a per-language examples directory). `completionItem/resolve` was dropped in favour of eager documentation (see the LSP section).
+
+**Post-M4 hardening** (review-driven, all shipped): a global composed-line budget plus a parse-time node cap that reject expansion-size blow-ups; snippets rendered without baked `base_indent` for LSP clients; grammar-aware quote handling in candidate extraction; a shared operator set; profile-default indentation for flat buffers; transitive profile inheritance; and `codemmet check` warnings for misnamed packs.
 
 ## Verification
 
@@ -179,4 +181,25 @@ Flags: `--lang` (required, accepts extensions), `--indent`, `--base-indent`, `--
 4. **tree-sitter-cpp compile time/size:** per-language cargo features.
 5. **Tabstop renumbering corner cases** (mirrors across `*`, nested placeholders — reject nesting in v1): defended by the snapshot suite.
 
-Deferred (note in README): project-local snippet packs (`.codemmet/snippets/`), repetition index variables (`${i}` in `*n`), VS Code extension, cross-language `base.toml` pack.
+## Status and deferred work
+
+All milestones (M0–M4) plus the post-M4 hardening above are complete: seven
+languages, ~250 built-in triggers, a CLI, an LSP server, a Neovim plugin, and
+full user documentation under `docs/`.
+
+Deferred features (not built): project-local snippet packs
+(`.codemmet/snippets/`), repetition index variables (`${i}` in `*n`), a
+packaged VS Code extension (codemmet works there via generic LSP today), and a
+cross-language `base.toml` pack (per-language packs read better; likely
+dropped rather than built).
+
+Deferred performance work (intentionally left at "M3 scale is fine"): the LSP
+server re-parses the whole buffer per edit rather than using tree-sitter
+`InputEdit` incremental sync, keeps its tree cache keyed per language rather
+than per document, and clones the document text into a `DocSnapshot` per
+request. These are contained changes to revisit only if large-buffer latency
+becomes a real complaint.
+
+Operational, not yet done: push to a GitHub remote (CI and the release
+workflow have never run), cut a `v0.1.0` tag to exercise the release binaries,
+and publish to crates.io (manifests already carry the metadata).

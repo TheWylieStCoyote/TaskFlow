@@ -2,7 +2,6 @@
 //! trigger-prefix discovery items for the segment being typed.
 
 use codemmet_core::Engine;
-use codemmet_core::abbr::AbbrNode;
 use codemmet_core::context::{ContextProvider, DocSnapshot, ExpansionContext};
 use codemmet_core::lang::registry::LanguageSnippets;
 use codemmet_core::snippet::render::TabstopMode;
@@ -20,9 +19,16 @@ const MAX_PREFIX_ITEMS: usize = 50;
 /// Compute completion items for `offset` in `text`, or `None` for a null
 /// response (no candidate, gated off, unknown language, or a cursor inside
 /// a string literal or comment).
+///
+/// Takes the caller's already-built `index` so the request indexes the
+/// document only once (the caller needs it to resolve the cursor `offset`).
+// The document view (index, text, encoding) plus cursor and gating naturally
+// exceed the arg-count lint; bundling them would obscure more than it helps.
+#[allow(clippy::too_many_arguments)]
 pub fn compute(
     engine: &Engine,
     provider: &mut dyn ContextProvider,
+    index: &LineIndex,
     text: &str,
     language_id: &str,
     offset: usize,
@@ -53,7 +59,6 @@ pub fn compute(
     ctx.base_indent = String::new();
 
     let mut items = Vec::new();
-    let index = LineIndex::new(text);
     let range = Range {
         start: index.position(text, start, encoding),
         end: index.position(text, offset, encoding),
@@ -66,8 +71,17 @@ pub fn compute(
     if items.is_empty() { None } else { Some(items) }
 }
 
-/// The single whole-abbreviation snippet item, when `candidate` parses and
-/// every word resolves and renders.
+/// The single whole-abbreviation snippet item, when `candidate` renders.
+///
+/// The engine's `expand` already parses and resolves the whole abbreviation,
+/// returning an error for anything unrenderable, so the `.ok()?` gate is the
+/// only check needed — a separate pre-parse would only duplicate (and risk
+/// drifting from) that logic. The item renders exactly once, in [`Keep`]
+/// mode; the label detail reuses the leading trigger's own description rather
+/// than a second [`Strip`] render.
+///
+/// [`Keep`]: TabstopMode::Keep
+/// [`Strip`]: TabstopMode::Strip
 fn expansion_item(
     engine: &Engine,
     lang: &LanguageSnippets,
@@ -75,24 +89,20 @@ fn expansion_item(
     range: Range,
     ctx: &ExpansionContext,
 ) -> Option<CompletionItem> {
-    let ast = codemmet_core::abbr::parse(candidate).ok()?;
-    if !ast.0.iter().all(|node| resolves(lang, node)) {
-        return None;
-    }
-
     let keep = engine
         .expand(candidate, lang.profile.id, ctx, TabstopMode::Keep)
         .ok()?;
-    let strip = engine
-        .expand(candidate, lang.profile.id, ctx, TabstopMode::Strip)
-        .ok()?;
-    let first_line = strip.body.lines().next().unwrap_or_default().to_owned();
+    // Describe the item with the leading trigger's human description.
+    let description = lang
+        .set
+        .resolve_word(candidate)
+        .and_then(|(snippet, _)| snippet.description.clone());
 
     Some(CompletionItem {
         label: candidate.to_owned(),
         label_details: Some(CompletionItemLabelDetails {
             detail: None,
-            description: Some(first_line),
+            description,
         }),
         kind: Some(CompletionItemKind::SNIPPET),
         documentation: Some(Documentation::MarkupContent(MarkupContent {
@@ -108,12 +118,6 @@ fn expansion_item(
         })),
         ..CompletionItem::default()
     })
-}
-
-/// Whether every word in the node's subtree resolves to a trigger.
-fn resolves(lang: &LanguageSnippets, node: &AbbrNode) -> bool {
-    lang.set.resolve_word(&node.word).is_some()
-        && node.children.iter().all(|child| resolves(lang, child))
 }
 
 /// Plain word items for registered triggers the final segment is a prefix of.
@@ -153,6 +157,7 @@ mod tests {
         compute(
             &engine(),
             &mut NullContextProvider,
+            &LineIndex::new(text),
             text,
             language,
             text.len(),
@@ -192,6 +197,13 @@ mod tests {
         let item = snippets[0];
         assert_eq!(item.label, "fori10");
         assert_eq!(item.sort_text.as_deref(), Some("0fori10"));
+        // The label detail is the leading trigger's own description.
+        assert_eq!(
+            item.label_details
+                .as_ref()
+                .and_then(|d| d.description.as_deref()),
+            Some("for loop over integer range")
+        );
         let Some(CompletionTextEdit::Edit(edit)) = &item.text_edit else {
             panic!("expected a plain text edit");
         };
@@ -246,6 +258,7 @@ mod tests {
         let items = compute(
             &engine(),
             &mut InStringProvider,
+            &LineIndex::new("fori10"),
             "fori10",
             "rust",
             6,

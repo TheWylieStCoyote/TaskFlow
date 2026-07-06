@@ -4,31 +4,15 @@ use std::io::Read as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use clap::{Args, ValueEnum};
+use clap::Args;
 use codemmet_core::Engine;
-use codemmet_core::context::{ExpansionContext, IndentUnit};
+use codemmet_core::context::ExpansionContext;
 use codemmet_core::engine::ExpandError;
-use codemmet_core::snippet::render::{Expansion, TabstopMode};
+use codemmet_core::snippet::render::Expansion;
 
-use super::{EXIT_PARSE, EXIT_RENDER, config_failure, load_registry};
-
-/// Tabstop handling for the rendered output (mirrors [`TabstopMode`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Tabstops {
-    /// Emit LSP snippet syntax (`${1:placeholder}`, `$0`).
-    Keep,
-    /// Emit plain text; placeholders become their text, markers vanish.
-    Strip,
-}
-
-impl From<Tabstops> for TabstopMode {
-    fn from(value: Tabstops) -> Self {
-        match value {
-            Tabstops::Keep => Self::Keep,
-            Tabstops::Strip => Self::Strip,
-        }
-    }
-}
+use super::{
+    EXIT_PARSE, EXIT_RENDER, Tabstops, config_failure, load_registry, resolve_indent_unit,
+};
 
 /// Arguments for `codemmet expand`.
 #[derive(Debug, Args)]
@@ -67,17 +51,9 @@ pub fn run(user_dir: Option<&Path>, args: &ExpandArgs) -> ExitCode {
         Err(err) => return config_failure(&err),
     };
 
-    let indent_unit = {
-        let Some(lang) = registry.language(&args.lang) else {
-            return config_failure(&format!("unknown language `{}`", args.lang));
-        };
-        match args.indent.as_deref() {
-            Some(text) => match parse_indent(text) {
-                Ok(unit) => unit,
-                Err(msg) => return config_failure(&msg),
-            },
-            None => lang.profile.default_indent.clone(),
-        }
+    let indent_unit = match resolve_indent_unit(&registry, &args.lang, args.indent.as_deref()) {
+        Ok(unit) => unit,
+        Err(msg) => return config_failure(&msg),
     };
 
     let abbr = match read_abbr(args.abbr.as_deref()) {
@@ -99,21 +75,6 @@ pub fn run(user_dir: Option<&Path>, args: &ExpandArgs) -> ExitCode {
             ExitCode::from(code)
         }
     }
-}
-
-/// Parse a `--indent` value: `"\t"` or a non-empty run of spaces.
-fn parse_indent(text: &str) -> Result<IndentUnit, String> {
-    if text == "\t" {
-        return Ok(IndentUnit::Tab);
-    }
-    if !text.is_empty() && text.bytes().all(|b| b == b' ') {
-        return u8::try_from(text.len())
-            .map(IndentUnit::Spaces)
-            .map_err(|_| format!("--indent is too wide: {} spaces (max 255)", text.len()));
-    }
-    Err(format!(
-        "invalid --indent {text:?}: expected a single tab or a run of spaces"
-    ))
 }
 
 /// Resolve the abbreviation argument; `None` or `-` reads stdin, trimming

@@ -255,6 +255,7 @@ impl Server {
         let items = completion::compute(
             &self.engine,
             self.provider.as_mut(),
+            &index,
             &doc.text,
             &doc.language_id,
             offset,

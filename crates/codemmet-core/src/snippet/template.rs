@@ -167,14 +167,17 @@ fn parse_braced(
             if chars.next() != Some('}') {
                 return Err(err(line_no, "expected '}' after parameter name"));
             }
-            if name == "child" {
-                if *saw_child {
-                    return Err(err(line_no, "at most one ${child} per snippet"));
+            match name.as_str() {
+                "child" => {
+                    if *saw_child {
+                        return Err(err(line_no, "at most one ${child} per snippet"));
+                    }
+                    *saw_child = true;
+                    Ok(Span::ChildSlot)
                 }
-                *saw_child = true;
-                Ok(Span::ChildSlot)
-            } else {
-                Ok(Span::Param { name })
+                // `${i}` is the reserved repetition-index variable.
+                "i" => Ok(Span::RepeatIndex),
+                _ => Ok(Span::Param { name }),
             }
         }
         Some('}') => Err(err(line_no, "empty '${}'")),
@@ -320,6 +323,15 @@ mod tests {
         assert_eq!(
             parse("do(${child});").lines[0].spans,
             vec![text("do("), Span::ChildSlot, text(");")]
+        );
+    }
+
+    #[test]
+    fn repeat_index_variable() {
+        // `${i}` is the reserved repetition-index variable, not a parameter.
+        assert_eq!(
+            parse("field${i}: x").lines[0].spans,
+            vec![text("field"), Span::RepeatIndex, text(": x")]
         );
     }
 

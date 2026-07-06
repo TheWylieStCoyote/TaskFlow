@@ -125,6 +125,7 @@ golden!(rust_loop_ifl, "rust", "loop>ifl");
 golden!(rust_if_el, "rust", "if+el");
 golden!(rust_if_elif_el, "rust", "if+elif+el");
 golden!(rust_match_cmd_arm3, "rust", "match:cmd>arm*3");
+golden!(rust_repeat_index_tests, "rust", "test:case${i}*3");
 golden!(rust_matchres, "rust", "matchres");
 golden!(rust_struct_point, "rust", "struct:Point");
 golden!(rust_enum_op_arm, "rust", "enum:Op>arm");

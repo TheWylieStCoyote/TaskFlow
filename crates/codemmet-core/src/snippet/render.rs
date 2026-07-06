@@ -222,8 +222,9 @@ impl Composer<'_> {
             .unwrap_or(scope);
 
         let mut out = Vec::new();
-        for _ in 0..node.repeat {
-            let mut lines = self.instantiate(template, &bindings);
+        for copy in 0..node.repeat {
+            // The repetition index is 1-based (`${i}` renders 1, 2, …).
+            let mut lines = self.instantiate(template, &bindings, copy + 1);
             // Fail fast: repeat counts multiply through nesting, so the
             // budget must trip during composition, not on a finished Vec.
             self.composed_lines = self.composed_lines.saturating_add(lines.len());
@@ -259,9 +260,17 @@ impl Composer<'_> {
 
     /// Instantiate one copy of a template with the node's bindings.
     ///
-    /// Every unbound parameter and every template-local tabstop index gets a
-    /// fresh identity on first occurrence; repeats become mirrors.
-    fn instantiate(&mut self, template: &Template, bindings: &[(String, Binding)]) -> Vec<Line> {
+    /// `index` is the 1-based repetition index for this copy; it renders
+    /// [`Span::RepeatIndex`] and replaces `${i}` in argument values and
+    /// placeholder defaults. Every unbound parameter and every template-local
+    /// tabstop index gets a fresh identity on first occurrence; repeats become
+    /// mirrors.
+    fn instantiate(
+        &mut self,
+        template: &Template,
+        bindings: &[(String, Binding)],
+        index: u32,
+    ) -> Vec<Line> {
         let mut param_ids: HashMap<&str, StopId> = HashMap::new();
         let mut index_ids: HashMap<u32, StopId> = HashMap::new();
 
@@ -271,16 +280,22 @@ impl Composer<'_> {
             for span in &ir_line.spans {
                 spans.push(match span {
                     Span::Text(t) => CSpan::Text(t.clone()),
-                    Span::Param { name } => self.instantiate_param(name, bindings, &mut param_ids),
-                    Span::Tabstop { index, placeholder } => {
-                        if let Some(&id) = index_ids.get(index) {
+                    Span::Param { name } => {
+                        self.instantiate_param(name, bindings, index, &mut param_ids)
+                    }
+                    Span::Tabstop {
+                        index: ti,
+                        placeholder,
+                    } => {
+                        if let Some(&id) = index_ids.get(ti) {
                             CSpan::Stop { id, mirror: true }
                         } else {
                             let id = self.alloc(placeholder.clone());
-                            index_ids.insert(*index, id);
+                            index_ids.insert(*ti, id);
                             CSpan::Stop { id, mirror: false }
                         }
                     }
+                    Span::RepeatIndex => CSpan::Text(index.to_string()),
                     Span::ChildSlot => CSpan::Slot,
                     Span::FinalCursor => CSpan::Final,
                 });
@@ -293,21 +308,24 @@ impl Composer<'_> {
         lines
     }
 
-    /// Instantiate one `${name}` reference.
+    /// Instantiate one `${name}` reference for copy `index`.
     fn instantiate_param<'b>(
         &mut self,
         name: &'b str,
         bindings: &[(String, Binding)],
+        index: u32,
         param_ids: &mut HashMap<&'b str, StopId>,
     ) -> CSpan {
         let binding = bindings.iter().find(|(n, _)| n == name).map(|(_, b)| b);
         match binding {
-            Some(Binding::Bound(value)) => CSpan::Text(value.clone()),
+            Some(Binding::Bound(value)) => CSpan::Text(sub_repeat_index(value, index)),
             other => {
                 // `None` means the body references an undeclared name; treat
                 // it as a free parameter with no default.
                 let default = match other {
-                    Some(Binding::Free { default }) => default.clone(),
+                    Some(Binding::Free { default }) => {
+                        default.as_deref().map(|d| sub_repeat_index(d, index))
+                    }
                     _ => None,
                 };
                 if let Some(&id) = param_ids.get(name) {
@@ -319,6 +337,18 @@ impl Composer<'_> {
                 }
             }
         }
+    }
+}
+
+/// Replace the repetition-index variable `${i}` in `text` with `index`.
+///
+/// A no-op (cheap clone) when `${i}` is absent, so it is safe to call on every
+/// argument value.
+fn sub_repeat_index(text: &str, index: u32) -> String {
+    if text.contains("${i}") {
+        text.replace("${i}", &index.to_string())
+    } else {
+        text.to_owned()
     }
 }
 
@@ -873,6 +903,7 @@ mod tests {
                 vec![param("name", ParamKind::Ident, None)],
                 "let ${name} = $1;\n",
             ),
+            snip("field", vec![], "field${i}: ${1:Type},\n"),
             snip("cash", vec![], "let x = \"\\$\";$0\n"),
             snip("ph", vec![], "${1:a\\}b}$0\n"),
             snip("gap", vec![], "a();$1\n\nb();$0\n"),
@@ -902,6 +933,30 @@ mod tests {
         assert_eq!(e.body, "println!(\"$0\");");
         assert!(e.is_snippet);
         assert_eq!(e.cursor, None);
+    }
+
+    #[test]
+    fn repeat_index_in_body_numbers_each_copy() {
+        // `${i}` renders the 1-based copy index; tabstops still renumber
+        // globally and independently per copy.
+        let e = expand("field*3", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "field1: ${1:Type},\nfield2: ${2:Type},\nfield3: ${3:Type},$0"
+        );
+    }
+
+    #[test]
+    fn repeat_index_without_repeat_is_one() {
+        let e = expand("field", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "field1: Type,");
+    }
+
+    #[test]
+    fn repeat_index_substitutes_into_argument_values() {
+        // `${i}` inside an explicit argument is replaced per copy.
+        let e = expand("let:x${i}*3", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "let x1 = ;\nlet x2 = ;\nlet x3 = ;");
     }
 
     #[test]

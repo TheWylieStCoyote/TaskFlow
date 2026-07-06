@@ -125,6 +125,37 @@ match cmd {
 You can repeat a whole group too: `(fori10>pr)*2` produces two copies of the
 loop-with-body. Repeat counts are capped, so very large repeats are rejected.
 
+#### The repetition index `${i}`
+
+Within a repeated node, the variable `${i}` expands to the **1-based copy
+number** — `1`, `2`, `3`, and so on (and just `1` when the node is not
+repeated). It works both inside an explicit argument and inside a snippet
+body. For example, `test:case${i}*3` names three test functions in order:
+
+```sh
+codemmet expand --lang rust "test:case${i}*3"
+```
+
+```rust
+#[test]
+fn case1() {
+    
+}
+#[test]
+fn case2() {
+    
+}
+#[test]
+fn case3() {
+    
+}
+```
+
+Snippet authors can use `${i}` directly in a body (see [custom
+snippets](snippets.md)); `i` is a reserved parameter name because of it. The
+index tracks each node's own repeat, so it applies to `node*n`, not to a
+group written as `(...)*n`.
+
 ### `^` — climb-up
 
 A caret ends the current nesting level and attaches what follows one level

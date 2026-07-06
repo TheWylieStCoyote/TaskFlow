@@ -263,6 +263,11 @@ fn compile_snippet(
 
     let mut declared = BTreeSet::new();
     for param in &def.params {
+        if param.name == "i" {
+            return Err(invalid(
+                "parameter name `i` is reserved for the repetition index `${i}`".to_owned(),
+            ));
+        }
         if !declared.insert(param.name.as_str()) {
             return Err(invalid(format!("duplicate parameter `{}`", param.name)));
         }
@@ -464,6 +469,23 @@ mod tests {
         match err {
             ConfigError::Invalid { message, .. } => {
                 assert_eq!(message, "duplicate parameter `msg`");
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn param_named_i_is_reserved() {
+        let err = compile_err(
+            "user",
+            "[meta]\nlanguage = \"rust\"\n[snippets.f]\nparams = [{ name = \"i\" }]\nbody = \"f${i}\"\n",
+        );
+        match err {
+            ConfigError::Invalid { message, .. } => {
+                assert!(
+                    message.contains("reserved for the repetition index"),
+                    "{message}"
+                );
             }
             other => panic!("expected Invalid, got {other:?}"),
         }

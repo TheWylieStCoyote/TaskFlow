@@ -198,12 +198,16 @@ placeholder (see the tabstops section below).
 
 ## Body syntax
 
-A body is LSP snippet syntax plus two codemmet extensions.
+A body is LSP snippet syntax plus three codemmet extensions.
 
 - `${name}` inserts the value of a declared parameter. Every `${name}` in a
   body must reference a declared parameter, or `check` fails.
 - `${child}` marks where content nested under this trigger with `>` is placed.
   A body may contain **at most one** `${child}`.
+- `${i}` is the **repetition index**: the 1-based copy number when the trigger
+  is repeated with `*n` (and `1` otherwise). A body of `field${i}: ${1:Type},`
+  expanded with `field*3` yields `field1:`, `field2:`, `field3:`. `i` is a
+  reserved parameter name because of this.
 - `$1`, `$2`, ... are ordered **tabstops** an editor jumps between with Tab.
 - `${1:placeholder}` is a tabstop with default text.
 - `$0` is the final cursor position.

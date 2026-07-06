@@ -187,11 +187,16 @@ All milestones (M0–M4) plus the post-M4 hardening above are complete: seven
 languages, ~250 built-in triggers, a CLI, an LSP server, a Neovim plugin, and
 full user documentation under `docs/`.
 
+Repetition index variables shipped: `${i}` renders the 1-based copy number of
+the enclosing repeated node, both in snippet bodies and in argument values
+(e.g. `test:case${i}*3` → `case1`/`case2`/`case3`). It is a `RepeatIndex` span
+in the IR; `i` is a reserved parameter name. Group-repeat (`(...)*n`) is
+distributed at parse time, so the index applies to `node*n`, not to a group.
+
 Deferred features (not built): project-local snippet packs
-(`.codemmet/snippets/`), repetition index variables (`${i}` in `*n`), a
-packaged VS Code extension (codemmet works there via generic LSP today), and a
-cross-language `base.toml` pack (per-language packs read better; likely
-dropped rather than built).
+(`.codemmet/snippets/`), a packaged VS Code extension (codemmet works there via
+generic LSP today), and a cross-language `base.toml` pack (per-language packs
+read better; likely dropped rather than built).
 
 Deferred performance work (intentionally left at "M3 scale is fine"): the LSP
 server re-parses the whole buffer per edit rather than using tree-sitter

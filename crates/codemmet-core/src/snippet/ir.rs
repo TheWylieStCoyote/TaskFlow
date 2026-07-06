@@ -44,6 +44,11 @@ pub enum Span {
         /// The parameter name; must exist in the snippet's `params` list.
         name: String,
     },
+    /// `${i}`: the 1-based repetition index of the enclosing node.
+    ///
+    /// Renders the copy number when the node is repeated with `*n` (`1`, `2`,
+    /// …), and `1` when the node is not repeated.
+    RepeatIndex,
     /// `${child}`: where `>`-nested children render, one indent level deeper.
     ///
     /// At most one per template. For a leaf node this degrades to the final

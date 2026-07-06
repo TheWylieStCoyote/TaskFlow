@@ -80,7 +80,8 @@ pub fn render(
     ctx: &ExpansionContext,
     mode: TabstopMode,
 ) -> Result<Expansion, RenderError> {
-    let (lines, placeholders) = compose(abbr, set, ctx)?;
+    // Normal expansion: a leaf's `${child}` slot degrades to the final cursor.
+    let (lines, placeholders) = compose(abbr, set, ctx, false)?;
     let lines = renumber(lines, &placeholders);
     Ok(materialize(&lines, ctx, mode))
 }
@@ -109,23 +110,31 @@ pub fn render_with_selection(
     mode: TabstopMode,
     selection: &str,
 ) -> Result<Expansion, RenderError> {
-    let (lines, placeholders) = compose(abbr, set, ctx)?;
+    // Keep the `${child}` slot so the selection injects into the construct's
+    // body (e.g. a `try` body, not its `except` clause where `$0` sits).
+    let (lines, placeholders) = compose(abbr, set, ctx, true)?;
     let lines = inject_selection(lines, selection);
     let lines = renumber(lines, &placeholders);
     Ok(materialize(&lines, ctx, mode))
 }
 
 /// Compose an abbreviation into the line IR plus its placeholder table.
+///
+/// `keep_child_slot` leaves a leaf node's `${child}` slot in place instead of
+/// degrading it to a final cursor; wrap uses this so the selection can be
+/// injected into the body slot.
 fn compose(
     abbr: &Abbreviation,
     set: &SnippetSet,
     ctx: &ExpansionContext,
+    keep_child_slot: bool,
 ) -> Result<(Vec<Line>, Vec<Option<String>>), RenderError> {
     let mut composer = Composer {
         set,
         raw_node_kinds: &ctx.raw_node_kinds,
         placeholders: Vec::new(),
         composed_lines: 0,
+        keep_child_slot,
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -188,6 +197,9 @@ struct Composer<'a> {
     /// [`MAX_COMPOSED_LINES`]. Splicing only ever merges lines, so this is
     /// an upper bound on the final line count.
     composed_lines: usize,
+    /// Keep a leaf's `${child}` slot instead of degrading it to a final
+    /// cursor (wrap injects the selection into that slot).
+    keep_child_slot: bool,
 }
 
 impl Composer<'_> {
@@ -234,11 +246,14 @@ impl Composer<'_> {
                 });
             }
             if node.children.is_empty() {
-                // A leaf's child slot degrades to a final-cursor candidate.
-                for line in &mut lines {
-                    for span in &mut line.spans {
-                        if matches!(span, CSpan::Slot) {
-                            *span = CSpan::Final;
+                // A leaf's child slot degrades to a final-cursor candidate —
+                // unless we're keeping it for a wrap injection.
+                if !self.keep_child_slot {
+                    for line in &mut lines {
+                        for span in &mut line.spans {
+                            if matches!(span, CSpan::Slot) {
+                                *span = CSpan::Final;
+                            }
                         }
                     }
                 }
@@ -422,40 +437,51 @@ fn splice_children(mut lines: Vec<Line>, mut children: Vec<Line>) -> Vec<Line> {
     lines
 }
 
-/// Replace the surviving final-cursor candidate with the dedented selection
-/// followed by a fresh final cursor.
+/// Replace the injection point with the dedented selection followed by a fresh
+/// final cursor.
 ///
-/// The injection point is the last [`CSpan::Final`] in document order — the
-/// exact occurrence [`renumber`] would keep as `$0` — or, when none exists,
-/// the end of the last line (mirroring `renumber`'s append fallback). The
-/// selection's first line splices inline between the spans surrounding the
-/// injection point; subsequent lines become new [`Line`]s at the injection
-/// line's depth, with blank selection lines as empty-span (truly blank)
-/// lines.
+/// The injection point is the first [`CSpan::Slot`] (the construct's `${child}`
+/// body, so the selection lands there — e.g. a `try` body rather than its
+/// `except` clause), else the last [`CSpan::Final`] in document order (the `$0`
+/// [`renumber`] would keep), else the end of the last line. The selection's
+/// first line splices inline between the spans surrounding the injection point;
+/// subsequent lines become new [`Line`]s at the injection line's depth, with
+/// blank selection lines as empty-span (truly blank) lines.
 fn inject_selection(mut lines: Vec<Line>, selection: &str) -> Vec<Line> {
-    let target = lines.iter().enumerate().rev().find_map(|(li, line)| {
+    let slot = lines.iter().enumerate().find_map(|(li, line)| {
         line.spans
             .iter()
-            .rposition(|s| matches!(s, CSpan::Final))
-            .map(|si| (li, si, true))
+            .position(|s| matches!(s, CSpan::Slot))
+            .map(|si| (li, si))
     });
-    let (li, si, had_final) = target.unwrap_or_else(|| {
-        if lines.is_empty() {
-            lines.push(Line {
-                depth: 0,
-                spans: Vec::new(),
-            });
-        }
-        let li = lines.len() - 1;
-        (li, lines[li].spans.len(), false)
+    let target = slot.or_else(|| {
+        lines.iter().enumerate().rev().find_map(|(li, line)| {
+            line.spans
+                .iter()
+                .rposition(|s| matches!(s, CSpan::Final))
+                .map(|si| (li, si))
+        })
     });
+    let (li, si, replace) = target.map_or_else(
+        || {
+            if lines.is_empty() {
+                lines.push(Line {
+                    depth: 0,
+                    spans: Vec::new(),
+                });
+            }
+            let li = lines.len() - 1;
+            (li, lines[li].spans.len(), false)
+        },
+        |(li, si)| (li, si, true),
+    );
 
     let line = lines.remove(li);
     let depth = line.depth;
     let mut spans = line.spans;
-    let suffix = spans.split_off(si + usize::from(had_final));
-    if had_final {
-        spans.pop(); // the final cursor being replaced
+    let suffix = spans.split_off(si + usize::from(replace));
+    if replace {
+        spans.pop(); // the slot or final cursor being replaced
     }
 
     let dedented = dedent(selection);
@@ -909,6 +935,9 @@ mod tests {
             snip("gap", vec![], "a();$1\n\nb();$0\n"),
             snip("stmt", vec![], "stmt();\n"),
             snip("wrap", vec![], "do(${child});\n"),
+            // A construct with both a `${child}` body and a later `$0` (like a
+            // try/catch): wrap should target the child body, not `$0`.
+            snip("tc", vec![], "try {\n\t${child}\n} catch {\n\t$0\n}\n"),
         ])
     }
 
@@ -1334,6 +1363,15 @@ mod tests {
                 character: 18
             })
         );
+    }
+
+    #[test]
+    fn wrap_injects_into_child_body_not_the_final_cursor() {
+        // `tc` has a `${child}` body and a separate `$0` (in the catch). The
+        // selection must land in the body; `$0` stays in the catch.
+        let e = wrap_expand("tc", "risky();", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "try {\n    risky();$1\n} catch {\n    $0\n}");
+        assert!(e.is_snippet);
     }
 
     #[test]

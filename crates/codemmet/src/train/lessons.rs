@@ -2,10 +2,11 @@
 //!
 //! Guided lessons draw from a curated, deliberately-ordered set of
 //! abbreviations per level so the experience is stable and pedagogical, unlike
-//! the randomized drills. Only languages with a curated set get one; others
-//! fall back to generated exercises. Every abbreviation here is rendered
-//! through the real engine (and a test asserts each one renders), so curated
-//! content can never drift from actual behavior.
+//! the randomized drills. Each supported language has its own progression,
+//! keyed by canonical language id (the trainer normalizes aliases before
+//! looking up). Every abbreviation here is rendered through the real engine
+//! (and a test asserts each one renders), so curated content can never drift
+//! from actual behavior.
 
 use super::exercise::Level;
 
@@ -13,9 +14,31 @@ use super::exercise::Level;
 /// Empty when the language has no curated progression (falls back to generated).
 #[must_use]
 pub fn curated(language: &str, level: Level) -> &'static [&'static str] {
-    if language != "rust" {
-        return &[];
+    match language {
+        "rust" => rust(level),
+        "python" => python(level),
+        "c" => c(level),
+        "cpp" => cpp(level),
+        "javascript" => javascript(level),
+        "typescript" => typescript(level),
+        "go" => go(level),
+        _ => &[],
     }
+}
+
+/// Every language id that ships a curated progression.
+#[cfg(test)]
+const CURATED_LANGUAGES: &[&str] = &[
+    "rust",
+    "python",
+    "c",
+    "cpp",
+    "javascript",
+    "typescript",
+    "go",
+];
+
+const fn rust(level: Level) -> &'static [&'static str] {
     match level {
         Level::SingleTrigger => &["pr", "ret", "vec", "main", "derive"],
         Level::Arguments => &[
@@ -33,6 +56,93 @@ pub fn curated(language: &str, level: Level) -> &'static [&'static str] {
     }
 }
 
+const fn python(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "main"],
+        Level::Arguments => &["def:greet", "class:Widget", "fori:i,10"],
+        Level::Nesting => &["def:main>pr", "fori:i,10>pr", "if>ret", "while>pr"],
+        Level::Siblings => &["pr+ret", "def:a+def:b"],
+        Level::Repeat => &["pr*3", "def:main>pr*3"],
+        Level::ClimbUp => &["def:main>fori:i,10>pr^ret", "def:run>if>pr^ret"],
+        Level::Grouping => &["(def:main>pr)+def:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
+const fn c(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "main"],
+        Level::Arguments => &["fn:compute", "struct:Point", "fori:i,10"],
+        Level::Nesting => &["fn:main>pr", "fori:i,10>pr", "if>ret", "while>pr"],
+        Level::Siblings => &["pr+ret", "fn:a+fn:b"],
+        Level::Repeat => &["pr*3", "fn:main>pr*3"],
+        Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
+        Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
+const fn cpp(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "main"],
+        Level::Arguments => &["fn:compute", "class:Widget", "fori:i,10", "ns:app"],
+        Level::Nesting => &[
+            "fn:main>pr",
+            "fori:i,10>pr",
+            "if>ret",
+            "class:Widget>fn:run",
+        ],
+        Level::Siblings => &["pr+ret", "fn:a+fn:b"],
+        Level::Repeat => &["pr*3", "fn:main>pr*3"],
+        Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
+        Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
+const fn javascript(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "arrow"],
+        Level::Arguments => &["fn:greet", "class:Widget", "fori:i,10"],
+        Level::Nesting => &[
+            "fn:main>pr",
+            "fori:i,10>pr",
+            "if>ret",
+            "class:Widget>fn:run",
+        ],
+        Level::Siblings => &["pr+ret", "fn:a+fn:b"],
+        Level::Repeat => &["pr*3", "fn:main>pr*3"],
+        Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
+        Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
+const fn typescript(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "arrow"],
+        Level::Arguments => &["fn:greet", "class:Widget", "fori:i,10", "int:Shape"],
+        Level::Nesting => &[
+            "fn:main>pr",
+            "fori:i,10>pr",
+            "if>ret",
+            "class:Widget>fn:run",
+        ],
+        Level::Siblings => &["pr+ret", "fn:a+fn:b"],
+        Level::Repeat => &["pr*3", "fn:main>pr*3"],
+        Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
+        Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
+const fn go(level: Level) -> &'static [&'static str] {
+    match level {
+        Level::SingleTrigger => &["pr", "ret", "todo", "main"],
+        Level::Arguments => &["fn:run", "struct:Point", "fori:i,10", "iface:Shape"],
+        Level::Nesting => &["fn:main>pr", "fori:i,10>pr", "if>ret", "for>pr"],
+        Level::Siblings => &["pr+ret", "fn:a+fn:b"],
+        Level::Repeat => &["pr*3", "fn:main>pr*3"],
+        Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
+        Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -42,19 +152,28 @@ mod tests {
     use codemmet_core::snippet::render::TabstopMode;
 
     #[test]
-    fn every_curated_rust_abbreviation_renders() {
+    fn every_curated_abbreviation_renders() {
         let engine = Engine::with_registry(Registry::with_builtins().expect("builtins"));
         let ctx = ExpansionContext::plain(String::new(), IndentUnit::Spaces(4));
-        for level in Level::ALL {
-            for abbr in curated("rust", level) {
-                let body = engine
-                    .expand(abbr, "rust", &ctx, TabstopMode::Strip)
-                    .unwrap_or_else(|err| panic!("curated `{abbr}` ({level:?}) failed: {err}"))
-                    .body;
+        for language in CURATED_LANGUAGES {
+            for level in Level::ALL {
+                let set = curated(language, level);
                 assert!(
-                    !body.trim().is_empty(),
-                    "curated `{abbr}` ({level:?}) rendered empty",
+                    !set.is_empty(),
+                    "{language} has no curated set for {level:?}",
                 );
+                for abbr in set {
+                    let body = engine
+                        .expand(abbr, language, &ctx, TabstopMode::Strip)
+                        .unwrap_or_else(|err| {
+                            panic!("curated `{abbr}` ({language}, {level:?}) failed: {err}")
+                        })
+                        .body;
+                    assert!(
+                        !body.trim().is_empty(),
+                        "curated `{abbr}` ({language}, {level:?}) rendered empty",
+                    );
+                }
             }
         }
     }
@@ -62,6 +181,6 @@ mod tests {
     #[test]
     fn unknown_language_has_no_curated_set() {
         assert!(curated("cobol", Level::SingleTrigger).is_empty());
-        assert!(curated("python", Level::Nesting).is_empty());
+        assert!(curated("fortran", Level::Nesting).is_empty());
     }
 }

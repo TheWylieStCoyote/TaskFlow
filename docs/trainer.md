@@ -112,12 +112,20 @@ progress reset (/home/you/.local/share/codemmet/trainer.json)
 
 ## Languages
 
-Guided lessons ship a hand-authored progression for **Rust**. Every other
-language still works in all modes — lessons, drills, review, and sandbox — using
-exercises generated from that language's snippet pack. Whichever triggers are
-configured (built-ins plus your own [custom snippets](snippets.md) and
-project-local packs) are fair game, so the trainer teaches the vocabulary you
-actually have.
+Guided lessons ship a hand-authored progression for every built-in language —
+Rust, Python, C, C++, JavaScript, TypeScript, and Go — each taught in the same
+level order but using that language's own triggers and idioms. Pick one with
+`--lang` (a language id or a file extension like `py` or `ts`):
+
+```console
+$ codemmet train --lang go
+$ codemmet train --lang ts --mode drills
+```
+
+Drills, review, and sandbox work for any configured language, using exercises
+generated from its snippet pack. Whichever triggers are configured — built-ins
+plus your own [custom snippets](snippets.md) and project-local packs — are fair
+game, so the trainer also teaches the vocabulary you have added yourself.
 
 ## Reproducible sessions
 

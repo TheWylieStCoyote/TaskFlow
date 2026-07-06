@@ -191,10 +191,13 @@ to `deny.toml`'s allowances if not already covered.
   clock, save/load round-trips, and per-mode state-machine flows (drills never
   self-terminate, review drains its queue then finishes, sandbox logs
   expansions), plus binary-level runs of every mode.
-- **T4 — content + polish ✅ (done):** a hand-authored Rust lesson progression
-  (`lessons.rs`) — a curated, ordered set of abbreviations per level, with a
-  test that renders every one so curated content can't drift; other languages
-  fall back to generated exercises. Multiple-choice decoys are now near-misses:
+- **T4 — content + polish ✅ (done):** hand-authored lesson progressions
+  (`lessons.rs`) for all seven built-in languages — Rust, Python, C, C++,
+  JavaScript, TypeScript, and Go — each a curated, ordered set of abbreviations
+  per level, with a test that renders every one across every language so curated
+  content can't drift. The trainer normalizes the language alias (e.g. `js` →
+  `javascript`) before the curated lookup; languages without a set fall back to
+  generated exercises. Multiple-choice decoys are now near-misses:
   a swapped operator (`>`→`+`) or a same-class sibling trigger, topped up with
   generated distractors only if needed. A `docs/trainer.md` user guide (modes,
   keys, spaced repetition, progress files, language coverage) is linked from the

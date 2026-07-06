@@ -184,6 +184,12 @@ impl<'a> Trainer<'a> {
             seed,
             now,
         } = config;
+        // Normalize to the canonical language id (e.g. `js` -> `javascript`) so
+        // curated lessons are found regardless of the alias the user typed.
+        let language = engine
+            .registry()
+            .language(&language)
+            .map_or(language, |lang| lang.profile.id.to_string());
         let levels = level.map_or_else(|| Level::ALL.to_vec(), |l| vec![l]);
         let mut trainer = Self {
             engine,

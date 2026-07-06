@@ -11,6 +11,7 @@ The available subcommands are:
 | `list` | List every trigger registered for a language. |
 | `check` | Validate the user snippet override directory. |
 | `lsp` | Run the Language Server Protocol server over standard input and output. |
+| `train` | Practice the abbreviation syntax interactively. See the [trainer guide](trainer.md). |
 
 Every command accepts `-h` or `--help`. The top-level command also reports its
 version two ways: `-V` prints the short version (`codemmet 0.1.0`), and

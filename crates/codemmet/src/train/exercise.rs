@@ -363,43 +363,69 @@ impl Gen<'_> {
         }
     }
 
-    /// Distinct multi-line decoy expansions at `level` that differ from `target`.
-    fn decoys(&self, vocab: &Vocab, level: Level, target: &str, rng: &mut Rng) -> Vec<String> {
+    /// Try to add `body` as a decoy if it is a distinct multi-line expansion
+    /// other than `target`. Returns whether the pool is now full.
+    fn take_decoy(decoys: &mut Vec<String>, body: String, target: &str) -> bool {
+        if body.contains('\n') && body != target && !decoys.contains(&body) {
+            decoys.push(body);
+        }
+        decoys.len() >= DECOY_TARGET
+    }
+
+    /// Distinct multi-line decoys for `target`, preferring near-misses: small
+    /// perturbations of `abbr` (swapped operator, swapped sibling trigger),
+    /// then random same-level exercises to top up.
+    fn decoys(
+        &self,
+        vocab: &Vocab,
+        level: Level,
+        abbr: &str,
+        target: &str,
+        rng: &mut Rng,
+    ) -> Vec<String> {
         let mut decoys: Vec<String> = Vec::new();
-        for _ in 0..DECOY_ATTEMPTS {
-            if decoys.len() >= DECOY_TARGET {
-                break;
+        for candidate in perturbations(vocab, abbr, rng) {
+            if let Some(body) = self.render(&candidate)
+                && Self::take_decoy(&mut decoys, body, target)
+            {
+                return decoys;
             }
-            let Some((abbr, _)) = compose(vocab, level, rng) else {
+        }
+        for _ in 0..DECOY_ATTEMPTS {
+            let Some((candidate, _)) = compose(vocab, level, rng) else {
                 continue;
             };
-            let Some(body) = self.render(&abbr) else {
-                continue;
-            };
-            if body.contains('\n') && body != target && !decoys.contains(&body) {
-                decoys.push(body);
+            if let Some(body) = self.render(&candidate)
+                && Self::take_decoy(&mut decoys, body, target)
+            {
+                break;
             }
         }
         decoys
     }
 
-    /// Assemble a finished exercise, choosing the direction and (for multi-line
-    /// forward exercises) building the multiple-choice options.
+    /// Assemble a finished exercise from a rendered `draft`. `want` forces the
+    /// direction when set, otherwise it is chosen at random. Multi-line forward
+    /// exercises are multiple choice; a single-line target is free-typed; a
+    /// multi-line target with no distinct decoys falls back to reverse rather
+    /// than asking for many typed lines.
     fn finish(
         &self,
         vocab: &Vocab,
-        level: Level,
-        abbr: String,
-        target: String,
-        concepts: Vec<Concept>,
+        draft: Draft,
+        want: Option<Direction>,
         rng: &mut Rng,
     ) -> Exercise {
-        // Forward multi-line exercises are multiple choice; a single-line target
-        // is free-typed. A multi-line target with no distinct decoys falls back
-        // to a reverse exercise rather than asking for many typed lines.
-        let (direction, choices, answer_index) = if rng.coin() {
+        let Draft {
+            level,
+            abbr,
+            target,
+            concepts,
+        } = draft;
+        let forward = want.map_or_else(|| rng.coin(), |d| d == Direction::Forward);
+        let (direction, choices, answer_index) = if forward {
             if target.contains('\n') {
-                let decoys = self.decoys(vocab, level, &target, rng);
+                let decoys = self.decoys(vocab, level, &abbr, &target, rng);
                 if decoys.is_empty() {
                     (Direction::Reverse, Vec::new(), 0)
                 } else {
@@ -423,6 +449,14 @@ impl Gen<'_> {
             concepts,
         }
     }
+}
+
+/// A rendered exercise awaiting a direction and (maybe) multiple-choice options.
+struct Draft {
+    level: Level,
+    abbr: String,
+    target: String,
+    concepts: Vec<Concept>,
 }
 
 /// Shuffle `target` in among `decoys`, returning the options and the target's
@@ -461,7 +495,13 @@ pub fn generate(
         if let Some((abbr, concepts)) = compose(&vocab, level, rng)
             && let Some(target) = generator.render(&abbr)
         {
-            return Some(generator.finish(&vocab, level, abbr, target, concepts, rng));
+            let draft = Draft {
+                level,
+                abbr,
+                target,
+                concepts,
+            };
+            return Some(generator.finish(&vocab, draft, None, rng));
         }
     }
 
@@ -469,17 +509,108 @@ pub fn generate(
     // stalls even for a sparse pack.
     for s in &vocab.no_param {
         if let Some(target) = generator.render(&s.trigger) {
-            return Some(generator.finish(
-                &vocab,
-                Level::SingleTrigger,
-                s.trigger.clone(),
+            let draft = Draft {
+                level: Level::SingleTrigger,
+                abbr: s.trigger.clone(),
                 target,
-                vec![Concept::Trigger(s.trigger.clone())],
-                rng,
-            ));
+                concepts: vec![Concept::Trigger(s.trigger.clone())],
+            };
+            return Some(generator.finish(&vocab, draft, None, rng));
         }
     }
     None
+}
+
+/// Candidate near-miss abbreviations derived from `abbr`: swap one operator, or
+/// swap the leading trigger for a same-class sibling.
+fn perturbations(vocab: &Vocab, abbr: &str, rng: &mut Rng) -> Vec<String> {
+    let mut out = Vec::new();
+    for (from, to) in [('>', '+'), ('+', '>'), ('^', '>'), ('>', '^')] {
+        if abbr.contains(from) {
+            out.push(abbr.replacen(from, &to.to_string(), 1));
+        }
+    }
+    if let Some(swapped) = swap_leading_trigger(vocab, abbr, rng) {
+        out.push(swapped);
+    }
+    out
+}
+
+/// Replace the first element's trigger with a random same-class sibling,
+/// dropping that element's arguments. `None` if there is no sibling to use.
+fn swap_leading_trigger(vocab: &Vocab, abbr: &str, rng: &mut Rng) -> Option<String> {
+    let boundary = abbr
+        .find(['>', '+', '^', '*', '(', ')'])
+        .unwrap_or(abbr.len());
+    let (head, rest) = abbr.split_at(boundary);
+    let word_end = head.find([':', ',']).unwrap_or(head.len());
+    let word = &head[..word_end];
+    let is_block = vocab.blocks.iter().any(|s| s.trigger == word);
+    let pool = if is_block {
+        &vocab.blocks
+    } else {
+        &vocab.leaves
+    };
+    let sibling = rng.choice(pool)?;
+    if sibling.trigger == word {
+        return None;
+    }
+    Some(format!("{}{rest}", sibling.trigger))
+}
+
+/// Build an exercise from a specific, hand-authored abbreviation (curated
+/// lessons). `want` forces the direction; `None` lets it vary by seed. Returns
+/// `None` if the abbreviation does not render for `language`.
+#[must_use]
+pub fn from_abbreviation(
+    engine: &Engine,
+    language: &str,
+    level: Level,
+    abbr: &str,
+    want: Option<Direction>,
+    ctx: &ExpansionContext,
+    rng: &mut Rng,
+) -> Option<Exercise> {
+    let set = &engine.registry().language(language)?.set;
+    let vocab = Vocab::from_set(set);
+    let generator = Gen {
+        engine,
+        language,
+        ctx,
+    };
+    let target = generator.render(abbr)?;
+    let concepts = concepts_in(abbr, set);
+    let draft = Draft {
+        level,
+        abbr: abbr.to_string(),
+        target,
+        concepts,
+    };
+    Some(generator.finish(&vocab, draft, want, rng))
+}
+
+/// The concepts an abbreviation touches: the leading trigger of each element
+/// (arguments excluded) plus the composition operators present.
+fn concepts_in(abbr: &str, set: &SnippetSet) -> Vec<Concept> {
+    let mut concepts = Vec::new();
+    for element in abbr.split(|c: char| "><+*^()".contains(c)) {
+        let word = element.trim().split([':', ',', ' ']).next().unwrap_or("");
+        if word.is_empty() {
+            continue;
+        }
+        if let Some((snippet, _)) = set.resolve_word(word) {
+            let concept = Concept::Trigger(snippet.trigger.clone());
+            if !concepts.contains(&concept) {
+                concepts.push(concept);
+            }
+        }
+    }
+    for op in ['>', '+', '*', '^', '('] {
+        if abbr.contains(op) {
+            concepts.push(Concept::Operator(op));
+        }
+    }
+    concepts
 }
 
 /// Generate an exercise that drills a specific concept (for spaced repetition).
@@ -515,7 +646,13 @@ pub fn generate_for_concept(
     } else {
         Level::Arguments
     };
-    Some(generator.finish(&vocab, level, abbr, target, concepts, rng))
+    let draft = Draft {
+        level,
+        abbr,
+        target,
+        concepts,
+    };
+    Some(generator.finish(&vocab, draft, None, rng))
 }
 
 #[cfg(test)]

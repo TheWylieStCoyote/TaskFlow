@@ -16,6 +16,7 @@
 mod exercise;
 mod grade;
 mod hint;
+mod lessons;
 mod progress;
 mod review;
 mod rng;

@@ -191,9 +191,14 @@ to `deny.toml`'s allowances if not already covered.
   clock, save/load round-trips, and per-mode state-machine flows (drills never
   self-terminate, review drains its queue then finishes, sandbox logs
   expansions), plus binary-level runs of every mode.
-- **T4 — content + polish:** hand-authored lesson progression, decoy tuning,
-  a `docs/trainer.md` user guide linked from the docs index, and a note in
-  `PLAN.md`.
+- **T4 — content + polish ✅ (done):** a hand-authored Rust lesson progression
+  (`lessons.rs`) — a curated, ordered set of abbreviations per level, with a
+  test that renders every one so curated content can't drift; other languages
+  fall back to generated exercises. Multiple-choice decoys are now near-misses:
+  a swapped operator (`>`→`+`) or a same-class sibling trigger, topped up with
+  generated distractors only if needed. A `docs/trainer.md` user guide (modes,
+  keys, spaced repetition, progress files, language coverage) is linked from the
+  docs index and CLI reference, and `PLAN.md` notes the trainer.
 
 ## Testing
 

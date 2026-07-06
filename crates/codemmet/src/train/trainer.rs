@@ -13,9 +13,12 @@ use codemmet_core::context::{ExpansionContext, IndentUnit};
 use codemmet_core::engine::Engine;
 use codemmet_core::snippet::render::TabstopMode;
 
-use super::exercise::{Concept, Direction, Exercise, Level, generate, generate_for_concept};
+use super::exercise::{
+    Concept, Direction, Exercise, Level, from_abbreviation, generate, generate_for_concept,
+};
 use super::grade::{Outcome, grade_forward_choice, grade_forward_free, grade_reverse};
 use super::hint::hints;
+use super::lessons;
 use super::review::ReviewState;
 use super::rng::Rng;
 
@@ -139,8 +142,6 @@ pub struct Trainer<'a> {
 
     /// Levels this run may draw from (one when focused, else all).
     levels: Vec<Level>,
-    /// Exercises per level in lessons mode.
-    per_level: u32,
     /// Index into `levels` (lessons progression).
     level_idx: usize,
     /// Exercises completed at the current level (lessons).
@@ -192,7 +193,6 @@ impl<'a> Trainer<'a> {
             mode,
             now,
             levels,
-            per_level: DEFAULT_PER_LEVEL,
             level_idx: 0,
             done_in_level: 0,
             completed: BTreeSet::new(),
@@ -320,10 +320,28 @@ impl<'a> Trainer<'a> {
     #[must_use]
     pub fn header_note(&self) -> String {
         match self.mode {
-            Mode::Lessons => format!("exercise {}/{}", self.done_in_level + 1, self.per_level),
+            Mode::Lessons => {
+                format!(
+                    "exercise {}/{}",
+                    self.done_in_level + 1,
+                    self.level_target()
+                )
+            }
             Mode::Drills => format!("drill #{}", self.stats.presented.max(1)),
             Mode::Review => format!("review — {} left", self.review_queue.len() + 1),
             Mode::Sandbox => "sandbox".to_string(),
+        }
+    }
+
+    /// How many exercises the current lesson level presents: the size of its
+    /// curated set, or [`DEFAULT_PER_LEVEL`] when there is none.
+    fn level_target(&self) -> u32 {
+        let level = self.levels[self.level_idx.min(self.levels.len() - 1)];
+        let curated = lessons::curated(&self.language, level).len();
+        if curated == 0 {
+            DEFAULT_PER_LEVEL
+        } else {
+            u32::try_from(curated).unwrap_or(DEFAULT_PER_LEVEL)
         }
     }
 
@@ -519,7 +537,7 @@ impl<'a> Trainer<'a> {
         // In lessons, count the finished exercise and roll levels over.
         if self.mode == Mode::Lessons && matches!(self.phase, Phase::Feedback(_)) {
             self.done_in_level += 1;
-            if self.done_in_level >= self.per_level {
+            if self.done_in_level >= self.level_target() {
                 self.completed.insert(self.levels[self.level_idx].number());
                 self.level_idx += 1;
                 self.done_in_level = 0;
@@ -537,7 +555,8 @@ impl<'a> Trainer<'a> {
     /// Generate and present the next exercise for the mode.
     fn start_exercise(&mut self) {
         let exercise = match self.mode {
-            Mode::Lessons | Mode::Drills => {
+            Mode::Lessons => self.next_lesson_exercise(),
+            Mode::Drills => {
                 let level = self.pick_level();
                 generate(self.engine, &self.language, level, &self.ctx, &mut self.rng)
             }
@@ -558,7 +577,28 @@ impl<'a> Trainer<'a> {
         self.phase = Phase::Answering;
     }
 
-    /// The level for the next lesson/drill exercise.
+    /// The next lesson exercise: the curated abbreviation for this position,
+    /// falling back to a generated one when curated content runs out.
+    fn next_lesson_exercise(&mut self) -> Option<Exercise> {
+        let level = self.levels[self.level_idx];
+        let curated = lessons::curated(&self.language, level);
+        let abbr = curated.get(self.done_in_level as usize).copied();
+        let from_curated = abbr.and_then(|abbr| {
+            from_abbreviation(
+                self.engine,
+                &self.language,
+                level,
+                abbr,
+                None,
+                &self.ctx,
+                &mut self.rng,
+            )
+        });
+        from_curated
+            .or_else(|| generate(self.engine, &self.language, level, &self.ctx, &mut self.rng))
+    }
+
+    /// The level for the next drill exercise.
     fn pick_level(&mut self) -> Level {
         match self.mode {
             Mode::Drills if self.levels.len() > 1 => self
@@ -662,9 +702,20 @@ mod tests {
     fn typing_the_solution_solves_the_exercise() {
         let engine = engine();
         let seed = 7;
+        // Lessons draw from the curated set, so replicate the first curated
+        // Nesting exercise (built the same way, from the same fresh seed).
+        let first = lessons::curated("rust", Level::Nesting)[0];
         let mut probe = Rng::new(seed);
-        let exercise =
-            generate(&engine, "rust", Level::Nesting, &probe_ctx(), &mut probe).expect("generated");
+        let exercise = from_abbreviation(
+            &engine,
+            "rust",
+            Level::Nesting,
+            first,
+            None,
+            &probe_ctx(),
+            &mut probe,
+        )
+        .expect("curated renders");
         let answer = solution(&exercise);
 
         let mut t = lessons(&engine, Some(Level::Nesting), seed);
@@ -727,7 +778,9 @@ mod tests {
                 _ => t.handle(Event::Advance),
             }
         }
-        assert_eq!(t.stats().presented, t.per_level);
+        // The single-trigger level presents its whole curated set (5 items).
+        assert_eq!(t.stats().presented, t.level_target());
+        assert_eq!(t.level_target(), 5);
         assert!(
             t.completed_levels()
                 .contains(&Level::SingleTrigger.number())

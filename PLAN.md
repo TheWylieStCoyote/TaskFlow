@@ -206,6 +206,17 @@ Neovim plugin (opt-in `preview = true`, or `:CodemmetPreviewToggle`) renders it
 as dimmed virtual lines below the current line while typing — no buffer edit and
 no completion menu.
 
+Interactive trainer shipped: `codemmet train` (behind the default-on `train`
+cargo feature) is a full-screen ratatui trainer — with a line-based fallback for
+non-TTY use — for learning the abbreviation syntax. It teaches the composition
+operators then the trigger vocabulary via mixed reverse/forward exercises,
+graded by output-equivalence against the real engine, across four modes
+(guided lessons, drills, spaced-repetition review, and a free-play sandbox).
+Progress, lifetime stats, and a Leitner review schedule persist under the data
+dir (`--reset` clears them). A pure `Trainer` state machine holds all logic; the
+front ends only render and forward key events. See `TRAINER_PLAN.md` (design)
+and `docs/trainer.md` (user guide).
+
 Deferred features (not built): a packaged VS Code extension (codemmet works
 there via generic LSP today), and a cross-language `base.toml` pack
 (per-language packs read better; likely dropped rather than built).

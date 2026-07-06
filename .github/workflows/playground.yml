@@ -1,9 +1,18 @@
 name: playground
 
-# Manual so it never fails CI before Pages is enabled. To publish:
-#   Settings → Pages → Source: GitHub Actions, then run this workflow.
+# Pages must be enabled (Settings → Pages → Source: GitHub Actions) for this to
+# succeed. Runs on demand, and automatically when the playground or the code it
+# builds from changes.
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "playground/**"
+      - "crates/codemmet-wasm/**"
+      - "crates/codemmet-core/**"
+      - "crates/codemmet-train/**"
+      - ".github/workflows/playground.yml"
 
 permissions:
   contents: read

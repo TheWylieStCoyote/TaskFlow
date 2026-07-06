@@ -49,10 +49,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --workspace --release
       - name: minimal build (no tree-sitter)
         run: cargo build -p codemmet --no-default-features
+      - name: wasm build (browser playground)
+        run: cargo build -p codemmet-wasm --release --target wasm32-unknown-unknown
 
   deny:
     runs-on: ubuntu-latest

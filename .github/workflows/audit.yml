@@ -1,0 +1,19 @@
+name: audit
+
+# CI runs cargo-deny on every push/PR, but a repo that goes quiet still needs
+# to hear about advisories filed *after* its last commit. Run the advisory
+# (and yanked-crate) check weekly, and on demand.
+on:
+  schedule:
+    # Mondays at 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  advisories:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

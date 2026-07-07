@@ -1,0 +1,29 @@
+# Keep dependencies current so a quiet repo does not silently fall behind on
+# grammar/toolchain updates or advisories. CI (fmt, clippy, tests, deny) vets
+# every PR Dependabot opens.
+version: 2
+updates:
+  # The Cargo workspace (all crates under crates/ resolve through the root
+  # lockfile). The detached fuzz/ harness is dev-only and updated by hand.
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the tree-sitter grammar crates — they move together and an
+      # ABI bump wants reviewing as a set.
+      tree-sitter:
+        patterns:
+          - "tree-sitter"
+          - "tree-sitter-*"
+    commit-message:
+      prefix: "deps"
+
+  # The GitHub Actions used by the CI, release, and playground workflows.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"

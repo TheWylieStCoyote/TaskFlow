@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Try it in the browser
+    url: https://thewyliestcoyote.github.io/codemmit/
+    about: The playground and trainer run the real engine via WebAssembly — reproduce or explore before filing.
+  - name: Documentation
+    url: https://github.com/TheWylieStCoyote/codemmit/tree/master/docs
+    about: Syntax, CLI, editor setup, custom snippets, and troubleshooting.

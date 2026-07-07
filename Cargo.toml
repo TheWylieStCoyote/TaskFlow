@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -20,8 +20,8 @@ keywords = ["emmet", "snippets", "lsp", "tree-sitter", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-codemmet-core = { path = "crates/codemmet-core", version = "0.2.0" }
-codemmet-tsctx = { path = "crates/codemmet-tsctx", version = "0.2.0" }
+codemmet-core = { path = "crates/codemmet-core", version = "0.3.0" }
+codemmet-tsctx = { path = "crates/codemmet-tsctx", version = "0.3.0" }
 
 anyhow = "1"
 clap = { version = "4.5", features = ["derive"] }

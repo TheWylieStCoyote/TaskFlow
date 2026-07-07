@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-07
+
 ### Added
 
 - **Data-driven expansion (CX0 — engine + CLI).** A repeat can now be driven by

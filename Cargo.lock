@@ -179,7 +179,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "codemmet"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -196,7 +196,7 @@ dependencies = [
 
 [[package]]
 name = "codemmet-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dirs",
  "insta",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "codemmet-train"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "codemmet-core",
  "serde",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "codemmet-tsctx"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "codemmet-core",
  "tree-sitter",
@@ -232,7 +232,7 @@ dependencies = [
 
 [[package]]
 name = "codemmet-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "codemmet-core",
  "codemmet-train",

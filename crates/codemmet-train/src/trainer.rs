@@ -714,26 +714,12 @@ mod tests {
     #[test]
     fn typing_the_solution_solves_the_exercise() {
         let engine = engine();
-        let seed = 7;
-        // Lessons draw from the curated set, so replicate the first curated
-        // Nesting exercise (built the same way, from the same fresh seed).
-        let first = lessons::curated("rust", Level::Nesting)[0];
-        let mut probe = Rng::new(seed);
-        let exercise = from_abbreviation(
-            &engine,
-            "rust",
-            Level::Nesting,
-            first,
-            None,
-            &probe_ctx(),
-            &mut probe,
-        )
-        .expect("curated renders");
-        let answer = solution(&exercise);
-
-        let mut t = lessons(&engine, Some(Level::Nesting), seed);
+        let mut t = lessons(&engine, Some(Level::Nesting), 7);
         t.handle(Event::Advance);
-        assert_eq!(t.exercise(), Some(&exercise));
+        // Answer the exercise the trainer actually presented — read it from the
+        // trainer rather than re-deriving one through a parallel RNG path, so a
+        // change to the trigger pool or curated set can't desync the test.
+        let answer = solution(t.exercise().expect("an exercise is presented"));
         type_str(&mut t, &answer);
         t.handle(Event::Submit);
 
@@ -742,10 +728,6 @@ mod tests {
             other => panic!("expected solved feedback, got {other:?}"),
         }
         assert_eq!(t.stats().solved, 1);
-    }
-
-    fn probe_ctx() -> ExpansionContext {
-        ExpansionContext::plain(String::new(), IndentUnit::Spaces(4))
     }
 
     #[test]

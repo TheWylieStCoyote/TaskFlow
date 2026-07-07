@@ -38,7 +38,7 @@ pub struct WrapArgs {
 }
 
 /// Run `codemmet wrap` with `user_dir` as the snippet override directory.
-pub fn run(sources: Sources, args: &WrapArgs) -> ExitCode {
+pub fn run(sources: &Sources, args: &WrapArgs) -> ExitCode {
     let registry = match load_registry(sources) {
         Ok(registry) => registry,
         Err(err) => return config_failure(&err),

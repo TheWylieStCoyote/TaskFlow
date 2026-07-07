@@ -91,7 +91,7 @@ pub struct TrainArgs {
 }
 
 /// Run the trainer.
-pub fn run(sources: Sources<'_>, args: &TrainArgs) -> ExitCode {
+pub fn run(sources: &Sources, args: &TrainArgs) -> ExitCode {
     let data_path = args.data_file.clone().or_else(progress::default_path);
 
     if args.reset {

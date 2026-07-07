@@ -15,8 +15,9 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use codemmet_core::config::loader::{ConfigError, default_user_snippets_dir};
+use codemmet_core::config::paths::{PathMapping, default_paths_config};
 use codemmet_core::context::IndentUnit;
-use codemmet_core::lang::registry::{Registry, find_project_snippets_dir};
+use codemmet_core::lang::registry::{Registry, find_project_snippets_dirs};
 use codemmet_core::snippet::render::TabstopMode;
 
 /// Exit code for abbreviation parse errors.
@@ -39,6 +40,11 @@ struct Cli {
     #[arg(long, global = true, value_name = "DIR")]
     config: Option<PathBuf>,
 
+    /// Personal path-prefix → snippet-dir mapping file
+    /// (default: `<config>/codemmet/paths.toml`).
+    #[arg(long, global = true, value_name = "FILE")]
+    paths: Option<PathBuf>,
+
     /// Do not auto-load project-local packs (`.codemmet/snippets`).
     #[arg(long, global = true)]
     no_project: bool,
@@ -47,16 +53,49 @@ struct Cli {
     command: Command,
 }
 
-/// Snippet override directories, in increasing priority (project wins).
-///
-/// Accessible to the subcommand submodules; the LSP resolves its own sources
-/// separately (project packs are opt-in there).
-#[derive(Debug, Clone, Copy)]
-pub struct Sources<'a> {
+/// The resolved snippet override tiers for one invocation, in increasing
+/// priority: `user < user-path-mapped < project` (project layered root-most →
+/// nearest). The LSP resolves its own tiers per document.
+#[derive(Debug, Clone, Default)]
+pub struct Sources {
     /// The user override directory (`--config` or the platform default).
-    user: Option<&'a Path>,
-    /// The project override directory (`.codemmet/snippets`), when enabled.
-    project: Option<&'a Path>,
+    user: Option<PathBuf>,
+    /// Personal path-mapped directories matching the working directory,
+    /// shallow prefix first.
+    mapped: Vec<PathBuf>,
+    /// Layered project directories (`.codemmet/snippets` up the tree),
+    /// root-most first. Empty under `--no-project`.
+    project: Vec<PathBuf>,
+}
+
+impl Sources {
+    /// The override directories to load, lowest priority first.
+    fn override_dirs(&self) -> Vec<&Path> {
+        let mut dirs: Vec<&Path> = Vec::new();
+        if let Some(user) = &self.user {
+            dirs.push(user);
+        }
+        dirs.extend(self.mapped.iter().map(PathBuf::as_path));
+        dirs.extend(self.project.iter().map(PathBuf::as_path));
+        dirs
+    }
+
+    /// The user override directory, if any (for `capture --user`).
+    fn user_dir(&self) -> Option<&Path> {
+        self.user.as_deref()
+    }
+
+    /// Every override directory with a tier label, lowest priority first
+    /// (for `check` reporting).
+    fn labeled_dirs(&self) -> Vec<(&'static str, &Path)> {
+        let mut out: Vec<(&'static str, &Path)> = Vec::new();
+        if let Some(user) = &self.user {
+            out.push(("user", user));
+        }
+        out.extend(self.mapped.iter().map(|d| ("path-mapped", d.as_path())));
+        out.extend(self.project.iter().map(|d| ("project", d.as_path())));
+        out
+    }
 }
 
 /// The available subcommands.
@@ -83,35 +122,45 @@ enum Command {
 pub fn run() -> ExitCode {
     let cli = Cli::parse();
     let user_dir = cli.config.or_else(default_user_snippets_dir);
-    // Project packs auto-load from the nearest `.codemmet/snippets` at or above
-    // the working directory, unless `--no-project`. The LSP opts in separately,
-    // so it keeps loading from `user_dir` only.
-    let project_dir = if cli.no_project {
-        None
+    let paths_file = cli.paths.or_else(default_paths_config);
+
+    // Resolve the snippet tiers relative to the working directory: the user
+    // global dir, personal path-mapped dirs, then layered project packs
+    // (`.codemmet/snippets` up the tree). The LSP resolves per document.
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let mapping = match &paths_file {
+        Some(path) => match PathMapping::load(path) {
+            Ok(mapping) => mapping,
+            Err(err) => return config_failure(&err),
+        },
+        None => PathMapping::empty(),
+    };
+    let project = if cli.no_project {
+        Vec::new()
     } else {
-        std::env::current_dir()
-            .ok()
-            .and_then(|cwd| find_project_snippets_dir(&cwd))
+        find_project_snippets_dirs(&cwd)
     };
     let sources = Sources {
-        user: user_dir.as_deref(),
-        project: project_dir.as_deref(),
+        user: user_dir.clone(),
+        mapped: mapping.dirs_for(&cwd),
+        project,
     };
+
     match cli.command {
-        Command::Expand(args) => expand::run(sources, &args),
-        Command::Wrap(args) => wrap::run(sources, &args),
-        Command::Capture(args) => capture::run(sources, &args),
-        Command::List(args) => list::run(sources, &args),
-        Command::Check => check::run(sources),
-        Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), &args),
+        Command::Expand(args) => expand::run(&sources, &args),
+        Command::Wrap(args) => wrap::run(&sources, &args),
+        Command::Capture(args) => capture::run(&sources, &args),
+        Command::List(args) => list::run(&sources, &args),
+        Command::Check => check::run(&sources),
+        Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), paths_file.as_deref(), &args),
         #[cfg(feature = "train")]
-        Command::Train(args) => crate::train::run(sources, &args),
+        Command::Train(args) => crate::train::run(&sources, &args),
     }
 }
 
-/// Load builtin packs merged with the user and project override directories.
-pub fn load_registry(sources: Sources) -> Result<Registry, ConfigError> {
-    Registry::with_dirs(sources.user, sources.project)
+/// Load builtin packs merged with the resolved override tiers.
+pub fn load_registry(sources: &Sources) -> Result<Registry, ConfigError> {
+    Registry::with_dirs_layered(&sources.override_dirs())
 }
 
 /// Report a configuration/environment failure and yield exit code 3.

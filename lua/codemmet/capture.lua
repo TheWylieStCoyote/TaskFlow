@@ -1,7 +1,10 @@
----Capture a line-wise selection into the project snippet pack via the server's
----`codemmet.capture` command. The server generalizes the selected code into a
----parameterized snippet, writes it to `.codemmet/snippets/<lang>.toml`, and
----reloads so the new trigger is expandable immediately.
+---Capture a line-wise selection into a snippet pack.
+---
+---The codemmet LSP server is deliberately read-only, so the capture is done by
+---invoking the `codemmet capture` CLI (the single source of truth for the
+---generalization + pack-writing). After the CLI writes the pack, we ask the
+---server to reload its snippet caches (a read-only re-read from disk) so the
+---new trigger is expandable in the same session.
 local lsp = require("codemmet.lsp")
 
 local M = {}
@@ -32,8 +35,36 @@ local function resolve_lines(opts)
   return row, row
 end
 
----Capture the selected lines into the project pack under trigger `name`.
----Prompts via `vim.ui.input` for the name unless `opts.name` is given.
+---The working directory to run the CLI in, so it resolves the project pack
+---relative to the file. Falls back to the editor's cwd for unsaved buffers.
+---@param bufnr integer
+---@return string
+local function buffer_cwd(bufnr)
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  if name == "" then
+    return vim.uv.cwd()
+  end
+  return vim.fs.dirname(name)
+end
+
+---Ask the server to re-read its snippet packs (read-only), so a freshly
+---captured trigger is usable without reopening the buffer.
+---@param client vim.lsp.Client
+---@param bufnr integer
+local function reload_server(client, bufnr)
+  lsp.exec(client, bufnr, "codemmet.reloadSnippets", {}, function(err)
+    if err then
+      vim.notify(
+        "codemmet: captured, but snippet reload failed: " .. (err.message or vim.inspect(err)),
+        vim.log.levels.WARN
+      )
+    end
+  end)
+end
+
+---Capture the selected lines into the project pack under trigger `name`, by
+---running `codemmet capture`. Prompts via `vim.ui.input` for the name unless
+---`opts.name` is given.
 ---@param opts? codemmet.CaptureOpts
 function M.capture(opts)
   opts = opts or {}
@@ -43,40 +74,36 @@ function M.capture(opts)
     vim.notify("codemmet: no codemmet client attached to this buffer", vim.log.levels.WARN)
     return
   end
+  local binary = client.config.cmd and client.config.cmd[1]
+  if type(binary) ~= "string" then
+    vim.notify("codemmet: cannot locate the codemmet binary to capture", vim.log.levels.WARN)
+    return
+  end
 
   local line1, line2 = resolve_lines(opts)
-  local range = {
-    start = { line = line1 - 1, character = 0 },
-    ["end"] = {
-      line = line2 - 1,
-      character = lsp.line_end_character(bufnr, line2 - 1, client.offset_encoding),
-    },
-  }
+  local lines = vim.api.nvim_buf_get_lines(bufnr, line1 - 1, line2, false)
+  local code = table.concat(lines, "\n")
+  local lang = vim.bo[bufnr].filetype
+  local cwd = buffer_cwd(bufnr)
 
   ---@param name string
   local function send(name)
-    lsp.exec(client, bufnr, "codemmet.capture", {
-      {
-        uri = vim.uri_from_bufnr(bufnr),
-        range = range,
-        name = name,
-        description = opts.description,
-      },
-    }, function(err, result)
-      if err then
-        vim.notify("codemmet: " .. (err.message or vim.inspect(err)), vim.log.levels.WARN)
-        return
-      end
-      if not result or not result.path then
-        return
-      end
-      local params = (result.params and #result.params > 0)
-          and (" [" .. table.concat(result.params, ", ") .. "]")
-        or ""
-      vim.notify(
-        "codemmet: captured `" .. result.trigger .. "`" .. params .. " -> " .. result.path,
-        vim.log.levels.INFO
-      )
+    local cmd = { binary, "capture", "--lang", lang, "--name", name }
+    if opts.description and opts.description ~= "" then
+      table.insert(cmd, "--description")
+      table.insert(cmd, opts.description)
+    end
+    table.insert(cmd, "-") -- read the code from stdin
+    vim.system(cmd, { cwd = cwd, stdin = code, text = true }, function(obj)
+      vim.schedule(function()
+        if obj.code ~= 0 then
+          local msg = (obj.stderr ~= "" and obj.stderr) or ("capture exited " .. obj.code)
+          vim.notify("codemmet: " .. vim.trim(msg), vim.log.levels.WARN)
+          return
+        end
+        reload_server(client, bufnr)
+        vim.notify("codemmet: " .. vim.trim(obj.stdout), vim.log.levels.INFO)
+      end)
     end)
   end
 

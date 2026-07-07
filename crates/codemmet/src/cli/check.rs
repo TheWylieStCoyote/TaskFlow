@@ -11,11 +11,12 @@ use super::{Sources, config_failure, load_registry};
 ///
 /// A missing directory is not an error: builtins are compiled in and there
 /// is simply nothing to validate.
-pub fn run(sources: Sources) -> ExitCode {
-    // Preserve the friendly single-directory notes when there is no project
-    // pack to also consider.
-    if sources.project.is_none() {
-        match sources.user {
+pub fn run(sources: &Sources) -> ExitCode {
+    let labeled = sources.labeled_dirs();
+    // Preserve the friendly single-directory notes when the only tier is the
+    // user directory (no path-mapped or project packs to also consider).
+    if labeled.len() <= 1 {
+        match sources.user_dir() {
             None => {
                 println!("no user snippets directory configured; builtins only");
                 return ExitCode::SUCCESS;
@@ -29,7 +30,7 @@ pub fn run(sources: Sources) -> ExitCode {
     }
     match load_registry(sources) {
         Ok(registry) => {
-            for dir in [sources.user, sources.project].into_iter().flatten() {
+            for (_, dir) in &labeled {
                 if dir.exists() {
                     warn_misnamed_packs(dir);
                 }
@@ -37,20 +38,14 @@ pub fn run(sources: Sources) -> ExitCode {
             let languages = registry.languages().count();
             let triggers: usize = registry.languages().map(|lang| lang.set.len()).sum();
             println!("ok: {languages} languages, {triggers} triggers");
-            report_dir("user", sources.user);
-            report_dir("project", sources.project);
+            for (label, dir) in &labeled {
+                if dir.exists() {
+                    println!("  {label} snippets: {}", dir.display());
+                }
+            }
             ExitCode::SUCCESS
         }
         Err(err) => config_failure(&err),
-    }
-}
-
-/// Print which override directory is in effect, if any.
-fn report_dir(label: &str, dir: Option<&Path>) {
-    if let Some(dir) = dir
-        && dir.exists()
-    {
-        println!("  {label} snippets: {}", dir.display());
     }
 }
 

@@ -15,11 +15,14 @@ mod line_index;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 
 use codemmet_core::Engine;
 use codemmet_core::config::loader::ConfigError;
+use codemmet_core::config::paths::PathMapping;
 use codemmet_core::context::{ContextProvider, DocSnapshot};
-use codemmet_core::lang::registry::{LanguageSnippets, Registry, find_project_snippets_dir};
+use codemmet_core::lang::profile;
+use codemmet_core::lang::registry::{Registry, resolve_override_dirs};
 #[cfg(feature = "tree-sitter")]
 use codemmet_tsctx::TreeSitterProvider;
 use lsp_server::{Connection, ErrorCode, Message, Request, Response};
@@ -61,11 +64,15 @@ struct InitOptions {
     /// Snippet override directory (defaults to `<config>/codemmet/snippets`
     /// or the CLI's `--config`).
     snippets_dir: Option<PathBuf>,
+    /// Personal path-prefix → snippet-dir mapping file (defaults to
+    /// `<config>/codemmet/paths.toml` or the CLI's `--paths`).
+    paths_file: Option<PathBuf>,
     /// `"always"` | `"operators-only"` | `"off"`.
     completion: Option<String>,
-    /// Opt in to project-local packs (`.codemmet/snippets` under the workspace
-    /// root). Off by default: the editor may open untrusted repositories, and a
-    /// project pack can silently redefine what abbreviations expand to.
+    /// Opt in to project-local packs (`.codemmet/snippets`, layered up the
+    /// tree from the file being edited). Off by default: the editor may open
+    /// untrusted repositories, and a project pack can silently redefine what
+    /// abbreviations expand to.
     project_snippets: Option<bool>,
 }
 
@@ -80,10 +87,87 @@ struct Document {
     version: i32,
 }
 
+/// Resolves (and caches) an [`Engine`] per document, so path-scoped snippet
+/// tiers apply to the file being edited.
+///
+/// For each document the override stack is `user global < user path-mapped <
+/// layered project packs` (see
+/// [`resolve_override_dirs`](codemmet_core::lang::registry::resolve_override_dirs)).
+/// Engines are cached by their exact resolved directory list — the caching
+/// consequence of per-document resolution — so repeated requests against the
+/// same subtree are free. [`reload`](SnippetResolver::reload) clears the cache;
+/// this is a **read-only** operation (it re-reads packs from disk on the next
+/// request, it never writes), which is how the editor picks up a snippet that
+/// `codemmet capture` just wrote.
+struct SnippetResolver {
+    /// The user global override directory (init `snippets_dir` or `--config`).
+    user_dir: Option<PathBuf>,
+    /// Personal path-prefix → dir mapping.
+    mapping: PathMapping,
+    /// Whether to layer in `.codemmet/snippets` project packs (opt-in).
+    include_project: bool,
+    /// Engines keyed by their resolved override-dir list.
+    cache: HashMap<Vec<PathBuf>, Rc<Engine>>,
+    /// Builtins-only fallback, used when an override tier fails to load.
+    builtins: Rc<Engine>,
+}
+
+impl SnippetResolver {
+    /// Build a resolver, precompiling the builtins-only fallback engine.
+    fn new(
+        user_dir: Option<PathBuf>,
+        mapping: PathMapping,
+        include_project: bool,
+    ) -> Result<Self, ConfigError> {
+        Ok(Self {
+            user_dir,
+            mapping,
+            include_project,
+            cache: HashMap::new(),
+            builtins: Rc::new(Engine::with_registry(Registry::with_builtins()?)),
+        })
+    }
+
+    /// The engine for a document at `doc_path` (its resolved snippet tiers),
+    /// building and caching it on first use. A broken override tier falls back
+    /// to builtins so the server stays usable.
+    fn engine_for(&mut self, doc_path: Option<&Path>) -> Rc<Engine> {
+        let dirs = match doc_path {
+            Some(path) => resolve_override_dirs(
+                path,
+                self.user_dir.as_deref(),
+                &self.mapping,
+                self.include_project,
+            ),
+            // A non-file document (untitled buffer) gets the user global tier
+            // only — there is no path to map or walk.
+            None => self.user_dir.iter().cloned().collect(),
+        };
+        if let Some(engine) = self.cache.get(&dirs) {
+            return Rc::clone(engine);
+        }
+        let refs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
+        match Registry::with_dirs_layered(&refs) {
+            Ok(registry) => {
+                let engine = Rc::new(Engine::with_registry(registry));
+                self.cache.insert(dirs, Rc::clone(&engine));
+                engine
+            }
+            Err(err) => {
+                eprintln!("codemmet: ignoring snippet overrides: {err}");
+                Rc::clone(&self.builtins)
+            }
+        }
+    }
+
+    /// Drop every cached engine so the next request re-reads packs from disk.
+    fn reload(&mut self) {
+        self.cache.clear();
+    }
+}
+
 /// All server state.
 struct Server {
-    /// The expansion engine (registry + renderer).
-    engine: Engine,
     /// Open documents by URI.
     docs: HashMap<Uri, Document>,
     /// Completion gating from `initializationOptions`.
@@ -93,22 +177,15 @@ struct Server {
     /// Syntax awareness for expansion points (`context_at` needs `&mut`
     /// for its tree cache, so the server owns the provider mutably).
     provider: Box<dyn ContextProvider>,
-    /// The user override directory in effect, kept so the registry can be
-    /// rebuilt after a `codemmet.capture` writes a new snippet.
-    user_dir: Option<PathBuf>,
-    /// The project override directory in effect (set on the first capture even
-    /// when `project_snippets` was not opted in, since a capture is an explicit
-    /// write into the project pack).
-    project_dir: Option<PathBuf>,
+    /// Per-document engine resolution + cache.
+    resolver: SnippetResolver,
 }
 
 impl Server {
-    /// Rebuild the engine's registry from the current override directories,
-    /// so a freshly captured snippet becomes immediately expandable.
-    fn reload_registry(&mut self) -> Result<(), ConfigError> {
-        let registry = Registry::with_dirs(self.user_dir.as_deref(), self.project_dir.as_deref())?;
-        self.engine = Engine::with_registry(registry);
-        Ok(())
+    /// The engine resolved for the document at `uri` (path-scoped tiers).
+    fn engine_for(&mut self, uri: &Uri) -> Rc<Engine> {
+        let path = file_uri_to_path(uri.as_str());
+        self.resolver.engine_for(path.as_deref())
     }
 }
 
@@ -174,8 +251,16 @@ fn default_provider() -> Box<dyn ContextProvider> {
 }
 
 /// Run `codemmet lsp` over stdio until the client disconnects or exits.
-pub fn run(user_dir: Option<&Path>, _args: &LspArgs) -> ExitCode {
-    match serve(user_dir) {
+///
+/// `default_user_dir` / `default_paths_file` are the CLI-resolved defaults; the
+/// client's `initializationOptions` (`snippets_dir`, `paths_file`) override
+/// them.
+pub fn run(
+    default_user_dir: Option<&Path>,
+    default_paths_file: Option<&Path>,
+    _args: &LspArgs,
+) -> ExitCode {
+    match serve(default_user_dir, default_paths_file) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("error: {err}");
@@ -185,7 +270,7 @@ pub fn run(user_dir: Option<&Path>, _args: &LspArgs) -> ExitCode {
 }
 
 /// The full server lifecycle: handshake, main loop, teardown.
-fn serve(default_user_dir: Option<&Path>) -> anyhow::Result<()> {
+fn serve(default_user_dir: Option<&Path>, default_paths_file: Option<&Path>) -> anyhow::Result<()> {
     let (connection, io_threads) = Connection::stdio();
 
     let (initialize_id, initialize_params) = connection.initialize_start()?;
@@ -205,40 +290,27 @@ fn serve(default_user_dir: Option<&Path>) -> anyhow::Result<()> {
     )?;
 
     let user_dir = options.snippets_dir.as_deref().or(default_user_dir);
-    // Project packs are opt-in: only when `project_snippets` is set do we look
-    // for `.codemmet/snippets` under the workspace root the client reported
-    // (a workspace folder, else the deprecated `rootUri`).
-    // `root_uri` is deprecated in favour of `workspace_folders`, but many
-    // clients still send only the former, so we accept it as a fallback.
-    #[allow(deprecated)]
-    let project_dir = if options.project_snippets.unwrap_or(false) {
-        params
-            .workspace_folders
-            .as_deref()
-            .and_then(|folders| folders.first())
-            .map(|folder| folder.uri.as_str())
-            .or_else(|| params.root_uri.as_ref().map(|uri| uri.as_str()))
-            .and_then(file_uri_to_path)
-            .and_then(|root| find_project_snippets_dir(&root))
-    } else {
-        None
-    };
-    let registry = match Registry::with_dirs(user_dir, project_dir.as_deref()) {
-        Ok(registry) => registry,
-        Err(err) => {
-            // Overrides are broken; stay usable on builtins alone.
-            eprintln!("codemmet: ignoring user snippets: {err}");
-            Registry::with_builtins()?
-        }
-    };
+    let paths_file = options.paths_file.as_deref().or(default_paths_file);
+    // The personal path mapping is user config, so it is always on; a broken
+    // one is reported but non-fatal.
+    let mapping = paths_file.map_or_else(PathMapping::empty, |path| {
+        PathMapping::load(path).unwrap_or_else(|err| {
+            eprintln!("codemmet: ignoring path mapping: {err}");
+            PathMapping::empty()
+        })
+    });
+    // Project packs are opt-in per document: only when `project_snippets` is
+    // set does the resolver layer in `.codemmet/snippets` from the file's tree.
+    // (The editor may open untrusted repositories.)
+    let include_project = options.project_snippets.unwrap_or(false);
+    let resolver = SnippetResolver::new(user_dir.map(Path::to_path_buf), mapping, include_project)?;
+
     let mut server = Server {
-        engine: Engine::with_registry(registry),
         docs: HashMap::new(),
         completion_mode: options.completion_mode(),
         encoding,
         provider: default_provider(),
-        user_dir: user_dir.map(Path::to_path_buf),
-        project_dir,
+        resolver,
     };
 
     for msg in &connection.receiver {
@@ -312,7 +384,7 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
                 "codemmet.expand".to_owned(),
                 "codemmet.wrap".to_owned(),
                 "codemmet.preview".to_owned(),
-                "codemmet.capture".to_owned(),
+                "codemmet.reloadSnippets".to_owned(),
             ],
             ..ExecuteCommandOptions::default()
         }),
@@ -343,15 +415,20 @@ impl Server {
             Err(err) => return invalid_params(request.id, &err),
         };
         let position = params.text_document_position;
-        let Some(doc) = self.docs.get(&position.text_document.uri) else {
+        let uri = &position.text_document.uri;
+        let path = file_uri_to_path(uri.as_str());
+        let Some(doc) = self.docs.get(uri) else {
             // An unopened document is not an error; there is just nothing
             // to complete.
             return Response::new_ok(request.id, serde_json::Value::Null);
         };
         let index = LineIndex::new(&doc.text);
         let offset = index.offset(&doc.text, position.position, self.encoding);
+        // Resolve the engine for this file's snippet tiers (disjoint field
+        // borrow, so `doc` and `provider` can be borrowed alongside it).
+        let engine = self.resolver.engine_for(path.as_deref());
         let items = completion::compute(
-            &self.engine,
+            &engine,
             self.provider.as_mut(),
             &index,
             &doc.text,
@@ -430,8 +507,13 @@ impl Server {
             "codemmet.preview" => {
                 command_args(params.arguments).map(|args| commands::preview(self, &args))
             }
-            "codemmet.capture" => {
-                command_args(params.arguments).and_then(|args| commands::capture(self, &args))
+            // Read-only: drop the per-document engine cache so the next request
+            // re-reads packs from disk. The editor calls this after writing a
+            // pack via the `codemmet capture` CLI, to pick the new trigger up
+            // in-session. The server itself never writes.
+            "codemmet.reloadSnippets" => {
+                self.resolver.reload();
+                Ok(serde_json::json!({ "reloaded": true }))
             }
             other => Err(CommandError(format!("unknown command `{other}`"))),
         };
@@ -504,21 +586,17 @@ impl Server {
             .ok_or_else(|| CommandError(format!("document not open: {}", uri.as_str())))
     }
 
-    /// The language for a document's `languageId`, or a command error.
-    fn language(&self, language_id: &str) -> Result<&LanguageSnippets, CommandError> {
-        self.engine
-            .registry()
-            .language(language_id)
-            .ok_or_else(|| CommandError(format!("unsupported language `{language_id}`")))
-    }
-
     /// An owned snapshot of the document at `uri` for the context provider,
     /// carrying the canonical profile id (not the raw client `languageId`).
+    ///
+    /// The profile mapping is static (`profile::find`), so this does not need a
+    /// resolved registry — decoupling it from the per-document engine.
     fn snapshot(&self, uri: &Uri) -> Result<DocSnapshot, CommandError> {
         let doc = self.document(uri)?;
-        let lang = self.language(&doc.language_id)?;
+        let profile = profile::find(&doc.language_id)
+            .ok_or_else(|| CommandError(format!("unsupported language `{}`", doc.language_id)))?;
         Ok(DocSnapshot {
-            language: lang.profile.id.to_owned(),
+            language: profile.id.to_owned(),
             text: doc.text.clone(),
         })
     }

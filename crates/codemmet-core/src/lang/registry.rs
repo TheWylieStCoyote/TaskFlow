@@ -54,6 +54,20 @@ impl Registry {
     /// trigger. Both directories are optional; a missing directory or
     /// per-language file is not an error, but an unreadable or invalid one is.
     pub fn with_dirs(user: Option<&Path>, project: Option<&Path>) -> Result<Self, ConfigError> {
+        let dirs: Vec<&Path> = [user, project].into_iter().flatten().collect();
+        Self::with_dirs_layered(&dirs)
+    }
+
+    /// Load builtin packs, then an ordered list of override directories.
+    ///
+    /// `override_dirs` is lowest-priority first: each `<dir>/<lang>.toml` is
+    /// merged over the ones before it, so the *last* directory wins per
+    /// trigger and may `disabled = true` any trigger from an earlier tier.
+    /// This is how path-scoped resolution composes its tiers — user global,
+    /// user path-mapped, then layered project packs (root-most to nearest);
+    /// see [`resolve_override_dirs`]. A missing directory or per-language file
+    /// is not an error, but an unreadable or invalid one is.
+    pub fn with_dirs_layered(override_dirs: &[&Path]) -> Result<Self, ConfigError> {
         let mut languages = HashMap::new();
         for profile in crate::lang::profile::PROFILES {
             let mut sources: Vec<(String, SnippetFile)> = Vec::new();
@@ -71,8 +85,8 @@ impl Registry {
             check_language(&builtin_origin, &builtin, profile.id)?;
             sources.push((builtin_origin, builtin));
 
-            // User overrides, then project overrides (highest priority).
-            for dir in [user, project].into_iter().flatten() {
+            // Override directories in increasing priority (last wins).
+            for dir in override_dirs {
                 push_override_file(&mut sources, dir, profile.id)?;
             }
 
@@ -130,6 +144,60 @@ pub fn find_project_snippets_dir(start: &Path) -> Option<PathBuf> {
         let candidate = dir.join(".codemmet").join("snippets");
         candidate.is_dir().then_some(candidate)
     })
+}
+
+/// Every `.codemmet/snippets` directory at or above `start`, ordered
+/// **root-most first**.
+///
+/// This is the layered generalization of [`find_project_snippets_dir`]: a
+/// monorepo can carry a repo-wide pack at its root and a refining pack in a
+/// subproject. Because the list runs root-most → nearest and
+/// [`Registry::with_dirs_layered`] merges later over earlier, the nearest
+/// pack wins per trigger while still inheriting everything the outer packs
+/// define (merge up the tree, nearest wins).
+pub fn find_project_snippets_dirs(start: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = start
+        .ancestors()
+        .filter_map(|dir| {
+            let candidate = dir.join(".codemmet").join("snippets");
+            candidate.is_dir().then_some(candidate)
+        })
+        .collect();
+    // `ancestors()` yields nearest-first; the loader wants lowest priority
+    // (root-most) first.
+    dirs.reverse();
+    dirs
+}
+
+/// Resolve the full ordered list of override directories for a file at
+/// `start`, lowest priority first.
+///
+/// The tiers, in increasing priority, are:
+///
+/// 1. the user global directory (`user_global`, e.g. `--config` or the
+///    platform default),
+/// 2. personal path-mapped directories whose prefix matches `start`
+///    (shallow prefix → deep prefix; see [`PathMapping`](crate::config::paths::PathMapping)),
+/// 3. layered project packs from the filesystem root down to `start`
+///    (only when `include_project`).
+///
+/// Feeding the result to [`Registry::with_dirs_layered`] realizes the
+/// precedence `builtin < user < user-path-mapped < project`.
+pub fn resolve_override_dirs(
+    start: &Path,
+    user_global: Option<&Path>,
+    mapping: &crate::config::paths::PathMapping,
+    include_project: bool,
+) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(user) = user_global {
+        dirs.push(user.to_path_buf());
+    }
+    dirs.extend(mapping.dirs_for(start));
+    if include_project {
+        dirs.extend(find_project_snippets_dirs(start));
+    }
+    dirs
 }
 
 /// Resolve the `.codemmet/snippets` directory a new snippet should be written
@@ -368,6 +436,107 @@ mod tests {
 
         std::fs::remove_dir_all(&user).ok();
         std::fs::remove_dir_all(&project).ok();
+    }
+
+    #[test]
+    fn find_project_snippets_dirs_lists_root_most_first() {
+        let root = scratch_dir("layered-list");
+        let root_pack = root.join(".codemmet").join("snippets");
+        let sub = root.join("crate").join("svc");
+        let sub_pack = sub.join(".codemmet").join("snippets");
+        std::fs::create_dir_all(&root_pack).expect("root pack dir");
+        std::fs::create_dir_all(&sub_pack).expect("sub pack dir");
+        let start = sub.join("src");
+        std::fs::create_dir_all(&start).expect("start dir");
+
+        assert_eq!(
+            find_project_snippets_dirs(&start),
+            vec![root_pack, sub_pack.clone()],
+            "root-most first"
+        );
+        // The nearest-only helper still returns the deepest.
+        assert_eq!(
+            find_project_snippets_dir(&start).as_deref(),
+            Some(sub_pack.as_path())
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn layered_project_packs_merge_up_the_tree_nearest_wins() {
+        let root = scratch_dir("layered-merge");
+        let root_pack = root.join(".codemmet").join("snippets");
+        let sub = root.join("svc");
+        let sub_pack = sub.join(".codemmet").join("snippets");
+        std::fs::create_dir_all(&root_pack).expect("root pack dir");
+        std::fs::create_dir_all(&sub_pack).expect("sub pack dir");
+        // Root defines `base` and `shared`; the subproject overrides `shared`
+        // and adds `svc`. The subproject must inherit `base`.
+        std::fs::write(
+            root_pack.join("rust.toml"),
+            "[meta]\nlanguage = \"rust\"\n[snippets.base]\nbody = \"base()\"\n[snippets.shared]\ndescription = \"root\"\nbody = \"root!()\"\n",
+        )
+        .expect("root pack");
+        std::fs::write(
+            sub_pack.join("rust.toml"),
+            "[meta]\nlanguage = \"rust\"\n[snippets.shared]\ndescription = \"sub\"\nbody = \"sub!()\"\n[snippets.svc]\nbody = \"svc()\"\n",
+        )
+        .expect("sub pack");
+
+        let start = sub.join("src");
+        std::fs::create_dir_all(&start).expect("start dir");
+        let dirs = find_project_snippets_dirs(&start);
+        let refs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
+        let rust = Registry::with_dirs_layered(&refs)
+            .expect("layered load")
+            .language("rust")
+            .expect("rust resolves")
+            .set
+            .clone();
+        assert!(rust.get("base").is_some(), "inherits root's base");
+        assert!(rust.get("svc").is_some(), "gains the subproject's svc");
+        assert_eq!(
+            rust.get("shared").and_then(|s| s.description.as_deref()),
+            Some("sub"),
+            "nearest (subproject) wins the shared trigger"
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn resolve_override_dirs_orders_tiers_user_mapped_project() {
+        use crate::config::paths::PathMapping;
+        let root = scratch_dir("resolve-order");
+        let proj = root.join(".codemmet").join("snippets");
+        std::fs::create_dir_all(&proj).expect("project pack dir");
+        let start = root.join("src");
+        std::fs::create_dir_all(&start).expect("start dir");
+        let user = root.join("user-global");
+
+        let mapping = PathMapping::parse(
+            "t",
+            &format!(
+                "[[map]]\nprefix = {:?}\ndir = {:?}\n",
+                root.display(),
+                root.join("mapped").display()
+            ),
+        )
+        .expect("mapping parses");
+
+        let dirs = resolve_override_dirs(&start, Some(&user), &mapping, true);
+        assert_eq!(
+            dirs,
+            vec![user, root.join("mapped"), proj],
+            "user < mapped < project, lowest first"
+        );
+
+        // With project excluded, only user + mapped remain.
+        let dirs = resolve_override_dirs(&start, Some(&root.join("user-global")), &mapping, false);
+        assert_eq!(dirs.len(), 2);
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

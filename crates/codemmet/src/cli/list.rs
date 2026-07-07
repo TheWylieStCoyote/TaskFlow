@@ -19,7 +19,7 @@ pub struct ListArgs {
 }
 
 /// Run `codemmet list` with `user_dir` as the snippet override directory.
-pub fn run(sources: Sources, args: &ListArgs) -> ExitCode {
+pub fn run(sources: &Sources, args: &ListArgs) -> ExitCode {
     let registry = match load_registry(sources) {
         Ok(registry) => registry,
         Err(err) => return config_failure(&err),

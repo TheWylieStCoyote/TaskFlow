@@ -218,7 +218,7 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
             "codemmet.expand",
             "codemmet.wrap",
             "codemmet.preview",
-            "codemmet.capture"
+            "codemmet.reloadSnippets"
         ])
     );
     assert_eq!(capabilities["codeActionProvider"], json!(true));
@@ -868,26 +868,30 @@ fn unknown_language_and_unopened_document_complete_to_null() {
     client.shutdown();
 }
 
+/// The project pack is resolved per document: `<file>`'s `.codemmet/snippets`
+/// tree (walking up from the file), not the workspace root.
 #[test]
 fn project_snippets_opt_in_loads_the_project_pack() {
-    // A project pack under the workspace root overrides the builtin `pr`.
-    let pack_dir = scratch_dir("project-opt-in")
-        .join(".codemmet")
-        .join("snippets");
+    let root = scratch_dir("project-opt-in");
+    let pack_dir = root.join(".codemmet").join("snippets");
     std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
     std::fs::write(
         pack_dir.join("rust.toml"),
         "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
     )
     .expect("project pack should be writable");
+    let uri = format!(
+        "file://{}/main.rs",
+        root.to_str().expect("scratch is UTF-8")
+    );
 
     let (mut client, _) = LspClient::start(
         "project-opt-in",
         &["utf-8"],
         &json!({ "project_snippets": true }),
     );
-    client.open(URI, "rust", "fn main() {\n    pr\n}\n");
-    let result = client.complete(URI, 1, 6);
+    client.open(&uri, "rust", "fn main() {\n    pr\n}\n");
+    let result = client.complete(&uri, 1, 6);
     let snippets = snippet_items(&result);
     assert_eq!(snippets.len(), 1, "items: {result}");
     let new_text = snippets[0]["textEdit"]["newText"]
@@ -898,24 +902,28 @@ fn project_snippets_opt_in_loads_the_project_pack() {
         "project pack should override pr; newText: {new_text}"
     );
     client.shutdown();
+    std::fs::remove_dir_all(&root).ok();
 }
 
 #[test]
 fn project_snippets_are_off_by_default() {
     // The same pack is present, but without the opt-in it must be ignored.
-    let pack_dir = scratch_dir("project-default-off")
-        .join(".codemmet")
-        .join("snippets");
+    let root = scratch_dir("project-default-off");
+    let pack_dir = root.join(".codemmet").join("snippets");
     std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
     std::fs::write(
         pack_dir.join("rust.toml"),
         "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
     )
     .expect("project pack should be writable");
+    let uri = format!(
+        "file://{}/main.rs",
+        root.to_str().expect("scratch is UTF-8")
+    );
 
     let (mut client, _) = LspClient::start("project-default-off", &["utf-8"], &json!({}));
-    client.open(URI, "rust", "fn main() {\n    pr\n}\n");
-    let result = client.complete(URI, 1, 6);
+    client.open(&uri, "rust", "fn main() {\n    pr\n}\n");
+    let result = client.complete(&uri, 1, 6);
     let snippets = snippet_items(&result);
     assert_eq!(snippets.len(), 1, "items: {result}");
     let new_text = snippets[0]["textEdit"]["newText"]
@@ -926,6 +934,60 @@ fn project_snippets_are_off_by_default() {
         "default should ignore the project pack; newText: {new_text}"
     );
     client.shutdown();
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// `codemmet.reloadSnippets` re-reads packs from disk: a pack written *after*
+/// the doc was first completed (and cached) is only picked up after a reload.
+#[test]
+fn reload_snippets_picks_up_a_pack_written_after_open() {
+    let root = scratch_dir("reload-pickup");
+    let pack_dir = root.join(".codemmet").join("snippets");
+    std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
+    let uri = format!(
+        "file://{}/main.rs",
+        root.to_str().expect("scratch is UTF-8")
+    );
+
+    let (mut client, _) = LspClient::start(
+        "reload-pickup",
+        &["utf-8"],
+        &json!({ "project_snippets": true }),
+    );
+    client.open(&uri, "rust", "fn main() {\n    pr\n}\n");
+
+    // No pack yet → builtin println, and the engine is now cached.
+    let before = client.complete(&uri, 1, 6);
+    let text = snippet_new_text(&before);
+    assert!(text.contains("println!"), "expected builtin; got {text}");
+
+    // Write the project pack; the cached engine still yields the builtin.
+    std::fs::write(
+        pack_dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.pr]\nbody = \"PROJECT!($0);\"\n",
+    )
+    .expect("project pack should be writable");
+    let cached_result = client.complete(&uri, 1, 6);
+    let cached = snippet_new_text(&cached_result);
+    assert!(
+        cached.contains("println!"),
+        "cache should still hold; got {cached}"
+    );
+
+    // Reload (read-only) → the next completion re-reads and sees the pack.
+    client.request(
+        "workspace/executeCommand",
+        &json!({ "command": "codemmet.reloadSnippets" }),
+    );
+    let after_result = client.complete(&uri, 1, 6);
+    let after = snippet_new_text(&after_result);
+    assert!(
+        after.contains("PROJECT!"),
+        "reload should pick up the pack; got {after}"
+    );
+
+    client.shutdown();
+    std::fs::remove_dir_all(&root).ok();
 }
 
 #[test]
@@ -994,102 +1056,4 @@ fn execute_command_preview_keeps_on_incomplete_abbreviation() {
         "expected the keep signal `{{}}`, got {result}"
     );
     client.shutdown();
-}
-
-#[test]
-fn execute_command_capture_writes_pack_and_reloads() {
-    // A capture into the project pack must (a) write a valid `<lang>.toml`,
-    // (b) return the path/trigger/params, and (c) reload the registry so the
-    // new trigger expands in the same session.
-    let proj = scratch_dir("lsp-capture-proj");
-    let uri = format!("file://{}/cap.rs", proj.to_str().expect("scratch is UTF-8"));
-
-    let (mut client, _) = LspClient::start("lsp-capture", &["utf-8"], &json!({}));
-    client.open(
-        &uri,
-        "rust",
-        "fn make() -> Widget {\n    Widget::new()\n}\n",
-    );
-
-    let result = client.request(
-        "workspace/executeCommand",
-        &json!({
-            "command": "codemmet.capture",
-            "arguments": [{
-                "uri": uri,
-                "range": {
-                    "start": { "line": 0, "character": 0 },
-                    "end": { "line": 2, "character": 1 },
-                },
-                "name": "mkw",
-            }],
-        }),
-    );
-    assert_eq!(result["trigger"], json!("mkw"));
-    assert_eq!(result["params"], json!(["Widget"]));
-    let path = result["path"].as_str().expect("path should be a string");
-    assert!(path.ends_with("rust.toml"), "path: {path}");
-
-    // The pack on disk is real and holds the captured trigger.
-    let text = std::fs::read_to_string(path).expect("pack should be written");
-    assert!(text.contains("[snippets.mkw]"), "pack: {text}");
-    assert!(text.contains("${Widget}"), "pack: {text}");
-
-    // The registry reloaded: expand the new trigger in the same session.
-    client.notify(
-        "textDocument/didChange",
-        &json!({
-            "textDocument": { "uri": uri, "version": 2 },
-            "contentChanges": [{ "text": "mkw\n" }],
-        }),
-    );
-    let expanded = client.request(
-        "workspace/executeCommand",
-        &json!({
-            "command": "codemmet.expand",
-            "arguments": [{ "uri": uri, "position": { "line": 0, "character": 3 } }],
-        }),
-    );
-    let snippet = expanded["snippet"]
-        .as_str()
-        .expect("snippet should be a string");
-    assert!(
-        snippet.contains("::new()"),
-        "captured trigger did not reload: {snippet}"
-    );
-
-    client.shutdown();
-    std::fs::remove_dir_all(&proj).ok();
-}
-
-#[test]
-fn execute_command_capture_empty_selection_is_an_error() {
-    let proj = scratch_dir("lsp-capture-empty");
-    let uri = format!("file://{}/e.rs", proj.to_str().expect("scratch is UTF-8"));
-    let (mut client, _) = LspClient::start("lsp-capture-empty", &["utf-8"], &json!({}));
-    client.open(&uri, "rust", "   \n");
-
-    let error = client.request_err(
-        "workspace/executeCommand",
-        &json!({
-            "command": "codemmet.capture",
-            "arguments": [{
-                "uri": uri,
-                "range": {
-                    "start": { "line": 0, "character": 0 },
-                    "end": { "line": 0, "character": 3 },
-                },
-                "name": "x",
-            }],
-        }),
-    );
-    assert!(
-        error["message"]
-            .as_str()
-            .unwrap_or("")
-            .contains("nothing to capture"),
-        "error: {error}"
-    );
-    client.shutdown();
-    std::fs::remove_dir_all(&proj).ok();
 }

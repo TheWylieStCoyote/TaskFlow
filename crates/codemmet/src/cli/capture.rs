@@ -51,7 +51,7 @@ pub struct CaptureArgs {
 }
 
 /// Run `codemmet capture`.
-pub fn run(sources: Sources, args: &CaptureArgs) -> ExitCode {
+pub fn run(sources: &Sources, args: &CaptureArgs) -> ExitCode {
     // Canonicalize the language (accepts extensions / LSP ids) so the pack file
     // name and `meta.language` are the profile id.
     let Some(profile) = profile::find(&args.lang) else {
@@ -109,10 +109,10 @@ pub fn run(sources: Sources, args: &CaptureArgs) -> ExitCode {
 /// `--user` writes to the user override directory (`--config` or the default);
 /// otherwise the project pack (`.codemmet/snippets` at or above the working
 /// directory, else a fresh one under the project root) is used.
-fn resolve_target(sources: Sources, user: bool) -> Result<PathBuf, String> {
+fn resolve_target(sources: &Sources, user: bool) -> Result<PathBuf, String> {
     if user {
         return sources
-            .user
+            .user_dir()
             .map(std::path::Path::to_path_buf)
             .ok_or_else(|| {
                 "no user snippets directory: pass --config <DIR> or build with the `dirs` feature"

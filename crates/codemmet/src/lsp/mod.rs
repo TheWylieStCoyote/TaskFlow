@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use codemmet_core::Engine;
+use codemmet_core::config::loader::ConfigError;
 use codemmet_core::context::{ContextProvider, DocSnapshot};
 use codemmet_core::lang::registry::{LanguageSnippets, Registry, find_project_snippets_dir};
 #[cfg(feature = "tree-sitter")]
@@ -92,6 +93,23 @@ struct Server {
     /// Syntax awareness for expansion points (`context_at` needs `&mut`
     /// for its tree cache, so the server owns the provider mutably).
     provider: Box<dyn ContextProvider>,
+    /// The user override directory in effect, kept so the registry can be
+    /// rebuilt after a `codemmet.capture` writes a new snippet.
+    user_dir: Option<PathBuf>,
+    /// The project override directory in effect (set on the first capture even
+    /// when `project_snippets` was not opted in, since a capture is an explicit
+    /// write into the project pack).
+    project_dir: Option<PathBuf>,
+}
+
+impl Server {
+    /// Rebuild the engine's registry from the current override directories,
+    /// so a freshly captured snippet becomes immediately expandable.
+    fn reload_registry(&mut self) -> Result<(), ConfigError> {
+        let registry = Registry::with_dirs(self.user_dir.as_deref(), self.project_dir.as_deref())?;
+        self.engine = Engine::with_registry(registry);
+        Ok(())
+    }
 }
 
 /// Convert a `file:` URI string to a filesystem path.
@@ -219,6 +237,8 @@ fn serve(default_user_dir: Option<&Path>) -> anyhow::Result<()> {
         completion_mode: options.completion_mode(),
         encoding,
         provider: default_provider(),
+        user_dir: user_dir.map(Path::to_path_buf),
+        project_dir,
     };
 
     for msg in &connection.receiver {
@@ -292,6 +312,7 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
                 "codemmet.expand".to_owned(),
                 "codemmet.wrap".to_owned(),
                 "codemmet.preview".to_owned(),
+                "codemmet.capture".to_owned(),
             ],
             ..ExecuteCommandOptions::default()
         }),
@@ -408,6 +429,9 @@ impl Server {
             }
             "codemmet.preview" => {
                 command_args(params.arguments).map(|args| commands::preview(self, &args))
+            }
+            "codemmet.capture" => {
+                command_args(params.arguments).and_then(|args| commands::capture(self, &args))
             }
             other => Err(CommandError(format!("unknown command `{other}`"))),
         };

@@ -4,15 +4,18 @@
 //! `workspace/applyEdit`, because applied edits cannot carry tabstops; the
 //! client deletes the range and hands the snippet to its own expander.
 
+use codemmet_core::config::writer::{SnippetEntry, upsert_snippet};
 use codemmet_core::context::{
     ContextProvider, DocSnapshot, ExpansionContext, IndentUnit, WrapSelection,
 };
+use codemmet_core::lang::registry::resolve_capture_dir;
+use codemmet_core::snippet::capture::{CaptureOptions, capture as capture_code};
 use codemmet_core::snippet::render::TabstopMode;
 use lsp_types::{Position, Range, Uri};
 use serde::Deserialize;
 
 use super::line_index::LineIndex;
-use super::{Server, extract};
+use super::{Server, extract, file_uri_to_path};
 
 /// A command failure: the human-readable message for a JSON-RPC error.
 #[derive(Debug)]
@@ -70,6 +73,29 @@ pub struct WrapArgs {
     /// Editor indent preferences; detected from the line when absent.
     #[serde(default, alias = "formattingOptions")]
     pub formatting_options: Option<FormattingOptions>,
+}
+
+/// Arguments of `codemmet.capture`.
+#[derive(Debug, Deserialize)]
+pub struct CaptureArgs {
+    /// The document the selection lives in.
+    pub uri: Uri,
+    /// The selection to generalize into a snippet.
+    pub range: Range,
+    /// The trigger name to register the captured snippet under.
+    pub name: String,
+    /// Optional human-readable description.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Identifiers to force into `${param}`s even if they occur once.
+    #[serde(default)]
+    pub params: Vec<String>,
+    /// Identifiers to keep literal even if they repeat.
+    #[serde(default)]
+    pub literals: Vec<String>,
+    /// Overwrite an existing trigger of the same name.
+    #[serde(default)]
+    pub force: bool,
 }
 
 /// Run `codemmet.expand`: expand the abbreviation left of `position`.
@@ -210,6 +236,70 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
         end: index.position(&doc.text, snapped.end, server.encoding),
     };
     Ok(result(range, &expansion.body))
+}
+
+/// Run `codemmet.capture`: generalize the selected code into a reusable
+/// snippet and write it into the project pack, then reload the registry so the
+/// new trigger is immediately expandable in the same session.
+///
+/// Unlike [`expand`]/[`wrap`], this command *writes* — but only the file the
+/// user explicitly asked for, and only inert snippet text. The target is the
+/// `.codemmet/snippets` pack at or above the document's directory (created if
+/// absent), resolved via
+/// [`resolve_capture_dir`](codemmet_core::lang::registry::resolve_capture_dir).
+///
+/// Returns `{ path, trigger, params }` for the client to report.
+pub fn capture(server: &mut Server, args: &CaptureArgs) -> Result<serde_json::Value, CommandError> {
+    let doc = server.snapshot(&args.uri)?;
+    let index = LineIndex::new(&doc.text);
+    let start = index.offset(&doc.text, args.range.start, server.encoding);
+    let end = index
+        .offset(&doc.text, args.range.end, server.encoding)
+        .max(start);
+    let selection = &doc.text[start..end];
+    if selection.trim().is_empty() {
+        return Err(CommandError(
+            "nothing to capture: the selection is empty".to_owned(),
+        ));
+    }
+
+    // The target directory is derived from the document's own path.
+    let file_path = file_uri_to_path(args.uri.as_str()).ok_or_else(|| {
+        CommandError(format!(
+            "cannot capture into a non-file URI: {}",
+            args.uri.as_str()
+        ))
+    })?;
+    let dir = resolve_capture_dir(file_path.parent().unwrap_or(&file_path));
+
+    let options = CaptureOptions {
+        force_params: args.params.clone(),
+        force_literals: args.literals.clone(),
+    };
+    let captured = capture_code(&doc.language, selection, &options);
+    let entry = SnippetEntry {
+        trigger: args.name.clone(),
+        description: args.description.clone(),
+        params: captured.params,
+        body: captured.body,
+    };
+    let param_names: Vec<String> = entry.params.iter().map(|p| p.name.clone()).collect();
+
+    let path = upsert_snippet(&dir, &doc.language, &entry, args.force)
+        .map_err(|err| CommandError(format!("cannot capture `{}`: {err}", args.name)))?;
+
+    // Make the captured trigger usable now: adopt the pack dir as the project
+    // override and rebuild the registry.
+    server.project_dir = Some(dir);
+    server
+        .reload_registry()
+        .map_err(|err| CommandError(format!("captured, but reloading snippets failed: {err}")))?;
+
+    Ok(serde_json::json!({
+        "path": path.display().to_string(),
+        "trigger": args.name,
+        "params": param_names,
+    }))
 }
 
 /// Ask the provider for the context at `offset`; the editor's explicit

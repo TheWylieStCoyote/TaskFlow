@@ -214,7 +214,12 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
     );
     assert_eq!(
         capabilities["executeCommandProvider"]["commands"],
-        json!(["codemmet.expand", "codemmet.wrap", "codemmet.preview"])
+        json!([
+            "codemmet.expand",
+            "codemmet.wrap",
+            "codemmet.preview",
+            "codemmet.capture"
+        ])
     );
     assert_eq!(capabilities["codeActionProvider"], json!(true));
     assert_eq!(result["serverInfo"]["name"], json!("codemmet"));
@@ -989,4 +994,102 @@ fn execute_command_preview_keeps_on_incomplete_abbreviation() {
         "expected the keep signal `{{}}`, got {result}"
     );
     client.shutdown();
+}
+
+#[test]
+fn execute_command_capture_writes_pack_and_reloads() {
+    // A capture into the project pack must (a) write a valid `<lang>.toml`,
+    // (b) return the path/trigger/params, and (c) reload the registry so the
+    // new trigger expands in the same session.
+    let proj = scratch_dir("lsp-capture-proj");
+    let uri = format!("file://{}/cap.rs", proj.to_str().expect("scratch is UTF-8"));
+
+    let (mut client, _) = LspClient::start("lsp-capture", &["utf-8"], &json!({}));
+    client.open(
+        &uri,
+        "rust",
+        "fn make() -> Widget {\n    Widget::new()\n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.capture",
+            "arguments": [{
+                "uri": uri,
+                "range": {
+                    "start": { "line": 0, "character": 0 },
+                    "end": { "line": 2, "character": 1 },
+                },
+                "name": "mkw",
+            }],
+        }),
+    );
+    assert_eq!(result["trigger"], json!("mkw"));
+    assert_eq!(result["params"], json!(["Widget"]));
+    let path = result["path"].as_str().expect("path should be a string");
+    assert!(path.ends_with("rust.toml"), "path: {path}");
+
+    // The pack on disk is real and holds the captured trigger.
+    let text = std::fs::read_to_string(path).expect("pack should be written");
+    assert!(text.contains("[snippets.mkw]"), "pack: {text}");
+    assert!(text.contains("${Widget}"), "pack: {text}");
+
+    // The registry reloaded: expand the new trigger in the same session.
+    client.notify(
+        "textDocument/didChange",
+        &json!({
+            "textDocument": { "uri": uri, "version": 2 },
+            "contentChanges": [{ "text": "mkw\n" }],
+        }),
+    );
+    let expanded = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": uri, "position": { "line": 0, "character": 3 } }],
+        }),
+    );
+    let snippet = expanded["snippet"]
+        .as_str()
+        .expect("snippet should be a string");
+    assert!(
+        snippet.contains("::new()"),
+        "captured trigger did not reload: {snippet}"
+    );
+
+    client.shutdown();
+    std::fs::remove_dir_all(&proj).ok();
+}
+
+#[test]
+fn execute_command_capture_empty_selection_is_an_error() {
+    let proj = scratch_dir("lsp-capture-empty");
+    let uri = format!("file://{}/e.rs", proj.to_str().expect("scratch is UTF-8"));
+    let (mut client, _) = LspClient::start("lsp-capture-empty", &["utf-8"], &json!({}));
+    client.open(&uri, "rust", "   \n");
+
+    let error = client.request_err(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.capture",
+            "arguments": [{
+                "uri": uri,
+                "range": {
+                    "start": { "line": 0, "character": 0 },
+                    "end": { "line": 0, "character": 3 },
+                },
+                "name": "x",
+            }],
+        }),
+    );
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("nothing to capture"),
+        "error: {error}"
+    );
+    client.shutdown();
+    std::fs::remove_dir_all(&proj).ok();
 }

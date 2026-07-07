@@ -138,7 +138,20 @@ fn extract_enum(
 // ---------------------------------------------------------------------------
 
 fn rust_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection>) {
-    extract_enum(root, text, "enum_item", "body", &["enum_variant"], map);
+    // Rust variants can carry a payload, so the item value is the match-ready
+    // pattern — `Quit`, `Write(..)`, `Move { .. }` — not just the name, so
+    // `match:Msg>arm*` produces arms that actually compile.
+    for def in descendants_of(root, &["enum_item"]) {
+        let Some(name) = field_text(def, "name", text) else {
+            continue;
+        };
+        let items = field_children(def, "body")
+            .into_iter()
+            .filter(|v| v.kind() == "enum_variant")
+            .filter_map(|v| Some(Item::new(rust_variant_pattern(v, text)?)))
+            .collect();
+        insert_def(map, name, items);
+    }
     for def in descendants_of(root, &["struct_item"]) {
         let Some(name) = field_text(def, "name", text) else {
             continue;
@@ -266,6 +279,21 @@ fn python_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection
         }
         insert_def(map, name, items);
     }
+}
+
+/// A Rust `enum_variant`'s match pattern: the bare name for a unit variant, a
+/// wildcard binding for a payload variant (`Write(..)` for a tuple variant,
+/// `Move { .. }` for a struct variant). This is minimal by design — it binds
+/// nothing, so the arm compiles without naming each field.
+fn rust_variant_pattern(variant: Node<'_>, text: &str) -> Option<String> {
+    let name = field_text(variant, "name", text)?;
+    Some(
+        match variant.child_by_field_name("body").map(|b| b.kind()) {
+            Some("ordered_field_declaration_list") => format!("{name}(..)"),
+            Some("field_declaration_list") => format!("{name} {{ .. }}"),
+            _ => name.to_owned(),
+        },
+    )
 }
 
 /// A struct field whose name is in a `name` field and type in a `type` field

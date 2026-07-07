@@ -381,6 +381,31 @@ fn execute_command_expand_fills_arms_from_a_buffer_enum() {
 }
 
 #[test]
+fn execute_command_expand_arms_bind_payload_variants() {
+    // Payload variants become wildcard bindings so the generated match
+    // compiles: a tuple variant → `Write(..)`, a struct variant → `Move { .. }`.
+    let (mut client, _) = LspClient::start("expand-enum-payload", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "enum Msg { Quit, Write(String), Move { x: i32 } }\nfn main() {\n    match:Msg>arm*\n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 18 } }],
+        }),
+    );
+    assert_eq!(
+        result["snippet"],
+        json!("match Msg {\n    Quit => $1,\n    Write(..) => $2,\n    Move { .. } => $0,\n}")
+    );
+    client.shutdown();
+}
+
+#[test]
 fn execute_command_expand_fills_fields_from_a_buffer_struct() {
     // CX3 end to end: `field*@Point` reads the fields of the `Point` struct in
     // the buffer, rendering each field's name and its declared type via

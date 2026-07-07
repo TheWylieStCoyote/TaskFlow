@@ -160,8 +160,12 @@ Extraction is **shape-directed, not type-aware**. codemmet reads what the syntax
 literally says — an enum's written variants, a struct's written fields, a list
 literal's written elements — and you name the source (`@Msg`). It does **not**
 infer a variable's type to find its definition, resolve imports, or read other
-files; that is a type-checker's job (rust-analyzer, tsc), not codemmet's. Payload
-enum variants currently fill their name only (`Move`, not `Move { .. }`).
+files; that is a type-checker's job (rust-analyzer, tsc), not codemmet's.
+
+Rust payload variants are handled minimally: a tuple variant extracts as
+`Write(..)` and a struct variant as `Move { .. }`, so a generated `match` arm
+compiles without your having to name each field. The bindings are wildcards —
+replace them if you need the payload.
 
 ## Language coverage
 

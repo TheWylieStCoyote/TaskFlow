@@ -320,3 +320,12 @@ description = "TODO comment"
 body = '''
 // TODO: $0
 '''
+
+[snippets.field]
+description = "struct field definition"
+# `${value}` / `${value.type}` bind to a data-driven repeat item: a struct's
+# fields fill `field*@Point` (name + declared type). With no data both fall
+# back to tabstops.
+body = '''
+${value:Name} ${value.type:Type}
+'''

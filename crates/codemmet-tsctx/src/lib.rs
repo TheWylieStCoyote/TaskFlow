@@ -25,6 +25,8 @@ use tree_sitter::{Node, Tree};
 
 pub use codemmet_core::context::ContextProvider;
 
+mod extract;
+
 /// Whether this build carries a grammar for `language_id`.
 ///
 /// `language_id` values are canonical profile ids (`"rust"`, `"python"`).
@@ -654,9 +656,10 @@ impl ContextProvider for TreeSitterProvider {
             in_string_or_comment,
             base_indent,
             indent_unit,
-            // Collection extraction (enum variants, in-scope lists, struct
-            // fields) lands in a later milestone; none for now.
-            collections: std::collections::BTreeMap::new(),
+            // Buffer-sourced collections for data-driven repeats: enum
+            // variants and struct fields (file-wide), plus list bindings in
+            // scope at the cursor.
+            collections: extract::collections(&doc.language, root, text, offset),
         }
     }
 
@@ -1372,5 +1375,145 @@ mod tests {
             WrapSelection::Valid { range } => assert_eq!(range, 14..21),
             WrapSelection::Invalid { reason } => panic!("unexpected invalid: {reason}"),
         }
+    }
+
+    // ---- Data-driven collection extraction (CX1–CX3) -------------------
+
+    /// The collections `context_at` extracts at the fixture's `§` cursor.
+    #[cfg(any(
+        feature = "lang-rust",
+        feature = "lang-python",
+        feature = "lang-c",
+        feature = "lang-cpp",
+        feature = "lang-javascript",
+        feature = "lang-typescript",
+        feature = "lang-go",
+    ))]
+    fn cols(
+        language: &str,
+        fixture: &str,
+    ) -> std::collections::BTreeMap<String, codemmet_core::context::Collection> {
+        ctx(language, fixture).collections
+    }
+
+    /// The `value`s of a named collection, in order (panics if absent).
+    #[cfg(any(
+        feature = "lang-rust",
+        feature = "lang-python",
+        feature = "lang-c",
+        feature = "lang-cpp",
+        feature = "lang-javascript",
+        feature = "lang-typescript",
+        feature = "lang-go",
+    ))]
+    fn values(
+        map: &std::collections::BTreeMap<String, codemmet_core::context::Collection>,
+        name: &str,
+    ) -> Vec<String> {
+        map.get(name)
+            .unwrap_or_else(|| panic!("no collection {name}; have {:?}", map.keys()))
+            .items
+            .iter()
+            .map(|i| i.value.clone())
+            .collect()
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn rust_enum_variants_extracted() {
+        let map = cols(
+            "rust",
+            "enum Msg { Quit, Move { x: i32 }, Write(String) }\nfn f() { §\n}\n",
+        );
+        assert_eq!(values(&map, "Msg"), ["Quit", "Move", "Write"]);
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn rust_struct_fields_carry_types() {
+        let map = cols("rust", "struct Point { x: i32, y: f64 }\nfn f() { §\n}\n");
+        assert_eq!(values(&map, "Point"), ["x", "y"]);
+        let point = &map["Point"];
+        assert_eq!(point.items[0].members["type"], "i32");
+        assert_eq!(point.items[1].members["type"], "f64");
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn rust_list_binding_in_scope() {
+        let map = cols("rust", "fn f() {\n    let items = [1, 2, 3];\n    §\n}\n");
+        assert_eq!(values(&map, "items"), ["1", "2", "3"]);
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn rust_vec_macro_and_scoping() {
+        // `vec![…]` elements are read; a binding *below* the cursor is not.
+        let map = cols(
+            "rust",
+            "fn f() {\n    let a = vec![x, y];\n    §\n    let b = [9];\n}\n",
+        );
+        assert_eq!(values(&map, "a"), ["x", "y"]);
+        assert!(
+            !map.contains_key("b"),
+            "binding below cursor is out of scope"
+        );
+    }
+
+    #[cfg(feature = "lang-typescript")]
+    #[test]
+    fn typescript_enums_unions_and_interfaces() {
+        let map = cols(
+            "typescript",
+            "enum Color { Red, Green = 2 }\ntype Dir = \"n\" | \"s\";\ninterface Point { x: number; y: string; }\n§\n",
+        );
+        assert_eq!(values(&map, "Color"), ["Red", "Green"]);
+        assert_eq!(values(&map, "Dir"), ["\"n\"", "\"s\""]);
+        assert_eq!(values(&map, "Point"), ["x", "y"]);
+        assert_eq!(map["Point"].items[0].members["type"], "number");
+    }
+
+    #[cfg(feature = "lang-c")]
+    #[test]
+    fn c_enum_and_struct() {
+        let map = cols(
+            "c",
+            "enum Color { RED, GREEN, BLUE };\nstruct Point { int x; double y; };\nvoid f() { §; }\n",
+        );
+        assert_eq!(values(&map, "Color"), ["RED", "GREEN", "BLUE"]);
+        assert_eq!(values(&map, "Point"), ["x", "y"]);
+        assert_eq!(map["Point"].items[0].members["type"], "int");
+    }
+
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn go_struct_fields_and_list() {
+        let map = cols(
+            "go",
+            "type Point struct {\n\tX int\n\tY float64\n}\nfunc f() {\n\titems := []int{1, 2, 3}\n\t§\n}\n",
+        );
+        assert_eq!(values(&map, "Point"), ["X", "Y"]);
+        assert_eq!(map["Point"].items[1].members["type"], "float64");
+        assert_eq!(values(&map, "items"), ["1", "2", "3"]);
+    }
+
+    #[cfg(feature = "lang-python")]
+    #[test]
+    fn python_enum_dataclass_and_list() {
+        let map = cols(
+            "python",
+            "class Color(Enum):\n    RED = 1\n    GREEN = 2\n\n@dataclass\nclass Point:\n    x: int\n    y: float\n\nitems = [1, 2, 3]\n§\n",
+        );
+        assert_eq!(values(&map, "Color"), ["RED", "GREEN"]);
+        assert_eq!(values(&map, "Point"), ["x", "y"]);
+        assert_eq!(map["Point"].items[0].members["type"], "int");
+        assert_eq!(values(&map, "items"), ["1", "2", "3"]);
+    }
+
+    #[cfg(feature = "lang-javascript")]
+    #[test]
+    fn javascript_list_binding() {
+        let map = cols("javascript", "const items = [1, 2, 3];\n§\n");
+        assert_eq!(values(&map, "items"), ["1", "2", "3"]);
     }
 }

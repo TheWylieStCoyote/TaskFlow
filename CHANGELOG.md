@@ -16,8 +16,19 @@ follows [Semantic Versioning](https://semver.org/).
   (so `arm*3` and plain `arm` are unchanged). The CLI `--repeat NAME=v1,v2,…`
   flag supplies collections (each value may carry `value:type`), so it works and
   is testable without an editor. `value` is now a reserved parameter name.
-  Buffer-sourced collections (enum variants, in-scope lists, struct fields via
-  tree-sitter) land in later milestones; see `CONTEXT_CODEGEN_PLAN.md`.
+- **Buffer-sourced collections (CX1–CX3 — live in the editor).** The
+  tree-sitter provider now extracts collections from the buffer, so data-driven
+  repeats fill themselves with no `--repeat` flag: `match:Msg>arm*` reads the
+  variants of a same-file `enum Msg` (CX2), `field*@Point` (or a struct-scoped
+  `arm*`) reads the fields of `struct Point` with each field's declared type on
+  `${value.type}` (CX3), and `arm*@items` reads the elements of an in-scope
+  `let items = […]` binding (CX1). Enum and struct/record definitions are
+  visible file-wide; list bindings must be lexically in scope and declared
+  before the cursor (nearest wins a name clash). Covered across all seven
+  languages where the construct exists — Rust, C/C++, TypeScript (including
+  string-union type aliases), Go, Python (`Enum` subclasses and dataclasses),
+  and JavaScript (lists only). Extraction is shape-directed, not type-aware:
+  you name the source rather than relying on inferring a variable's type.
 
 ### Testing
 

@@ -102,3 +102,12 @@ params = [{ name = "module", default = "module" }]
 body = '''
 import type { $1 } from "${module}";$0
 '''
+
+[snippets.field]
+description = "object/interface field"
+# `${value}` / `${value.type}` bind to a data-driven repeat item: an
+# interface's members fill `field*@Point` (name + declared type). With no data
+# both fall back to tabstops.
+body = '''
+${value:name}: ${value.type:type};
+'''

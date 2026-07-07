@@ -285,3 +285,12 @@ description = "TODO comment"
 body = '''
 # TODO: $0
 '''
+
+[snippets.field]
+description = "annotated attribute (dataclass field)"
+# `${value}` / `${value.type}` bind to a data-driven repeat item: a
+# dataclass's annotated attributes fill `field*@Point` (name + type). With no
+# data both fall back to tabstops.
+body = '''
+${value:name}: ${value.type:type}
+'''

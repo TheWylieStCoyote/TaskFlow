@@ -190,7 +190,7 @@ fn indented<W: Write>(text: &str, out: &mut W) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::train::exercise::{Exercise, Level, generate};
+    use crate::train::exercise::{Exercise, Level, from_abbreviation};
     use crate::train::review::ReviewState;
     use crate::train::rng::Rng;
     use crate::train::trainer::{Config, Mode};
@@ -249,9 +249,21 @@ mod tests {
     fn a_correct_answer_is_accepted() {
         let engine = engine();
         let seed = 7;
+        // Lessons draw from the curated set, not `generate`, so replicate the
+        // first curated Nesting exercise (built the same way, from the same
+        // fresh seed) to know its accepted answer.
+        let first = codemmet_train::lessons::curated("rust", Level::Nesting)[0];
         let mut probe = Rng::new(seed);
-        let exercise =
-            generate(&engine, "rust", Level::Nesting, &ctx(), &mut probe).expect("generated");
+        let exercise = from_abbreviation(
+            &engine,
+            "rust",
+            Level::Nesting,
+            first,
+            None,
+            &ctx(),
+            &mut probe,
+        )
+        .expect("curated renders");
         let answer = solution(&exercise);
 
         let mut t = trainer(&engine, Mode::Lessons, Some(Level::Nesting), seed);

@@ -312,6 +312,58 @@ fn execute_command_expand_returns_range_and_snippet() {
 }
 
 #[test]
+fn execute_command_expand_fills_arms_from_a_buffer_enum() {
+    // The flagship data-driven case, end to end through the tree-sitter
+    // provider: `match:Msg>arm*` reads the variants of the `Msg` enum defined
+    // in the same buffer and renders one arm per variant — no `--repeat`.
+    let (mut client, _) = LspClient::start("expand-enum", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "enum Msg { Quit, Move, Write }\nfn main() {\n    match:Msg>arm*\n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 18 } }],
+        }),
+    );
+    assert_eq!(
+        result["snippet"],
+        json!("match Msg {\n    Quit => $1,\n    Move => $2,\n    Write => $0,\n}")
+    );
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_expand_fills_fields_from_a_buffer_struct() {
+    // CX3 end to end: `field*@Point` reads the fields of the `Point` struct in
+    // the buffer, rendering each field's name and its declared type via
+    // `${value}` / `${value.type}` — with no `--repeat`.
+    let (mut client, _) = LspClient::start("expand-struct", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "struct Point { x: i32, y: f64 }\nfn main() {\n    struct:Wrapper>field*@Point\n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.expand",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 31 } }],
+        }),
+    );
+    assert_eq!(
+        result["snippet"],
+        json!("struct Wrapper {\n    x: i32,\n    y: f64,\n}$0")
+    );
+    client.shutdown();
+}
+
+#[test]
 fn execute_command_expand_without_candidate_is_an_error() {
     let (mut client, _) = LspClient::start("expand-err", &["utf-8"], &json!({}));
     client.open(URI, "rust", DOC);

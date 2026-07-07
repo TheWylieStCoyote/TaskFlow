@@ -162,6 +162,62 @@ snippets](snippets.md)); `i` is a reserved parameter name because of it. The
 index tracks each node's own repeat, so it applies to `node*n`, not to a
 group written as `(...)*n`.
 
+#### Data-driven repeats (`*@name`)
+
+Instead of a fixed count, a repeat can be driven by a **collection** — one copy
+per item, with each copy filled from that item. Write `*@name` to repeat over a
+named collection:
+
+```sh
+# one match arm per variant of the Msg enum:
+codemmet expand --lang rust "match:cmd>arm*@Msg"
+```
+
+A snippet body pulls the current item in with `${value}`; a member of the item
+with `${value.type}` (or any `${value.key}`); and supplies a fallback for when
+there is no data with `${value:default}`. The built-in `arm` and `field`
+snippets use these, so an enum fills its arms and a struct fills its fields:
+
+```rust
+match cmd {
+    Quit => ,
+    Move => ,
+    Write => ,
+}
+```
+
+Where does the collection come from?
+
+- **In an editor**, codemmet reads it from the buffer with tree-sitter. Three
+  kinds are recognized: an **enum**'s variants (`match:Msg>arm*@Msg`), a
+  **struct**/record's fields with their declared types
+  (`struct:Wrapper>field*@Point` → `x: i32,` / `y: f64,`), and an **in-scope
+  list** binding's elements (`let items = [a, b, c]` → `arm*@items`). Enum and
+  struct definitions are visible anywhere in the file; a list binding must be
+  in scope and appear before the cursor. This works across all seven languages
+  where the construct exists (JavaScript has lists only).
+- **On the CLI**, there is no buffer, so you supply collections with
+  `--repeat name=item1,item2,…` (repeatable). Each item may carry a member
+  after a colon — `field*@Point --repeat Point=x:i32,y:f64` gives each item a
+  `type`:
+
+  ```sh
+  codemmet expand --lang rust "struct:Wrapper>field*@Point" \
+      --repeat Point=x:i32,y:f64
+  ```
+
+If the enclosing construct already names the source — `match:Msg` — a bare
+`arm*` (no `@`) repeats over that subject, so `match:Msg>arm*` is shorthand for
+`match:Msg>arm*@Msg`. When a data-driven repeat finds no matching collection it
+degrades to a single copy with the `${value:default}` fallbacks, so `arm*` is
+always safe to type.
+
+> Extraction is **shape-directed, not type-aware**: codemmet reads what the
+> syntax literally says (an enum's written variants, a list literal's written
+> elements). It does not infer a variable's type to find its definition — you
+> name the source (`@Msg`). `value` is a reserved parameter name because of
+> `${value}`.
+
 ### `^` — climb-up
 
 A caret ends the current nesting level and attaches what follows one level

@@ -19,7 +19,9 @@ follows [Semantic Versioning](https://semver.org/).
 - **Buffer-sourced collections (CX1–CX3 — live in the editor).** The
   tree-sitter provider now extracts collections from the buffer, so data-driven
   repeats fill themselves with no `--repeat` flag: `match:Msg>arm*` reads the
-  variants of a same-file `enum Msg` (CX2), `field*@Point` (or a struct-scoped
+  variants of a same-file `enum Msg` (CX2) — a Rust tuple variant becomes
+  `Write(..)` and a struct variant `Move { .. }`, so the generated arms
+  compile — `field*@Point` (or a struct-scoped
   `arm*`) reads the fields of `struct Point` with each field's declared type on
   `${value.type}` (CX3), and `arm*@items` reads the elements of an in-scope
   `let items = […]` binding (CX1). Enum and struct/record definitions are

@@ -1425,7 +1425,10 @@ mod tests {
             "rust",
             "enum Msg { Quit, Move { x: i32 }, Write(String) }\nfn f() { §\n}\n",
         );
-        assert_eq!(values(&map, "Msg"), ["Quit", "Move", "Write"]);
+        // The value is the match-ready pattern: a unit variant is bare, a struct
+        // variant gets `{ .. }`, and a tuple variant gets `(..)`, so a generated
+        // `match:Msg>arm*` compiles without naming each payload field.
+        assert_eq!(values(&map, "Msg"), ["Quit", "Move { .. }", "Write(..)"]);
     }
 
     #[cfg(feature = "lang-rust")]

@@ -132,6 +132,25 @@ pub fn find_project_snippets_dir(start: &Path) -> Option<PathBuf> {
     })
 }
 
+/// Resolve the `.codemmet/snippets` directory a new snippet should be written
+/// to, walking up from `start`.
+///
+/// Prefers an existing `.codemmet/snippets` at or above `start` (so a capture
+/// lands in the project pack already in use). When none exists, it is placed
+/// under the nearest ancestor that looks like a project root — one holding a
+/// `.git` entry — else directly under `start`. The directory is *not* created;
+/// the caller creates it when it writes.
+pub fn resolve_capture_dir(start: &Path) -> PathBuf {
+    if let Some(dir) = find_project_snippets_dir(start) {
+        return dir;
+    }
+    let root = start
+        .ancestors()
+        .find(|dir| dir.join(".git").exists())
+        .unwrap_or(start);
+    root.join(".codemmet").join("snippets")
+}
+
 /// The ancestor profiles `profile` inherits, transitively, outermost first.
 ///
 /// Errors if an `inherits` id is unknown or the chain contains a cycle.
@@ -364,6 +383,33 @@ mod tests {
             Some(snippets.as_path())
         );
         assert!(find_project_snippets_dir(std::env::temp_dir().as_path()).is_none());
+
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn resolve_capture_dir_prefers_existing_then_git_root() {
+        let root = scratch_dir("capture-resolve");
+        let nested = root.join("crate").join("src");
+        std::fs::create_dir_all(&nested).expect("nested dir should be creatable");
+
+        // No existing pack, no .git: falls back to the start directory itself.
+        assert_eq!(
+            resolve_capture_dir(&nested),
+            nested.join(".codemmet").join("snippets")
+        );
+
+        // A .git at the root makes that the project root for a fresh pack.
+        std::fs::create_dir_all(root.join(".git")).expect(".git should be creatable");
+        assert_eq!(
+            resolve_capture_dir(&nested),
+            root.join(".codemmet").join("snippets")
+        );
+
+        // An existing pack wins over both.
+        let existing = root.join(".codemmet").join("snippets");
+        std::fs::create_dir_all(&existing).expect("existing pack dir should be creatable");
+        assert_eq!(resolve_capture_dir(&nested), existing);
 
         std::fs::remove_dir_all(&root).ok();
     }

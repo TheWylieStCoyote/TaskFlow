@@ -6,7 +6,7 @@ use std::process::ExitCode;
 
 use clap::Args;
 use codemmet_core::Engine;
-use codemmet_core::context::{Collection, ExpansionContext, Item};
+use codemmet_core::context::{Collection, ExpansionContext};
 use codemmet_core::engine::ExpandError;
 use codemmet_core::snippet::render::Expansion;
 
@@ -94,28 +94,9 @@ pub fn run(sources: Sources, args: &ExpandArgs) -> ExitCode {
 fn parse_repeat(specs: &[String]) -> Result<BTreeMap<String, Collection>, String> {
     let mut collections = BTreeMap::new();
     for spec in specs {
-        let (name, rest) = spec
-            .split_once('=')
-            .ok_or_else(|| format!("--repeat expects NAME=values, got `{spec}`"))?;
-        let name = name.trim();
-        if name.is_empty() {
-            return Err(format!("--repeat has an empty name in `{spec}`"));
-        }
-        let items = rest
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(|value| match value.split_once(':') {
-                Some((v, ty)) => {
-                    let mut item = Item::new(v.trim());
-                    item.members
-                        .insert("type".to_string(), ty.trim().to_string());
-                    item
-                }
-                None => Item::new(value),
-            })
-            .collect();
-        collections.insert(name.to_string(), Collection { items });
+        let (name, collection) =
+            Collection::parse_spec(spec).map_err(|err| format!("--repeat {err}"))?;
+        collections.insert(name, collection);
     }
     Ok(collections)
 }

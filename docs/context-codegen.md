@@ -1,0 +1,184 @@
+# Context-aware and data-driven expansion
+
+Most of codemmet is pure text: a trigger and its arguments expand the same way
+everywhere. But in an editor, codemmet also reads the code *around* the cursor
+with tree-sitter, and can use it two ways:
+
+- **Context-aware variants** — the same trigger expands differently depending on
+  the enclosing scope (a `fn` inside an `impl` gains `&self`).
+- **Data-driven repeats** — a repeat is driven by a *collection* pulled from the
+  buffer (a `match` fills one arm per enum variant), instead of a fixed count.
+
+Both need the tree-sitter provider, so they apply on the **editor / language
+server path**. Plain CLI expansion has no buffer to read; where it matters, the
+CLI offers explicit flags (`--repeat`) so the behavior is still reachable and
+testable. This is the same split as the rest of codemmet's context features —
+see the [`NullContextProvider`](../PLAN.md) note.
+
+## Context-aware variants
+
+A snippet can declare scope-specific variants. The classic case: a function
+gains a receiver parameter inside a type body.
+
+In an editor, typing `fn` inside an `impl` block expands to `fn name(&self) {…}`;
+at the top level it expands to `fn name() {…}`. The same happens for composed
+abbreviations, because a snippet's declared scope flows to its children:
+
+```sh
+codemmet expand --lang rust "impl:Point>fn:area"
+```
+
+```rust
+impl Point {
+    fn area(&self) {
+
+    }
+}
+```
+
+Python's `def` behaves the same inside a `class`:
+
+```sh
+codemmet expand --lang python "class:Widget>def:run"
+```
+
+```python
+class Widget:
+    def run(self):
+
+```
+
+The normalized scopes codemmet recognizes are `type-body`, `fn-body`, `loop`,
+`conditional`, `match-body`, and `try-body`; snippet authors match on them (or
+on a raw tree-sitter node kind) to add variants. See
+[custom snippets](snippets.md) for how to declare them.
+
+## Data-driven repeats
+
+A repeat written `*@name` draws from a **collection** — an ordered list of
+**items** — and renders one copy per item, each filled from that item. The
+snippet body references the current item:
+
+| In a body | Renders |
+| --- | --- |
+| `${value}` | the item's primary value (an enum variant, a field name, a list element) |
+| `${value.type}` (or any `${value.key}`) | a named member of the item |
+| `${value:default}` | the value, or `default` (as a tabstop) when there is no data |
+
+Three built-in snippets use these, so the common cases work out of the box:
+
+| Trigger | Body | Fills from |
+| --- | --- | --- |
+| `arm` | `${value:pattern} => $0,` | a `match`/`switch` over a collection |
+| `field` | a field definition, with `${value.type}` | a `struct`/record/interface |
+| `variant` | an enum member | an `enum` definition |
+
+### Where the collection comes from
+
+**In an editor**, codemmet extracts collections from the buffer with
+tree-sitter. Three kinds are recognized:
+
+- **Enum variants**, keyed by the enum name. Typing `match:msg>arm*@Msg` (or
+  the shorthand `match:Msg>arm*`, which infers the subject) reads the variants
+  of a same-file `enum Msg` and writes one arm each.
+- **Struct / record fields**, keyed by the type name, each carrying its declared
+  `type`. `struct:Wrapper>field*@Point` copies `Point`'s fields, and
+  `${value.type}` renders each field's type.
+- **In-scope list bindings**, keyed by the variable name. Given
+  `let items = [a, b, c];`, an `arm*@items` repeats over `a`, `b`, `c`.
+
+Enum and struct/record definitions are visible anywhere in the file (a
+definition may sit below its use). A list binding must be **lexically in scope**
+and appear **before the cursor**; when two in-scope bindings share a name, the
+nearest one wins.
+
+**On the CLI** there is no buffer, so you supply collections explicitly with
+`--repeat name=item1,item2,…` (repeatable). Each item may carry a member after a
+colon (`value:type`):
+
+```sh
+codemmet expand --lang rust "match:shape>arm*@Shape" \
+    --repeat Shape=Circle,Square,Triangle
+```
+
+```rust
+match shape {
+    Circle => ,
+    Square => ,
+    Triangle => ,
+}
+```
+
+```sh
+codemmet expand --lang rust "struct:Wrapper>field*@Point" \
+    --repeat Point=x:i32,y:f64
+```
+
+```rust
+struct Wrapper {
+    x: i32,
+    y: f64,
+}
+```
+
+The [browser playground](https://thewyliestcoyote.github.io/codemmit/) has a
+**Data-driven collections** box that takes the same `name=values` lines, so you
+can try all of this without an editor.
+
+### Defining, then consuming
+
+The `variant`/`field` snippets and the `arm` snippet are mirror images, so the
+same collection feature scaffolds a definition and later consumes it:
+
+```sh
+# define — three variants, filled from a collection (or *3 for blank tabstops)
+codemmet expand --lang rust "enum:Color>variant*@V" --repeat V=Red,Green,Blue
+```
+
+```rust
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+```
+
+In an editor, once `Color` exists in the buffer, `match:c>arm*@Color` (or
+`match:Color>arm*`) reads those variants straight back out — no `--repeat`.
+
+### The no-data fallback
+
+A data-driven repeat with no matching collection degrades to a **single copy**
+whose `${value:default}` spans become tabstops, so it is always safe to type. A
+bare `arm*` with no enum in scope yields one `pattern => ,` arm; `field*` yields
+one `name: Type,`. This keeps `arm*3` (a fixed count) and a plain `arm`
+identical to before data-driven repeats existed.
+
+### What it does *not* do
+
+Extraction is **shape-directed, not type-aware**. codemmet reads what the syntax
+literally says — an enum's written variants, a struct's written fields, a list
+literal's written elements — and you name the source (`@Msg`). It does **not**
+infer a variable's type to find its definition, resolve imports, or read other
+files; that is a type-checker's job (rust-analyzer, tsc), not codemmet's. Payload
+enum variants currently fill their name only (`Move`, not `Move { .. }`).
+
+## Language coverage
+
+| Source | Rust | C / C++ | TypeScript | Go | Python | JavaScript |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| Enum variants | ✓ | ✓ | ✓ (incl. string-union `type`) | — | ✓ (`Enum` subclass) | — |
+| Struct / record fields | ✓ | ✓ | ✓ (interface) | ✓ | ✓ (dataclass) | — |
+| In-scope lists | ✓ (incl. `vec!`) | ✓ | ✓ | ✓ (`:=` / `var`) | ✓ | ✓ |
+
+Go has no `enum` keyword (its enums are `const`/`iota` blocks) and JavaScript
+has neither enums nor typed fields, which is why those cells are blank.
+
+## See also
+
+- [Abbreviation syntax](syntax.md) — the `*@name` grammar and the `${value}`
+  spans in one place.
+- [Custom snippets](snippets.md) — declaring context variants and using
+  `${value}` / `${value.type}` in your own snippet bodies.
+- [Advanced examples](examples/advanced.md) — worked, end-to-end abbreviations.
+- [Language reference](languages.md) — every trigger per language.

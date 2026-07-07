@@ -15,7 +15,7 @@ use std::slice;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
-use codemmet_core::context::{ExpansionContext, IndentUnit};
+use codemmet_core::context::{Collection, ExpansionContext, IndentUnit};
 use codemmet_core::engine::Engine;
 use codemmet_core::lang::registry::Registry;
 use codemmet_core::snippet::render::TabstopMode;
@@ -71,14 +71,16 @@ pub extern "C" fn cm_last_ok() -> u32 {
     LAST_OK.load(Ordering::Relaxed)
 }
 
-/// Expand `abbr` for `lang`.
+/// Expand `abbr` for `lang`, optionally with data-driven collections.
 ///
-/// `keep` selects snippet syntax (`1`) or plain stripped text (`0`). Returns a
-/// pointer to a freshly allocated UTF-8 buffer whose length is [`cm_last_len`];
-/// the caller must [`cm_free`] it.
+/// `repeat` is a newline-separated list of `NAME=v1,v2,…` collection specs (the
+/// browser equivalent of the CLI `--repeat` flag; each value may carry
+/// `value:type`); pass an empty buffer for none. `keep` selects snippet syntax
+/// (`1`) or plain stripped text (`0`). Returns a pointer to a freshly allocated
+/// UTF-8 buffer whose length is [`cm_last_len`]; the caller must [`cm_free`] it.
 ///
 /// # Safety
-/// `abbr`/`lang` must point to `abbr_len`/`lang_len` readable UTF-8 bytes (as
+/// `abbr`/`lang`/`repeat` must point to `*_len` readable UTF-8 bytes (as
 /// written after [`cm_alloc`]).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cm_expand(
@@ -86,11 +88,14 @@ pub unsafe extern "C" fn cm_expand(
     abbr_len: usize,
     lang: *const u8,
     lang_len: usize,
+    repeat: *const u8,
+    repeat_len: usize,
     keep: u32,
 ) -> *mut u8 {
     let abbr = unsafe { str_from(abbr, abbr_len) };
     let lang = unsafe { str_from(lang, lang_len) };
-    let (ok, text) = expand(&abbr, &lang, keep != 0);
+    let repeat = unsafe { str_from(repeat, repeat_len) };
+    let (ok, text) = expand(&abbr, &lang, &repeat, keep != 0);
     LAST_OK.store(u32::from(ok), Ordering::Relaxed);
     return_string(text)
 }
@@ -115,13 +120,25 @@ unsafe fn str_from(ptr: *const u8, len: usize) -> String {
 }
 
 /// Expand, returning `(success, text)` — the expansion, or the error message.
-fn expand(abbr: &str, lang: &str, keep: bool) -> (bool, String) {
+///
+/// `repeat_spec` supplies data-driven collections, one `NAME=values` per line;
+/// malformed lines are ignored so a half-typed spec never fails the expansion.
+fn expand(abbr: &str, lang: &str, repeat_spec: &str, keep: bool) -> (bool, String) {
     let mode = if keep {
         TabstopMode::Keep
     } else {
         TabstopMode::Strip
     };
-    let ctx = ExpansionContext::plain(String::new(), indent_for(lang));
+    let mut ctx = ExpansionContext::plain(String::new(), indent_for(lang));
+    for line in repeat_spec.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok((name, collection)) = Collection::parse_spec(line) {
+            ctx.collections.insert(name, collection);
+        }
+    }
     match engine().expand(abbr, lang, &ctx, mode) {
         Ok(expansion) => (true, expansion.body),
         Err(err) => (false, err.to_string()),
@@ -373,7 +390,7 @@ mod tests {
 
     #[test]
     fn expands_a_known_abbreviation() {
-        let (ok, text) = expand("fn:main>pr", "rust", false);
+        let (ok, text) = expand("fn:main>pr", "rust", "", false);
         assert!(ok);
         assert!(text.contains("fn main()"));
         assert!(text.contains("println!"));
@@ -381,16 +398,29 @@ mod tests {
 
     #[test]
     fn keep_mode_emits_snippet_syntax() {
-        let (ok, text) = expand("pr", "rust", true);
+        let (ok, text) = expand("pr", "rust", "", true);
         assert!(ok);
         assert!(text.contains('$'), "snippet syntax has a tabstop: {text}");
     }
 
     #[test]
     fn an_unknown_trigger_reports_an_error() {
-        let (ok, text) = expand("definitely_not_real", "rust", false);
+        let (ok, text) = expand("definitely_not_real", "rust", "", false);
         assert!(!ok);
         assert!(!text.is_empty());
+    }
+
+    #[test]
+    fn data_driven_repeat_fills_from_the_repeat_spec() {
+        let (ok, text) = expand("match:cmd>arm*@Msg", "rust", "Msg=Quit,Move,Write", false);
+        assert!(ok, "text: {text}");
+        assert_eq!(
+            text,
+            "match cmd {\n    Quit => ,\n    Move => ,\n    Write => ,\n}"
+        );
+        // A malformed spec line is ignored rather than failing the expansion.
+        let (ok, _) = expand("pr", "rust", "no-equals-sign", false);
+        assert!(ok);
     }
 
     #[test]

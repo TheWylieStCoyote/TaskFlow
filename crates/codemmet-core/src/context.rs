@@ -40,6 +40,40 @@ pub struct Collection {
     pub items: Vec<Item>,
 }
 
+impl Collection {
+    /// Parse a `NAME=v1,v2,…` spec into a named collection, as accepted by the
+    /// CLI `--repeat` flag and the web playground. Each value may carry a
+    /// member after a colon (`value:type`), which becomes the item's `type`.
+    /// Empty values are skipped, so a trailing comma is harmless.
+    ///
+    /// # Errors
+    /// Returns a message when the spec has no `=`, or an empty name.
+    pub fn parse_spec(spec: &str) -> Result<(String, Self), String> {
+        let (name, rest) = spec
+            .split_once('=')
+            .ok_or_else(|| format!("expected NAME=values, got `{spec}`"))?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!("empty collection name in `{spec}`"));
+        }
+        let items = rest
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| match value.split_once(':') {
+                Some((v, ty)) => {
+                    let mut item = Item::new(v.trim());
+                    item.members
+                        .insert("type".to_string(), ty.trim().to_string());
+                    item
+                }
+                None => Item::new(value),
+            })
+            .collect();
+        Ok((name.to_string(), Self { items }))
+    }
+}
+
 /// A read-only snapshot of the document an expansion happens in.
 #[derive(Debug, Clone)]
 pub struct DocSnapshot {
@@ -186,6 +220,27 @@ impl ContextProvider for NullContextProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_spec_reads_name_values_and_type_members() {
+        let (name, collection) = Collection::parse_spec("Point=x:i32, y :f64 , z").expect("valid");
+        assert_eq!(name, "Point");
+        let values: Vec<&str> = collection.items.iter().map(|i| i.value.as_str()).collect();
+        assert_eq!(values, ["x", "y", "z"]);
+        assert_eq!(collection.items[0].members["type"], "i32");
+        assert_eq!(collection.items[1].members["type"], "f64");
+        assert!(collection.items[2].members.is_empty());
+    }
+
+    #[test]
+    fn parse_spec_skips_empty_values_and_rejects_malformed() {
+        // Trailing comma leaves no empty item.
+        let (_, collection) = Collection::parse_spec("E=A,B,").expect("valid");
+        assert_eq!(collection.items.len(), 2);
+        // No `=`, and an empty name, are both errors.
+        assert!(Collection::parse_spec("nope").is_err());
+        assert!(Collection::parse_spec("=A,B").is_err());
+    }
 
     #[test]
     fn null_provider_takes_indent_from_current_line() {

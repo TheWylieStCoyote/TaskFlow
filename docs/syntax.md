@@ -343,12 +343,15 @@ that surrounds it. For example, Rust's `fn` gains a `&self` parameter when it
 appears inside an `impl` block, and Python's `def` gains a `self` parameter
 inside a `class`. codemmet detects this using tree-sitter, so it applies only
 on the editor and language-server path (including composed forms such as
-`impl:Point>fn:new`), not to plain CLI expansion. See the
-[language reference](languages.md) and [editor setup](editors.md) for details.
+`impl:Point>fn:new`), not to plain CLI expansion. This is the same mechanism
+that lets a data-driven repeat read enum variants and struct fields from the
+buffer — see [context-aware & data-driven expansion](context-codegen.md) for
+the whole picture.
 
 ## See also
 
 - [documentation home](README.md)
+- [context-aware & data-driven expansion](context-codegen.md)
 - [language reference](languages.md)
 - [CLI reference](cli.md)
 - [custom snippets](snippets.md)

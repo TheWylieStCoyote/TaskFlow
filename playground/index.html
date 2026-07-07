@@ -50,6 +50,29 @@
         font-size: 16px;
         margin: 4px 0 14px;
       }
+      details.repeat-box { margin: 0 0 16px; }
+      details.repeat-box > summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 13px;
+        user-select: none;
+      }
+      details.repeat-box[open] > summary { color: var(--accent); margin-bottom: 8px; }
+      #repeat {
+        width: 100%;
+        min-height: 62px;
+        resize: vertical;
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-family: ui-monospace, "DejaVu Sans Mono", SFMono-Regular, Menlo, monospace;
+        font-size: 14px;
+      }
+      #repeat:focus { outline: 2px solid var(--accent); }
+      .repeat-box .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+      .repeat-box .hint code { color: var(--code); }
       .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
       .examples button {
         background: var(--panel);
@@ -120,6 +143,24 @@
         placeholder="fn:main&gt;fori10&gt;pr"
       />
 
+      <details class="repeat-box" id="repeat-box">
+        <summary>Data-driven collections (optional)</summary>
+        <textarea
+          id="repeat"
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
+          placeholder="Msg=Quit,Move,Write&#10;Point=x:i32,y:f64"
+        ></textarea>
+        <p class="hint">
+          One per line: <code>Name=item1,item2</code>. Drive a repeat with
+          <code>arm*@Name</code>, <code>field*@Name</code>, or
+          <code>variant*@Name</code>. Items may carry a type: <code>x:i32</code>
+          fills <code>${value}</code> and <code>${value.type}</code>. In an
+          editor these come from the buffer automatically.
+        </p>
+      </details>
+
       <div class="examples" id="examples"></div>
 
       <pre id="out" class="loading">loading the engine…</pre>
@@ -141,6 +182,11 @@
         ["rust", "enum:Shape+impl:Shape>fn:area"],
         ["rust", "tmod>test:case${i}*3"],
         ["rust", "mod:app>((struct:Point)+(impl:Point>((fn:x>ret)+(fn:y>ret))))"],
+        // Data-driven: a third element supplies the collection (in an editor
+        // this comes from the buffer, so no collection is needed there).
+        ["rust", "match:cmd>arm*@Msg", "Msg=Quit,Move,Write"],
+        ["rust", "enum:Color>variant*@V", "V=Red,Green,Blue"],
+        ["rust", "struct:Point>field*@P", "P=x:i32,y:f64"],
         // Python
         ["python", "def:main>fori:i,10>pr"],
         ["python", "class:Widget>(def:init+def:run)"],
@@ -157,30 +203,38 @@
         // TypeScript
         ["typescript", "class:Widget>fn:run"],
         ["typescript", "int:Shape+fng:identity"],
+        ["typescript", "enum:Dir>variant*@D", "D=North,South,East,West"],
         // Go
         ["go", "fn:main>fori:i,10>pr"],
         ["go", "fn:run>iferr"],
         ["go", "struct:Point+iface:Shape"],
+        ["go", "struct:Point>field*@P", "P=X:int,Y:float64"],
       ];
 
       const $ = (id) => document.getElementById(id);
       const abbrEl = $("abbr"), langEl = $("lang"), keepEl = $("keep"), outEl = $("out");
+      const repeatEl = $("repeat"), repeatBox = $("repeat-box");
 
       const enc = new TextEncoder();
       const dec = new TextDecoder();
       let wasm = null;
 
-      function expand(abbr, lang, keep) {
+      function expand(abbr, lang, repeat, keep) {
         const x = wasm;
-        const a = enc.encode(abbr), l = enc.encode(lang);
+        const a = enc.encode(abbr), l = enc.encode(lang), r = enc.encode(repeat || "");
         const ap = x.cm_alloc(a.length), lp = x.cm_alloc(l.length);
+        // Only allocate a collections buffer when there is one, so the common
+        // no-collections path passes a null pointer with length zero.
+        const rp2 = r.length ? x.cm_alloc(r.length) : 0;
         new Uint8Array(x.memory.buffer, ap, a.length).set(a);
         new Uint8Array(x.memory.buffer, lp, l.length).set(l);
-        const rp = x.cm_expand(ap, a.length, lp, l.length, keep ? 1 : 0);
+        if (r.length) new Uint8Array(x.memory.buffer, rp2, r.length).set(r);
+        const rp = x.cm_expand(ap, a.length, lp, l.length, rp2, r.length, keep ? 1 : 0);
         const rl = x.cm_last_len(), ok = x.cm_last_ok() === 1;
         const out = dec.decode(new Uint8Array(x.memory.buffer, rp, rl).slice());
         x.cm_free(ap, a.length);
         x.cm_free(lp, l.length);
+        if (r.length) x.cm_free(rp2, r.length);
         x.cm_free(rp, rl);
         return { ok, out };
       }
@@ -193,7 +247,7 @@
           outEl.textContent = "Type an abbreviation above…";
           return;
         }
-        const { ok, out } = expand(abbr, langEl.value, keepEl.checked);
+        const { ok, out } = expand(abbr, langEl.value, repeatEl.value, keepEl.checked);
         outEl.className = ok ? "" : "error";
         outEl.textContent = out || "(empty)";
       }
@@ -202,13 +256,16 @@
       function buildExamples() {
         const box = $("examples");
         box.replaceChildren();
-        for (const [lang, abbr] of EXAMPLES) {
+        for (const [lang, abbr, repeat] of EXAMPLES) {
           if (lang !== langEl.value) continue;
           const b = document.createElement("button");
           b.textContent = abbr;
-          b.title = abbr;
+          b.title = repeat ? `${abbr}   (with ${repeat})` : abbr;
           b.addEventListener("click", () => {
             abbrEl.value = abbr;
+            repeatEl.value = repeat || "";
+            // Reveal the collection an example relies on so its output makes sense.
+            if (repeat) repeatBox.open = true;
             render();
             abbrEl.focus();
           });
@@ -237,6 +294,7 @@
       }
 
       abbrEl.addEventListener("input", render);
+      repeatEl.addEventListener("input", render);
       langEl.addEventListener("change", () => {
         buildExamples();
         render();

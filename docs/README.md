@@ -36,6 +36,10 @@ New to codemmet? Read these in order:
   and the `>` `+` `*` `^` `()` composition operators.
 - **[Language reference](languages.md)** — every trigger for each of the seven
   languages, with descriptions.
+- **[Context-aware & data-driven expansion](context-codegen.md)** — how codemmet
+  reads the surrounding code: scope-specific variants (`fn` in `impl` gains
+  `&self`) and repeats driven by enum variants, struct fields, or in-scope lists
+  (`match:Msg>arm*`).
 - **[CLI reference](cli.md)** — the `expand`, `wrap`, `list`, `check`, and `lsp`
   subcommands, their flags, and exit codes.
 - **[Trainer](trainer.md)** — the `train` subcommand: modes, keys, spaced

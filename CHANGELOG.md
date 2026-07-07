@@ -35,6 +35,13 @@ follows [Semantic Versioning](https://semver.org/).
   ways: `struct:Wrapper>field*@Point` writes field definitions and
   `enum:Color>variant*3` (or `*@Src`) writes enum members — the mirror image of
   consuming them with `arm`.
+- **Data-driven collections in the browser playground (CX4).** The playground
+  gains an optional "Data-driven collections" box that takes the same
+  `name=values` lines as `--repeat`, so `match:cmd>arm*@Msg` and friends are
+  demoable without an editor; several data-driven examples ship with it.
+- **A [context-aware & data-driven expansion guide](docs/context-codegen.md)**
+  covering scope variants and the three buffer sources, plus worked examples in
+  the [advanced cookbook](docs/examples/advanced.md).
 
 ### Testing
 

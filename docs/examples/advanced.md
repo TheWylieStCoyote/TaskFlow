@@ -394,9 +394,85 @@ From one line of abbreviation, that is a 33-line module skeleton with nine
 tabstops to jump through — the struct body first (`$1`), then each method and
 its `return`, then the three test bodies, ending on `$0` in the last test.
 
+## Data-driven repeats: one arm per enum variant
+
+`*3` repeats a fixed number of times; `*@Name` repeats over a **collection** and
+fills each copy from it. The `arm` snippet renders `${value}` as the arm
+pattern, so a `match` writes one arm per variant. On the CLI you supply the
+collection with `--repeat`; in an editor codemmet reads it from a same-file
+`enum` automatically (just `match:event>arm*`).
+
+```sh
+codemmet expand --lang rust "match:event>arm*@Event" \
+    --repeat Event=Click,Scroll,KeyPress
+```
+
+```rust
+match event {
+    Click => ,
+    Scroll => ,
+    KeyPress => ,
+}
+```
+
+In `keep` mode each arm still gets its own tabstop for the body, so you can jump
+straight through filling them in:
+
+```sh
+codemmet expand --lang rust --tabstops keep "match:event>arm*@Event" \
+    --repeat Event=Click,Scroll,KeyPress
+```
+
+```rust
+match event {
+    Click => $1,
+    Scroll => $2,
+    KeyPress => $0,
+}
+```
+
+## Defining an enum, then a struct, from the same collection idiom
+
+The `variant` and `field` snippets are the definition-side mirror of `arm`.
+`variant` fills enum members and `field` fills struct fields — and a field
+carries its declared type on `${value.type}`, supplied as `value:type`:
+
+```sh
+codemmet expand --lang rust "enum:Event>variant*@Event" \
+    --repeat Event=Click,Scroll,KeyPress
+```
+
+```rust
+enum Event {
+    Click,
+    Scroll,
+    KeyPress,
+}
+```
+
+```sh
+codemmet expand --lang rust "struct:Config>field*@Cfg" \
+    --repeat Cfg=host:String,port:u16
+```
+
+```rust
+struct Config {
+    host: String,
+    port: u16,
+}
+```
+
+So one buffer can drive the whole cycle: define `enum Event { … }` with
+`variant*`, then elsewhere consume it with `match:event>arm*` — which reads
+those variants back out. See
+[context-aware & data-driven expansion](../context-codegen.md) for the sources
+codemmet extracts and the per-language coverage.
+
 ## See also
 
 - [Examples overview](README.md) and the per-language pages.
 - [Abbreviation syntax](../syntax.md) — the grammar and operator precedence.
+- [Context-aware & data-driven expansion](../context-codegen.md) — repeats
+  driven by the surrounding code.
 - [Tutorials](../tutorials.md) — build up from the basics.
 - [Language reference](../languages.md) — every trigger, linked to its own example.

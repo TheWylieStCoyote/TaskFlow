@@ -184,7 +184,7 @@ Flags: `--lang` (required, accepts extensions), `--indent`, `--base-indent`, `--
 ## Status and deferred work
 
 All milestones (M0–M4) plus the post-M4 hardening above are complete: seven
-languages, ~250 built-in triggers, a CLI, an LSP server, a Neovim plugin, and
+languages, ~265 built-in triggers, a CLI, an LSP server, a Neovim plugin, and
 full user documentation under `docs/`.
 
 Repetition index variables shipped: `${i}` renders the 1-based copy number of
@@ -218,6 +218,22 @@ library) holds all logic; the front ends only render and forward key events —
 which is why it also runs in the browser: the WASM playground (see `playground/`)
 ships a web trainer (`train.html`) over the same state machine, with progress in
 `localStorage`. See `TRAINER_PLAN.md` (design) and `docs/trainer.md` (user guide).
+
+Data-driven expansion shipped (milestones CX0–CX4; see
+`CONTEXT_CODEGEN_PLAN.md`): a repeat can be driven by a named *collection* of
+items instead of a fixed count — `arm*@Msg`, or the shorthand `match:Msg>arm*`
+that infers the subject. Snippet bodies reference the current item with
+`${value}`, a member with `${value.type}`/`${value.key}`, and a no-data fallback
+with `${value:default}` (so `arm*3` and plain `arm` are unchanged); `value` is a
+reserved parameter name. The built-in `arm`, `field`, and `variant` snippets
+consume and define enums/records. Collections come from the buffer via
+tree-sitter — enum variants and struct/record fields (visible file-wide) and
+in-scope list bindings — across every language where the construct exists, or
+from the CLI `--repeat name=v1,v2,…` hatch (also wired into the browser
+playground). Extraction is shape-directed, not type-aware: the source is named,
+never inferred from a variable's type. Engine-and-CLI logic lives in
+`codemmet-core`; all per-language node-kind knowledge is isolated in
+`codemmet-tsctx`'s `extract` module. See `docs/context-codegen.md` (user guide).
 
 Deferred features (not built): a packaged VS Code extension (codemmet works
 there via generic LSP today), and a cross-language `base.toml` pack

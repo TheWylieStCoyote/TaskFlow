@@ -19,6 +19,12 @@ test:
 snap:
     cargo insta review
 
+# Smoke-run the coverage-guided fuzz targets (needs nightly + `cargo install
+# cargo-fuzz`). Pass a run count, e.g. `just fuzz 1000000` for a longer session.
+fuzz runs="100000":
+    cd fuzz && cargo +nightly fuzz run parse  -- -runs={{runs}}
+    cd fuzz && cargo +nightly fuzz run expand -- -runs={{runs}}
+
 # Regenerate the README demo GIF (needs ffmpeg + a DejaVu Sans Mono font)
 demo:
     bash demo/render.sh

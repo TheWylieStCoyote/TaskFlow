@@ -17,6 +17,10 @@ cargo +nightly fuzz run parse     # fuzz the abbreviation parser
 cargo +nightly fuzz run expand    # fuzz the full expand pipeline
 ```
 
+Or a bounded smoke run of both via the justfile: `just fuzz` (default 100k
+iterations each), or `just fuzz 1000000` for longer. Both targets have been run
+for 200k iterations with no crashes.
+
 Targets:
 
 - **`parse`** — `codemmet_core::abbr::parse` on arbitrary UTF-8.

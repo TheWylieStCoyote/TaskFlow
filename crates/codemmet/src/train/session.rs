@@ -190,21 +190,15 @@ fn indented<W: Write>(text: &str, out: &mut W) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::train::exercise::{Exercise, Level, from_abbreviation};
+    use crate::train::exercise::{Exercise, Level};
     use crate::train::review::ReviewState;
-    use crate::train::rng::Rng;
     use crate::train::trainer::{Config, Mode};
-    use codemmet_core::context::{ExpansionContext, IndentUnit};
     use codemmet_core::engine::Engine;
     use codemmet_core::lang::registry::Registry;
     use std::io::Cursor;
 
     fn engine() -> Engine {
         Engine::with_registry(Registry::with_builtins().expect("builtins should load"))
-    }
-
-    fn ctx() -> ExpansionContext {
-        ExpansionContext::plain(String::new(), IndentUnit::Spaces(4))
     }
 
     fn trainer(engine: &Engine, mode: Mode, level: Option<Level>, seed: u64) -> Trainer<'_> {
@@ -248,27 +242,15 @@ mod tests {
     #[test]
     fn a_correct_answer_is_accepted() {
         let engine = engine();
-        let seed = 7;
-        // Lessons draw from the curated set, not `generate`, so replicate the
-        // first curated Nesting exercise (built the same way, from the same
-        // fresh seed) to know its accepted answer.
-        let first = codemmet_train::lessons::curated("rust", Level::Nesting)[0];
-        let mut probe = Rng::new(seed);
-        let exercise = from_abbreviation(
-            &engine,
-            "rust",
-            Level::Nesting,
-            first,
-            None,
-            &ctx(),
-            &mut probe,
-        )
-        .expect("curated renders");
-        let answer = solution(&exercise);
-
-        let mut t = trainer(&engine, Mode::Lessons, Some(Level::Nesting), seed);
-        // Enter to begin, then the answer; EOF then stops at the feedback screen.
-        let text = drive(&mut t, &format!("\n{answer}\n"));
+        let mut t = trainer(&engine, Mode::Lessons, Some(Level::Nesting), 7);
+        // Advance to the exercise and answer the one the trainer actually
+        // presents — read it from the trainer rather than re-deriving it from a
+        // parallel RNG path, so a change to the trigger pool or curated set
+        // can't desync the test. Then the line runner takes the answer and
+        // stops at the feedback screen on EOF.
+        t.handle(Event::Advance);
+        let answer = solution(t.exercise().expect("an exercise is presented"));
+        let text = drive(&mut t, &format!("{answer}\n"));
         assert!(text.contains("✓ correct"), "output:\n{text}");
         assert_eq!(t.stats().solved, 1);
     }

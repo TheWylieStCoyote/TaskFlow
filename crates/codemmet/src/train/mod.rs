@@ -16,8 +16,6 @@
 // The pure trainer core lives in the `codemmet-train` library so it can also
 // compile to WebAssembly for the browser playground. Re-export the modules the
 // native front ends use under `crate::train::…` so their paths are unchanged.
-#[cfg(test)]
-use codemmet_train::rng;
 use codemmet_train::{exercise, review, trainer};
 
 mod progress;

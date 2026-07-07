@@ -24,7 +24,7 @@
 
 use std::ops::Range;
 
-use super::{AbbrNode, Abbreviation, ParseError};
+use super::{AbbrNode, Abbreviation, ParseError, Repeat};
 
 /// Maximum accepted `*n` repeat count.
 const MAX_REPEAT: u32 = 100;
@@ -93,7 +93,7 @@ fn node_weight(node: &AbbrNode) -> usize {
         .children
         .iter()
         .fold(0usize, |sum, c| sum.saturating_add(node_weight(c)));
-    usize::try_from(node.repeat)
+    usize::try_from(node.repeat.budget_weight())
         .unwrap_or(usize::MAX)
         .saturating_mul(children.saturating_add(1))
 }
@@ -223,10 +223,10 @@ impl Parser<'_> {
             let star = self.here();
             self.bump();
             let start = self.pos;
-            let n = self.repeat_count(star)?;
-            (n, start..self.pos)
+            let repeat = self.repeat_spec(star)?;
+            (repeat, start..self.pos)
         } else {
-            (1, 0..self.input.len())
+            (Repeat::Count(1), 0..self.input.len())
         };
         let (children, flow) = if self.peek() == Some('>') {
             let op = self.here();
@@ -245,7 +245,10 @@ impl Parser<'_> {
         };
         match atom {
             Atom::Node(mut node) => {
-                self.charge_nodes(usize::try_from(repeat).unwrap_or(usize::MAX), &repeat_span)?;
+                self.charge_nodes(
+                    usize::try_from(repeat.budget_weight()).unwrap_or(usize::MAX),
+                    &repeat_span,
+                )?;
                 node.repeat = repeat;
                 node.children = children;
                 nodes.push(node);
@@ -257,15 +260,24 @@ impl Parser<'_> {
                 if let Some(last) = group.last_mut() {
                     last.children.extend(children);
                 }
+                // A data-driven count can't be distributed at parse time (it is
+                // unknown until render); support it on plain nodes only.
+                if repeat.is_data_driven() {
+                    return Err(err(
+                        "data-driven repeat (`*@name` or `*`) is not supported on a group",
+                        repeat_span,
+                    ));
+                }
                 // Distribute `(…)*n` into n sibling copies, charging each
                 // copy's full subtree weight so nested distribution fails
                 // fast instead of materializing the clones.
-                if repeat > 1 {
+                let count = repeat.budget_weight();
+                if count > 1 {
                     let weight = group
                         .iter()
                         .fold(0usize, |sum, n| sum.saturating_add(node_weight(n)));
                     let copy = group.clone();
-                    for _ in 1..repeat {
+                    for _ in 1..count {
                         self.charge_nodes(weight, &repeat_span)?;
                         group.extend_from_slice(&copy);
                     }
@@ -309,9 +321,29 @@ impl Parser<'_> {
         Ok(AbbrNode {
             word,
             args,
-            repeat: 1,
+            repeat: Repeat::Count(1),
             children: Vec::new(),
         })
+    }
+
+    /// The repeat spec after a `*`: `@name` (data-driven source), a NUMBER
+    /// (literal count), or nothing/an operator (a bare `*`, data-driven over
+    /// the enclosing subject).
+    fn repeat_spec(&mut self, star: Range<usize>) -> Result<Repeat, ParseError> {
+        match self.peek() {
+            Some('@') => {
+                self.bump();
+                if !self
+                    .peek()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                {
+                    return Err(err("expected a name after '*@'", star));
+                }
+                Ok(Repeat::Source(self.word()))
+            }
+            Some(c) if c.is_ascii_digit() => Ok(Repeat::Count(self.repeat_count(star)?)),
+            _ => Ok(Repeat::Subject),
+        }
     }
 
     /// `WORD := [A-Za-z_][A-Za-z0-9_]*` — the caller has checked the first
@@ -415,7 +447,7 @@ impl Parser<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{AbbrNode, ParseError};
+    use super::super::{AbbrNode, ParseError, Repeat};
     use super::parse;
 
     /// A bare node with the given word and all other fields defaulted.
@@ -423,7 +455,7 @@ mod tests {
         AbbrNode {
             word: w.to_string(),
             args: Vec::new(),
-            repeat: 1,
+            repeat: Repeat::Count(1),
             children: Vec::new(),
         }
     }
@@ -523,7 +555,7 @@ mod tests {
         assert_eq!(
             parsed("a*3"),
             vec![AbbrNode {
-                repeat: 3,
+                repeat: Repeat::Count(3),
                 ..word("a")
             }]
         );
@@ -535,7 +567,7 @@ mod tests {
         assert_eq!(
             parsed("a*3>b"),
             vec![AbbrNode {
-                repeat: 3,
+                repeat: Repeat::Count(3),
                 children: vec![word("b")],
                 ..word("a")
             }]
@@ -647,7 +679,7 @@ mod tests {
             vec![AbbrNode {
                 args: vec!["main".to_string()],
                 children: vec![AbbrNode {
-                    repeat: 2,
+                    repeat: Repeat::Count(2),
                     children: vec![AbbrNode {
                         args: vec!["x".to_string()],
                         ..word("pr")
@@ -702,14 +734,27 @@ mod tests {
     }
 
     #[test]
-    fn error_star_without_number() {
-        let e = parse_err("a*");
-        assert_eq!(e.message, "expected a number after '*'");
-        assert_eq!(e.span, 1..2);
+    fn bare_star_is_data_driven_over_the_subject() {
+        let nodes = parse("a*").expect("a bare `*` is valid (data-driven)").0;
+        assert_eq!(nodes[0].repeat, Repeat::Subject);
+    }
 
-        let e = parse_err("a*x");
-        assert_eq!(e.message, "expected a number after '*'");
-        assert_eq!(e.span, 1..2);
+    #[test]
+    fn star_at_names_an_explicit_source() {
+        let nodes = parse("a*@Msg").expect("`*@name` is valid").0;
+        assert_eq!(nodes[0].repeat, Repeat::Source("Msg".to_string()));
+    }
+
+    #[test]
+    fn error_star_at_without_a_name() {
+        let e = parse_err("a*@");
+        assert_eq!(e.message, "expected a name after '*@'");
+    }
+
+    #[test]
+    fn error_data_driven_repeat_on_a_group() {
+        let e = parse_err("(a+b)*@x");
+        assert!(e.message.contains("not supported on a group"));
     }
 
     #[test]
@@ -867,7 +912,7 @@ mod tests {
             vec![
                 AbbrNode {
                     children: vec![AbbrNode {
-                        repeat: 2,
+                        repeat: Repeat::Count(2),
                         ..word("b")
                     }],
                     ..word("a")
@@ -964,7 +1009,7 @@ mod tests {
         // Weighted count 10,000 sits exactly at the cap.
         let nodes = parsed("(a*100)*100");
         assert_eq!(nodes.len(), 100);
-        assert!(nodes.iter().all(|n| n.repeat == 100));
+        assert!(nodes.iter().all(|n| n.repeat == Repeat::Count(100)));
     }
 
     #[test]
@@ -973,6 +1018,6 @@ mod tests {
         // renderer's line budget owns that case.
         let nodes = parsed("a*100>b*100>c*100");
         assert_eq!(nodes.len(), 1);
-        assert_eq!(nodes[0].repeat, 100);
+        assert_eq!(nodes[0].repeat, Repeat::Count(100));
     }
 }

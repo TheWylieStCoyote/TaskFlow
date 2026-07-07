@@ -164,6 +164,39 @@ fn parse_braced(
                     break;
                 }
             }
+            // `${value}` / `${value.key}` / `${value:default}`: the data-driven
+            // repeat item. Handled before the `}` check because of the `.`/`:`.
+            if name == "value" {
+                let member = if chars.peek() == Some(&'.') {
+                    chars.next();
+                    let mut key = String::new();
+                    while let Some(c) = chars.peek().copied() {
+                        if c.is_ascii_alphanumeric() || c == '_' {
+                            chars.next();
+                            key.push(c);
+                        } else {
+                            break;
+                        }
+                    }
+                    if key.is_empty() {
+                        return Err(err(line_no, "expected a member name after ${value."));
+                    }
+                    Some(key)
+                } else {
+                    None
+                };
+                return match chars.next() {
+                    Some('}') => Ok(Span::ItemValue {
+                        member,
+                        default: None,
+                    }),
+                    Some(':') => Ok(Span::ItemValue {
+                        member,
+                        default: Some(parse_placeholder(chars, line_no)?),
+                    }),
+                    _ => Err(err(line_no, "expected '}' or ':' in ${value}")),
+                };
+            }
             if chars.next() != Some('}') {
                 return Err(err(line_no, "expected '}' after parameter name"));
             }

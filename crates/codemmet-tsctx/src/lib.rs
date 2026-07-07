@@ -654,6 +654,9 @@ impl ContextProvider for TreeSitterProvider {
             in_string_or_comment,
             base_indent,
             indent_unit,
+            // Collection extraction (enum variants, in-scope lists, struct
+            // fields) lands in a later milestone; none for now.
+            collections: std::collections::BTreeMap::new(),
         }
     }
 

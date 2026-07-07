@@ -453,3 +453,34 @@ fn train_rejects_an_out_of_range_level() {
     assert_eq!(code(&out), 3);
     assert!(stderr(&out).contains("between 1 and 7"));
 }
+
+#[test]
+fn expand_data_driven_repeat_fills_arms_from_flag() {
+    let out = run(
+        "expand-repeat",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "match:Msg>arm*",
+            "--repeat",
+            "Msg=Quit,Move,Write",
+        ],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "match Msg {\n    Quit => ,\n    Move => ,\n    Write => ,\n}\n"
+    );
+}
+
+#[test]
+fn expand_data_driven_repeat_falls_back_without_data() {
+    let out = run(
+        "expand-repeat-fallback",
+        &["expand", "--lang", "rust", "--no-project", "match:X>arm*"],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "match X {\n    pattern => ,\n}\n");
+}

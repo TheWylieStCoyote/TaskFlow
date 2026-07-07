@@ -179,8 +179,10 @@ match ${1:expr} {
 
 [snippets.arm]
 description = "match arm"
+# `${value}` binds to a data-driven repeat item (`match:Msg>arm*` fills one arm
+# per variant); with no data it falls back to the `pattern` placeholder.
 body = '''
-${1:pattern} => $0,
+${value:pattern} => $0,
 '''
 
 [snippets.struct]

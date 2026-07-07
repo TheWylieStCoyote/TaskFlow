@@ -268,6 +268,12 @@ fn compile_snippet(
                 "parameter name `i` is reserved for the repetition index `${i}`".to_owned(),
             ));
         }
+        if param.name == "value" {
+            return Err(invalid(
+                "parameter name `value` is reserved for the data-driven repeat item `${value}`"
+                    .to_owned(),
+            ));
+        }
         if !declared.insert(param.name.as_str()) {
             return Err(invalid(format!("duplicate parameter `{}`", param.name)));
         }
@@ -497,6 +503,23 @@ mod tests {
             ConfigError::Invalid { message, .. } => {
                 assert!(
                     message.contains("reserved for the repetition index"),
+                    "{message}"
+                );
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn param_named_value_is_reserved() {
+        let err = compile_err(
+            "user",
+            "[meta]\nlanguage = \"rust\"\n[snippets.f]\nparams = [{ name = \"value\" }]\nbody = \"f${value}\"\n",
+        );
+        match err {
+            ConfigError::Invalid { message, .. } => {
+                assert!(
+                    message.contains("reserved for the data-driven repeat item"),
                     "{message}"
                 );
             }

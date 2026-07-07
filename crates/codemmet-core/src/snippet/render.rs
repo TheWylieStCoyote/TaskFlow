@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use crate::abbr::{AbbrNode, Abbreviation};
+use std::collections::BTreeMap;
+
+use crate::abbr::{AbbrNode, Abbreviation, Repeat};
 use crate::config::loader::{CompiledSnippet, SnippetSet, parse_scope_name};
 use crate::config::schema::ParamKind;
-use crate::context::{ExpansionContext, Scope};
+use crate::context::{Collection, ExpansionContext, Item, Scope};
 use crate::snippet::ir::{Span, Template};
 
 /// Maximum number of composed lines per expansion.
@@ -135,12 +137,13 @@ fn compose(
         placeholders: Vec::new(),
         composed_lines: 0,
         keep_child_slot,
+        collections: &ctx.collections,
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
     let mut lines = Vec::new();
     for node in &abbr.0 {
-        lines.extend(composer.compose_node(node, scope)?);
+        lines.extend(composer.compose_node(node, scope, None)?);
     }
     Ok((lines, composer.placeholders))
 }
@@ -200,6 +203,8 @@ struct Composer<'a> {
     /// Keep a leaf's `${child}` slot instead of degrading it to a final
     /// cursor (wrap injects the selection into that slot).
     keep_child_slot: bool,
+    /// Named collections in scope, for data-driven repeats.
+    collections: &'a BTreeMap<String, Collection>,
 }
 
 impl Composer<'_> {
@@ -215,7 +220,12 @@ impl Composer<'_> {
     /// a top-level node, or the enclosing snippet's declared `scope` (a
     /// scope-less parent is transparent) for a `>`-nested one. It picks the
     /// context variant to instantiate.
-    fn compose_node(&mut self, node: &AbbrNode, scope: Scope) -> Result<Vec<Line>, RenderError> {
+    fn compose_node(
+        &mut self,
+        node: &AbbrNode,
+        scope: Scope,
+        subject: Option<&str>,
+    ) -> Result<Vec<Line>, RenderError> {
         let (snippet, remainder) =
             self.set
                 .resolve_word(&node.word)
@@ -232,11 +242,24 @@ impl Composer<'_> {
             .as_deref()
             .and_then(parse_scope_name)
             .unwrap_or(scope);
+        // The subject for this node's children: this node's first argument if
+        // it names a known collection (e.g. `match:Msg` → `Msg`), else the
+        // inherited subject. This is what a child's bare `*` repeats over.
+        let child_subject = node
+            .args
+            .first()
+            .filter(|a| self.collections.contains_key(a.as_str()))
+            .map_or(subject, |a| Some(a.as_str()));
 
+        // One entry per copy: `Some(item)` for a data-driven repeat, `None`
+        // for a literal `*n` copy or a data-driven repeat with no resolvable
+        // collection (which degrades to a single copy).
+        let items = self.resolve_items(&node.repeat, subject);
         let mut out = Vec::new();
-        for copy in 0..node.repeat {
+        for (copy, item) in items.iter().enumerate() {
             // The repetition index is 1-based (`${i}` renders 1, 2, …).
-            let mut lines = self.instantiate(template, &bindings, copy + 1);
+            let index = u32::try_from(copy + 1).unwrap_or(u32::MAX);
+            let mut lines = self.instantiate(template, &bindings, index, item.as_ref());
             // Fail fast: repeat counts multiply through nesting, so the
             // budget must trip during composition, not on a finished Vec.
             self.composed_lines = self.composed_lines.saturating_add(lines.len());
@@ -264,7 +287,7 @@ impl Composer<'_> {
                 }
                 let mut children = Vec::new();
                 for child in &node.children {
-                    children.extend(self.compose_node(child, child_scope)?);
+                    children.extend(self.compose_node(child, child_scope, child_subject)?);
                 }
                 lines = splice_children(lines, children);
             }
@@ -280,11 +303,30 @@ impl Composer<'_> {
     /// placeholder defaults. Every unbound parameter and every template-local
     /// tabstop index gets a fresh identity on first occurrence; repeats become
     /// mirrors.
+    /// One entry per rendered copy for `repeat`: the data-driven items, or
+    /// `None`s for a literal `*n`. A data-driven repeat whose collection is
+    /// missing or empty degrades to a single `None` copy (the `${value}`
+    /// placeholders become tabstops), so the user still gets a scaffold.
+    fn resolve_items(&self, repeat: &Repeat, subject: Option<&str>) -> Vec<Option<Item>> {
+        let items_of = |name: &str| match self.collections.get(name) {
+            Some(collection) if !collection.items.is_empty() => {
+                collection.items.iter().cloned().map(Some).collect()
+            }
+            _ => vec![None],
+        };
+        match repeat {
+            Repeat::Count(n) => (0..*n).map(|_| None).collect(),
+            Repeat::Source(name) => items_of(name),
+            Repeat::Subject => subject.map_or_else(|| vec![None], items_of),
+        }
+    }
+
     fn instantiate(
         &mut self,
         template: &Template,
         bindings: &[(String, Binding)],
         index: u32,
+        item: Option<&Item>,
     ) -> Vec<Line> {
         let mut param_ids: HashMap<&str, StopId> = HashMap::new();
         let mut index_ids: HashMap<u32, StopId> = HashMap::new();
@@ -311,6 +353,26 @@ impl Composer<'_> {
                         }
                     }
                     Span::RepeatIndex => CSpan::Text(index.to_string()),
+                    Span::ItemValue { member, default } => item.map_or_else(
+                        // No item: leave a tabstop carrying the default.
+                        || CSpan::Stop {
+                            id: self.alloc(default.clone()),
+                            mirror: false,
+                        },
+                        |it| {
+                            let text = member.as_ref().map_or_else(
+                                || it.value.clone(),
+                                |key| {
+                                    it.members
+                                        .get(key)
+                                        .cloned()
+                                        .or_else(|| default.clone())
+                                        .unwrap_or_default()
+                                },
+                            );
+                            CSpan::Text(text)
+                        },
+                    ),
                     Span::ChildSlot => CSpan::Slot,
                     Span::FinalCursor => CSpan::Final,
                 });
@@ -916,7 +978,16 @@ mod tests {
                 vec![param("name", ParamKind::Ident, None)],
                 "def ${name}($1):\n\t${child}\n",
             ),
-            snip("arm", vec![], "${1:pattern} => $0,\n"),
+            snip("arm", vec![], "${value:pattern} => $0,\n"),
+            scoped(
+                snip(
+                    "match",
+                    vec![param("expr", ParamKind::Ident, Some("expr"))],
+                    "match ${expr} {\n\t${child}\n}\n",
+                ),
+                "match-body",
+            ),
+            snip("fielddef", vec![], "${value}: ${value.type},\n"),
             snip("if", vec![], "if $1 {\n\t${child}\n}\n"),
             snip("el", vec![], "else {\n\t${child}\n}\n"),
             snip(
@@ -1124,6 +1195,58 @@ mod tests {
     fn siblings_concatenate() {
         let e = expand("if+el", &ctx(), TabstopMode::Keep);
         assert_eq!(e.body, "if $1 {\n    $2\n}\nelse {\n    $0\n}");
+    }
+
+    // --- data-driven repeats -------------------------------------------------
+
+    fn ctx_with(name: &str, values: &[&str]) -> ExpansionContext {
+        let mut ctx = ctx();
+        ctx.collections.insert(
+            name.to_string(),
+            Collection {
+                items: values.iter().map(|v| Item::new(*v)).collect(),
+            },
+        );
+        ctx
+    }
+
+    #[test]
+    fn data_driven_explicit_source_fills_one_copy_per_item() {
+        let ctx = ctx_with("Msg", &["Quit", "Move", "Write"]);
+        let e = expand("arm*@Msg", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body, "Quit => ,\nMove => ,\nWrite => ,");
+    }
+
+    #[test]
+    fn data_driven_subject_inferred_from_parent() {
+        let ctx = ctx_with("Msg", &["Quit", "Move"]);
+        let e = expand("match:Msg>arm*", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body, "match Msg {\n    Quit => ,\n    Move => ,\n}");
+    }
+
+    #[test]
+    fn data_driven_missing_collection_falls_back_to_one_copy() {
+        // No `Nope` collection in context → a single copy with the tabstop.
+        let e = expand("arm*@Nope", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "pattern => ,");
+    }
+
+    #[test]
+    fn data_driven_members_render_via_value_dot_key() {
+        let mut ctx = ctx();
+        let field = |name: &str, ty: &str| {
+            let mut item = Item::new(name);
+            item.members.insert("type".to_string(), ty.to_string());
+            item
+        };
+        ctx.collections.insert(
+            "Point".to_string(),
+            Collection {
+                items: vec![field("x", "f64"), field("y", "i32")],
+            },
+        );
+        let e = expand("fielddef*@Point", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body, "x: f64,\ny: i32,");
     }
 
     #[test]

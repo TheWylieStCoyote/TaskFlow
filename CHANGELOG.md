@@ -6,6 +6,19 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Data-driven expansion (CX0 — engine + CLI).** A repeat can now be driven by
+  a named collection instead of a fixed count: `arm*@Msg` repeats over `Msg`,
+  and a bare `arm*` repeats over the subject named by the enclosing construct
+  (`match:Msg>arm*`). Snippet bodies reference the current item with `${value}`,
+  a member with `${value.key}`, and a no-data fallback with `${value:default}`
+  (so `arm*3` and plain `arm` are unchanged). The CLI `--repeat NAME=v1,v2,…`
+  flag supplies collections (each value may carry `value:type`), so it works and
+  is testable without an editor. `value` is now a reserved parameter name.
+  Buffer-sourced collections (enum variants, in-scope lists, struct fields via
+  tree-sitter) land in later milestones; see `CONTEXT_CODEGEN_PLAN.md`.
+
 ### Testing
 
 - Property-based fuzzing of the abbreviation parser, the template parser, and

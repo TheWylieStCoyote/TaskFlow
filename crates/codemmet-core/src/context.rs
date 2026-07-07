@@ -6,7 +6,39 @@
 //! [`NullContextProvider`]; the `codemmet-tsctx` crate supplies a
 //! tree-sitter-backed implementation in later phases.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
+
+/// One member of a [`Collection`] that drives data-driven repetition.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Item {
+    /// The item's primary text — a `${value}` reference renders this (an enum
+    /// variant name, a list element, a struct field name).
+    pub value: String,
+    /// Named extras a `${value.key}` reference can render (e.g. a field's
+    /// `"type"`).
+    pub members: BTreeMap<String, String>,
+}
+
+impl Item {
+    /// A member-less item carrying just a primary value.
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            members: BTreeMap::new(),
+        }
+    }
+}
+
+/// A named, ordered collection resolved from the buffer (or supplied on the
+/// CLI) that a data-driven repeat (`arm*@Msg`, or a bare `*` over a subject)
+/// expands over — one copy per item.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Collection {
+    /// The items, in source order.
+    pub items: Vec<Item>,
+}
 
 /// A read-only snapshot of the document an expansion happens in.
 #[derive(Debug, Clone)]
@@ -74,6 +106,9 @@ pub struct ExpansionContext {
     pub base_indent: String,
     /// Indentation unit for nested lines.
     pub indent_unit: IndentUnit,
+    /// Named collections in scope, for data-driven repeats (`arm*@Msg`, or a
+    /// bare `*` over a subject). Empty when there is no context data.
+    pub collections: BTreeMap<String, Collection>,
 }
 
 impl ExpansionContext {
@@ -85,6 +120,7 @@ impl ExpansionContext {
             in_string_or_comment: false,
             base_indent,
             indent_unit,
+            collections: BTreeMap::new(),
         }
     }
 }

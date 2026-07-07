@@ -1,11 +1,12 @@
 //! `codemmet expand`: abbreviation in, rendered code out.
 
+use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::process::ExitCode;
 
 use clap::Args;
 use codemmet_core::Engine;
-use codemmet_core::context::ExpansionContext;
+use codemmet_core::context::{Collection, ExpansionContext, Item};
 use codemmet_core::engine::ExpandError;
 use codemmet_core::snippet::render::Expansion;
 
@@ -38,6 +39,12 @@ pub struct ExpandArgs {
     #[arg(long)]
     json: bool,
 
+    /// Supply a collection for a data-driven repeat, as `NAME=v1,v2,…` (each
+    /// value may carry a member as `value:type`). Repeatable. Example:
+    /// `--repeat Msg=Quit,Move,Write` with `match:Msg>arm*`.
+    #[arg(long, value_name = "NAME=v1,v2,…")]
+    repeat: Vec<String>,
+
     /// The abbreviation; omitted or `-` reads it from stdin.
     #[arg(value_name = "ABBR")]
     abbr: Option<String>,
@@ -60,8 +67,14 @@ pub fn run(sources: Sources, args: &ExpandArgs) -> ExitCode {
         Err(msg) => return config_failure(&msg),
     };
 
+    let collections = match parse_repeat(&args.repeat) {
+        Ok(collections) => collections,
+        Err(msg) => return config_failure(&msg),
+    };
+
     let engine = Engine::with_registry(registry);
-    let ctx = ExpansionContext::plain(args.base_indent.clone(), indent_unit);
+    let mut ctx = ExpansionContext::plain(args.base_indent.clone(), indent_unit);
+    ctx.collections = collections;
     match engine.expand(&abbr, &args.lang, &ctx, args.tabstops.into()) {
         Ok(expansion) => emit(&expansion, args.json),
         Err(err) => {
@@ -74,6 +87,37 @@ pub fn run(sources: Sources, args: &ExpandArgs) -> ExitCode {
             ExitCode::from(code)
         }
     }
+}
+
+/// Parse `--repeat NAME=v1,v2,…` specs into named collections. Each value may
+/// carry a single member as `value:type`.
+fn parse_repeat(specs: &[String]) -> Result<BTreeMap<String, Collection>, String> {
+    let mut collections = BTreeMap::new();
+    for spec in specs {
+        let (name, rest) = spec
+            .split_once('=')
+            .ok_or_else(|| format!("--repeat expects NAME=values, got `{spec}`"))?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!("--repeat has an empty name in `{spec}`"));
+        }
+        let items = rest
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| match value.split_once(':') {
+                Some((v, ty)) => {
+                    let mut item = Item::new(v.trim());
+                    item.members
+                        .insert("type".to_string(), ty.trim().to_string());
+                    item
+                }
+                None => Item::new(value),
+            })
+            .collect();
+        collections.insert(name.to_string(), Collection { items });
+    }
+    Ok(collections)
 }
 
 /// Resolve the abbreviation argument; `None` or `-` reads stdin, trimming

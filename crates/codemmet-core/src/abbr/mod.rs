@@ -51,6 +51,35 @@ pub const OPERATOR_CHARS: &[char] = &['>', '+', '*', ':', ',', '(', ')', '^'];
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Abbreviation(pub Vec<AbbrNode>);
 
+/// How a node repeats.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Repeat {
+    /// A literal count from `*n` (and the absent case, `Count(1)`).
+    Count(u32),
+    /// `*@name`: repeat over the collection named `name` (data-driven).
+    Source(String),
+    /// A bare `*`: repeat over the subject named by the enclosing construct.
+    Subject,
+}
+
+impl Repeat {
+    /// Parse-time weight for the size budget: the literal count, or 1 for a
+    /// data-driven repeat (whose real size the render budget bounds).
+    #[must_use]
+    pub const fn budget_weight(&self) -> u32 {
+        match self {
+            Self::Count(n) => *n,
+            Self::Source(_) | Self::Subject => 1,
+        }
+    }
+
+    /// Whether the count comes from context data (`*@name` or a bare `*`).
+    #[must_use]
+    pub const fn is_data_driven(&self) -> bool {
+        matches!(self, Self::Source(_) | Self::Subject)
+    }
+}
+
 /// One node of the abbreviation tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AbbrNode {
@@ -58,8 +87,8 @@ pub struct AbbrNode {
     pub word: String,
     /// Explicit `:`-args, already unquoted and unescaped, in source order.
     pub args: Vec<String>,
-    /// Repetition count from `*n`; `1` when absent.
-    pub repeat: u32,
+    /// How the node repeats: a literal `*n`, or a data-driven `*@name` / `*`.
+    pub repeat: Repeat,
     /// Nodes attached with `>`.
     pub children: Vec<Self>,
 }

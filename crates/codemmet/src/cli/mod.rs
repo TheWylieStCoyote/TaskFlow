@@ -4,6 +4,7 @@
 //! error, 2 unknown trigger or argument-binding failure, 3 configuration or
 //! environment error. Diagnostics go to stderr only.
 
+mod capture;
 mod check;
 mod expand;
 mod list;
@@ -65,6 +66,8 @@ enum Command {
     Expand(expand::ExpandArgs),
     /// Wrap a selection (stdin) in an expanded abbreviation.
     Wrap(wrap::WrapArgs),
+    /// Capture example code into a reusable, parameterized snippet.
+    Capture(capture::CaptureArgs),
     /// List every trigger registered for a language.
     List(list::ListArgs),
     /// Validate the user snippet override directory.
@@ -97,6 +100,7 @@ pub fn run() -> ExitCode {
     match cli.command {
         Command::Expand(args) => expand::run(sources, &args),
         Command::Wrap(args) => wrap::run(sources, &args),
+        Command::Capture(args) => capture::run(sources, &args),
         Command::List(args) => list::run(sources, &args),
         Command::Check => check::run(sources),
         Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), &args),

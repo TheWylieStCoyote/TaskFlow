@@ -523,3 +523,167 @@ fn expand_enum_with_variants_defines_and_data_fills() {
         "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
     );
 }
+
+// ---- capture-from-example (`codemmet capture`) --------------------------
+
+/// Capture code into the `--config` (user) dir, then expand the new trigger
+/// back: the round-trip reproduces the original.
+#[test]
+fn capture_into_user_dir_round_trips() {
+    let src = "fn make() -> Widget {\n    Widget::new()\n}";
+    let captured = run(
+        "capture-roundtrip",
+        &[
+            "capture",
+            "--lang",
+            "rust",
+            "--name",
+            "mkw",
+            "--user",
+            "--no-project",
+            src,
+        ],
+    );
+    assert_eq!(code(&captured), 0, "stderr: {}", stderr(&captured));
+    // `Widget` repeats, so it is generalized into one parameter.
+    assert!(
+        stdout(&captured).contains("captured `mkw` (1 parameter(s): Widget)"),
+        "stdout: {}",
+        stdout(&captured)
+    );
+
+    // Same scratch dir (keyed by test name): expand the captured trigger back.
+    let expanded = run(
+        "capture-roundtrip",
+        &["expand", "--lang", "rust", "--no-project", "mkw"],
+    );
+    assert_eq!(code(&expanded), 0, "stderr: {}", stderr(&expanded));
+    assert_eq!(
+        stdout(&expanded),
+        "fn make() -> Widget {\n    Widget::new()\n}\n"
+    );
+}
+
+/// A glued identifier argument overrides the captured parameter's default, so
+/// the same pattern stamps out a differently-named variant.
+#[test]
+fn capture_then_expand_with_glued_argument() {
+    let src = "struct Widget {\n    id: u32,\n}\nimpl Widget {}";
+    let captured = run(
+        "capture-glued",
+        &[
+            "capture",
+            "--lang",
+            "rust",
+            "--name",
+            "mkw",
+            "--user",
+            "--no-project",
+            src,
+        ],
+    );
+    assert_eq!(code(&captured), 0, "stderr: {}", stderr(&captured));
+
+    let expanded = run(
+        "capture-glued",
+        &["expand", "--lang", "rust", "--no-project", "mkwGadget"],
+    );
+    assert_eq!(code(&expanded), 0, "stderr: {}", stderr(&expanded));
+    assert_eq!(
+        stdout(&expanded),
+        "struct Gadget {\n    id: u32,\n}\nimpl Gadget {}\n"
+    );
+}
+
+/// Capturing an existing trigger conflicts (exit 3) unless `--force` is given.
+#[test]
+fn capture_conflict_needs_force() {
+    let base = &[
+        "capture",
+        "--lang",
+        "rust",
+        "--name",
+        "dup",
+        "--user",
+        "--no-project",
+        "let a = a;",
+    ];
+    assert_eq!(code(&run("capture-conflict", base)), 0);
+
+    let conflict = run("capture-conflict", base);
+    assert_eq!(code(&conflict), 3, "stdout: {}", stdout(&conflict));
+    assert!(
+        stderr(&conflict).contains("already exists"),
+        "stderr: {}",
+        stderr(&conflict)
+    );
+
+    let forced = run(
+        "capture-conflict",
+        &[
+            "capture",
+            "--lang",
+            "rust",
+            "--name",
+            "dup",
+            "--user",
+            "--no-project",
+            "--force",
+            "let b = b;",
+        ],
+    );
+    assert_eq!(code(&forced), 0, "stderr: {}", stderr(&forced));
+}
+
+/// A pack written by `capture` passes `codemmet check`.
+#[test]
+fn captured_pack_passes_check() {
+    let captured = run(
+        "capture-check",
+        &[
+            "capture",
+            "--lang",
+            "rust",
+            "--name",
+            "logit",
+            "--user",
+            "--no-project",
+            "--description",
+            "log helper",
+            "tracing::info!(\"x\");",
+        ],
+    );
+    assert_eq!(code(&captured), 0, "stderr: {}", stderr(&captured));
+
+    let checked = run("capture-check", &["check", "--no-project"]);
+    assert_eq!(code(&checked), 0, "stderr: {}", stderr(&checked));
+    assert!(
+        stdout(&checked).starts_with("ok:"),
+        "stdout: {}",
+        stdout(&checked)
+    );
+}
+
+/// Capturing an unknown language is a config error (exit 3).
+#[test]
+fn capture_unknown_language_is_config_error() {
+    let out = run(
+        "capture-unknown",
+        &[
+            "capture",
+            "--lang",
+            "cobol",
+            "--name",
+            "x",
+            "--user",
+            "--no-project",
+            "y",
+        ],
+    );
+    assert_eq!(code(&out), 3);
+    assert!(
+        stderr(&out).contains("unknown language"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}

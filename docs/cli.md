@@ -8,6 +8,7 @@ The available subcommands are:
 | --- | --- |
 | `expand` | Expand an abbreviation to code on standard output. |
 | `wrap` | Wrap a selection (read from standard input) in an expanded abbreviation. |
+| `capture` | Generalize example code into a reusable snippet and write it to a pack. |
 | `list` | List every trigger registered for a language. |
 | `check` | Validate the user snippet override directory. |
 | `lsp` | Run the Language Server Protocol server over standard input and output. |
@@ -134,6 +135,54 @@ for ${1:i} in 0..10 {
     println!("{x}");$0
 }
 ```
+
+## capture
+
+Turn a chunk of existing code into a reusable, parameterized snippet and write it into a snippet pack. This is the "I have a pattern; let me make more of it" workflow: capture the shape of something you have, then `expand` it back with a different name.
+
+```sh
+codemmet capture [OPTIONS] --lang <ID> --name <NAME> [CODE]
+```
+
+The `[CODE]` positional argument is the code to capture. If you omit it, or pass `-`, codemmet reads the code from standard input.
+
+| Option | Description |
+| --- | --- |
+| `--lang <ID>` | Required. Same meaning as for `expand`. |
+| `--name <NAME>` | Required. The trigger name to register the captured snippet under. |
+| `--description <TEXT>` | Optional description, shown by `list` and in editor completion. |
+| `--param <IDENT>` | Force an identifier to become a `${param}`, even if it occurs once. Repeatable. |
+| `--literal <IDENT>` | Keep an identifier literal, even if it repeats. Repeatable. |
+| `--user` | Write to the user override directory (`--config` or the default) instead of the project pack. |
+| `--force` | Overwrite an existing trigger of the same name. |
+
+**Generalization.** codemmet scans the code for identifiers. An identifier that occurs **more than once** and is not a language keyword becomes a parameter (repeated occurrences become a mirror, so they stay in sync); everything else stays literal. Each parameter's default is the original identifier, so expanding the trigger with no arguments reproduces the original code. Matching is whole-token (`foo` and `handle_foo` are different), so use `--param` / `--literal` to correct the guess. The captured body is dedented and re-indented to tabs, so it adapts to any target indentation.
+
+**Where it writes.** Without `--user`, the snippet lands in the `.codemmet/snippets/<lang>.toml` pack at or above the working directory (created under the project's `.git` root if none exists yet). The written pack always passes `codemmet check`. An existing trigger of the same name is an error (exit code 3) unless you pass `--force`.
+
+```sh
+printf 'fn make_widget() -> Widget {\n    Widget::default()\n}\n' \
+  | codemmet capture --lang rust --name mkwidget --param Widget
+```
+
+```text
+captured `mkwidget` (1 parameter(s): Widget) into /repo/.codemmet/snippets/rust.toml
+```
+
+```sh
+codemmet expand --lang rust mkwidget          # reproduces the original
+codemmet expand --lang rust mkwidgetGadget    # glued identifier arg → Gadget
+```
+
+The glued `Gadget` binds to the `Widget` parameter. `make_widget` is a single token, so it is not touched (whole-token matching):
+
+```rust
+fn make_widget() -> Gadget {
+    Gadget::default()
+}
+```
+
+In Neovim, the same workflow is `:CodemmetCapture` on a visual selection (see [editor setup](editors.md)).
 
 ## list
 

@@ -129,14 +129,17 @@ The key bindings are installed buffer-locally when the server attaches
 | `keymaps.expand` | `<A-e>` | insert and normal | Expand the abbreviation immediately before the cursor. |
 | `keymaps.wrap` | `<leader>cw` | visual | Wrap the selected lines in an abbreviation (prompts for it). |
 
-The plugin also defines three user commands:
+The plugin also defines these user commands:
 
 | Command | Range | Action |
 | --- | --- | --- |
 | `:CodemmetExpand` | no | Expand the abbreviation before the cursor. |
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
+| `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
+
+`:CodemmetCapture` calls the server's `codemmet.capture` command, which generalizes the selection (identifiers that repeat become `${param}` mirrors), writes `.codemmet/snippets/<lang>.toml` beside the file, and reloads so the new trigger expands immediately in the same session. See the [`capture` CLI reference](cli.md) for the generalization rules.
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled

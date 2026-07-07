@@ -39,6 +39,25 @@ Two pages run the real engine compiled to WebAssembly, no install needed:
 [Pages workflow](.github/workflows/playground.yml). See
 [playground/](playground/README.md).)
 
+## Install
+
+**Prebuilt binaries.** Each [tagged release](https://github.com/TheWylieStCoyote/codemmit/releases)
+ships a `codemmet` binary for Linux, macOS (Intel and Apple Silicon), and
+Windows. Download the archive for your platform, extract it, and put `codemmet`
+on your `PATH`.
+
+**From source** (needs a Rust toolchain, and a C compiler for the bundled
+tree-sitter grammars):
+
+```sh
+cargo install --git https://github.com/TheWylieStCoyote/codemmit codemmet
+```
+
+Or clone and `cargo install --path crates/codemmet`. For a smaller build with
+no C toolchain (text-only, no tree-sitter context), add
+`--no-default-features`. See [installation](docs/installation.md) for the full
+details and how to verify the install.
+
 ## Documentation
 
 Full guides live in **[docs/](docs/README.md)** — start with
@@ -48,13 +67,16 @@ syntax](docs/syntax.md), [language reference](docs/languages.md), [CLI
 reference](docs/cli.md), [custom snippets](docs/snippets.md), and
 [troubleshooting](docs/troubleshooting.md).
 
-**Status: all planned milestones (M0–M4) complete.** Supported languages:
-Rust, Python, C, C++ (inherits C), JavaScript, TypeScript (inherits
-JavaScript), and Go — ~250 builtin triggers. Tree-sitter powers
+**Status: all planned milestones complete**, including data-driven expansion.
+Supported languages: Rust, Python, C, C++ (inherits C), JavaScript, TypeScript
+(inherits JavaScript), and Go — ~265 builtin triggers. Tree-sitter powers
 context-aware expansion (`fn` inside an `impl` block expands with `&self`,
-`def` in a Python class gets `self`), completion suppression inside strings
-and comments, and statement-boundary snapping for wrap selections. See
-[PLAN.md](PLAN.md) for the design document.
+`def` in a Python class gets `self`), data-driven repeats that read enum
+variants and struct fields from the buffer (`match:Msg>arm*`), completion
+suppression inside strings and comments, and statement-boundary snapping for
+wrap selections. See [PLAN.md](PLAN.md) and
+[context-aware & data-driven expansion](docs/context-codegen.md) for the
+design.
 
 ## Neovim
 
@@ -62,7 +84,7 @@ Install with lazy.nvim (builds the binary on install):
 
 ```lua
 {
-  "<your-github>/codemmet",
+  "TheWylieStCoyote/codemmit",
   build = "cargo build --release",
   ft = {
     "rust", "python", "c", "cpp",

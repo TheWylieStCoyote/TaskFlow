@@ -29,6 +29,12 @@ follows [Semantic Versioning](https://semver.org/).
   string-union type aliases), Go, Python (`Enum` subclasses and dataclasses),
   and JavaScript (lists only). Extraction is shape-directed, not type-aware:
   you name the source rather than relying on inferring a variable's type.
+- **Definition-side snippets `field` and `variant`.** Every pack that has
+  records gains a `field` snippet, and every pack with an enum-like construct
+  gains a `variant` snippet, so data-driven repeats render to real code both
+  ways: `struct:Wrapper>field*@Point` writes field definitions and
+  `enum:Color>variant*3` (or `*@Src`) writes enum members — the mirror image of
+  consuming them with `arm`.
 
 ### Testing
 

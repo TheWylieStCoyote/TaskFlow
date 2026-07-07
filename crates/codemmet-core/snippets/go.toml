@@ -225,6 +225,16 @@ body = '''
 const ${name} = $0
 '''
 
+[snippets.variant]
+description = "enum constant (const/iota block member)"
+# Go has no enum keyword; its enums are `const ( … iota )` blocks. Write the
+# block yourself and fill its members with `variant*@Src` — `${value}` binds
+# to a data-driven repeat item; with no data it falls back to the `Name`
+# tabstop.
+body = '''
+${value:Name}
+'''
+
 [snippets.ret]
 description = "return statement"
 body = '''

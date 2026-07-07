@@ -136,6 +136,15 @@ typedef enum {
 } ${name};
 '''
 
+[snippets.variant]
+description = "enum enumerator"
+# Nest inside `enum` (`enum:Color>variant*3`). `${value}` binds to a
+# data-driven repeat item, so `variant*@Src` fills one enumerator per item;
+# with no data it falls back to the `NAME` tabstop. Inherited by C++.
+body = '''
+${value:NAME},
+'''
+
 [snippets.td]
 description = "typedef declaration"
 body = '''

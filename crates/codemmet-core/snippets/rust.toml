@@ -212,6 +212,15 @@ enum ${name} {
 }
 '''
 
+[snippets.variant]
+description = "enum variant"
+# Nest inside `enum` (`enum:Color>variant*3`). `${value}` binds to a
+# data-driven repeat item, so `variant*@Src` fills one variant per item; with
+# no data it falls back to the `Name` tabstop.
+body = '''
+${value:Name},
+'''
+
 [snippets.trait]
 description = "trait definition"
 params = [{ name = "name", kind = "ident", default = "Name" }]

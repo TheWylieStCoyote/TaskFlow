@@ -484,3 +484,42 @@ fn expand_data_driven_repeat_falls_back_without_data() {
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
     assert_eq!(stdout(&out), "match X {\n    pattern => ,\n}\n");
 }
+
+#[test]
+fn expand_enum_with_variants_defines_and_data_fills() {
+    // The definition side, symmetric with `match … > arm*`: `variant` nests in
+    // `enum` and fills from a collection (falling back to a `Name` tabstop).
+    let scaffold = run(
+        "expand-variant-scaffold",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "enum:Color>variant*3",
+        ],
+    );
+    assert_eq!(code(&scaffold), 0, "stderr: {}", stderr(&scaffold));
+    assert_eq!(
+        stdout(&scaffold),
+        "enum Color {\n    Name,\n    Name,\n    Name,\n}\n"
+    );
+
+    let filled = run(
+        "expand-variant-filled",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "enum:Color>variant*@Src",
+            "--repeat",
+            "Src=Red,Green,Blue",
+        ],
+    );
+    assert_eq!(code(&filled), 0, "stderr: {}", stderr(&filled));
+    assert_eq!(
+        stdout(&filled),
+        "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n"
+    );
+}

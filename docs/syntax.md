@@ -175,8 +175,11 @@ codemmet expand --lang rust "match:cmd>arm*@Msg"
 
 A snippet body pulls the current item in with `${value}`; a member of the item
 with `${value.type}` (or any `${value.key}`); and supplies a fallback for when
-there is no data with `${value:default}`. The built-in `arm` and `field`
-snippets use these, so an enum fills its arms and a struct fills its fields:
+there is no data with `${value:default}`. Three built-in snippets use these:
+`arm` (a match arm), `field` (a struct/record field, with its declared type),
+and `variant` (an enum member — the definition side). So an enum fills its
+arms, a struct fills its fields, and — going the other way — a fresh `enum`
+fills its own variants:
 
 ```rust
 match cmd {
@@ -185,6 +188,11 @@ match cmd {
     Write => ,
 }
 ```
+
+Defining an enum is the mirror image — `variant` nests inside `enum`, so
+`enum:Color>variant*3` scaffolds three variants (each a `Name,` tabstop), and
+`enum:Color>variant*@Src` fills them from a collection. `field` behaves the
+same inside `struct`.
 
 Where does the collection come from?
 

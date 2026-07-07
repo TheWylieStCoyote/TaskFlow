@@ -166,6 +166,16 @@ class ${name} {
 }
 '''
 
+[snippets.variant]
+description = "frozen-object enum member"
+# JavaScript has no enum keyword; the idiom is a frozen object of string
+# constants. Nest inside such an object and fill it with `variant*@Src` —
+# `${value}` binds to a data-driven repeat item; with no data both fall back
+# to the `NAME` tabstop.
+body = '''
+${value:NAME}: "${value:NAME}",
+'''
+
 [snippets.ctor]
 description = "constructor method"
 scope = "fn-body"

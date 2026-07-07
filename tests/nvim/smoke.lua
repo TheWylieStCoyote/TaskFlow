@@ -207,5 +207,56 @@ io.write("smoke: note scenario passed\n")
 
 reset_state()
 
+-- Scenario 7: capture a selection into the project pack, then expand the new
+-- trigger back. The server generalizes `Widget` (it repeats) into a parameter,
+-- writes `.codemmet/snippets/rust.toml` next to the buffer, and reloads so the
+-- trigger is immediately expandable in the same session.
+local capture_buf = rust_buf("capture", { "fn make() -> Widget {", "    Widget::new()", "}" })
+local capture_client = vim.lsp.get_clients({ name = "codemmet", bufnr = capture_buf })[1]
+
+local cap_result
+require("codemmet.lsp").exec(capture_client, capture_buf, "codemmet.capture", {
+  {
+    uri = vim.uri_from_bufnr(capture_buf),
+    range = {
+      start = { line = 0, character = 0 },
+      ["end"] = { line = 2, character = 1 },
+    },
+    name = "mkw",
+  },
+}, function(err, result)
+  cap_result = { err = err, result = result }
+end)
+local cap_got = vim.wait(5000, function()
+  return cap_result ~= nil
+end, 50)
+if not cap_got or cap_result.err or not (cap_result.result and cap_result.result.path) then
+  fail("capture: codemmet.capture did not return a path", capture_buf)
+end
+local pack = cap_result.result.path
+if vim.uv.fs_stat(pack) == nil then
+  fail("capture: pack file was not written at " .. pack, capture_buf)
+end
+local pack_text = table.concat(vim.fn.readfile(pack), "\n")
+if not (pack_text:find("[snippets.mkw]", 1, true) and pack_text:find("${Widget}", 1, true)) then
+  fail("capture: pack missing the captured trigger:\n" .. pack_text, capture_buf)
+end
+
+-- Expand the captured trigger: proof the registry reloaded live.
+vim.api.nvim_buf_set_lines(capture_buf, 0, -1, false, { "mkw" })
+vim.api.nvim_win_set_cursor(0, { 1, 2 }) -- normal-mode cursor ON the trailing "w"
+require("codemmet").expand()
+local capture_expanded = vim.wait(5000, function()
+  return vim.api.nvim_buf_get_lines(capture_buf, 0, 1, false)[1] == "fn make() -> Widget {"
+end, 50)
+if not capture_expanded then
+  fail("capture: expanding the captured trigger did not reload the registry", capture_buf)
+end
+-- Clean up the pack the capture wrote into the temp directory.
+os.remove(pack)
+io.write("smoke: capture scenario passed\n")
+
+reset_state()
+
 io.write("SMOKE OK\n")
 os.exit(0)

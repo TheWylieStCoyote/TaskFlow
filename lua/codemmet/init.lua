@@ -43,6 +43,13 @@ function M.wrap(opts)
   require("codemmet.wrap").wrap(opts)
 end
 
+---Capture the visual selection (or `opts.line1..opts.line2`) into the project
+---snippet pack as a reusable, parameterized snippet.
+---@param opts? codemmet.CaptureOpts
+function M.capture(opts)
+  require("codemmet.capture").capture(opts)
+end
+
 ---Configure codemmet: start the language server for the configured filetypes and
 ---install buffer-local keymaps when it attaches.
 ---@param opts? codemmet.SetupOpts

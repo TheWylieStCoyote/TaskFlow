@@ -166,6 +166,21 @@ so it works in any client that can call `workspace/executeCommand` and render
 virtual text — the shipped Neovim plugin renders it with `nvim_buf_set_extmark`
 virtual lines.
 
+### Code actions
+
+codemmet advertises `textDocument/codeAction`, so no plugin wiring is needed:
+put the cursor inside a `match` over an enum value and trigger your editor's
+code actions to get **"Fill match arms from `Name`"**, which inserts one arm per
+variant (see [context-aware & data-driven expansion](context-codegen.md#code-actions)).
+In Neovim:
+
+```vim
+:lua vim.lsp.buf.code_action()
+```
+
+or bind it, e.g. `vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action)`.
+The edit is plain text, so it applies in any LSP client.
+
 ### Wrapping a selection
 
 The `wrap` binding operates line-wise. Select the lines you want to wrap in

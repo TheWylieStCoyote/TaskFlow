@@ -174,6 +174,39 @@ enum variants currently fill their name only (`Move`, not `Move { .. }`).
 Go has no `enum` keyword (its enums are `const`/`iota` blocks) and JavaScript
 has neither enums nor typed fields, which is why those cells are blank.
 
+## Code actions
+
+Data-driven repeats are powerful but easy to miss — you have to know `arm*@`
+exists. So the same machinery also drives a **code action**, which any editor
+surfaces without you memorizing anything.
+
+Put the cursor inside a `match` over a value and trigger your editor's code
+actions (in Neovim, `vim.lsp.buf.code_action()`); for each `enum` in the file
+you get **"Fill match arms from `Name`"**:
+
+```rust
+enum Msg { Quit, Write(String), Move { x: i32 } }
+
+fn handle(m: Msg) {
+    match m {}   // cursor here → "Fill match arms from Msg"
+}
+```
+
+applying it →
+
+```rust
+    match m {
+        Quit => todo!(),
+        Write(..) => todo!(),
+        Move { .. } => todo!(),
+    }
+```
+
+Payload variants bind wildcards so the result compiles; arms already present are
+skipped, so it also completes a partial `match`. The edit is plain text (no
+tabstops), so it works in any LSP client — no codemmet plugin needed. This is
+Rust-only for now.
+
 ## See also
 
 - [Abbreviation syntax](syntax.md) — the `*@name` grammar and the `${value}`

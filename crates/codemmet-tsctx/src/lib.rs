@@ -18,13 +18,15 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
 
 use codemmet_core::context::{
-    DocSnapshot, ExpansionContext, IndentUnit, NullContextProvider, Scope, WrapSelection,
+    DocSnapshot, ExpansionContext, FillTarget, IndentUnit, NullContextProvider, Scope,
+    WrapSelection,
 };
 use codemmet_core::lang::profile;
 use tree_sitter::{Node, Tree};
 
 pub use codemmet_core::context::ContextProvider;
 
+mod codegen;
 mod extract;
 
 /// Whether this build carries a grammar for `language_id`.
@@ -750,6 +752,24 @@ impl ContextProvider for TreeSitterProvider {
         };
         WrapSelection::Valid {
             range: extend_to_lines(text, snapped.start, snapped.end),
+        }
+    }
+
+    fn fill_targets(&mut self, doc: &DocSnapshot, offset: usize) -> Vec<FillTarget> {
+        let Some(spec) = spec_for(&doc.language) else {
+            return Vec::new();
+        };
+        let Some(tree) = self.tree_for(doc, spec) else {
+            return Vec::new();
+        };
+        let text = doc.text.as_str();
+        let offset = clamp_offset(text, offset);
+        let indent = indent_unit_for(doc);
+        // Only Rust has an enum→match-arm fill today; other languages return
+        // nothing until their codegen shapes are added.
+        match doc.language.as_str() {
+            "rust" => codegen::match_arm_fills(tree.root_node(), text, offset, &indent.as_str()),
+            _ => Vec::new(),
         }
     }
 }
@@ -1515,5 +1535,69 @@ mod tests {
     fn javascript_list_binding() {
         let map = cols("javascript", "const items = [1, 2, 3];\n§\n");
         assert_eq!(values(&map, "items"), ["1", "2", "3"]);
+    }
+
+    // ---- Fill-match-arms code action (codegen) -------------------------
+
+    /// Fill targets at the `§` cursor.
+    #[cfg(feature = "lang-rust")]
+    fn fills(language: &str, fixture: &str) -> Vec<FillTarget> {
+        let (doc, offset) = doc_at(language, fixture);
+        TreeSitterProvider::new().fill_targets(&doc, offset)
+    }
+
+    /// Apply a fill target to the fixture text (marker stripped).
+    #[cfg(feature = "lang-rust")]
+    fn applied(fixture: &str, target: &FillTarget) -> String {
+        let mut text = fixture.replacen('§', "", 1);
+        text.replace_range(target.range.clone(), &target.new_text);
+        text
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn fill_empty_match_from_enum() {
+        let fixture = "enum Msg { Quit, Move, Write }\nfn f(m: Msg) {\n    match m {§}\n}\n";
+        let targets = fills("rust", fixture);
+        assert_eq!(targets.len(), 1, "one enum in scope");
+        assert_eq!(targets[0].title, "Fill match arms from Msg");
+        assert_eq!(
+            applied(fixture, &targets[0]),
+            "enum Msg { Quit, Move, Write }\nfn f(m: Msg) {\n    match m {\n        Quit => todo!(),\n        Move => todo!(),\n        Write => todo!(),\n    }\n}\n"
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn fill_match_binds_payload_variants() {
+        let fixture = "enum Msg { Quit, Write(String), Move { x: i32 } }\nfn f(m: Msg) {\n    match m {§}\n}\n";
+        let targets = fills("rust", fixture);
+        assert!(
+            targets[0].new_text.contains("Write(..) => todo!(),")
+                && targets[0].new_text.contains("Move { .. } => todo!(),"),
+            "payload variants bind wildcards: {:?}",
+            targets[0].new_text
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn fill_match_skips_covered_variants_and_appends() {
+        // One arm already present: only the missing variants are offered, and
+        // they append after the existing arm rather than replacing the body.
+        let fixture = "enum Msg { Quit, Move, Write }\nfn f(m: Msg) {\n    match m {\n        Quit => todo!(),§\n    }\n}\n";
+        let targets = fills("rust", fixture);
+        assert_eq!(targets.len(), 1);
+        assert_eq!(
+            targets[0].new_text,
+            "\n        Move => todo!(),\n        Write => todo!(),"
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn no_fill_outside_a_match() {
+        let targets = fills("rust", "enum Msg { Quit }\nfn f() {\n    §\n}\n");
+        assert!(targets.is_empty());
     }
 }

@@ -42,6 +42,13 @@ follows [Semantic Versioning](https://semver.org/).
 - **A [context-aware & data-driven expansion guide](docs/context-codegen.md)**
   covering scope variants and the three buffer sources, plus worked examples in
   the [advanced cookbook](docs/examples/advanced.md).
+- **"Fill match arms" code action.** The LSP now advertises
+  `textDocument/codeAction`: with the cursor in a Rust `match`, it offers "Fill
+  match arms from `Name`" for each in-scope `enum`, inserting one arm per
+  variant (payload variants bind wildcards so it compiles; already-covered
+  variants are skipped). It's a plain-text edit, so any LSP client applies it
+  with no plugin support — a discoverable path to data-driven codegen that
+  needs no memorized syntax.
 
 ### Testing
 

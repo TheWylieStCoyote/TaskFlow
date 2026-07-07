@@ -23,10 +23,11 @@ use codemmet_core::lang::registry::{LanguageSnippets, Registry, find_project_sni
 use codemmet_tsctx::TreeSitterProvider;
 use lsp_server::{Connection, ErrorCode, Message, Request, Response};
 use lsp_types::{
-    CompletionOptions, CompletionParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, ExecuteCommandOptions, ExecuteCommandParams, InitializeParams,
-    PositionEncodingKind, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
-    Uri,
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams,
+    CodeActionProviderCapability, CompletionOptions, CompletionParams, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, ExecuteCommandOptions,
+    ExecuteCommandParams, InitializeParams, PositionEncodingKind, Range, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri, WorkspaceEdit,
 };
 use serde::Deserialize;
 
@@ -294,6 +295,7 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
             ],
             ..ExecuteCommandOptions::default()
         }),
+        code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
         ..ServerCapabilities::default()
     }
 }
@@ -303,6 +305,7 @@ impl Server {
     fn handle_request(&mut self, request: Request) -> Response {
         match request.method.as_str() {
             "textDocument/completion" => self.handle_completion(request),
+            "textDocument/codeAction" => self.handle_code_action(request),
             "workspace/executeCommand" => self.handle_execute_command(request),
             _ => Response::new_err(
                 request.id,
@@ -337,6 +340,54 @@ impl Server {
             self.encoding,
         );
         match serde_json::to_value(items) {
+            Ok(value) => Response::new_ok(request.id, value),
+            Err(err) => internal_error(request.id, &err),
+        }
+    }
+
+    /// `textDocument/codeAction`: code-generation edits at the cursor — today,
+    /// filling a `match` from an in-scope enum. Each is a plain-text
+    /// `WorkspaceEdit`, so any client applies it without the codemmet plugin.
+    fn handle_code_action(&mut self, request: Request) -> Response {
+        let params: CodeActionParams = match serde_json::from_value(request.params) {
+            Ok(params) => params,
+            Err(err) => return invalid_params(request.id, &err),
+        };
+        let uri = params.text_document.uri;
+        let Ok(doc) = self.snapshot(&uri) else {
+            return Response::new_ok(request.id, serde_json::Value::Array(Vec::new()));
+        };
+        let index = LineIndex::new(&doc.text);
+        // Offer actions for the cursor (the selection start).
+        let offset = index.offset(&doc.text, params.range.start, self.encoding);
+        let actions: Vec<CodeActionOrCommand> = self
+            .provider
+            .fill_targets(&doc, offset)
+            .into_iter()
+            .map(|target| {
+                let range = Range {
+                    start: index.position(&doc.text, target.range.start, self.encoding),
+                    end: index.position(&doc.text, target.range.end, self.encoding),
+                };
+                let edit = WorkspaceEdit {
+                    changes: Some(HashMap::from([(
+                        uri.clone(),
+                        vec![TextEdit {
+                            range,
+                            new_text: target.new_text,
+                        }],
+                    )])),
+                    ..WorkspaceEdit::default()
+                };
+                CodeActionOrCommand::CodeAction(CodeAction {
+                    title: target.title,
+                    kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                    edit: Some(edit),
+                    ..CodeAction::default()
+                })
+            })
+            .collect();
+        match serde_json::to_value(actions) {
             Ok(value) => Response::new_ok(request.id, value),
             Err(err) => internal_error(request.id, &err),
         }

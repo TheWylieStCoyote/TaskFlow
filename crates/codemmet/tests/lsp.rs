@@ -155,6 +155,21 @@ impl LspClient {
         )
     }
 
+    /// `textDocument/codeAction` for a zero-width range at (line, character).
+    fn code_action(&mut self, uri: &str, line: u32, character: u32) -> Value {
+        self.request(
+            "textDocument/codeAction",
+            &json!({
+                "textDocument": { "uri": uri },
+                "range": {
+                    "start": { "line": line, "character": character },
+                    "end": { "line": line, "character": character },
+                },
+                "context": { "diagnostics": [] },
+            }),
+        )
+    }
+
     /// Shut the server down and assert it exits cleanly.
     fn shutdown(mut self) {
         self.request("shutdown", &Value::Null);
@@ -201,7 +216,35 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
         capabilities["executeCommandProvider"]["commands"],
         json!(["codemmet.expand", "codemmet.wrap", "codemmet.preview"])
     );
+    assert_eq!(capabilities["codeActionProvider"], json!(true));
     assert_eq!(result["serverInfo"]["name"], json!("codemmet"));
+    client.shutdown();
+}
+
+#[test]
+fn code_action_fills_match_arms_from_a_buffer_enum() {
+    // Cursor inside an empty `match` over a variable → the server offers, per
+    // in-scope enum, a plain-text edit inserting one arm per variant.
+    let (mut client, _) = LspClient::start("code-action", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "enum Msg { Quit, Move, Write }\nfn f(m: Msg) {\n    match m {}\n}\n",
+    );
+
+    // Line 2 is `    match m {}`; the `{}` opens at column 12, so column 13 is
+    // between the braces.
+    let result = client.code_action(URI, 2, 13);
+    let actions = result.as_array().expect("code actions are an array");
+    assert_eq!(actions.len(), 1, "actions: {result}");
+    assert_eq!(actions[0]["title"], json!("Fill match arms from Msg"));
+    let edits = &actions[0]["edit"]["changes"][URI];
+    assert_eq!(
+        edits[0]["newText"],
+        json!(
+            "\n        Quit => todo!(),\n        Move => todo!(),\n        Write => todo!(),\n    "
+        )
+    );
     client.shutdown();
 }
 

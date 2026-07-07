@@ -174,6 +174,22 @@ pub enum WrapSelection {
     },
 }
 
+/// A ready-to-apply code-generation edit the provider found at the cursor —
+/// the backing for editor code actions (e.g. "fill match arms from an enum").
+///
+/// It is a plain text edit (no tabstops), so any LSP client can apply it
+/// without cooperating with the codemmet plugin: replace `range` with
+/// `new_text`. The provider does all the work; the title is display-ready.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FillTarget {
+    /// Menu title, e.g. `"Fill match arms from Msg"`.
+    pub title: String,
+    /// Byte range to replace; an empty range is a pure insertion.
+    pub range: Range<usize>,
+    /// Replacement text, already indented for its insertion point.
+    pub new_text: String,
+}
+
 /// Supplies buffer/syntax awareness to the expansion engine.
 pub trait ContextProvider {
     /// Describe the expansion point at `offset` (a byte offset into the doc).
@@ -181,6 +197,13 @@ pub trait ContextProvider {
 
     /// Validate (and possibly snap) a selection for wrap-with-abbreviation.
     fn validate_wrap(&mut self, doc: &DocSnapshot, range: Range<usize>) -> WrapSelection;
+
+    /// Code-generation edits available at `offset` — the source of editor code
+    /// actions. Defaults to none; the tree-sitter provider fills it in (e.g.
+    /// completing a `match` from an in-scope enum).
+    fn fill_targets(&mut self, _doc: &DocSnapshot, _offset: usize) -> Vec<FillTarget> {
+        Vec::new()
+    }
 }
 
 /// Syntax-unaware provider used until tree-sitter support lands (M3).

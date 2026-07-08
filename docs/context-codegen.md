@@ -65,13 +65,15 @@ snippet body references the current item:
 | `${value.type}` (or any `${value.key}`) | a named member of the item |
 | `${value:default}` | the value, or `default` (as a tabstop) when there is no data |
 
-A snippet only sees the item through these `${value}` spans. So a trigger that
-names itself from a **parameter** — like `fn ${name}(…)` — is *not* filled by a
-collection on its own: `impl:Point>fn*@Meth` just repeats the same `fn`
-skeleton. To name each copy, put `${value}` in the **argument**:
+### Naming each copy from the item
+
+A snippet named from a **parameter** — like `fn ${name}(…)` — is named by the
+collection automatically. When the body doesn't itself use `${value}`, the item
+**auto-binds to the trigger's first unfilled parameter**, so the simple case
+needs nothing special:
 
 ```sh
-codemmet expand --lang rust 'impl:Point>fn:${value}*@Meth' --repeat Meth=new,len,area
+codemmet expand --lang rust "impl:Point>fn*@Meth" --repeat Meth=new,len,area
 ```
 ```rust
 impl Point {
@@ -81,14 +83,26 @@ impl Point {
 }
 ```
 
-> **Quote it with single quotes.** `${value}` looks like a shell variable, so a
-> double-quoted `"…fn:${value}…"` lets the shell replace it with nothing before
-> codemmet sees it. Single quotes (or escaping `\${value}`) keep it intact —
-> the same rule as quoted arguments elsewhere.
+For finer control you can place the item explicitly. Writing `${value}` in an
+argument is the same as the auto-bind above:
 
-`${value}`, `${value.member}`, and `${value:default}` all work in an argument
-position (substituted per copy); with no item a bare `${value}` argument falls
-back to that parameter's own tabstop.
+```sh
+codemmet expand --lang rust 'impl:Point>fn:${value}*@Meth' --repeat Meth=new,len,area
+```
+
+and `${value.member}` picks a member of the item while `${value:default}`
+supplies a fallback — each substituted per copy. Use the explicit form when a
+trigger has several arguments and you need the item in a specific one, or to
+pass a member rather than the primary value.
+
+> **Single-quote an explicit `${value}`.** It looks like a shell variable, so a
+> double-quoted `"…${value}…"` lets the shell blank it before codemmet sees it.
+> Single quotes (or escaping `\${value}`) keep it intact. (The bare `fn*@Meth`
+> form above has no `${value}`, so it needs no special quoting.)
+
+An explicit argument wins over the auto-bind (it fills the slot), a body that
+already uses `${value}` (arm/field/variant) is never auto-bound, and with no
+data a bare `${value}` argument falls back to that parameter's own tabstop.
 
 Three built-in snippets use these in their bodies, so the common cases work out
 of the box:

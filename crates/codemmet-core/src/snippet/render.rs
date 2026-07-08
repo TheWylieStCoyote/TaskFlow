@@ -298,16 +298,23 @@ impl Composer<'_> {
             return self.expand_composite(node, snippet, composite, remainder, scope, subject);
         }
         let template = select_template(snippet, scope, self.raw_node_kinds);
-        // An argument may reference the per-copy data-driven item via `${value}`
-        // (`fn:${value}*@Meth` names each copy). Bind once when no argument
-        // does; otherwise the binding depends on the item, so it is redone per
-        // copy below.
+        // How the per-copy data-driven item reaches this node's parameters:
+        //   * an explicit `${value}` argument (`fn:${value}*@Meth`), resolved
+        //     per copy; or
+        //   * when the body does *not* itself consume `${value}`, the item
+        //     auto-binds to the first unfilled parameter — so a param-named
+        //     trigger like `fn*@Meth` is named by the collection without
+        //     repeating `${value}`. A body that uses `${value}` (arm/field/
+        //     variant) already consumes the item, so it is left alone.
+        // When neither applies the binding is item-independent (bound once).
         let value_arg = node.args.iter().any(|a| arg_is_value_token(a));
-        let shared_bindings = if value_arg {
-            None
-        } else {
-            Some(bind_args(snippet, &node.args, remainder)?)
-        };
+        let base = bind_args(snippet, &node.args, remainder)?;
+        let auto_bind = (!value_arg && !template_uses_value(template))
+            .then(|| {
+                base.iter()
+                    .position(|(_, b)| matches!(b, Binding::Free { .. }))
+            })
+            .flatten();
         // Children live in the snippet's declared scope; a scope-less
         // snippet passes its own effective scope through unchanged.
         let child_scope = snippet
@@ -332,13 +339,18 @@ impl Composer<'_> {
         for (copy, item) in items.iter().enumerate() {
             // The repetition index is 1-based (`${i}` renders 1, 2, …).
             let index = u32::try_from(copy + 1).unwrap_or(u32::MAX);
-            let bindings: Cow<[(String, Binding)]> = match &shared_bindings {
-                Some(b) => Cow::Borrowed(b.as_slice()),
-                None => Cow::Owned(bind_args(
+            let bindings: Cow<[(String, Binding)]> = if value_arg {
+                Cow::Owned(bind_args(
                     snippet,
                     &resolve_item_args(&node.args, item.as_ref()),
                     remainder,
-                )?),
+                )?)
+            } else if let (Some(idx), Some(it)) = (auto_bind, item.as_ref()) {
+                let mut bound = base.clone();
+                bound[idx].1 = Binding::Bound(it.value.clone());
+                Cow::Owned(bound)
+            } else {
+                Cow::Borrowed(base.as_slice())
             };
             let mut lines = self.instantiate(template, &bindings, index, item.as_ref());
             // Fail fast: repeat counts multiply through nesting, so the
@@ -1004,6 +1016,17 @@ impl ArgMarkers {
         }
         out
     }
+}
+
+/// Whether a template body references the data-driven item (`${value}` etc.).
+/// When it does, the item is already consumed, so the item is not also
+/// auto-bound to a parameter.
+fn template_uses_value(template: &Template) -> bool {
+    template
+        .lines
+        .iter()
+        .flat_map(|line| &line.spans)
+        .any(|span| matches!(span, Span::ItemValue { .. }))
 }
 
 /// Whether `arg` is a whole `${value…}` data-driven item reference — the forms
@@ -1973,17 +1996,39 @@ mod tests {
     }
 
     #[test]
-    fn data_driven_item_is_not_consumed_without_value() {
-        // The item flows to a snippet ONLY through `${value}`. A stock `fn`
-        // (named from a `name` param, not `${value}`) ignores the collection —
-        // this pins the sharp edge that motivated the value-in-arg feature.
-        let ctx = ctx_with("Meth", &["new", "len"]);
+    fn data_driven_bare_repeat_auto_names_from_the_item() {
+        // The simple case: a param-named trigger whose body doesn't use
+        // `${value}` (`fn`) auto-binds the item to its first unfilled param, so
+        // `fn*@Meth` names each method without an explicit `${value}`.
+        let ctx = ctx_with("Meth", &["new", "len", "min"]);
         let e = expand("impl:Point>fn*@Meth", &ctx, TabstopMode::Strip);
+        for name in ["new", "len", "min"] {
+            assert!(e.body.contains(&format!("fn {name}(&self)")), "{}", e.body);
+        }
+    }
+
+    #[test]
+    fn data_driven_auto_bind_yields_to_an_explicit_argument() {
+        // An explicitly supplied argument fills the only param, so there is no
+        // free slot to auto-bind — every copy keeps the explicit name.
+        let ctx = ctx_with("Meth", &["new", "len"]);
+        let e = expand("impl:Point>fn:run*@Meth", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body.matches("fn run(&self)").count(), 2, "{}", e.body);
         assert!(
             !e.body.contains("new") && !e.body.contains("len"),
-            "the collection values must not be consumed by a param-based `fn`: {}",
+            "{}",
             e.body
         );
+    }
+
+    #[test]
+    fn data_driven_value_body_is_not_also_auto_bound() {
+        // `arm` consumes the item via `${value}` in its body, so the item is
+        // NOT additionally auto-bound (arm has no param anyway) — output is
+        // exactly the pattern, once per item.
+        let ctx = ctx_with("Meth", &["Quit", "Move"]);
+        let e = expand("arm*@Meth", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body, "Quit => ,\nMove => ,");
     }
 
     #[test]

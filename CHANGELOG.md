@@ -242,6 +242,19 @@ follows [Semantic Versioning](https://semver.org/).
   a bare `${value}` argument with no item falls back to that parameter's
   tabstop. Previously the item reached a snippet only through `${value}` *body*
   spans, so a param-named trigger like `fn` ignored the collection.
+- **Multi-file snippets (`codemmet scaffold`).** A snippet can now span several
+  files: `[snippets.<t>.files.<label>]` sections each target a file — a `path`
+  template (`"${app}/models.py"`, root-relative and `${param}`-substituted) or a
+  `self`/sibling `target` (`".cpp"`) — and carry their own `body` or `expands`.
+  One trigger scaffolds a whole feature (a Django model + view + route; a C++
+  declaration + definition). `codemmet scaffold <trigger:args>` prints a
+  manifest (`--json`) or applies it (`--write`): it **creates** new files (with
+  an optional `on_create` header) and **appends** to existing ones; the single
+  `primary` file keeps its tabstops (others insert plain text, since tabstops
+  cannot cross files). Project-local packs (`.codemmet/snippets`) make these
+  repo-specific. Validated by `codemmet check`. (`on_exists = "inject"` currently
+  degrades to append; structural injection is a later phase.) See
+  [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a
   higher-level scaffold is built out of the trigger vocabulary you already have

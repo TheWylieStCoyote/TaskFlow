@@ -251,6 +251,40 @@ fn expand_uses_config_override_directory() {
 }
 
 #[test]
+fn scaffold_writes_a_multi_file_snippet() {
+    let dir = scratch_dir("scaffold-multifile");
+    std::fs::write(
+        dir.join("python.toml"),
+        concat!(
+            "[meta]\nlanguage = \"python\"\n\n",
+            "[snippets.feat]\nparams = [{ name = \"app\", kind = \"ident\", default = \"app\" }]\n\n",
+            "[snippets.feat.files.model]\npath = \"${app}/models.py\"\n",
+            "body = \"class ${app}Model:\\n\\tpass$0\"\n\n",
+            "[snippets.feat.files.urls]\npath = \"${app}/urls.py\"\n",
+            "body = \"route('${app}')\"\n",
+        ),
+    )
+    .expect("pack should be writable");
+    let root = dir.join("proj");
+    let out = bin()
+        .args(["scaffold", "--lang", "python", "--no-project", "--write"])
+        .args(["--root", root.to_str().expect("path is UTF-8")])
+        .arg("feat:blog")
+        .args(["--config", dir.to_str().expect("path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        std::fs::read_to_string(root.join("blog/models.py")).expect("model written"),
+        "class blogModel:\n    pass\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("blog/urls.py")).expect("urls written"),
+        "route('blog')\n"
+    );
+}
+
+#[test]
 fn expand_builtin_composite_classp() {
     let out = run(
         "composite-classp",

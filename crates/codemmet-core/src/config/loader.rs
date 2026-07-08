@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use crate::config::schema::{ParamDef, SnippetDef, SnippetFile};
+use crate::config::schema::{FileDef, OnExists, ParamDef, SnippetDef, SnippetFile};
 use crate::context::Scope;
 use crate::snippet::ir::{Span, Template};
 use crate::snippet::template::{TemplateError, parse_template};
@@ -33,6 +33,54 @@ pub struct CompiledSnippet {
     /// abbreviation re-expanded at render time rather than [`Self::template`]
     /// (which is empty for a composite). See `COMPOSITE_SNIPPETS.md`.
     pub composite: Option<CompiledComposite>,
+    /// Set when this trigger is a **multi-file** snippet: its content spans
+    /// several files, resolved by the `scaffold` pipeline rather than expanded
+    /// into a single tree. See `MULTIFILE_SNIPPETS.md`.
+    pub multifile: Option<CompiledMultiFile>,
+}
+
+/// A multi-file snippet: an ordered set of file pieces, each targeting a file.
+#[derive(Debug, Clone)]
+pub struct CompiledMultiFile {
+    /// The file pieces, in declaration order.
+    pub files: Vec<CompiledFilePiece>,
+}
+
+/// One file piece of a multi-file snippet.
+#[derive(Debug, Clone)]
+pub struct CompiledFilePiece {
+    /// The section label (`[snippets.x.files.<label>]`), for diagnostics.
+    pub label: String,
+    /// Where this piece's content is written.
+    pub target: FileTarget,
+    /// The content to render for this file (a body template or a composite).
+    pub content: PieceContent,
+    /// What to do when the target already exists.
+    pub on_exists: OnExists,
+    /// Text prepended only when the target file is created.
+    pub on_create: Option<String>,
+    /// Whether this piece receives the tabstops/final cursor.
+    pub primary: bool,
+}
+
+/// Where a multi-file piece writes.
+#[derive(Debug, Clone)]
+pub enum FileTarget {
+    /// A path relative to the scaffold root, still `${param}`-templated.
+    Path(String),
+    /// The invocation's current file.
+    SelfFile,
+    /// A sibling of the current file with this extension (e.g. `".cpp"`).
+    Sibling(String),
+}
+
+/// The renderable content of a multi-file piece (mirrors `body` vs `expands`).
+#[derive(Debug, Clone)]
+pub enum PieceContent {
+    /// A template body (LSP snippet syntax + `${param}`).
+    Body(String),
+    /// A composite-style abbreviation, re-expanded through the engine.
+    Expands(String),
 }
 
 /// A composite (alias) snippet: an abbreviation that is re-expanded, plus the
@@ -439,6 +487,11 @@ fn compile_snippet(
 
     validate_requires(&invalid, language, &def.requires)?;
 
+    // A multi-file snippet carries `[files.*]` sections instead of a body.
+    if !def.files.is_empty() {
+        return compile_multifile(origin, trigger, def);
+    }
+
     // A composite carries `expands` (an abbreviation) instead of a `body`.
     if def.expands.is_some() {
         return compile_composite(origin, trigger, def);
@@ -536,6 +589,7 @@ fn compile_snippet(
         variants,
         requires: def.requires.clone(),
         composite: None,
+        multifile: None,
     })
 }
 
@@ -660,7 +714,200 @@ fn compile_composite(
             expands: expands.to_owned(),
             options: def.options.clone(),
         }),
+        multifile: None,
     })
+}
+
+/// Validate and compile a multi-file (`[files.*]`) snippet definition.
+///
+/// A multi-file snippet has no top-level `body`/`expands`/`composite`; each
+/// `[files.<label>]` section targets a file (a `path` template or a `self`/
+/// sibling `target`) and carries either a `body` or an `expands`. Parameters
+/// are shared across the sections; every declared param must be referenced by
+/// at least one section (its path, body, or expands), and every `${name}` a
+/// section references must be declared.
+fn compile_multifile(
+    origin: &str,
+    trigger: &str,
+    def: &SnippetDef,
+) -> Result<CompiledSnippet, ConfigError> {
+    let invalid = |message: String| ConfigError::Invalid {
+        trigger: trigger.to_owned(),
+        origin: origin.to_owned(),
+        message,
+    };
+
+    if def.body.is_some() || def.expands.is_some() {
+        return Err(invalid(
+            "a multi-file snippet (`[files]`) cannot also have a top-level \
+             `body` or `expands`"
+                .to_owned(),
+        ));
+    }
+    if def.scope.is_some() || !def.variants.is_empty() || !def.options.is_empty() {
+        return Err(invalid(
+            "a multi-file snippet cannot declare `scope`, `variants`, or `options`".to_owned(),
+        ));
+    }
+
+    // Parameter rules mirror the other paths: reserved names, no duplicates.
+    let mut declared = BTreeSet::new();
+    for param in &def.params {
+        if matches!(param.name.as_str(), "i" | "value" | COMPOSITE_CHILD_NAME) {
+            return Err(invalid(format!(
+                "parameter name `{}` is reserved",
+                param.name
+            )));
+        }
+        if !declared.insert(param.name.as_str()) {
+            return Err(invalid(format!("duplicate parameter `{}`", param.name)));
+        }
+    }
+
+    let mut files = Vec::with_capacity(def.files.len());
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    let mut primaries = 0usize;
+    // `def.files` is a BTreeMap, so sections compile in label order.
+    for (label, file) in &def.files {
+        let piece = compile_file_piece(&invalid, label, file, &declared, &mut referenced)?;
+        if piece.primary {
+            primaries += 1;
+        }
+        files.push(piece);
+    }
+
+    if files.is_empty() {
+        return Err(invalid(
+            "a multi-file snippet needs at least one `[files.<label>]` section".to_owned(),
+        ));
+    }
+    if primaries > 1 {
+        return Err(invalid(
+            "at most one file section may set `primary = true`".to_owned(),
+        ));
+    }
+    for param in &def.params {
+        if !referenced.contains(&param.name) {
+            return Err(invalid(format!(
+                "parameter `{}` is never referenced by any file section",
+                param.name
+            )));
+        }
+    }
+
+    Ok(CompiledSnippet {
+        trigger: trigger.to_owned(),
+        description: def.description.clone(),
+        params: def.params.clone(),
+        template: Template { lines: Vec::new() },
+        scope: None,
+        variants: Vec::new(),
+        composite: None,
+        requires: def.requires.clone(),
+        multifile: Some(CompiledMultiFile { files }),
+    })
+}
+
+/// Compile and validate one `[files.<label>]` section, recording the params it
+/// references into `referenced`.
+fn compile_file_piece(
+    invalid: &impl Fn(String) -> ConfigError,
+    label: &str,
+    file: &FileDef,
+    declared: &BTreeSet<&str>,
+    referenced: &mut BTreeSet<String>,
+) -> Result<CompiledFilePiece, ConfigError> {
+    // Exactly one of `path` / `target`, and one of `body` / `expands`.
+    let target = match (&file.path, &file.target) {
+        (Some(_), Some(_)) => {
+            return Err(invalid(format!(
+                "file section `{label}` sets both `path` and `target`; use one"
+            )));
+        }
+        (Some(path), None) => FileTarget::Path(path.clone()),
+        (None, Some(target)) => parse_target(invalid, label, target)?,
+        (None, None) => {
+            return Err(invalid(format!(
+                "file section `{label}` needs a `path` or a `target`"
+            )));
+        }
+    };
+    // The params this section's content references. A `body` is a *template*
+    // (so its `${1:x}` tabstops must not be read as params — use the parsed
+    // param spans); an `expands` is an abbreviation (scan its `${name}`s).
+    let (content, content_refs): (PieceContent, Vec<String>) = match (&file.body, &file.expands) {
+        (Some(_), Some(_)) => {
+            return Err(invalid(format!(
+                "file section `{label}` sets both `body` and `expands`; use one"
+            )));
+        }
+        (Some(body), None) => {
+            // Parse now so a bad template fails `check`, not at scaffold time.
+            let template = parse_template(body).map_err(|source| ConfigError::Snippet {
+                trigger: label.to_owned(),
+                origin: String::new(),
+                source,
+            })?;
+            let refs = referenced_params(&template)
+                .map(ToOwned::to_owned)
+                .collect();
+            (PieceContent::Body(body.clone()), refs)
+        }
+        (None, Some(expands)) => {
+            crate::abbr::parse(expands).map_err(|err| {
+                invalid(format!(
+                    "file section `{label}` `expands` does not parse: {err}"
+                ))
+            })?;
+            (
+                PieceContent::Expands(expands.clone()),
+                param_markers(expands),
+            )
+        }
+        (None, None) => {
+            return Err(invalid(format!(
+                "file section `{label}` needs a `body` or an `expands`"
+            )));
+        }
+    };
+
+    // Collect and check every `${name}` this section references (path + content).
+    let path_refs = file.path.as_deref().map(param_markers).unwrap_or_default();
+    for name in path_refs.into_iter().chain(content_refs) {
+        if !declared.contains(name.as_str()) {
+            return Err(invalid(format!(
+                "file section `{label}` references undeclared parameter `{name}`"
+            )));
+        }
+        referenced.insert(name);
+    }
+
+    Ok(CompiledFilePiece {
+        label: label.to_owned(),
+        target,
+        content,
+        on_exists: file.on_exists,
+        on_create: file.on_create.clone(),
+        primary: file.primary,
+    })
+}
+
+/// Parse a `target` value: `"self"`, or `.<ext>` for a sibling by extension.
+fn parse_target(
+    invalid: &impl Fn(String) -> ConfigError,
+    label: &str,
+    target: &str,
+) -> Result<FileTarget, ConfigError> {
+    if target == "self" {
+        Ok(FileTarget::SelfFile)
+    } else if let Some(ext) = target.strip_prefix('.').filter(|e| !e.is_empty()) {
+        Ok(FileTarget::Sibling(format!(".{ext}")))
+    } else {
+        Err(invalid(format!(
+            "file section `{label}` has invalid `target` {target:?} \
+             (expected `self` or a sibling extension like `.cpp`)"
+        )))
+    }
 }
 
 /// The `${name}` parameter markers a composite fragment references, in order.

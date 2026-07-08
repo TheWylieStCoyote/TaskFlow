@@ -1578,6 +1578,7 @@ mod tests {
             variants: Vec::new(),
             requires: Vec::new(),
             composite: None,
+            multifile: None,
         }
     }
 
@@ -1615,6 +1616,7 @@ mod tests {
                     .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
                     .collect(),
             }),
+            multifile: None,
         }
     }
 

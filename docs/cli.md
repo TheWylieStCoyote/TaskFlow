@@ -323,6 +323,27 @@ fn make_widget() -> Gadget {
 
 In Neovim, the same workflow is `:CodemmetCapture` on a visual selection (see [editor setup](editors.md)).
 
+## scaffold
+
+Expand a [multi-file snippet](snippets.md#multi-file-snippets) into a file manifest, optionally writing it to disk. The invocation is a single trigger with arguments (no `>`/`+`/`*` chains).
+
+```sh
+codemmet scaffold --lang python "djfeature:blog" --json     # print the manifest
+codemmet scaffold --lang python "djfeature:blog" --write    # apply it
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--lang <ID>` | Language id, extension, or LSP id (required). |
+| `--root <DIR>` | Base directory for `path` targets (default: the working directory). |
+| `--from <FILE>` | The current file, for `self`/sibling (`.cpp`) targets. |
+| `--tabstops keep\|strip` | Tabstop handling for the **primary** file (default `strip`; others are always plain). |
+| `--indent <STR>` | Indent unit (a tab or a run of spaces); defaults to the language profile. |
+| `--json` | Print `[{path, action, content, primary}]` for an editor to apply. |
+| `--write` | Apply the manifest: **create** new files (with any `on_create` header), **append** to existing ones. |
+
+With neither `--json` nor `--write`, it prints a human-readable dry run. A section whose `on_exists = "inject"` currently appends (structural injection is a later phase). Exit code 2 on an unrenderable invocation, 3 on a config/filesystem error.
+
 ## list
 
 List every trigger registered for a language, sorted, one per line. Each line is the trigger and its description separated by a tab.

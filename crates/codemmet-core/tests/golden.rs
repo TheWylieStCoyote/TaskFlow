@@ -280,6 +280,7 @@ fn ts_variant_fires_on_raw_node_kind() {
         }],
         requires: Vec::new(),
         composite: None,
+        multifile: None,
     }]);
     let abbr = codemmet_core::abbr::parse("pr").expect("abbreviation should parse");
 

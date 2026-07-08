@@ -62,9 +62,63 @@ pub struct SnippetDef {
     /// expansion when missing. See `lang::imports` for the spec forms.
     #[serde(default)]
     pub requires: Vec<String>,
+    /// A **multi-file** snippet: `[snippets.<trigger>.files.<label>]` sections,
+    /// each targeting a file with its own `body`/`expands`. Mutually exclusive
+    /// with a top-level `body`/`expands`. See `MULTIFILE_SNIPPETS.md`.
+    #[serde(default)]
+    pub files: BTreeMap<String, FileDef>,
     /// In a user override file: remove this builtin trigger entirely.
     #[serde(default)]
     pub disabled: bool,
+}
+
+/// One `[snippets.<trigger>.files.<label>]` section of a multi-file snippet.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileDef {
+    /// Target path relative to the scaffold root, `${param}`-substituted
+    /// (e.g. `"${app}/models.py"`). Mutually exclusive with `target`.
+    #[serde(default)]
+    pub path: Option<String>,
+    /// Target derived from the invocation's current file: `"self"` (the current
+    /// file) or a sibling by extension (e.g. `".cpp"`). Mutually exclusive with
+    /// `path`.
+    #[serde(default)]
+    pub target: Option<String>,
+    /// Template body for this file (LSP snippet syntax plus `${param}`).
+    /// Mutually exclusive with `expands`.
+    #[serde(default)]
+    pub body: Option<String>,
+    /// A composite-style abbreviation re-expanded for this file. Mutually
+    /// exclusive with `body`.
+    #[serde(default)]
+    pub expands: Option<String>,
+    /// What to do when the target file already exists (default: `inject`,
+    /// which degrades to `append` until the tree-sitter injector lands).
+    #[serde(default)]
+    pub on_exists: OnExists,
+    /// Text prepended only when the file is *created* (e.g. `#pragma once`, an
+    /// import block).
+    #[serde(default)]
+    pub on_create: Option<String>,
+    /// This file receives the tabstops and final cursor. At most one per
+    /// snippet; the others insert plain text (tabstops cannot cross files).
+    #[serde(default)]
+    pub primary: bool,
+}
+
+/// What a multi-file section does when its target already exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OnExists {
+    /// Inject into the right structural place (Phase 2); until the injector
+    /// lands this degrades to [`Self::Append`].
+    #[default]
+    Inject,
+    /// Append the content to the end of the file.
+    Append,
+    /// Only create; treat an existing target as an error.
+    Create,
 }
 
 /// One entry of a snippet's `params` list.

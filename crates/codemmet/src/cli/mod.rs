@@ -9,6 +9,7 @@ mod check;
 mod expand;
 mod list;
 mod render;
+mod scaffold;
 mod wrap;
 
 use std::ffi::OsString;
@@ -124,6 +125,8 @@ enum Command {
     Wrap(wrap::WrapArgs),
     /// Capture example code into a reusable, parameterized snippet.
     Capture(capture::CaptureArgs),
+    /// Expand a multi-file snippet into a file manifest (optionally --write).
+    Scaffold(scaffold::ScaffoldArgs),
     /// List every trigger registered for a language.
     List(list::ListArgs),
     /// Validate the user snippet override directory.
@@ -179,6 +182,7 @@ pub fn run() -> ExitCode {
         Some(Command::Render(args)) => render::run(&sources, &args),
         Some(Command::Wrap(args)) => wrap::run(&sources, &args),
         Some(Command::Capture(args)) => capture::run(&sources, &args),
+        Some(Command::Scaffold(args)) => scaffold::run(&sources, &args),
         Some(Command::List(args)) => list::run(&sources, &args),
         Some(Command::Check) => check::run(&sources),
         Some(Command::Lsp(args)) => {

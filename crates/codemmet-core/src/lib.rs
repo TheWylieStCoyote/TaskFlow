@@ -15,6 +15,7 @@ pub mod context;
 pub mod engine;
 pub mod filefmt;
 pub mod lang;
+pub mod scaffold;
 pub mod snippet;
 
 pub use engine::Engine;

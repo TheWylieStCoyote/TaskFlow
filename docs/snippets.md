@@ -668,6 +668,54 @@ already exist in its pack:
 rejects an `expands`/option fragment that doesn't parse, a reference to a
 trigger that doesn't resolve, and definitional cycles.
 
+## Multi-file snippets
+
+Some scaffolds naturally span **several files** — a Django feature is a model in
+one file, a view in another, and a route in a third; a C++ construct is a
+declaration in a header and a definition in a source. A multi-file snippet
+captures that as one trigger.
+
+Instead of a top-level `body`/`expands`, it declares
+`[snippets.<trigger>.files.<label>]` sections, each targeting a file and
+carrying its own `body` or `expands`:
+
+```toml
+[snippets.djfeature]
+params = [{ name = "app", kind = "ident", default = "app" }]
+
+[snippets.djfeature.files.model]
+path    = "${app}/models.py"           # root-relative, ${param}-substituted
+expands = "class:${app}Model>field"
+
+[snippets.djfeature.files.view]
+path    = "${app}/views.py"
+primary = true                         # this file keeps the tabstops
+body    = "def ${app}_view(request):\n\t${1:pass}$0"
+
+[snippets.djfeature.files.urls]
+path      = "${app}/urls.py"
+on_exists = "append"                   # append if it already exists
+body      = "path('${app}/', ${app}_view),"
+```
+
+```sh
+codemmet scaffold --lang python "djfeature:blog" --write
+# create blog/models.py · create blog/views.py · create blog/urls.py
+```
+
+A section targets its file with a `path` template **or** a `target` — `"self"`
+(the current file) or a sibling by extension (`".cpp"`), for which the CLI needs
+`--from <FILE>`. Each new file may carry an `on_create` header (a `#pragma once`
+or import block added only on creation), and `on_exists` chooses `append` /
+`create` / `inject` when the target is already there.
+
+Parameters resolve to **concrete text** here (they appear in file paths), so —
+unlike a composite — they are not tabstops; only the single `primary` file keeps
+tabstops, since these cannot cross files. `codemmet scaffold` prints a manifest
+(`--json`) or applies it (`--write`). Full details and the design are in
+[`MULTIFILE_SNIPPETS.md`](../MULTIFILE_SNIPPETS.md); the command reference is in
+the [CLI reference](cli.md#scaffold).
+
 ## Validating with `codemmet check`
 
 `codemmet check` validates the override directory and reports the first

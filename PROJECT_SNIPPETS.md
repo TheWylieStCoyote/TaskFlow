@@ -30,18 +30,20 @@ them.
 
 ### 2.1 The three axes
 
-A snippet source can be attached to a path in three ways. The first exists; the
-other two are the design.
+A snippet source can be attached to a path in three ways. All three are now
+built (the first predates this branch).
 
 1. 🟢 **Committed project pack** — `.codemmet/snippets/` inside the repo.
    Travels with the repository; shared by everyone who clones it.
-2. ⚪ **Layered project packs up the tree** — every `.codemmet/snippets` from
-   the file's directory up to the filesystem root, not just the nearest.
-   Serves monorepos where a subproject refines the repo-wide pack.
-3. ⚪ **User path-prefix mapping** — a personal config that maps path prefixes
-   to snippet directories, so a snippet set you keep *outside* a repo applies
-   whenever you edit files under a chosen path. Lets a personal pattern library
-   ride along with projects without being committed.
+2. 🔵 **Layered project packs up the tree** — every `.codemmet/snippets` from
+   the file's directory up to the filesystem root, not just the nearest
+   (`find_project_snippets_dirs`). Serves monorepos where a subproject refines
+   the repo-wide pack.
+3. 🔵 **User path-prefix mapping** — a personal `paths.toml` that maps path
+   prefixes to snippet directories (`config::paths::PathMapping`), so a snippet
+   set you keep *outside* a repo applies whenever you edit files under a chosen
+   path. Lets a personal pattern library ride along with projects without being
+   committed.
 
 ### 2.2 Precedence
 
@@ -73,27 +75,32 @@ Rationale for the ordering:
 
 ### 2.3 How it extends today's loader
 
-`Registry::with_dirs(user, project)` already takes an ordered source list and
-compiles it with `SnippetSet::compile` (later wins). The extension is purely
-"gather more directories, in the right order" — the compile step is unchanged:
+`Registry::with_dirs(user, project)` already took an ordered source list and
+compiled it with `SnippetSet::compile` (later wins). The extension was purely
+"gather more directories, in the right order" — the compile step is unchanged.
+`with_dirs` now delegates to the generalized entry point, so existing callers
+keep working:
 
 ```rust
-// Sketch. Replaces the two Option<&Path> args with an ordered list.
-pub fn with_layered_dirs(sources: &[SnippetDir]) -> Result<Self, ConfigError> { … }
+// Any number of override dirs, lowest priority first (last wins per trigger).
+pub fn with_dirs_layered(override_dirs: &[&Path]) -> Result<Self, ConfigError>;
 
-struct SnippetDir { origin_label: String, path: PathBuf }
-
-// The CLI / LSP build the list, lowest priority first:
-//   1. user global dir
-//   2. user path-mapped dirs whose prefix matches the file, shallow → deep
-//   3. every .codemmet/snippets from the fs root down to the file's dir
-fn resolve_sources(file: &Path, user_global: Option<&Path>, mapping: &PathMapping) -> Vec<SnippetDir>
+// Build that ordered list for a file: user global, then path-mapped dirs
+// (shallow → deep), then every .codemmet/snippets from fs root down to the
+// file's dir (when project packs are opted in).
+pub fn resolve_override_dirs(
+    start: &Path,
+    user_global: Option<&Path>,
+    mapping: &PathMapping,
+    include_project: bool,
+) -> Vec<PathBuf>;
 ```
 
-- **Layered project discovery** generalizes `find_project_snippets_dir` from
-  "first hit walking up" to "collect all hits, return root-most → nearest".
-- **The path mapping** is a new small config file, e.g.
-  `~/.config/codemmet/paths.toml`:
+- **Layered project discovery** — `find_project_snippets_dirs` generalizes
+  `find_project_snippets_dir` from "first hit walking up" to "collect all hits,
+  return root-most → nearest".
+- **The path mapping** is a small config file, `~/.config/codemmet/paths.toml`
+  (`config::paths`):
 
   ```toml
   # Personal pattern sets applied by path prefix. Prefixes match the file's
@@ -114,12 +121,15 @@ fn resolve_sources(file: &Path, user_global: Option<&Path>, mapping: &PathMappin
 
 ### 2.4 One subtlety: caching
 
-Today the registry is built once per process (CLI) or per LSP session. Path
-mapping and layered discovery make the resolved source set **depend on the file
-being edited**, so a single cached `Registry` is no longer correct in the LSP
-when documents from different subtrees are open at once. The design is to key a
-small registry cache by *resolved source-set fingerprint* (the ordered list of
-dirs + their mtimes). This branch does **not** implement that — see §5.
+Path mapping and layered discovery make the resolved source set **depend on the
+file being edited**, so a single cached `Registry` is no longer correct in the
+LSP when documents from different subtrees are open at once. 🔵 The LSP now
+carries a `SnippetResolver` that builds an `Engine` per document path and
+**caches it keyed by the resolved override-dir list**, so repeated requests in
+the same subtree are free and different subtrees get their own engine. A tier
+that fails to load falls back to builtins so the server stays usable. Cache
+invalidation is explicit: the read-only `codemmet.reloadSnippets` command
+clears the cache (see §3.2), rather than tracking file mtimes.
 
 ## 3. Creation workflows
 
@@ -161,10 +171,12 @@ cost of missing substring variation (a documented limitation; hand-edit or
 `[snippets.<name>]` table in `<dir>/<lang>.toml`, creating the file (with a
 `[meta]` header) if absent. It is minimally invasive — other snippets,
 comments, and formatting survive; only the target trigger's tables (including
-its `[[…variants]]`) are replaced. **The result is re-validated through the
-loader before it touches disk**, so a written pack always passes
-`codemmet check`. An existing trigger conflicts (exit 3 / JSON-RPC error)
-unless `force`.
+its `[[…variants]]`) are replaced. Table-header detection is multi-line-string
+aware, so a `body = '''…'''` that itself contains a line like `[snippets.other]`
+(captured TOML/INI, say) is never mistaken for a real header. **The result is
+re-validated through the loader before it touches disk**, so a written pack
+always passes `codemmet check`. An existing trigger conflicts (exit 3 / JSON-RPC
+error) unless `force`.
 
 **Target directory** (`resolve_capture_dir` in `registry.rs`): the existing
 `.codemmet/snippets` at or above the file wins; otherwise a fresh one under the
@@ -186,19 +198,19 @@ codemmet expand --lang rust mkwidgetGadget    # glued arg → Gadget instead
 ```
 
 **Neovim** (`lua/codemmet/capture.lua`, `:CodemmetCapture [name]`): select
-code, run the command, get prompted for a trigger name. It calls the
-`codemmet.capture` LSP command, which writes the project pack **and reloads the
-registry**, so the new trigger is expandable in the same session — no restart.
-Mirrors `wrap.lua` and the `codemmet.wrap` command exactly (same range plumbing,
-same client `exec`).
+code, run the command, get prompted for a trigger name. The editor **shells out
+to the `codemmet capture` CLI** (`vim.system`, feeding the selection on stdin),
+then calls the read-only `codemmet.reloadSnippets` LSP command so the freshly
+written trigger is expandable in the same session — no restart.
 
-**Why an LSP command (a write) and not a read-only return?** `expand`/`wrap`
-return edits and never touch disk. `capture` must persist. It stays safe
-because it writes only (a) the file the user explicitly asked to write, (b)
-inert snippet text — the same trust argument the docs already make for packs.
-Capturing implicitly adopts the project pack dir for the session (sets
-`project_dir` and reloads), which is reasonable since the user just chose to
-write there.
+**Why the editor writes, not the server.** The `codemmet lsp` server stays
+**read-only**: `expand`/`wrap` return edits and never touch disk, and capture
+follows suit — the *only* writer is the `codemmet capture` CLI, the single
+source of truth. This keeps a clean separation (a language server that never
+mutates project files) at the cost of a little editor code. To preserve the
+"works instantly in-session" feel, `codemmet.reloadSnippets` clears the LSP's
+per-subtree engine cache (§2.4) so the next completion/expand re-reads the pack
+from disk — a read, never a write.
 
 ### 3.3 Implement-an-interface / generate-from-a-type — ⚪ related, NOT built
 
@@ -232,44 +244,41 @@ language and careful signature reproduction, which is its own body of work.
 | `upsert_snippet()` pack writer (validate-before-write, comment-preserving) | 🔵 built, unit-tested |
 | `resolve_capture_dir()` target resolution | 🔵 built, unit-tested |
 | `codemmet capture` CLI subcommand | 🔵 built, integration-tested |
-| `codemmet.capture` LSP command + live registry reload | 🔵 built, integration-tested |
-| `:CodemmetCapture` + `capture.lua` | 🔵 built, nvim smoke scenario |
-| Layered project packs up the tree | ⚪ designed (§2.2–2.3) |
-| User path-prefix mapping (`paths.toml`) | ⚪ designed (§2.3) |
-| File-scoped registry caching for the above | ⚪ designed (§2.4) |
-| Implement-an-interface codegen | ⚪ sketched (§3.3) |
+| `codemmet.reloadSnippets` read-only LSP command | 🔵 built, integration-tested |
+| `:CodemmetCapture` + `capture.lua` (editor shells out to the CLI) | 🔵 built, nvim smoke scenario |
+| Layered project packs up the tree (`find_project_snippets_dirs`) | 🔵 built, unit-tested |
+| User path-prefix mapping (`config::paths`, `paths.toml`) | 🔵 built, unit-tested |
+| File-scoped engine caching in the LSP (`SnippetResolver`) | 🔵 built, integration-tested |
+| Implement-an-interface codegen | ⚪ sketched (§3.3), not built |
 
-The prototype targets the **existing single `.codemmet/snippets` location** for
-writing, which is the honest, well-scoped outcome the task allowed: the capture
-loop is complete and real, and the multi-location resolution is fully designed
-above rather than half-built.
+Everything except the implement-an-interface codegen (§3.3) is built and
+tested. Capture writes to the resolved project pack; the LSP resolves the full
+tier stack (user global → path-mapped → layered project) per document.
 
-## 5. Open questions for the user
+## 5. Decisions made
 
-1. **Merge vs. nearest-only for layered project packs.** §2.2 proposes
-   *merge up the tree, nearest wins ties*. Do you ever want a subproject to
-   *fully replace* the ancestor set instead of refining it (e.g. a vendored
-   subdir with unrelated conventions)? If so we'd need an opt-out marker in the
-   subproject pack.
-2. **Path-mapping precedence vs. committed packs.** The design puts committed
-   project packs *above* user path-mapped ones. If you keep a personal set that
-   you want to win even inside a repo (your muscle-memory triggers), we'd need a
-   per-mapping "priority: high" flag. Which is the common case for you?
-3. **Capture generalization strength.** The default only generalizes *repeated*
-   identifiers. For single-occurrence "the name" cases you must pass `--param`.
-   Would you prefer a smarter default — e.g. "also generalize the first
-   identifier after `fn`/`struct`/`class`" via tree-sitter — accepting more
-   magic and per-language code? (Tree-sitter capture would also let us skip
-   identifiers inside strings/comments, which the text tokenizer does not.)
-4. **Type-aware capture.** Should capture optionally generalize *types* into a
-   second class of parameter (e.g. `${T}` for `Widget`, `${U}` for a field
-   type), or is name-level generalization enough for now?
-5. **LSP capture writing to disk.** Comfortable with the `codemmet.capture`
-   command writing files (and adopting the project pack for the session), or
-   should the editor path instead shell out to `codemmet capture` so the server
-   stays strictly read-only? Both are viable; this branch chose the in-server
-   command for the live-reload UX.
-6. **Where should a mapping-less capture land?** `resolve_capture_dir` prefers
-   an existing pack, else the `.git` root, else beside the file. Is "`.git`
-   root" the right default project anchor, or would you rather it always prompt
-   for the location in the editor?
+These were open questions during the exploration; the user has since settled
+them, and the branch reflects the choices:
+
+1. **Layered packs merge up the tree, nearest wins ties** — not
+   nearest-only-replace. A subproject refines the ancestor set. (No opt-out
+   marker for full replacement; add one only if a real vendored-subdir case
+   appears.)
+2. **Committed project packs outrank user path-mapped packs.** A personal
+   path-mapped set refines the global user set but a committed pack wins inside
+   its repo. (No per-mapping priority override.)
+3. **Capture keeps the repeated-identifier rule.** No tree-sitter "name after
+   `fn`/`struct`" smarts; `--param`/`--literal` remain the escape hatches.
+4. **No type-aware capture.** Name-level generalization only; types are not
+   lifted into a separate parameter class.
+5. **The LSP server is read-only.** The editor shells out to `codemmet capture`
+   to write; the server only offers the read-only `codemmet.reloadSnippets`.
+
+## 6. Still open
+
+- **Where a capture with no in-scope pack should land.** `resolve_capture_dir`
+  prefers an existing `.codemmet/snippets`, else the nearest `.git` root, else
+  beside the file. Is the `.git` root the right default anchor, or would you
+  rather the editor prompt for the location?
+- **Implement-an-interface codegen** (§3.3) remains sketched, not built — a
+  separate follow-up feature.

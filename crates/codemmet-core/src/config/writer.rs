@@ -119,20 +119,109 @@ pub fn upsert_snippet(
 
 /// Remove every table owned by `trigger` (its `[snippets.<trigger>]` and any
 /// `[[snippets.<trigger>.variants]]`) from `text`, keeping everything else.
+///
+/// A line is treated as a table header only when it begins *outside* a
+/// multi-line string: a snippet `body = '''…'''` can contain a line that looks
+/// like `[snippets.other]` (captured TOML/INI, say), and that must not be
+/// mistaken for a real header. Multi-line string state (`'''`/`"""`) is tracked
+/// across lines; single-line strings and `#` comments can't span a line, so
+/// they never affect the next line's header detection. `text` is assumed valid
+/// TOML (the caller parses it before stripping).
 fn strip_trigger(text: &str, trigger: &str) -> String {
     let own = format!("snippets.{trigger}");
     let own_prefix = format!("snippets.{trigger}.");
     let mut out = String::with_capacity(text.len());
     let mut dropping = false;
+    let mut multiline = Multiline::None;
     for line in text.split_inclusive('\n') {
-        if let Some(path) = table_header_path(line.trim_end()) {
+        if multiline == Multiline::None
+            && let Some(path) = table_header_path(line.trim_end())
+        {
             dropping = path == own || path.starts_with(&own_prefix);
         }
         if !dropping {
             out.push_str(line);
         }
+        multiline = advance_multiline(multiline, line);
     }
     out
+}
+
+/// The multi-line string a line can begin inside; the only TOML construct that
+/// carries string context across a line boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Multiline {
+    /// Not inside a multi-line string.
+    None,
+    /// Inside a `'''` literal multi-line string (no escapes).
+    Literal,
+    /// Inside a `""" ` basic multi-line string (`\` escapes).
+    Basic,
+}
+
+/// Advance the multi-line-string state across one `line` (which includes its
+/// trailing newline). Single-line strings and comments are consumed within the
+/// line so their contents can't open a spurious multi-line string, but they
+/// never carry over — only [`Multiline::Literal`]/[`Multiline::Basic`] do.
+fn advance_multiline(entry: Multiline, line: &str) -> Multiline {
+    let b = line.as_bytes();
+    let mut state = entry;
+    let mut i = 0;
+    while i < b.len() {
+        match state {
+            Multiline::None => match b[i] {
+                b'#' => return Multiline::None, // comment to end of line
+                b'\'' if b[i + 1..].starts_with(b"''") => {
+                    state = Multiline::Literal;
+                    i += 3;
+                }
+                b'"' if b[i + 1..].starts_with(b"\"\"") => {
+                    state = Multiline::Basic;
+                    i += 3;
+                }
+                b'\'' => i = skip_single(b, i + 1, b'\'', false),
+                b'"' => i = skip_single(b, i + 1, b'"', true),
+                _ => i += 1,
+            },
+            Multiline::Literal => {
+                if b[i..].starts_with(b"'''") {
+                    state = Multiline::None;
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            }
+            Multiline::Basic => {
+                if b[i] == b'\\' {
+                    i += 2; // escape: skip the next byte
+                } else if b[i..].starts_with(b"\"\"\"") {
+                    state = Multiline::None;
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            }
+        }
+    }
+    state
+}
+
+/// Skip a single-line string starting at `from` (just past the opening quote),
+/// stopping past the closing `quote` or at a newline (single-line strings can't
+/// span lines). `escapes` handles `\` in basic strings. Returns the new index.
+fn skip_single(b: &[u8], from: usize, quote: u8, escapes: bool) -> usize {
+    let mut i = from;
+    while i < b.len() && b[i] != b'\n' {
+        if escapes && b[i] == b'\\' {
+            i += 2;
+            continue;
+        }
+        if b[i] == quote {
+            return i + 1;
+        }
+        i += 1;
+    }
+    i
 }
 
 /// The dotted key path of a TOML table header line (`[a.b]` or `[[a.b]]`), or
@@ -294,5 +383,58 @@ mod tests {
         assert!(!stripped.contains("[snippets.fn]"));
         assert!(!stripped.contains("[[snippets.fn.variants]]"));
         assert!(stripped.contains("[snippets.keep]"));
+    }
+
+    #[test]
+    fn strip_trigger_ignores_headers_inside_a_multiline_body() {
+        // `other`'s body literally contains a line that looks like the table
+        // being stripped. The old line-scanner would treat it as a header and
+        // corrupt `other`; the multi-line-aware scanner leaves it alone.
+        let text = "[meta]\nlanguage = \"rust\"\n\
+            [snippets.other]\nbody = '''\n[snippets.mk]\nnot a real header\n'''\n\
+            [snippets.mk]\nbody = \"old\"\n";
+        let stripped = strip_trigger(text, "mk");
+        // The real `mk` table (and its body) is gone.
+        assert!(
+            !stripped.contains("body = \"old\""),
+            "real mk removed: {stripped}"
+        );
+        // `other` and every line of its body survive intact.
+        assert!(
+            stripped.contains("[snippets.other]"),
+            "sibling kept: {stripped}"
+        );
+        assert!(
+            stripped.contains("not a real header"),
+            "body line kept: {stripped}"
+        );
+        // The only `[snippets.mk]` left is the lookalike inside `other`'s body.
+        assert_eq!(
+            stripped.matches("[snippets.mk]").count(),
+            1,
+            "only the body lookalike remains: {stripped}"
+        );
+    }
+
+    #[test]
+    fn upsert_preserves_a_sibling_with_a_header_lookalike_body() {
+        // End-to-end: force-replacing `mk` must not corrupt `other`, and the
+        // result must still load (the writer re-validates before writing).
+        let dir = scratch("lookalike");
+        let path = dir.join("rust.toml");
+        std::fs::write(
+            &path,
+            "[meta]\nlanguage = \"rust\"\n[snippets.other]\nbody = '''\n[snippets.mk]\n'''\n[snippets.mk]\nbody = \"old\"\n",
+        )
+        .expect("seed pack");
+        upsert_snippet(&dir, "rust", &entry("mk", "new()", vec![]), true).expect("force write");
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert!(text.contains("[snippets.other]"), "sibling kept: {text}");
+        assert!(
+            text.contains("body = '''\nnew()\n'''"),
+            "mk replaced: {text}"
+        );
+        assert!(!text.contains("body = \"old\""), "old mk gone: {text}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

@@ -251,6 +251,102 @@ fn expand_uses_config_override_directory() {
 }
 
 #[test]
+fn expand_builtin_composite_classp() {
+    let out = run(
+        "composite-classp",
+        &["expand", "--lang", "python", "classp:Point"],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "class Point:\n    def __init__(self):\n        \n    \
+         def __str__(self) -> str:\n        return f\"\"\n    \
+         def __repr__(self) -> str:\n        return f\"{type(self).__name__}()\"\n"
+    );
+}
+
+#[test]
+fn expand_composite_with_option_and_freeform_child() {
+    let out = run(
+        "composite-merge",
+        &["expand", "--lang", "python", "classp:Point,eq>def:validate"],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains("def __eq__(self):"), "stdout: {text}");
+    assert!(text.contains("def validate(self):"), "stdout: {text}");
+    // Order: base dunders, then the option, then the freeform child.
+    let eq = text.find("__eq__").expect("has __eq__");
+    let validate = text.find("validate").expect("has validate");
+    assert!(
+        eq < validate,
+        "option should precede freeform child: {text}"
+    );
+}
+
+#[test]
+fn expand_composite_unknown_option_exits_2() {
+    let out = run(
+        "composite-badopt",
+        &["expand", "--lang", "python", "classp:Point,nope"],
+    );
+    assert_eq!(code(&out), 2, "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("has no option `nope`"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn check_reports_composite_cycle_exits_3() {
+    let dir = scratch_dir("check-composite-cycle");
+    std::fs::write(
+        dir.join("python.toml"),
+        "[meta]\nlanguage = \"python\"\n[snippets.a]\nexpands = \"b\"\n[snippets.b]\nexpands = \"a\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 3, "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("composite cycle"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn check_reports_composite_unknown_trigger_exits_3() {
+    let dir = scratch_dir("check-composite-unknown");
+    std::fs::write(
+        dir.join("python.toml"),
+        "[meta]\nlanguage = \"python\"\n[snippets.bad]\nexpands = \"class>nosuchtrigger\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 3, "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("unknown trigger `nosuchtrigger`"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn check_valid_override_dir_exits_0() {
     let dir = scratch_dir("check-valid");
     std::fs::write(

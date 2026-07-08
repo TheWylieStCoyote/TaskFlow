@@ -22,6 +22,8 @@ follows [Semantic Versioning](https://semver.org/).
   `testmod`, Go `stringer`/`errtype`/`maincmd`, TS/JS `classc`, C
   `hstruct`/`henum`, and C++ `hclass`/`nsclass`. See
   [custom snippets → composite snippets](docs/snippets.md#composite-snippets).
+  The trainer gains a new capstone **level 8 (composites)** — curated lessons,
+  drills, and spaced-repetition review all cover them (`train --level 8`).
 - **Capture a snippet from example.** `codemmet capture --lang X --name trigger`
   (and `:CodemmetCapture` on a Neovim selection) turns a chunk of real code into
   a reusable parameterized snippet in a project pack — repeated identifiers

@@ -47,11 +47,13 @@ pub enum Level {
     ClimbUp,
     /// Grouping with `()` (`(fn:main>pr)+ret`).
     Grouping,
+    /// Composite triggers that expand to a whole scaffold (`dstruct:Point`).
+    Composite,
 }
 
 impl Level {
     /// Every level, in teaching order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::SingleTrigger,
         Self::Arguments,
         Self::Nesting,
@@ -59,6 +61,7 @@ impl Level {
         Self::Repeat,
         Self::ClimbUp,
         Self::Grouping,
+        Self::Composite,
     ];
 
     /// The 1-based level number.
@@ -72,6 +75,7 @@ impl Level {
             Self::Repeat => 5,
             Self::ClimbUp => 6,
             Self::Grouping => 7,
+            Self::Composite => 8,
         }
     }
 
@@ -86,6 +90,7 @@ impl Level {
             5 => Some(Self::Repeat),
             6 => Some(Self::ClimbUp),
             7 => Some(Self::Grouping),
+            8 => Some(Self::Composite),
             _ => None,
         }
     }
@@ -101,6 +106,7 @@ impl Level {
             Self::Repeat => "repeat (*)",
             Self::ClimbUp => "climb-up (^)",
             Self::Grouping => "grouping ( )",
+            Self::Composite => "composites",
         }
     }
 
@@ -135,6 +141,11 @@ impl Level {
             Self::Grouping => {
                 "`( )` groups a whole subtree so operators apply to it as a unit:\n\
                  `(fn:main>pr)+ret` — the group, then a sibling."
+            }
+            Self::Composite => {
+                "A composite trigger expands to a whole scaffold built from other\n\
+                 triggers: `dstruct:Point` yields a derived struct, `classp:Point`\n\
+                 a class with the common dunders. Use one like any other trigger."
             }
         }
     }
@@ -222,6 +233,10 @@ struct Vocab<'a> {
     blocks: Vec<&'a CompiledSnippet>,
     /// Triggers with no `${child}` slot (statement-like leaves).
     leaves: Vec<&'a CompiledSnippet>,
+    /// Composite triggers (aliases that expand to a scaffold). Drilled only at
+    /// [`Level::Composite`], so they stay out of the operator levels where a
+    /// whole scaffold would swamp the concept being taught.
+    composites: Vec<&'a CompiledSnippet>,
 }
 
 impl<'a> Vocab<'a> {
@@ -231,8 +246,13 @@ impl<'a> Vocab<'a> {
             with_param: Vec::new(),
             blocks: Vec::new(),
             leaves: Vec::new(),
+            composites: Vec::new(),
         };
         for s in set.iter() {
+            if s.composite.is_some() {
+                v.composites.push(s);
+                continue;
+            }
             if s.params.is_empty() {
                 v.no_param.push(s);
             } else {
@@ -335,6 +355,10 @@ fn compose(vocab: &Vocab, level: Level, rng: &mut Rng) -> Option<(String, Vec<Co
             concepts.push(Concept::Operator('('));
             concepts.push(Concept::Operator('+'));
             format!("({sa}>{sb})+{sc}")
+        }
+        Level::Composite => {
+            let s = rng.choice(&vocab.composites).copied()?;
+            call(s, rng, &mut concepts)
         }
     };
     Some((abbr, concepts))
@@ -734,6 +758,6 @@ mod tests {
             assert_eq!(Level::from_number(level.number()), Some(level));
         }
         assert_eq!(Level::from_number(0), None);
-        assert_eq!(Level::from_number(8), None);
+        assert_eq!(Level::from_number(9), None);
     }
 }

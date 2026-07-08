@@ -53,6 +53,7 @@ const fn rust(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "let:x*2", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["dstruct:Point", "denum:Color", "newtype:Meters", "testmod"],
     }
 }
 
@@ -65,6 +66,7 @@ const fn python(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "def:main>pr*3"],
         Level::ClimbUp => &["def:main>fori:i,10>pr^ret", "def:run>if>pr^ret"],
         Level::Grouping => &["(def:main>pr)+def:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["classp:Point", "ctxmgr:Timer"],
     }
 }
 
@@ -77,6 +79,7 @@ const fn c(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["hstruct:Node", "henum:Color"],
     }
 }
 
@@ -94,6 +97,7 @@ const fn cpp(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["hclass:Widget", "nsclass:Shape", "henum:Mode"],
     }
 }
 
@@ -111,6 +115,7 @@ const fn javascript(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["classc:Widget"],
     }
 }
 
@@ -128,6 +133,7 @@ const fn typescript(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["classc:Shape"],
     }
 }
 
@@ -140,6 +146,7 @@ const fn go(level: Level) -> &'static [&'static str] {
         Level::Repeat => &["pr*3", "fn:main>pr*3"],
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
+        Level::Composite => &["stringer:Point", "errtype:ParseError", "maincmd"],
     }
 }
 

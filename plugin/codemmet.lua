@@ -49,6 +49,13 @@ end, {
   desc = "Render the .codemmet buffer to a file (default: the sidecar name)",
 })
 
+vim.api.nvim_create_user_command("CodemmetScaffold", function(cmd)
+  require("codemmet").scaffold({ abbr = vim.trim(cmd.args) ~= "" and vim.trim(cmd.args) or nil })
+end, {
+  nargs = "?",
+  desc = "Expand a multi-file snippet across files (prompts when no argument)",
+})
+
 vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()
 end, { desc = "Toggle the codemmet live ghost-line preview in this buffer" })

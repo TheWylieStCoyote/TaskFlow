@@ -108,6 +108,13 @@ function M.capture(opts)
   require("codemmet.capture").capture(opts)
 end
 
+---Expand a multi-file snippet across files (create/append/inject), then open
+---the primary file. Prompts for the invocation unless `opts.abbr` is given.
+---@param opts? codemmet.ScaffoldOpts
+function M.scaffold(opts)
+  require("codemmet.scaffold").scaffold(opts)
+end
+
 ---Browse every trigger registered for this buffer in a `vim.ui.select` picker
 ---and expand the picked one at the cursor.
 function M.snippets()

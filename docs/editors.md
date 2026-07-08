@@ -159,10 +159,13 @@ The plugin also defines these user commands:
 | `:CodemmetSnippets` | no | Browse the buffer's snippets in a picker and expand the picked one at the cursor. |
 | `:CodemmetContext` | no | Show the codemmet context (scope stack, in-scope collections) at the cursor. |
 | `:CodemmetRenderTo {file}` | no | Render the `.codemmet` buffer to `{file}` — by default the sidecar name, the buffer path minus `.codemmet`. Writes nothing on a failed render. |
+| `:CodemmetScaffold {abbr}` | no | Expand a [multi-file snippet](snippets.md#multi-file-snippets) across files (create/append/inject), then open the primary file. Prompts for the invocation when omitted. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
 | `:CodemmetRenderPreview` | no | Toggle a live split rendering this buffer as a `.codemmet` source file. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
+
+`:CodemmetScaffold` runs `codemmet scaffold --write` (pointing `--from` at the current file and `--root` at the project root — the nearest `.codemmet`/`.git` ancestor), so the CLI does all the path resolution and file operations; the plugin then opens the file the CLI marked primary. Like capture, the read-only server never writes. Interactive tabstops in the primary file are not yet driven (the created files carry plain text); see [`MULTIFILE_SNIPPETS.md`](../MULTIFILE_SNIPPETS.md).
 
 `:CodemmetCapture` runs the `codemmet capture` CLI on the selection (feeding it on standard input), which generalizes it — identifiers that repeat become `${param}` mirrors — and writes it into the resolved `.codemmet/snippets/<lang>.toml` pack. The plugin then calls the server's read-only `codemmet.reloadSnippets` command so the new trigger expands immediately in the same session. The language server itself never writes files: the CLI is the only writer, and `reloadSnippets` just re-reads packs from disk. See the [`capture` CLI reference](cli.md#capture) for the generalization rules and where the pack lands.
 

@@ -282,6 +282,23 @@ fn scaffold_writes_a_multi_file_snippet() {
         std::fs::read_to_string(root.join("blog/urls.py")).expect("urls written"),
         "route('blog')\n"
     );
+    // The `--write` output marks exactly one primary file, which the editor
+    // wrapper (`:CodemmetScaffold`) parses to know which file to open.
+    let out_text = stdout(&out);
+    let primary: Vec<&str> = out_text
+        .lines()
+        .filter(|l| l.contains("(primary)"))
+        .collect();
+    assert_eq!(
+        primary.len(),
+        1,
+        "exactly one primary line; stdout:\n{out_text}"
+    );
+    assert!(
+        primary[0].contains("models.py"),
+        "primary line: {}",
+        primary[0]
+    );
 }
 
 #[test]

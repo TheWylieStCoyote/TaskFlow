@@ -253,7 +253,9 @@ fn apply(planned: &[Planned]) -> ExitCode {
             eprintln!("error: {msg}");
             return ExitCode::from(EXIT_CONFIG);
         }
-        println!("{} {}", entry.action.as_str(), entry.path.display());
+        // Mark the primary file so an editor wrapper knows which to open.
+        let mark = if entry.primary { " (primary)" } else { "" };
+        println!("{} {}{}", entry.action.as_str(), entry.path.display(), mark);
     }
     ExitCode::SUCCESS
 }

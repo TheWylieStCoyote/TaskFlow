@@ -126,9 +126,11 @@ the primary file to drive its tabstops. (Not built in Phase 1.)
 - **Phase 2 (done):** tree-sitter structural **injection** — insert a member
   into the last class/struct/impl body of an existing file (Rust, C, C++,
   Python, JS/TS, Go), so `on_exists = "inject"` is real.
-- **Phase 3:** the `codemmet.scaffold` LSP command and the Neovim
-  `:CodemmetScaffold` wrapper (create/open files, apply the edits, focus the
-  primary file's tabstops).
+- **Phase 3 (done):** the Neovim `:CodemmetScaffold` wrapper. Like capture, it
+  shells out to `codemmet scaffold --write` (the read-only server never writes)
+  with `--from` the current file and `--root` the project root, then opens the
+  file the CLI marks primary. Driving *interactive tabstops* in the primary
+  file is still open (the created files carry plain text).
 
 ## Known limitations
 

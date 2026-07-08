@@ -255,7 +255,8 @@ follows [Semantic Versioning](https://semver.org/).
   a method into an existing class/struct body (Rust, C, C++, Python, …), via
   tree-sitter — falling back to an append when the file has no such container.
   Project-local packs (`.codemmet/snippets`) make these repo-specific, and
-  `codemmet check` validates them. See
+  `codemmet check` validates them. In Neovim, `:CodemmetScaffold` runs it on the
+  current file (shelling out like capture) and opens the primary file. See
   [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a

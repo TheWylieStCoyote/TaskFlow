@@ -71,7 +71,7 @@ collection on its own: `impl:Point>fn*@Meth` just repeats the same `fn`
 skeleton. To name each copy, put `${value}` in the **argument**:
 
 ```sh
-codemmet expand --lang rust "impl:Point>fn:${value}*@Meth" --repeat Meth=new,len,area
+codemmet expand --lang rust 'impl:Point>fn:${value}*@Meth' --repeat Meth=new,len,area
 ```
 ```rust
 impl Point {
@@ -80,6 +80,11 @@ impl Point {
     fn area(&self) {  }
 }
 ```
+
+> **Quote it with single quotes.** `${value}` looks like a shell variable, so a
+> double-quoted `"…fn:${value}…"` lets the shell replace it with nothing before
+> codemmet sees it. Single quotes (or escaping `\${value}`) keep it intact —
+> the same rule as quoted arguments elsewhere.
 
 `${value}`, `${value.member}`, and `${value:default}` all work in an argument
 position (substituted per copy); with no item a bare `${value}` argument falls

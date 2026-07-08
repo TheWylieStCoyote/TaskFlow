@@ -14,6 +14,13 @@ follows [Semantic Versioning](https://semver.org/).
   may carry a member as `value:type` (`field*[x:f64,y:i32]`), parsed exactly
   like a `--repeat` value. Rejected on groups and composites, like the other
   data-driven forms.
+- **`${outer}` for nested data-driven repeats.** Inside a repeat nested under
+  another (`impl*[Point,Line]>fn*[new,area]`), a body or argument can reference
+  the **enclosing** repeat's item with `${outer}` (with the same `.member` and
+  `:default` suffixes as `${value}`), while `${value}` stays the current level's
+  item — so each copy can name both levels. With no enclosing repeat, `${outer}`
+  falls back to a tabstop like `${value}`. `outer` is now a reserved parameter
+  name.
 - **Data-driven repeats can name the construct, not just fill a body.** The
   current item now reaches a trigger's parameters, so `impl:Point>fn*@Meth`
   (with `--repeat Meth=new,len,area`, or a buffer collection) yields `fn new`,

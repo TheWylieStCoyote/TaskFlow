@@ -164,9 +164,11 @@ fn parse_braced(
                     break;
                 }
             }
-            // `${value}` / `${value.key}` / `${value:default}`: the data-driven
-            // repeat item. Handled before the `}` check because of the `.`/`:`.
-            if name == "value" {
+            // `${value…}` (current item) and `${outer…}` (enclosing item):
+            // data-driven repeat items. Handled before the `}` check because of
+            // the `.`/`:` suffixes.
+            if name == "value" || name == "outer" {
+                let outer = name == "outer";
                 let member = if chars.peek() == Some(&'.') {
                     chars.next();
                     let mut key = String::new();
@@ -187,14 +189,16 @@ fn parse_braced(
                 };
                 return match chars.next() {
                     Some('}') => Ok(Span::ItemValue {
+                        outer,
                         member,
                         default: None,
                     }),
                     Some(':') => Ok(Span::ItemValue {
+                        outer,
                         member,
                         default: Some(parse_placeholder(chars, line_no)?),
                     }),
-                    _ => Err(err(line_no, "expected '}' or ':' in ${value}")),
+                    _ => Err(err(line_no, "expected '}' or ':' in ${value}/${outer}")),
                 };
             }
             if chars.next() != Some('}') {
@@ -365,6 +369,53 @@ mod tests {
         assert_eq!(
             parse("field${i}: x").lines[0].spans,
             vec![text("field"), Span::RepeatIndex, text(": x")]
+        );
+    }
+
+    #[test]
+    fn value_and_outer_item_spans() {
+        // `${value…}` is the current repeat item; `${outer…}` is the enclosing
+        // one. Both take `.member` and `:default`; the `outer` flag distinguishes.
+        assert_eq!(
+            parse("${value} ${value.type} ${value:d} ${outer} ${outer.k} ${outer:e}").lines[0]
+                .spans,
+            vec![
+                Span::ItemValue {
+                    outer: false,
+                    member: None,
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: false,
+                    member: Some("type".to_owned()),
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: false,
+                    member: None,
+                    default: Some("d".to_owned())
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: true,
+                    member: None,
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: true,
+                    member: Some("k".to_owned()),
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: true,
+                    member: None,
+                    default: Some("e".to_owned())
+                },
+            ]
         );
     }
 

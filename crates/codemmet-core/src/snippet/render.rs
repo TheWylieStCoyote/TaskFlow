@@ -188,6 +188,7 @@ fn compose(
         collections: &ctx.collections,
         composite_depth: 0,
         shared_emitted: HashSet::new(),
+        outer_stack: Vec::new(),
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -263,6 +264,10 @@ struct Composer<'a> {
     /// param pass-through gives every occurrence of one unbound param the same
     /// [`StopId`] so the editor keeps them in sync (see [`stop_sentinel`]).
     shared_emitted: HashSet<StopId>,
+    /// Enclosing data-driven items, innermost last. A node's `${outer}`
+    /// resolves to the top; each data-driven copy pushes its item before
+    /// composing its children and pops afterwards.
+    outer_stack: Vec<Item>,
 }
 
 impl Composer<'_> {
@@ -307,7 +312,7 @@ impl Composer<'_> {
         //     repeating `${value}`. A body that uses `${value}` (arm/field/
         //     variant) already consumes the item, so it is left alone.
         // When neither applies the binding is item-independent (bound once).
-        let value_arg = node.args.iter().any(|a| arg_is_value_token(a));
+        let value_arg = node.args.iter().any(|a| arg_is_item_token(a));
         let base = bind_args(snippet, &node.args, remainder)?;
         let auto_bind = (!value_arg && !template_uses_value(template))
             .then(|| {
@@ -335,6 +340,8 @@ impl Composer<'_> {
         // for a literal `*n` copy or a data-driven repeat with no resolvable
         // collection (which degrades to a single copy).
         let items = self.resolve_items(&node.repeat, subject);
+        // This node's `${outer}` is the innermost enclosing data-driven item.
+        let outer = self.outer_stack.last().cloned();
         let mut out = Vec::new();
         for (copy, item) in items.iter().enumerate() {
             // The repetition index is 1-based (`${i}` renders 1, 2, …).
@@ -342,7 +349,7 @@ impl Composer<'_> {
             let bindings: Cow<[(String, Binding)]> = if value_arg {
                 Cow::Owned(bind_args(
                     snippet,
-                    &resolve_item_args(&node.args, item.as_ref()),
+                    &resolve_item_args(&node.args, item.as_ref(), outer.as_ref()),
                     remainder,
                 )?)
             } else if let (Some(idx), Some(it)) = (auto_bind, item.as_ref()) {
@@ -352,7 +359,8 @@ impl Composer<'_> {
             } else {
                 Cow::Borrowed(base.as_slice())
             };
-            let mut lines = self.instantiate(template, &bindings, index, item.as_ref());
+            let mut lines =
+                self.instantiate(template, &bindings, index, item.as_ref(), outer.as_ref());
             // Fail fast: repeat counts multiply through nesting, so the
             // budget must trip during composition, not on a finished Vec.
             self.composed_lines = self.composed_lines.saturating_add(lines.len());
@@ -378,9 +386,17 @@ impl Composer<'_> {
                 for line in &mut lines {
                     line.spans.retain(|s| !matches!(s, CSpan::Final));
                 }
+                // Expose this copy's item to the children as their `${outer}`.
+                let pushed = item.is_some();
+                if let Some(it) = item {
+                    self.outer_stack.push(it.clone());
+                }
                 let mut children = Vec::new();
                 for child in &node.children {
                     children.extend(self.compose_node(child, child_scope, child_subject)?);
+                }
+                if pushed {
+                    self.outer_stack.pop();
                 }
                 lines = splice_children(lines, children);
             }
@@ -539,6 +555,7 @@ impl Composer<'_> {
         bindings: &[(String, Binding)],
         index: u32,
         item: Option<&Item>,
+        outer: Option<&Item>,
     ) -> Vec<Line> {
         let mut param_ids: HashMap<&str, StopId> = HashMap::new();
         let mut index_ids: HashMap<u32, StopId> = HashMap::new();
@@ -565,7 +582,11 @@ impl Composer<'_> {
                         }
                     }
                     Span::RepeatIndex => CSpan::Text(index.to_string()),
-                    Span::ItemValue { member, default } => item.map_or_else(
+                    Span::ItemValue {
+                        outer: is_outer,
+                        member,
+                        default,
+                    } => (if *is_outer { outer } else { item }).map_or_else(
                         // No item: leave a tabstop carrying the default.
                         || CSpan::Stop {
                             id: self.alloc(default.clone()),
@@ -1030,54 +1051,79 @@ impl ArgMarkers {
     }
 }
 
-/// Whether a template body references the data-driven item (`${value}` etc.).
-/// When it does, the item is already consumed, so the item is not also
-/// auto-bound to a parameter.
+/// Whether a template body references the **current** data-driven item
+/// (`${value…}`). `${outer…}` doesn't count: it consumes the enclosing item,
+/// not this level's, so a body that uses only `${outer}` still auto-binds this
+/// level's item to a parameter.
 fn template_uses_value(template: &Template) -> bool {
     template
         .lines
         .iter()
         .flat_map(|line| &line.spans)
-        .any(|span| matches!(span, Span::ItemValue { .. }))
+        .any(|span| matches!(span, Span::ItemValue { outer: false, .. }))
 }
 
-/// Whether `arg` is a whole `${value…}` data-driven item reference — the forms
-/// `${value}`, `${value.member}`, or `${value:default}`.
-fn arg_is_value_token(arg: &str) -> bool {
-    arg.strip_prefix("${")
-        .and_then(|s| s.strip_suffix('}'))
-        .is_some_and(|inner| {
-            inner == "value" || inner.starts_with("value.") || inner.starts_with("value:")
-        })
+/// A parsed `${value…}` / `${outer…}` argument token: the source (`outer`), an
+/// optional `.member`, and an optional `:default`.
+struct ItemToken<'a> {
+    outer: bool,
+    member: Option<&'a str>,
+    default: Option<&'a str>,
 }
 
-/// Resolve each argument against the current data-driven `item`: a whole
-/// `${value…}` token becomes the item's value (or `.member`, or its `:default`);
-/// with no item a bare `${value}` argument is **dropped** so its parameter
-/// falls back to its own tabstop, mirroring how `${value}` behaves in a body.
-fn resolve_item_args(args: &[String], item: Option<&Item>) -> Vec<String> {
+/// Parse a whole-argument item token (`${value}`, `${outer.member}`,
+/// `${value:default}`, …), or `None` when `arg` is not one.
+fn item_token(arg: &str) -> Option<ItemToken<'_>> {
+    let inner = arg.strip_prefix("${").and_then(|s| s.strip_suffix('}'))?;
+    let (outer, rest) = inner.strip_prefix("value").map_or_else(
+        || inner.strip_prefix("outer").map(|rest| (true, rest)),
+        |rest| Some((false, rest)),
+    )?;
+    match rest {
+        "" => Some(ItemToken {
+            outer,
+            member: None,
+            default: None,
+        }),
+        r if r.starts_with('.') => Some(ItemToken {
+            outer,
+            member: Some(&r[1..]),
+            default: None,
+        }),
+        r if r.starts_with(':') => Some(ItemToken {
+            outer,
+            member: None,
+            default: Some(&r[1..]),
+        }),
+        _ => None,
+    }
+}
+
+/// Whether `arg` is a whole `${value…}`/`${outer…}` item reference.
+fn arg_is_item_token(arg: &str) -> bool {
+    item_token(arg).is_some()
+}
+
+/// Resolve each argument against the current `item` and enclosing `outer` item:
+/// a whole `${value…}`/`${outer…}` token becomes that item's value (or
+/// `.member`, or its `:default`); with no item a bare token is **dropped** so
+/// its parameter falls back to its own tabstop, mirroring the body behaviour.
+fn resolve_item_args(args: &[String], item: Option<&Item>, outer: Option<&Item>) -> Vec<String> {
     let mut out = Vec::with_capacity(args.len());
     for arg in args {
-        let Some(inner) = arg
-            .strip_prefix("${")
-            .and_then(|s| s.strip_suffix('}'))
-            .filter(|i| *i == "value" || i.starts_with("value.") || i.starts_with("value:"))
-        else {
+        let Some(tok) = item_token(arg) else {
             out.push(arg.clone());
             continue;
         };
-        let (member, default) = inner.strip_prefix("value.").map_or_else(
-            || (None, inner.strip_prefix("value:")),
-            |key| (Some(key), None),
-        );
-        match item {
-            Some(it) => out.push(member.map_or_else(
+        let src = if tok.outer { outer } else { item };
+        match src {
+            Some(it) => out.push(tok.member.map_or_else(
                 || it.value.clone(),
                 |key| it.members.get(key).cloned().unwrap_or_default(),
             )),
-            // No item: a `:default` supplies text; a bare `${value}` is dropped.
+            // No item: a `:default` supplies text; a bare token is dropped.
             None => {
-                if let Some(def) = default {
+                if let Some(def) = tok.default {
                     out.push(def.to_owned());
                 }
             }
@@ -1512,6 +1558,9 @@ mod tests {
                 "match-body",
             ),
             snip("fielddef", vec![], "${value}: ${value.type},\n"),
+            // References the enclosing repeat's item via `${outer}` (and its own
+            // via `${value}`) — for the nested `${outer}` tests.
+            snip("dv", vec![], "${outer}.${value}$0\n"),
             snip("if", vec![], "if $1 {\n\t${child}\n}\n"),
             snip("el", vec![], "else {\n\t${child}\n}\n"),
             snip(
@@ -2070,6 +2119,33 @@ mod tests {
         );
         assert_eq!(e.body.matches("fn new(&self)").count(), 2, "{}", e.body);
         assert_eq!(e.body.matches("fn area(&self)").count(), 2, "{}", e.body);
+    }
+
+    #[test]
+    fn nested_outer_references_the_enclosing_item() {
+        // `${outer}` in the inner body resolves to the enclosing repeat's item,
+        // while `${value}` stays the inner one: a full cross product of pairs.
+        let e = expand("impl*[A,B]>dv*[x,y]", &ctx(), TabstopMode::Strip);
+        for pair in ["A.x", "A.y", "B.x", "B.y"] {
+            assert!(e.body.contains(pair), "missing {pair} in:\n{}", e.body);
+        }
+    }
+
+    #[test]
+    fn outer_in_argument_position_binds_the_enclosing_item() {
+        // `${outer}` also works as an argument, substituted per inner copy.
+        let e = expand("impl*[A,B]>note:${outer}*[x,y]", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body.matches("// A").count(), 2, "{}", e.body);
+        assert_eq!(e.body.matches("// B").count(), 2, "{}", e.body);
+    }
+
+    #[test]
+    fn outer_with_no_enclosing_repeat_is_a_tabstop() {
+        // A top-level `dv*[x]` has no enclosing item, so `${outer}` degrades to
+        // a tabstop rather than erroring or emitting stray text.
+        let e = expand("dv*[x]", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains(".x"), "{}", e.body);
+        assert!(!e.body.contains("${outer}"), "{}", e.body);
     }
 
     #[test]

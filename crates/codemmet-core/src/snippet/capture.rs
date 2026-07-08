@@ -184,11 +184,12 @@ fn push_escaped(body: &mut String, text: &str) {
 /// unique among `existing`.
 ///
 /// Identifiers are already valid WORDs, so the name is the identifier itself
-/// unless it collides with a reserved name (`i`, `value`) or a name already
-/// taken, in which case a numeric suffix is appended.
+/// unless it collides with a reserved name (`i`, `value`, `outer`) or a name
+/// already taken, in which case a numeric suffix is appended.
 fn unique_param_name(ident: &str, existing: &[ParamDef]) -> String {
-    let taken =
-        |name: &str| name == "i" || name == "value" || existing.iter().any(|p| p.name == name);
+    let taken = |name: &str| {
+        name == "i" || name == "value" || name == "outer" || existing.iter().any(|p| p.name == name)
+    };
     if !taken(ident) {
         return ident.to_owned();
     }

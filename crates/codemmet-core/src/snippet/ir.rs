@@ -49,10 +49,14 @@ pub enum Span {
     /// Renders the copy number when the node is repeated with `*n` (`1`, `2`,
     /// …), and `1` when the node is not repeated.
     RepeatIndex,
-    /// `${value}` / `${value.key}` / `${value:default}`: the current item of a
-    /// data-driven repeat. Renders the item's value (or a named member) when
-    /// there is an item, otherwise a tabstop carrying `default`.
+    /// `${value}` / `${value.key}` / `${value:default}` (and the `${outer…}`
+    /// forms): a data-driven repeat item. `${value}` is the current level's
+    /// item; `${outer}` is the nearest *enclosing* data-driven item (for nested
+    /// repeats). Renders the item's value (or a named member) when there is one,
+    /// otherwise a tabstop carrying `default`.
     ItemValue {
+        /// `true` for `${outer…}` (the enclosing item), `false` for `${value…}`.
+        outer: bool,
         /// The member key from `${value.key}`; `None` for the primary value.
         member: Option<String>,
         /// The `${value:default}` fallback, used when there is no item.

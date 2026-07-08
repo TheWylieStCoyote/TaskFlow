@@ -200,7 +200,10 @@ codemmet expand --lang rust "match:cmd>arm*@Msg"
 
 A snippet body pulls the current item in with `${value}`; a member of the item
 with `${value.type}` (or any `${value.key}`); and supplies a fallback for when
-there is no data with `${value:default}`. Three built-in snippets use these:
+there is no data with `${value:default}`. When repeats **nest**, `${outer}`
+(same `.key` / `:default` suffixes) reaches the enclosing repeat's item, so
+`impl*[Point,Line]>fn*[new,area]` can name each `fn` from `${value}` and refer
+back to its type with `${outer}`. Three built-in snippets use these:
 `arm` (a match arm), `field` (a struct/record field, with its declared type),
 and `variant` (an enum member — the definition side). So an enum fills its
 arms, a struct fills its fields, and — going the other way — a fresh `enum`
@@ -248,8 +251,8 @@ always safe to type.
 > Extraction is **shape-directed, not type-aware**: codemmet reads what the
 > syntax literally says (an enum's written variants, a list literal's written
 > elements). It does not infer a variable's type to find its definition — you
-> name the source (`@Msg`). `value` is a reserved parameter name because of
-> `${value}`.
+> name the source (`@Msg`). `value` and `outer` are reserved parameter names
+> because of `${value}` / `${outer}`.
 
 ### `^` — climb-up
 

@@ -64,6 +64,7 @@ snippet body references the current item:
 | `${value}` | the item's primary value (an enum variant, a field name, a list element) |
 | `${value.type}` (or any `${value.key}`) | a named member of the item |
 | `${value:default}` | the value, or `default` (as a tabstop) when there is no data |
+| `${outer}` (also `.key` / `:default`) | the **enclosing** repeat's item, for a nested repeat (see [Nesting](#nesting-a-cross-product)) |
 
 ### Naming each copy from the item
 
@@ -204,6 +205,19 @@ impl Circle { … }
 
 Each level auto-binds *its own* item (the outer names the `impl`, the inner names
 the `fn`), and `${value}` inside a level refers to that level's item.
+
+To reach the **enclosing** item from inside the inner body or an inner argument,
+use `${outer}` — it names the nearest surrounding data-driven repeat's item (and
+takes the same `.member` / `:default` suffixes as `${value}`). So a body that
+pairs the two,
+
+```sh
+codemmet expand --lang rust "impl*[Point,Line]>const*[X,Y]"
+# where `const` is `const ${outer}_${value}: …` → Point_X, Point_Y, Line_X, Line_Y
+```
+
+writes the cross product with both levels' items in each copy. With no enclosing
+repeat, a bare `${outer}` falls back to its own tabstop, exactly like `${value}`.
 
 ### Defining, then consuming
 

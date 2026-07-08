@@ -452,6 +452,12 @@ fn compile_snippet(
                     .to_owned(),
             ));
         }
+        if param.name == "outer" {
+            return Err(invalid(
+                "parameter name `outer` is reserved for the enclosing repeat item `${outer}`"
+                    .to_owned(),
+            ));
+        }
         if !declared.insert(param.name.as_str()) {
             return Err(invalid(format!("duplicate parameter `{}`", param.name)));
         }
@@ -545,6 +551,12 @@ fn compile_composite(
         if param.name == "value" {
             return Err(invalid(
                 "parameter name `value` is reserved for the data-driven repeat item `${value}`"
+                    .to_owned(),
+            ));
+        }
+        if param.name == "outer" {
+            return Err(invalid(
+                "parameter name `outer` is reserved for the enclosing repeat item `${outer}`"
                     .to_owned(),
             ));
         }
@@ -828,6 +840,23 @@ mod tests {
             ConfigError::Invalid { message, .. } => {
                 assert!(
                     message.contains("reserved for the data-driven repeat item"),
+                    "{message}"
+                );
+            }
+            other => panic!("expected Invalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn param_named_outer_is_reserved() {
+        let err = compile_err(
+            "user",
+            "[meta]\nlanguage = \"rust\"\n[snippets.f]\nparams = [{ name = \"outer\" }]\nbody = \"f${outer}\"\n",
+        );
+        match err {
+            ConfigError::Invalid { message, .. } => {
+                assert!(
+                    message.contains("reserved for the enclosing repeat item"),
                     "{message}"
                 );
             }

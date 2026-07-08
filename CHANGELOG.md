@@ -251,9 +251,11 @@ follows [Semantic Versioning](https://semver.org/).
   manifest (`--json`) or applies it (`--write`): it **creates** new files (with
   an optional `on_create` header) and **appends** to existing ones; the single
   `primary` file keeps its tabstops (others insert plain text, since tabstops
-  cannot cross files). Project-local packs (`.codemmet/snippets`) make these
-  repo-specific. Validated by `codemmet check`. (`on_exists = "inject"` currently
-  degrades to append; structural injection is a later phase.) See
+  cannot cross files). `on_exists = "inject"` places the content structurally —
+  a method into an existing class/struct body (Rust, C, C++, Python, …), via
+  tree-sitter — falling back to an append when the file has no such container.
+  Project-local packs (`.codemmet/snippets`) make these repo-specific, and
+  `codemmet check` validates them. See
   [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a

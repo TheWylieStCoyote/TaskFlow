@@ -285,6 +285,40 @@ fn scaffold_writes_a_multi_file_snippet() {
 }
 
 #[test]
+#[cfg(feature = "tree-sitter")]
+fn scaffold_injects_into_an_existing_class() {
+    let dir = scratch_dir("scaffold-inject");
+    std::fs::write(
+        dir.join("cpp.toml"),
+        concat!(
+            "[meta]\nlanguage = \"cpp\"\n\n",
+            "[snippets.method]\nparams = [{ name = \"name\", kind = \"ident\", default = \"fn\" }]\n\n",
+            "[snippets.method.files.decl]\ntarget = \"self\"\non_exists = \"inject\"\n",
+            "body = \"int ${name}();\"\n",
+        ),
+    )
+    .expect("pack should be writable");
+    let hpp = dir.join("widget.hpp");
+    std::fs::write(
+        &hpp,
+        "class Widget {\npublic:\n    int width() const;\n};\n",
+    )
+    .expect("header should be writable");
+    let out = bin()
+        .args(["scaffold", "--lang", "cpp", "--no-project", "--write"])
+        .args(["--from", hpp.to_str().expect("path is UTF-8")])
+        .arg("method:area")
+        .args(["--config", dir.to_str().expect("path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        std::fs::read_to_string(&hpp).expect("header written"),
+        "class Widget {\npublic:\n    int width() const;\n    int area();\n};\n"
+    );
+}
+
+#[test]
 fn expand_builtin_composite_classp() {
     let out = run(
         "composite-classp",

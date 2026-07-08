@@ -99,8 +99,16 @@ on the flags:
 The **action** per file is decided against the filesystem:
 
 - target missing → **create** (content prefixed with `on_create`);
-- target exists → **append** (or, once built, **inject** — see below); an
+- target exists → **inject** or **append**, per the section's `on_exists`; an
   `on_exists = "create"` section errors if its target already exists.
+
+**Injection** (`on_exists = "inject"`, the default) places the content
+*structurally*: tree-sitter finds the last type-like container (class, struct,
+impl, trait, interface) in the existing file and inserts the content as a new
+member at the body's indentation. With no such container — or in a
+tree-sitter-free build — it falls back to appending. A JSON manifest entry for
+an inject carries the byte `offset` so an editor can apply it without
+re-parsing.
 
 `--root <DIR>` is the base for `path` targets (default: the working directory).
 `--from <FILE>` supplies the current file that `self`/sibling targets need.
@@ -113,18 +121,20 @@ the primary file to drive its tabstops. (Not built in Phase 1.)
 
 ## Status / phases
 
-- **Phase 1 (this):** core + CLI. `path`/`target` resolution, per-piece
+- **Phase 1 (done):** core + CLI. `path`/`target` resolution, per-piece
   rendering, the manifest, `scaffold --json`/`--write`, and `check` validation.
-  `on_exists = "inject"` **degrades to `append`** with a note.
-- **Phase 2:** tree-sitter structural **injection** — add a method into an
-  existing class body / access section, a field into a struct — so `inject`
-  becomes real.
+- **Phase 2 (done):** tree-sitter structural **injection** — insert a member
+  into the last class/struct/impl body of an existing file (Rust, C, C++,
+  Python, JS/TS, Go), so `on_exists = "inject"` is real.
 - **Phase 3:** the `codemmet.scaffold` LSP command and the Neovim
-  `:CodemmetScaffold` wrapper.
+  `:CodemmetScaffold` wrapper (create/open files, apply the edits, focus the
+  primary file's tabstops).
 
-## Known limitations (Phase 1)
+## Known limitations
 
-- `inject` appends rather than placing content structurally.
+- Injection targets the **last** container in a file and inserts after its last
+  member; it does not choose a named class or a specific access section
+  (`public:`/`private:`). Those refinements can layer on later.
 - Unknown sub-triggers inside a piece's `expands` are caught at scaffold time,
   not by `check` (composite-style whole-set validation for pieces is future
   work).

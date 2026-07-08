@@ -70,6 +70,11 @@ enum Action {
     Create,
     /// The target exists: append to it.
     Append,
+    /// The target exists: splice the content in at this byte offset (inside a
+    /// class/struct body, via the tree-sitter injector). Only constructed in a
+    /// tree-sitter build; the minimal build always falls back to `Append`.
+    #[cfg_attr(not(feature = "tree-sitter"), allow(dead_code))]
+    Inject { offset: usize },
 }
 
 impl Action {
@@ -77,6 +82,7 @@ impl Action {
         match self {
             Self::Create => "create",
             Self::Append => "append",
+            Self::Inject { .. } => "inject",
         }
     }
 }
@@ -97,6 +103,7 @@ pub fn run(sources: &Sources, args: &ScaffoldArgs) -> ExitCode {
     };
 
     let engine = Engine::with_registry(registry);
+    let indent = indent_unit.as_str();
     let ctx = ExpansionContext::plain(String::new(), indent_unit);
     let opts = ScaffoldOptions {
         root: &args.root,
@@ -120,7 +127,7 @@ pub fn run(sources: &Sources, args: &ScaffoldArgs) -> ExitCode {
     // Decide each entry's concrete action against the filesystem.
     let mut planned = Vec::with_capacity(outputs.len());
     for out in &outputs {
-        match plan(out) {
+        match plan(out, &args.lang, &indent) {
             Ok(entry) => planned.push(entry),
             Err(msg) => {
                 eprintln!("error: {msg}");
@@ -139,10 +146,10 @@ pub fn run(sources: &Sources, args: &ScaffoldArgs) -> ExitCode {
 }
 
 /// Turn a [`FileOutput`] into a [`Planned`] entry: stat the target, pick the
-/// action, and fold the `on_create` prefix into the content when creating.
-fn plan(out: &FileOutput) -> Result<Planned, String> {
-    let exists = out.path.exists();
-    let (action, content) = if exists {
+/// action, and prepare the content (fold in `on_create` on create; compute the
+/// structural insertion on inject).
+fn plan(out: &FileOutput, lang: &str, indent: &str) -> Result<Planned, String> {
+    let (action, content) = if out.path.exists() {
         match out.on_exists {
             OnExists::Create => {
                 return Err(format!(
@@ -152,15 +159,8 @@ fn plan(out: &FileOutput) -> Result<Planned, String> {
                     out.path.display()
                 ));
             }
-            OnExists::Inject => {
-                // Phase 1: no tree-sitter injector yet — append with a note.
-                eprintln!(
-                    "note: `{}` exists; appending (`inject` lands in a later phase)",
-                    out.path.display()
-                );
-                (Action::Append, out.content.clone())
-            }
             OnExists::Append => (Action::Append, out.content.clone()),
+            OnExists::Inject => plan_inject(out, lang, indent)?,
         }
     } else {
         let content = out.on_create.as_ref().map_or_else(
@@ -177,17 +177,53 @@ fn plan(out: &FileOutput) -> Result<Planned, String> {
     })
 }
 
+/// Plan an `inject` into an existing file: ask the tree-sitter injector for a
+/// structural insertion point, falling back to an append when there's no
+/// container (or in a tree-sitter-free build).
+#[cfg(feature = "tree-sitter")]
+fn plan_inject(out: &FileOutput, lang: &str, indent: &str) -> Result<(Action, String), String> {
+    let existing = std::fs::read_to_string(&out.path)
+        .map_err(|err| format!("cannot read {}: {err}", out.path.display()))?;
+    if let Some(inj) = codemmet_tsctx::inject(lang, &existing, &out.content, indent) {
+        Ok((Action::Inject { offset: inj.offset }, inj.text))
+    } else {
+        eprintln!(
+            "note: no container found in {}; appending instead",
+            out.path.display()
+        );
+        Ok((Action::Append, out.content.clone()))
+    }
+}
+
+// The `Result` mirrors the tree-sitter build's fallible signature; this
+// variant never fails but must share the shape for a single call site.
+#[cfg(not(feature = "tree-sitter"))]
+#[allow(clippy::unnecessary_wraps)]
+fn plan_inject(out: &FileOutput, _lang: &str, _indent: &str) -> Result<(Action, String), String> {
+    eprintln!(
+        "note: `{}` exists; appending (`inject` needs the tree-sitter build)",
+        out.path.display()
+    );
+    Ok((Action::Append, out.content.clone()))
+}
+
 /// Print the manifest as a JSON array.
 fn emit_json(planned: &[Planned]) -> ExitCode {
     let entries: Vec<serde_json::Value> = planned
         .iter()
         .map(|e| {
-            serde_json::json!({
+            let mut obj = serde_json::json!({
                 "path": e.path.display().to_string(),
                 "action": e.action.as_str(),
                 "content": e.content,
                 "primary": e.primary,
-            })
+            });
+            // An `inject` entry carries the byte offset to splice at, so an
+            // editor can apply it without re-parsing.
+            if let Action::Inject { offset } = e.action {
+                obj["offset"] = serde_json::json!(offset);
+            }
+            obj
         })
         .collect();
     println!("{}", serde_json::Value::Array(entries));
@@ -248,6 +284,14 @@ fn apply_one(entry: &Planned) -> Result<(), String> {
             let block = format!("\n{}{}", entry.content, if ends_nl { "" } else { "\n" });
             file.write_all(block.as_bytes())
                 .map_err(|err| io_err("append to", &err))
+        }
+        Action::Inject { offset } => {
+            // `content` is the pre-indented block with its own surrounding
+            // newlines; splice it in at the injector's byte offset.
+            let mut existing =
+                std::fs::read_to_string(&entry.path).map_err(|err| io_err("read", &err))?;
+            existing.insert_str(offset.min(existing.len()), &entry.content);
+            std::fs::write(&entry.path, existing).map_err(|err| io_err("write", &err))
         }
     }
 }

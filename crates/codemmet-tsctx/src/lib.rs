@@ -187,6 +187,19 @@ impl LangSpec {
             .find(|c| c.kind() == "{")
             .map(|c| c.start_byte())
     }
+
+    /// The body/block *node* of a scope-bearing node (the class body,
+    /// declaration list, suite, …), for structural injection.
+    fn body_node<'t>(&self, node: Node<'t>) -> Option<Node<'t>> {
+        for &field in self.body_fields {
+            if let Some(child) = node.child_by_field_name(field) {
+                return Some(child);
+            }
+        }
+        let mut cursor = node.walk();
+        node.named_children(&mut cursor)
+            .find(|c| self.block_kinds.contains(&c.kind()))
+    }
 }
 
 /// Per-language spec for `language`, or `None` when this build carries no
@@ -225,6 +238,115 @@ fn spec_for(language: &str) -> Option<&'static LangSpec> {
         "go" => Some(&GO),
         _ => None,
     }
+}
+
+/// A structural insertion: splice [`Self::text`] at byte [`Self::offset`] in an
+/// existing file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Injection {
+    /// Byte offset to insert at (a token boundary, so a valid char boundary).
+    pub offset: usize,
+    /// The text to insert, already indented and surrounded by the newlines that
+    /// place it as a new member.
+    pub text: String,
+}
+
+/// Find a structural insertion point for `content` in an existing file.
+///
+/// It injects inside the body of the **last type-like container** (class,
+/// struct, impl, trait, interface, …), so `content` becomes a new member at the
+/// body's indentation. Returns `None` when the language is unsupported or the
+/// file has no such container — the caller should fall back to appending.
+///
+/// This is deliberately container-directed and single-shot: it does not try to
+/// choose an access section or a specific named class (a header with more than
+/// one type takes the last). Those refinements can layer on later.
+#[must_use]
+pub fn inject(
+    language_id: &str,
+    text: &str,
+    content: &str,
+    indent_unit: &str,
+) -> Option<Injection> {
+    let spec = spec_for(language_id)?;
+    let language = (spec.grammar)();
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&language).ok()?;
+    let tree = parser.parse(text, None)?;
+
+    let container = last_type_body(tree.root_node(), spec)?;
+    let body = spec.body_node(container)?;
+    let member_indent = format!("{}{indent_unit}", line_indent(text, container.start_byte()));
+    let block = indent_block(content.trim_end_matches('\n'), &member_indent);
+
+    let mut cursor = body.walk();
+    let members: Vec<Node<'_>> = body.named_children(&mut cursor).collect();
+    Some(members.last().map_or_else(
+        || {
+            // Empty body: insert just after the opening brace, then re-close.
+            let mut cursor = body.walk();
+            let open = body
+                .children(&mut cursor)
+                .find(|c| c.kind() == "{")
+                .map_or_else(|| body.start_byte(), |b| b.end_byte());
+            let close_indent = line_indent(text, container.start_byte());
+            Injection {
+                offset: open,
+                text: format!("\n{block}\n{close_indent}"),
+            }
+        },
+        // Insert after the last member, keeping the body's closing on its line.
+        |last| Injection {
+            offset: last.end_byte(),
+            text: format!("\n{block}"),
+        },
+    ))
+}
+
+/// The last outermost type-body container (class/struct/impl/…) in document
+/// order. Outermost: once one is found the walk does not descend into it, so a
+/// nested type never shadows the type you meant.
+fn last_type_body<'t>(root: Node<'t>, spec: &LangSpec) -> Option<Node<'t>> {
+    let mut found: Option<Node<'t>> = None;
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if spec.scope_for(node.kind()) == Some(Scope::TypeBody) {
+            if found.is_none_or(|f| node.start_byte() > f.start_byte()) {
+                found = Some(node);
+            }
+            continue; // do not descend into a container
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            stack.push(child);
+        }
+    }
+    found
+}
+
+/// The leading whitespace of the line containing `offset`.
+fn line_indent(text: &str, offset: usize) -> String {
+    let offset = offset.min(text.len());
+    let start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    text[start..offset]
+        .chars()
+        .take_while(|c| *c == ' ' || *c == '\t')
+        .collect()
+}
+
+/// Prefix every non-empty line of `content` with `indent`.
+fn indent_block(content: &str, indent: &str) -> String {
+    content
+        .split('\n')
+        .map(|line| {
+            if line.is_empty() {
+                String::new()
+            } else {
+                format!("{indent}{line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(feature = "lang-rust")]
@@ -810,6 +932,58 @@ mod tests {
     fn ctx(language: &str, fixture: &str) -> ExpansionContext {
         let (doc, offset) = doc_at(language, fixture);
         TreeSitterProvider::new().context_at(&doc, offset)
+    }
+
+    /// Apply [`inject`] to `text` (four-space indent) and return the result, or
+    /// `None` when no container is found.
+    #[cfg(any(feature = "lang-rust", feature = "lang-cpp", feature = "lang-python"))]
+    fn injected(language: &str, text: &str, content: &str) -> Option<String> {
+        inject(language, text, content, "    ").map(|inj| {
+            let mut out = text.to_owned();
+            out.insert_str(inj.offset, &inj.text);
+            out
+        })
+    }
+
+    #[cfg(feature = "lang-cpp")]
+    #[test]
+    fn inject_adds_a_method_after_the_last_class_member() {
+        let src = "class Point {\npublic:\n    double area() const;\n};\n";
+        assert_eq!(
+            injected("cpp", src, "void scale(double f);").as_deref(),
+            Some(
+                "class Point {\npublic:\n    double area() const;\n    void scale(double f);\n};\n"
+            )
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn inject_adds_a_fn_to_a_rust_impl() {
+        let src = "impl Point {\n    fn area(&self) {}\n}\n";
+        assert_eq!(
+            injected("rust", src, "fn scale(&self) {}").as_deref(),
+            Some("impl Point {\n    fn area(&self) {}\n    fn scale(&self) {}\n}\n")
+        );
+    }
+
+    #[cfg(feature = "lang-python")]
+    #[test]
+    fn inject_adds_a_method_to_a_python_class_indenting_each_line() {
+        let src = "class Point:\n    def area(self):\n        pass\n";
+        assert_eq!(
+            injected("python", src, "def scale(self):\n    pass").as_deref(),
+            Some(
+                "class Point:\n    def area(self):\n        pass\n    \
+                 def scale(self):\n        pass\n"
+            )
+        );
+    }
+
+    #[cfg(feature = "lang-rust")]
+    #[test]
+    fn inject_returns_none_without_a_container() {
+        assert_eq!(injected("rust", "fn free() {}\n", "fn x() {}"), None);
     }
 
     /// Run `validate_wrap` over a fixture with `«` and `»` selection

@@ -263,3 +263,8 @@ description = "struct field definition"
 body = '''
 ${value.type:Type} ${value:name};
 '''
+
+[snippets.hstruct]
+description = "include-guarded struct for a header (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "guard>struct:${name}"

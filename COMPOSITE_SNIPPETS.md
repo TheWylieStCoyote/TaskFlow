@@ -41,6 +41,27 @@ size budget all flow through the ordinary pipeline. The only new work is
 *resolution*: substitute the params, splice in the selected options and the
 caller's freeform children, then re-parse and compose the result.
 
+## Built-in composites
+
+Beyond `classp`, the builtin packs ship a starter set (each built only from
+triggers that already exist in its pack, so it stays DRY):
+
+| Lang | Trigger | Expands to | What you get |
+| --- | --- | --- | --- |
+| Python | `classp:Name` | `class>init+str+repr` (+options `eq`/`hash`/`len`) | class with common dunders |
+| Python | `ctxmgr:Name` | `class>init+__enter__+__exit__` | context-manager class |
+| Rust | `dstruct:Name` | `derive+struct>field` | `#[derive]`d struct |
+| Rust | `newtype:Name` | `(struct>field)+impl` | struct paired with an impl block |
+| Rust | `testmod` | `tmod>test` | test module with a first test |
+| Go | `stringer:Name` | `(struct>field)+meth:String` | struct + a `String()` method |
+| Go | `maincmd` | `pkg:main+main` | `package main` + `func main` |
+| TS/JS | `classc:Name` | `class>ctor` | class with a constructor |
+| C | `hstruct:Name` | `guard>struct` | include-guarded struct for a header |
+
+Each accepts the name inline (`newtype:Point`) or leaves a tabstop when bare
+(`newtype`), takes freeform `>`-children (`ctxmgr:Timer>def:reset`), and — for
+`classp` — selectable options (`classp:Point,eq`).
+
 ---
 
 ## Schema

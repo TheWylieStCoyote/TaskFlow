@@ -120,3 +120,8 @@ description = "object/interface field"
 body = '''
 ${value:name}: ${value.type:type};
 '''
+
+[snippets.classc]
+description = "class with a constructor (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "class:${name}>ctor"

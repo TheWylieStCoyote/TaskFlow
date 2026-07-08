@@ -391,3 +391,17 @@ description = "assert_eq! statement"
 body = '''
 assert_eq!(${1:left}, $0);
 '''
+
+[snippets.dstruct]
+description = "#[derive]d struct (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "derive+struct:${name}>field"
+
+[snippets.newtype]
+description = "struct paired with an impl block (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "(struct:${name}>field)+impl:${name}"
+
+[snippets.testmod]
+description = "test module with a first test case (composite)"
+expands = "tmod>test"

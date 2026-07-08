@@ -321,3 +321,8 @@ description = "annotated attribute (dataclass field)"
 body = '''
 ${value:name}: ${value.type:type}
 '''
+
+[snippets.ctxmgr]
+description = "context manager class with __enter__/__exit__ (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "class:${name}>(init+def:__enter__+def:__exit__)"

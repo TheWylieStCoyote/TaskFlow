@@ -339,3 +339,12 @@ description = "struct field definition"
 body = '''
 ${value:Name} ${value.type:Type}
 '''
+
+[snippets.stringer]
+description = "struct with a String() method (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "(struct:${name}>field)+meth:String"
+
+[snippets.maincmd]
+description = "package main with a main function (composite)"
+expands = "pkg:main+main"

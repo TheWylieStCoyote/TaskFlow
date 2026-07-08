@@ -184,6 +184,27 @@ impl Point {
 This works the same in the editor — no buffer collection or flag needed — which
 makes it the quickest way to stamp out a handful of named members on the spot.
 
+### Nesting: a cross product
+
+Data-driven repeats **nest** — the inner one runs once per outer copy, so two
+of them form a cross product. This writes each method for each type:
+
+```sh
+codemmet expand --lang rust "impl*[Point,Line,Circle]>fn*[new,len,area]"
+# or with named collections:
+codemmet expand --lang rust "impl*@Types>fn*@Methods" \
+    --repeat Types=Point,Line,Circle --repeat Methods=new,len,area
+```
+
+```rust
+impl Point { fn new(&self) {} fn len(&self) {} fn area(&self) {} }
+impl Line   { … }
+impl Circle { … }
+```
+
+Each level auto-binds *its own* item (the outer names the `impl`, the inner names
+the `fn`), and `${value}` inside a level refers to that level's item.
+
 ### Defining, then consuming
 
 The `variant`/`field` snippets and the `arm` snippet are mirror images, so the

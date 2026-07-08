@@ -2035,6 +2035,44 @@ mod tests {
     }
 
     #[test]
+    fn nested_data_driven_repeats_form_a_cross_product() {
+        // Outer over types, inner over methods, per type: the inner repeat runs
+        // once per outer copy, and each level auto-binds its own item.
+        let mut ctx = ctx_with("DataTypes", &["Point", "Line"]);
+        ctx.collections.insert(
+            "Methods".to_string(),
+            Collection {
+                items: ["new", "area"].iter().map(|v| Item::new(*v)).collect(),
+            },
+        );
+        let e = expand("impl*@DataTypes>fn*@Methods", &ctx, TabstopMode::Strip);
+        assert!(
+            e.body.contains("impl Point {") && e.body.contains("impl Line {"),
+            "{}",
+            e.body
+        );
+        assert_eq!(e.body.matches("fn new(&self)").count(), 2, "{}", e.body);
+        assert_eq!(e.body.matches("fn area(&self)").count(), 2, "{}", e.body);
+    }
+
+    #[test]
+    fn nested_inline_collection_literals_form_a_cross_product() {
+        // The same, fully inline — no collections in context.
+        let e = expand(
+            "impl*[Point,Line]>fn*[new,area]",
+            &ctx(),
+            TabstopMode::Strip,
+        );
+        assert!(
+            e.body.contains("impl Point {") && e.body.contains("impl Line {"),
+            "{}",
+            e.body
+        );
+        assert_eq!(e.body.matches("fn new(&self)").count(), 2, "{}", e.body);
+        assert_eq!(e.body.matches("fn area(&self)").count(), 2, "{}", e.body);
+    }
+
+    #[test]
     fn inline_collection_literal_needs_no_repeat() {
         // `*[…]` carries its own items — no collection in context required.
         let e = expand("impl:Point>fn*[new,len,min]", &ctx(), TabstopMode::Strip);

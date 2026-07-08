@@ -243,7 +243,7 @@ Files in this directory are named `<language-id>.toml`, for example `rust.toml` 
 
 ## Project-local packs and `--no-project`
 
-The CLI also auto-loads **project-local** packs: it walks up from the working directory looking for a `.codemmet/snippets/` directory and, if found, merges those packs at the highest priority (project overrides user overrides builtins). This lets a repository ship its own triggers. Pass the global `--no-project` flag to any subcommand to ignore project packs and use only the user and built-in ones. See [custom snippets](snippets.md) for the precedence rules and the LSP's opt-in behavior.
+The CLI also auto-loads **project-local** packs: it collects every `.codemmet/snippets/` directory from the working directory up to the filesystem root and merges them at the highest priority (project overrides user overrides builtins), with the nearest pack winning per-trigger conflicts. This lets a repository — including a monorepo with a shared root pack and refining subproject packs — ship its own triggers. Pass the global `--no-project` flag to any subcommand to ignore project packs and use only the user and built-in ones. See [custom snippets](snippets.md) for the full precedence rules (including personal path-mapped packs) and the LSP's opt-in behavior.
 
 ## Exit codes
 

@@ -6,6 +6,24 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Capture a snippet from example.** `codemmet capture --lang X --name trigger`
+  (and `:CodemmetCapture` on a Neovim selection) turns a chunk of real code into
+  a reusable parameterized snippet in a project pack — repeated identifiers
+  become `${param}` mirrors, so expanding it reproduces the code and a different
+  argument stamps out a variant. `--param`/`--literal` steer the guess; the pack
+  is re-validated before writing, so it always passes `codemmet check`.
+- **Path-scoped snippet packs.** Project packs now layer up the directory tree
+  (a monorepo's root pack plus refining subproject packs, nearest wins), and a
+  personal `paths.toml` maps path prefixes to snippet directories so a snippet
+  set kept outside a repo applies under chosen paths. Precedence:
+  `builtin < user < user-path-mapped < project`.
+- The language server stays **read-only**: capture writes via the CLI, and a
+  new read-only `codemmet.reloadSnippets` command re-reads packs so a freshly
+  captured trigger works in the same session. The LSP resolves the pack stack
+  per document and caches an engine per resolved directory list.
+
 ## [0.3.0] - 2026-07-07
 
 ### Added

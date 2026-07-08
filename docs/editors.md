@@ -139,7 +139,7 @@ The plugin also defines these user commands:
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
 
-`:CodemmetCapture` calls the server's `codemmet.capture` command, which generalizes the selection (identifiers that repeat become `${param}` mirrors), writes `.codemmet/snippets/<lang>.toml` beside the file, and reloads so the new trigger expands immediately in the same session. See the [`capture` CLI reference](cli.md) for the generalization rules.
+`:CodemmetCapture` runs the `codemmet capture` CLI on the selection (feeding it on standard input), which generalizes it — identifiers that repeat become `${param}` mirrors — and writes it into the resolved `.codemmet/snippets/<lang>.toml` pack. The plugin then calls the server's read-only `codemmet.reloadSnippets` command so the new trigger expands immediately in the same session. The language server itself never writes files: the CLI is the only writer, and `reloadSnippets` just re-reads packs from disk. See the [`capture` CLI reference](cli.md#capture) for the generalization rules and where the pack lands.
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled
@@ -222,7 +222,8 @@ through `init_options`; both are optional:
 | --- | --- | --- | --- |
 | `snippets_dir` | string | a directory path | Directory of user snippet override packs (`<lang>.toml` files). If omitted, the default platform directory is used. |
 | `completion` | string | `"always"` (default), `"operators-only"`, `"off"` | When to offer expansion completions. |
-| `project_snippets` | boolean | `false` (default), `true` | Load project-local packs from `.codemmet/snippets` under the workspace root. Off by default; see the note below. |
+| `project_snippets` | boolean | `false` (default), `true` | Load project-local packs from `.codemmet/snippets` (layered up the directory tree). Off by default; see the note below. |
+| `paths_file` | string | a file path | Path to a personal `paths.toml` mapping path prefixes to snippet directories (see [custom snippets](snippets.md#personal-path-scoped-packs)). If omitted, the default `<config>/codemmet/paths.toml` is used. |
 
 The default snippet directories are:
 

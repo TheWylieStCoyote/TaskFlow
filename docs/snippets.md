@@ -51,17 +51,26 @@ builtins untouched.
 A repository can ship its own snippet packs so everyone working in it shares
 the same triggers. Put them in `.codemmet/snippets/<lang>.toml` at (or above)
 the project root — the same file layout as the user directory, just named
-`.codemmet/snippets` inside the project. codemmet walks upward from the working
-directory (or the editor's workspace root) and uses the nearest one it finds.
+`.codemmet/snippets` inside the project.
 
-Project packs are the **highest priority** tier, so the full precedence is:
+codemmet collects **every** `.codemmet/snippets` from the file's directory up to
+the filesystem root and merges them, so a monorepo can carry a repo-wide pack at
+its root and a refining pack in a subproject. They merge **root-most first, so
+the nearest pack wins** a per-trigger conflict while still inheriting everything
+the outer packs define — a subproject pack that only redefines `log` keeps every
+other trigger the root pack provides.
+
+Project packs are the **highest-priority** tier, so the full precedence is:
 
 ```
-builtin (+ inherited)  <  user (~/.config/codemmet/snippets)  <  project (.codemmet/snippets)
+builtin (+ inherited)
+  <  user            (~/.config/codemmet/snippets)
+  <  user path-mapped (personal packs matched by path — see below)
+  <  project         (.codemmet/snippets, root-most → nearest)
 ```
 
-A project pack overrides a user pack overrides the builtins, and it can
-`disabled = true` any trigger.
+A project pack overrides a user pack overrides the builtins, and any pack can
+`disabled = true` a trigger from a lower tier.
 
 How they load differs by entry point, on purpose:
 
@@ -77,6 +86,55 @@ How they load differs by entry point, on purpose:
 
 `codemmet check` validates the project pack too and reports it alongside the
 user pack.
+
+## Personal path-scoped packs
+
+Sometimes you want a snippet set that follows *you* rather than living in a
+repo — a personal pattern library you'd rather not commit, but that should apply
+whenever you work under a given directory. A `paths.toml` maps path prefixes to
+snippet directories:
+
+```toml
+# ~/.config/codemmet/paths.toml  (Linux; alongside the snippets/ dir)
+[[map]]
+prefix = "~/work/acme"
+dir    = "~/snippets/acme"
+
+[[map]]
+prefix = "~/oss"
+dir    = "~/snippets/rust-oss"
+```
+
+When the file you're editing lives under a `prefix`, that `dir` joins the merge
+as the **user path-mapped** tier — above your global user pack but below a
+committed project pack (so a repo's own conventions still win inside it).
+Prefixes match by path component (`~/work/acme` matches `~/work/acme/lib/x.rs`
+but not `~/work/acme-fork/…`); when several match, the deeper prefix wins. A
+missing `paths.toml` simply means no mappings.
+
+## Capturing a snippet from code
+
+You don't have to hand-write the TOML. Point codemmet at a piece of real code
+and it writes the snippet for you, generalizing the repeated identifiers into
+parameters:
+
+```sh
+codemmet capture --lang rust --name mkwidget --param Widget - <<'EOF'
+fn make_widget() -> Widget {
+    Widget::default()
+}
+EOF
+# → captured `mkwidget` (1 parameter: Widget) into ./.codemmet/snippets/rust.toml
+
+codemmet expand --lang rust mkwidget         # reproduces the code
+codemmet expand --lang rust mkwidgetGadget   # the Widget parameter → Gadget
+```
+
+It writes into the project pack in scope (or the user directory with `--user`),
+re-validating the whole file before saving so the result always passes
+`codemmet check`. In Neovim, select code and run `:CodemmetCapture` (see
+[editor setup](editors.md)). Full flags are in the
+[CLI reference](cli.md#capture).
 
 ## Your first custom snippet
 

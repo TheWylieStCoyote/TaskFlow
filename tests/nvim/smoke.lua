@@ -38,7 +38,12 @@ end
 
 require("codemmet").setup({
   cmd = { binary, "lsp" },
-  init_options = { snippets_dir = "/tmp/codemmet-smoke-nonexistent" },
+  -- `project_snippets` lets the server load `.codemmet/snippets` packs, so the
+  -- capture scenario's freshly written trigger is visible after a reload.
+  init_options = {
+    snippets_dir = "/tmp/codemmet-smoke-nonexistent",
+    project_snippets = true,
+  },
   -- Table form of the preview option: exercises normalization and the
   -- configurable debounce while keeping the preview off for the scenarios
   -- (scenario 5 drives it explicitly).
@@ -241,38 +246,40 @@ io.write("smoke: note scenario passed\n")
 reset_state()
 
 -- Scenario 7: capture a selection into the project pack, then expand the new
--- trigger back. The server generalizes `Widget` (it repeats) into a parameter,
--- writes `.codemmet/snippets/rust.toml` next to the buffer, and reloads so the
--- trigger is immediately expandable in the same session.
+-- trigger back. `:CodemmetCapture` shells out to the `codemmet capture` CLI
+-- (the server is read-only), which generalizes the repeated `Widget` into a
+-- parameter and writes `.codemmet/snippets/rust.toml`; the plugin then reloads
+-- the server so the trigger is immediately expandable in the same session.
 local capture_buf = rust_buf("capture", { "fn make() -> Widget {", "    Widget::new()", "}" })
 local capture_client = vim.lsp.get_clients({ name = "codemmet", bufnr = capture_buf })[1]
+-- The CLI runs in the buffer's directory; with no `.git`/`.codemmet` ancestor
+-- above the tempdir it writes to `<dir>/.codemmet/snippets/rust.toml`.
+local pack = vim.fs.dirname(vim.api.nvim_buf_get_name(capture_buf))
+  .. "/.codemmet/snippets/rust.toml"
 
-local cap_result
-require("codemmet.lsp").exec(capture_client, capture_buf, "codemmet.capture", {
-  {
-    uri = vim.uri_from_bufnr(capture_buf),
-    range = {
-      start = { line = 0, character = 0 },
-      ["end"] = { line = 2, character = 1 },
-    },
-    name = "mkw",
-  },
-}, function(err, result)
-  cap_result = { err = err, result = result }
-end)
-local cap_got = vim.wait(5000, function()
-  return cap_result ~= nil
+require("codemmet").capture({ name = "mkw", line1 = 1, line2 = 3 })
+
+local wrote = vim.wait(5000, function()
+  return vim.uv.fs_stat(pack) ~= nil
 end, 50)
-if not cap_got or cap_result.err or not (cap_result.result and cap_result.result.path) then
-  fail("capture: codemmet.capture did not return a path", capture_buf)
-end
-local pack = cap_result.result.path
-if vim.uv.fs_stat(pack) == nil then
+if not wrote then
   fail("capture: pack file was not written at " .. pack, capture_buf)
 end
 local pack_text = table.concat(vim.fn.readfile(pack), "\n")
 if not (pack_text:find("[snippets.mkw]", 1, true) and pack_text:find("${Widget}", 1, true)) then
   fail("capture: pack missing the captured trigger:\n" .. pack_text, capture_buf)
+end
+
+-- Wait for a reload to complete (idempotent), so the server sees the new
+-- trigger before we expand it — this is what capture does under the hood.
+local reloaded = false
+require("codemmet.lsp").exec(capture_client, capture_buf, "codemmet.reloadSnippets", {}, function()
+  reloaded = true
+end)
+if not vim.wait(5000, function()
+  return reloaded
+end, 50) then
+  fail("capture: reloadSnippets did not complete", capture_buf)
 end
 
 -- Expand the captured trigger: proof the registry reloaded live.

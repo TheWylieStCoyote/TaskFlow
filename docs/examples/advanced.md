@@ -468,6 +468,80 @@ those variants back out. See
 [context-aware & data-driven expansion](../context-codegen.md) for the sources
 codemmet extracts and the per-language coverage.
 
+## Multi-file: scaffold a construct across files
+
+A [multi-file snippet](../snippets.md#multi-file-snippets) spans several files
+and is run with `codemmet scaffold`, not `expand`. The builtin C++ `mcls`
+creates a class as a header/source pair (dry run — `--write` applies it,
+`--json` prints a manifest an editor can apply):
+
+```sh
+codemmet scaffold --lang cpp "mcls:Point"
+```
+
+```text
+# create ./Point.hpp (primary)
+#pragma once
+
+class Point {
+public:
+    Point();
+
+};
+
+# create ./Point.cpp
+#include "Point.hpp"
+
+Point::Point() {
+}
+```
+
+The `primary` file (`Point.hpp`) is the one an editor opens with live tabstops;
+the rest are written for you.
+
+### Authoring one: declare in the header, define in the source
+
+Injection makes the C++ "add a method" chore one command. This pack section
+puts the declaration inside the current header's class and appends the
+definition to its `.cpp` sibling:
+
+```toml
+# .codemmet/snippets/cpp.toml
+[snippets.mmethod]
+params = [
+  { name = "name", kind = "ident", default = "method" },
+  { name = "cls",  kind = "ident", default = "Widget" },
+]
+
+[snippets.mmethod.files.decl]
+target    = "self"        # the header you're editing
+on_exists = "inject"
+into      = "${cls}"      # inject into class ${cls}
+body      = "void ${name}();"
+
+[snippets.mmethod.files.def]
+target    = ".cpp"        # the sibling source file
+on_exists = "append"
+primary   = true
+body      = "void ${cls}::${name}() {\n\t$0\n}"
+```
+
+Run from `shape.hpp` (which has `class Shape { public: … };`):
+
+```sh
+codemmet scaffold --lang cpp --from shape.hpp "mmethod:scale,Shape" --write
+```
+
+```text
+inject shape.hpp
+append shape.cpp (primary)
+```
+
+`void scale();` lands at the end of `Shape`'s `public:` section (tree-sitter
+finds it), and `void Shape::scale() { … }` is appended to `shape.cpp`. In
+Neovim, `:CodemmetScaffold mmethod:scale,Shape` does the same and drops you into
+`shape.cpp` with the cursor on the body's tabstop.
+
 ## See also
 
 - [Examples overview](README.md) and the per-language pages.

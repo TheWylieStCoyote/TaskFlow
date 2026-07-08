@@ -186,10 +186,11 @@ impl SnippetSet {
             }
         }
         let set = Self { snippets };
-        // Composite validation is a whole-set pass: a composite may reference
-        // any trigger in the *merged* set (including ones a later pack added),
-        // so it can only run once the merge is complete.
+        // Composite and multi-file validation are whole-set passes: a fragment
+        // may reference any trigger in the *merged* set (including ones a later
+        // pack added), so they can only run once the merge is complete.
         set.validate_composites()?;
+        set.validate_multifile()?;
         Ok(set)
     }
 
@@ -274,6 +275,42 @@ impl SnippetSet {
             edges.insert(snippet.trigger.as_str(), refs);
         }
         detect_cycles(&edges)
+    }
+
+    /// Validate that every `expands` piece of a multi-file snippet references
+    /// only triggers that resolve in the merged set. Like composites, this must
+    /// run whole-set (a piece may reference a trigger a later pack provides).
+    /// No cycle check is needed: a multi-file snippet is never referenced by an
+    /// abbreviation, so it cannot participate in one.
+    fn validate_multifile(&self) -> Result<(), ConfigError> {
+        for snippet in self.snippets.values() {
+            let Some(multifile) = &snippet.multifile else {
+                continue;
+            };
+            let invalid = |message: String| ConfigError::Invalid {
+                trigger: snippet.trigger.clone(),
+                origin: "multifile".to_owned(),
+                message,
+            };
+            for piece in &multifile.files {
+                let PieceContent::Expands(expands) = &piece.content else {
+                    continue;
+                };
+                // Substitute a safe identifier for every `${name}` so the
+                // fragment parses; the concrete values sit in argument slots and
+                // do not affect which *triggers* it references.
+                let text = substitute_markers(&substitute_child_slot(expands), |_| "x".to_owned());
+                let ast = crate::abbr::parse(&text).map_err(|err| {
+                    invalid(format!(
+                        "file `{}` expands `{expands}` does not parse: {err}",
+                        piece.label
+                    ))
+                })?;
+                let mut refs: BTreeSet<&str> = BTreeSet::new();
+                collect_referenced_triggers(self, &ast.0, &mut refs, &invalid)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1642,6 +1679,46 @@ mod tests {
             matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("at most once")),
             "{err:?}"
         );
+    }
+
+    // --- multi-file ----------------------------------------------------------
+
+    #[test]
+    fn multifile_expands_referencing_unknown_trigger_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.mf.files.a]\n",
+                "path = \"a.rs\"\n",
+                "expands = \"foo+nope\"\n",
+            )),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref origin, ref message, .. }
+                if origin == "multifile" && message == "references unknown trigger `nope`"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn multifile_expands_referencing_a_known_trigger_compiles() {
+        // `foo` is defined by `composite_pack`; a later pack could add it too.
+        let set = compile_one(
+            "user",
+            &composite_pack("[snippets.mf.files.a]\npath = \"a.rs\"\nexpands = \"foo+foo\"\n"),
+        );
+        assert!(set.get("mf").and_then(|s| s.multifile.as_ref()).is_some());
+    }
+
+    #[test]
+    fn multifile_body_piece_skips_trigger_validation() {
+        // A `body` piece is a template, not an abbreviation — its words are not
+        // triggers, so `whatever` must not be validated as one.
+        let set = compile_one(
+            "user",
+            &composite_pack("[snippets.mf.files.a]\npath = \"a.rs\"\nbody = \"whatever\"\n"),
+        );
+        assert!(set.get("mf").and_then(|s| s.multifile.as_ref()).is_some());
     }
 
     #[test]

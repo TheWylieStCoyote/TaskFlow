@@ -359,3 +359,24 @@ expands = "pkg:main+main"
 description = "error struct with an Error() method (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "(struct:${name}>field)+meth:Error"
+
+[snippets.mtest]
+description = "a _test.go file (multi-file)"
+params = [
+    { name = "name", kind = "ident", default = "Feature" },
+    { name = "pkg", kind = "ident", default = "main" },
+]
+
+[snippets.mtest.files.test]
+path = "${name}_test.go"
+on_exists = "create"
+primary = true
+body = '''
+package ${pkg}
+
+import "testing"
+
+func Test${name}(t *testing.T) {
+    $0
+}
+'''

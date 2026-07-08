@@ -125,3 +125,17 @@ ${value:name}: ${value.type:type};
 description = "class with a constructor (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "class:${name}>ctor"
+
+[snippets.mtest]
+description = "a .test.ts file (multi-file)"
+params = [{ name = "name", kind = "ident", default = "widget" }]
+
+[snippets.mtest.files.test]
+path = "${name}.test.ts"
+on_exists = "create"
+primary = true
+body = '''
+test("${name}", () => {
+    $0
+});
+'''

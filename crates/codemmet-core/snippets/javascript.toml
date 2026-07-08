@@ -318,3 +318,17 @@ await $0;
 description = "class with a constructor (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "class:${name}>ctor"
+
+[snippets.mtest]
+description = "a .test.js file (multi-file)"
+params = [{ name = "name", kind = "ident", default = "widget" }]
+
+[snippets.mtest.files.test]
+path = "${name}.test.js"
+on_exists = "create"
+primary = true
+body = '''
+test("${name}", () => {
+    $0
+});
+'''

@@ -350,3 +350,34 @@ from ${name} import ${name}
 def test_${name}():
     ${name}()
 '''
+
+[snippets.mpkg]
+description = "a package directory: __init__.py plus a module (multi-file)"
+params = [{ name = "name", kind = "ident", default = "pkg" }]
+
+[snippets.mpkg.files.init]
+path = "${name}/__init__.py"
+on_exists = "create"
+body = "from .${name} import ${name}"
+
+[snippets.mpkg.files.module]
+path = "${name}/${name}.py"
+on_exists = "create"
+primary = true
+body = '''
+def ${name}():
+    ${1:pass}
+'''
+
+[snippets.mtest]
+description = "a test file for a module (multi-file)"
+params = [{ name = "name", kind = "ident", default = "thing" }]
+
+[snippets.mtest.files.test]
+path = "test_${name}.py"
+on_exists = "create"
+primary = true
+body = '''
+def test_${name}():
+    $0
+'''

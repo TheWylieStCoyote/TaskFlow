@@ -170,3 +170,79 @@ body = '''
 ${name}::${name}() {
 }
 '''
+
+[snippets.mmethod]
+description = "declare a method in the current header's class, define it in the .cpp (multi-file)"
+params = [
+    { name = "name", kind = "ident", default = "method" },
+    { name = "cls", kind = "ident", default = "Widget" },
+]
+
+[snippets.mmethod.files.decl]
+target = "self"
+on_exists = "inject"
+into = "${cls}"
+body = "void ${name}();"
+
+[snippets.mmethod.files.def]
+target = ".cpp"
+on_exists = "append"
+primary = true
+body = '''
+void ${cls}::${name}() {
+    $0
+}
+'''
+
+[snippets.mns]
+description = "a class inside a namespace, split across .hpp and .cpp (multi-file)"
+params = [
+    { name = "ns", kind = "ident", default = "app" },
+    { name = "name", kind = "ident", default = "Widget" },
+]
+
+[snippets.mns.files.header]
+path = "${name}.hpp"
+on_exists = "create"
+primary = true
+body = '''
+#pragma once
+
+namespace ${ns} {
+
+class ${name} {
+public:
+    ${name}();
+    $0
+};
+
+}  // namespace ${ns}
+'''
+
+[snippets.mns.files.source]
+path = "${name}.cpp"
+on_exists = "create"
+body = '''
+#include "${name}.hpp"
+
+namespace ${ns} {
+
+${name}::${name}() {
+}
+
+}  // namespace ${ns}
+'''
+
+[snippets.mtest]
+description = "a test file (multi-file)"
+params = [{ name = "name", kind = "ident", default = "widget" }]
+
+[snippets.mtest.files.test]
+path = "${name}_test.cpp"
+on_exists = "create"
+primary = true
+body = '''
+TEST(${name}, ${1:works}) {
+    $0
+}
+'''

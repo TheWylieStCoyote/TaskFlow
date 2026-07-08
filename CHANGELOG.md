@@ -256,10 +256,12 @@ follows [Semantic Versioning](https://semver.org/).
   named by `into` when given. The single `primary` file keeps its tabstops
   (others insert plain text, since tabstops cannot cross files); in Neovim
   `:CodemmetScaffold` writes the supporting files and opens the primary as a
-  **live snippet**. Builtin multi-file snippets ship for Rust (`mmod`), Python
-  (`mmod`), C (`munit`), and C++ (`mcls`). Project-local packs make these
-  repo-specific, and `codemmet check` validates them. See
-  [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
+  **live snippet**. Builtins ship for every language — module/package scaffolds
+  (`mmod`/`mpkg`), test files (`mtest`), Rust `mbin`, and C++ `mmethod` (inject
+  a declaration into the current header's class + define it in the `.cpp`) and
+  `mns`. Project-local packs make these repo-specific, and `codemmet check`
+  validates them (including that each `expands` piece's sub-triggers resolve).
+  See [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a
   higher-level scaffold is built out of the trigger vocabulary you already have

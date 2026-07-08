@@ -33,7 +33,8 @@ full built-in set, under
 
 A few triggers are **multi-file** snippets — they scaffold across several files
 and are run with [`codemmet scaffold`](cli.md#scaffold) rather than `expand`
-(Rust `mmod`, Python `mmod`, C `munit`, C++ `mcls`). See
+(module/package scaffolds `mmod`/`mpkg`, test files `mtest`, Rust `mbin`, and
+C++ `mmethod`/`mns`/`mcls`). See
 [custom snippets → multi-file snippets](snippets.md#multi-file-snippets).
 
 You can regenerate any of the trigger lists below live from your installed

@@ -351,7 +351,7 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 287 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 297 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 The full authoring guide — schema, parameters, body syntax, overriding,
@@ -403,7 +403,10 @@ create ./Point.cpp
 The **primary** file is the one you'll edit first (here `Point.hpp`); it's the
 only file that carries tabstops. Python's `mmod:parser` makes `parser.py` and a
 `test_parser.py`; Rust's `mmod:util` makes `util.rs` and appends `mod util;` to
-the file you ran it from; C's `munit` makes a `.h`/`.c` pair.
+the file you ran it from; C's `munit` makes a `.h`/`.c` pair. Other builtins
+include `mtest` (a test file), Rust `mbin`, Python `mpkg`, and C++ `mns` — plus
+`mmethod`, which *injects* a declaration into the class in the header you're
+editing and appends the definition to its `.cpp`.
 
 In Neovim, `:CodemmetScaffold mcls:Point` does the same but opens the primary
 file as a **live snippet** — you land in `Point.hpp` with the cursor on the

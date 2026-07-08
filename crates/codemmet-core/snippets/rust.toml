@@ -448,3 +448,32 @@ pub fn ${name}() {
     $0
 }
 '''
+
+[snippets.mbin]
+description = "a new binary target in src/bin (multi-file)"
+params = [{ name = "name", kind = "ident", default = "tool" }]
+
+[snippets.mbin.files.bin]
+path = "src/bin/${name}.rs"
+on_exists = "create"
+primary = true
+body = '''
+fn main() {
+    $0
+}
+'''
+
+[snippets.mtest]
+description = "an integration test in tests/ (multi-file)"
+params = [{ name = "name", kind = "ident", default = "feature" }]
+
+[snippets.mtest.files.test]
+path = "tests/${name}.rs"
+on_exists = "create"
+primary = true
+body = '''
+#[test]
+fn ${name}() {
+    $0
+}
+'''

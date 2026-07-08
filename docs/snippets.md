@@ -165,7 +165,7 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 282 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 297 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 Confirm the trigger is registered (`list` shows it merged in alphabetically):
@@ -723,8 +723,9 @@ Parameters resolve to **concrete text** here (they appear in file paths), so —
 unlike a composite — they are not tabstops; only the single `primary` file keeps
 tabstops, since these cannot cross files. `codemmet scaffold` prints a manifest
 (`--json`) or applies it (`--write`); in Neovim `:CodemmetScaffold` writes the
-supporting files and opens the primary as a live, interactive snippet. Builtins
-ship for Rust (`mmod`), Python (`mmod`), C (`munit`), and C++ (`mcls`). Full
+supporting files and opens the primary as a live, interactive snippet. Every
+language ships builtins — module/package scaffolds, `mtest` test files, Rust
+`mbin`, and C++ `mmethod`/`mns` (the full list is in the design doc). Full
 details and the design are in
 [`MULTIFILE_SNIPPETS.md`](../MULTIFILE_SNIPPETS.md); the command reference is in
 the [CLI reference](cli.md#scaffold).
@@ -758,7 +759,7 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 281 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 296 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 ## See also

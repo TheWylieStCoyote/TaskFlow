@@ -139,6 +139,23 @@ class ${name}$1:
 	${child}
 '''
 
+[snippets.classp]
+description = "class with common dunder methods (composite)"
+# A composite: `expands` is an abbreviation re-expanded at render time, so this
+# scaffold stays DRY — it is built from the existing `class`, `init`, `str`, and
+# `repr` triggers and follows them if they change. The name argument passes
+# through to `class` (`classp:Point`); extra bare args select options
+# (`classp:Point,eq,hash`); freeform `>`-children merge into the class body
+# (`classp:Point>def:validate`).
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "class:${name}>(init+str+repr)"
+
+[snippets.classp.options]
+eq = "def:__eq__"
+hash = "def:__hash__"
+len = "def:__len__"
+ord = "def:__lt__+def:__le__"
+
 [snippets.variant]
 description = "Enum member"
 # Nest inside an `Enum` subclass (`class:Color(Enum)>variant*3`). `${value}`

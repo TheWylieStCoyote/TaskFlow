@@ -1,0 +1,20 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"python\", \"classp:Point\")"
+---
+== keep ==
+class Point$1:
+    def __init__(self$2):
+        $3
+    def __str__(self) -> str:
+        return f"$4"
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}($0)"
+== strip ==
+class Point:
+    def __init__(self):
+        
+    def __str__(self) -> str:
+        return f""
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(‸)"

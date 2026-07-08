@@ -197,6 +197,18 @@ golden!(rust_match_x_arm2, "rust", "match:x>arm*2");
 golden!(py_class_config_def_load, "python", "class:Config>def:load");
 golden!(py_class_a_adef_run, "python", "class:A>adef:run");
 
+// Composite (alias) snippet `classp`: base dunders, selectable options, and
+// freeform `>`-children, all merged into the class body.
+golden!(py_classp, "python", "classp");
+golden!(py_classp_point, "python", "classp:Point");
+golden!(py_classp_point_eq_hash, "python", "classp:Point,eq,hash");
+golden!(py_classp_point_child, "python", "classp:Point>def:validate");
+golden!(
+    py_classp_point_ord_child,
+    "python",
+    "classp:Point,ord>prop:size"
+);
+
 // ===== Contextual variants: buffer context =====
 
 /// A context mimicking a cursor inside an `impl` block's body.

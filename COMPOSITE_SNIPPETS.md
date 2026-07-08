@@ -90,25 +90,65 @@ Given `classp:Point,eq,hash` and one declared param (`name`):
 Glued arguments (`classpWidget`) bind to a param by kind just as they would for
 any snippet; options can only be selected with explicit `,`-args.
 
-### `${name}` substitution
+### `${name}` substitution — argument pass-through
 
-Before the `expands` (and each selected option) is re-parsed, every `${name}`
-marker is substituted **textually**:
+A `${name}` marker in `expands` (or an option) is an **argument position** for a
+sub-trigger (e.g. `class:${name}`). It is resolved by **passing the composite's
+argument through** to that sub-trigger, so the underlying snippet handles it
+natively — which means an unbound param becomes a real *tabstop*, not literal
+text:
 
-- a **bound** param → its literal argument value;
-- an **unbound** param → its declared `default` (empty string when it has none).
+- a **bound** param (the caller supplied it) → the value is emitted as that
+  argument: `classp:Point` → `class:Point` → renders `class Point`;
+- an **unbound** param → the argument is **dropped**, so the sub-trigger's own
+  parameter default surfaces: bare `classp` → `class` (no arg) → renders
+  `class ${1:Name}` in keep mode — a tabstop you can tab into. The declared
+  default is **not** substituted as text.
 
-So `classp:Point` yields `class:Point>(init+str+repr)` and bare `classp` yields
-`class:Name>(init+str+repr)` (the `Name` default).
+```sh
+codemmet expand --lang python --tabstops keep "classp"        # class ${1:Name}$2: …
+codemmet expand --lang python --tabstops keep "classp:Point"  # class Point$1: …
+```
 
-**Consequence (documented tradeoff):** a composite's *own* params render as
-literal text; they do **not** themselves become tabstops. Tabstops in the output
-come from the *underlying* snippets (e.g. `class`'s `$1` for base classes, each
-method's body cursor). Because values are spliced back into an abbreviation and
-re-parsed, **composite params should be `ident`/`int` kind** — a `str` value
+The same rule applies to every `${name}` and to option fragments; a name used in
+several sub-triggers passes through to each. Tabstop renumbering stays global
+across the whole merged tree, so the passed-through tabstops interleave
+correctly with the base pieces, options, and freeform children.
+
+**Mechanism.** Substitution can't drop an argument at the string level
+(`class:` does not parse), so markers are resolved on the *parsed* tree: each
+`${name}` is first replaced by a parse-safe placeholder, the fragment is parsed,
+then each placeholder that is a **whole argument** is either replaced by the
+bound value or removed. Because values are spliced back through the abbreviation
+grammar, **composite params should be `ident`/`int` kind** — a `str` value
 containing abbreviation operators (`>`, `+`, `:`, …) would be re-interpreted as
-grammar and produce a parse error at render time (surfaced as
-`cannot expand composite …`).
+grammar and produce a render-time parse error (`cannot expand composite …`).
+
+**Non-argument markers.** A `${name}` that is *not* a whole argument (embedded
+in a longer arg, or glued into a word) has no argument slot to drop, so it falls
+back to value-or-default **text** substitution. Composite params are meant for
+argument positions; the text fallback keeps odd shapes working rather than
+failing.
+
+**Positional gap (documented limitation).** The abbreviation grammar has no
+empty positional slot, so an **unbound argument that sits *before* a later
+argument** in the same sub-trigger's list cannot be expressed. Example:
+`fori:${var},${end}` with `var` unbound but `end` bound (e.g. via a glued int).
+This is **rejected with a clear error** rather than silently mis-binding:
+
+```text
+unbound parameter `var` leaves a positional gap before a later argument;
+declare optional params last, or pass `var`
+```
+
+The clean shapes — a single param, or several params where the unbound ones are
+**trailing** (`fori:${var},${end}` with `end` unbound drops cleanly to its
+tabstop) — all work. The rule: put optional (droppable) params last.
+
+Because the pass-through resolves the composite param to the sub-trigger's
+argument, a composite param's own `default` is only observed for the
+non-argument text fallback; in an argument position the *sub-trigger's* default
+governs the unbound case.
 
 ### The merge (insertion point)
 
@@ -240,13 +280,11 @@ error: invalid snippet `b` in composite: composite cycle: `b` expands through `a
 
 ## Open questions / future work (designed, not built)
 
-- **Tabstop-preserving params.** Today a composite param renders as literal
-  text (or its default). A future refinement could let an *unbound* param drop
-  through to the underlying snippet's own tabstop (so bare `classp` gives
-  `class ${1:Name}` rather than literal `class Name`) by omitting the arg from
-  the generated abbreviation rather than substituting the default. This needs
-  argument-level (not string-level) substitution to stay robust across
-  comma-separated args.
+- **Interior positional gaps.** An unbound argument *before* a bound one in the
+  same sub-trigger arg list is rejected (see "Positional gap" above) rather than
+  handled. Handling it would need either named arguments or an empty-slot syntax
+  in the abbreviation grammar; the trailing-optional convention avoids it in
+  practice.
 - **Explicit `${child}` slot in `expands`.** The insertion point is currently
   implicit ("last top-level node"), which covers the common scaffold cleanly. A
   dedicated slot marker would let a composite place the extras somewhere other

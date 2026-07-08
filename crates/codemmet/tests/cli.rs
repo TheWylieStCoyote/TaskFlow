@@ -266,6 +266,43 @@ fn expand_builtin_composite_classp() {
 }
 
 #[test]
+fn expand_composite_bare_leaves_a_tabstop_for_the_name() {
+    // Unbound composite param passes through to `class`'s own param, which
+    // renders as a real tabstop rather than substituted literal text.
+    let out = run(
+        "composite-bare-tabstop",
+        &["expand", "--lang", "python", "--tabstops", "keep", "classp"],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(
+        stdout(&out).starts_with("class ${1:Name}$2:\n"),
+        "stdout: {}",
+        stdout(&out)
+    );
+}
+
+#[test]
+fn expand_composite_bound_name_is_literal() {
+    let out = run(
+        "composite-bound-literal",
+        &[
+            "expand",
+            "--lang",
+            "python",
+            "--tabstops",
+            "keep",
+            "classp:Point",
+        ],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(
+        stdout(&out).starts_with("class Point$1:\n"),
+        "stdout: {}",
+        stdout(&out)
+    );
+}
+
+#[test]
 fn expand_composite_with_option_and_freeform_child() {
     let out = run(
         "composite-merge",

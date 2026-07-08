@@ -425,24 +425,16 @@ impl Composer<'_> {
         scope: Scope,
         subject: Option<&str>,
     ) -> Result<Vec<Line>, RenderError> {
-        let parse = |fragment: &str, label: &str| {
-            let text = substitute_params_into_abbr(fragment, bindings);
-            crate::abbr::parse(&text)
-                .map(|abbr| abbr.0)
-                .map_err(|err| RenderError::Composite {
-                    trigger: snippet.trigger.clone(),
-                    message: format!("{label} `{text}` does not parse: {err}"),
-                })
-        };
+        let expand = |fragment: &str| expand_fragment(fragment, bindings, &snippet.trigger);
 
         let mut out = Vec::new();
         for _ in 0..count {
-            let mut base = parse(&composite.expands, "expansion")?;
+            let mut base = expand(&composite.expands)?;
             // Extras merge as siblings of the base pieces: selected options
             // first (in selection order), then the caller's freeform children.
             let mut extras: Vec<AbbrNode> = Vec::new();
             for fragment in selected {
-                extras.extend(parse(fragment, "option")?);
+                extras.extend(expand(fragment)?);
             }
             extras.extend(node.children.iter().cloned());
             merge_extras(&mut base, extras);
@@ -769,22 +761,155 @@ fn merge_extras(base: &mut [AbbrNode], extras: Vec<AbbrNode>) {
     }
 }
 
-/// Substitute `${name}` param markers in a composite abbreviation fragment.
+/// Expand one composite fragment (the base expansion or a selected option) into
+/// abbreviation nodes, **passing the composite's arguments through** to the
+/// sub-triggers.
 ///
-/// A bound param becomes its literal argument, an unbound one its declared
-/// default (empty when it has none). The result is re-parsed as an
-/// abbreviation, so a composite's own params render as literal text; tabstops
-/// in the output come from the underlying snippets.
-fn substitute_params_into_abbr(fragment: &str, bindings: &[(String, Binding)]) -> String {
-    substitute_markers(fragment, |name| {
+/// A `${name}` marker in the fragment is an *argument position* for a
+/// sub-trigger (e.g. `class:${name}`):
+///
+/// - **bound** (the caller supplied it) → the value is emitted as that argument
+///   (`classp:Point` → `class:Point`);
+/// - **unbound** → the argument is **dropped**, so the sub-trigger's own
+///   parameter default surfaces as a tabstop (`classp` → `class` →
+///   `class ${1:Name}`). The declared default is *not* substituted as text.
+///
+/// A marker that is not a whole argument (embedded in a word or in longer arg
+/// text) has no argument slot to drop, so it falls back to value-or-default
+/// text substitution.
+///
+/// Markers are resolved on the parsed tree (not the string) so an unbound
+/// argument can simply be removed; because the abbreviation grammar has no
+/// empty positional slot, an unbound argument *before* a later argument in the
+/// same list is a positional gap and is rejected with a clear error.
+fn expand_fragment(
+    fragment: &str,
+    bindings: &[(String, Binding)],
+    trigger: &str,
+) -> Result<Vec<AbbrNode>, RenderError> {
+    let markers = ArgMarkers::new(bindings.len());
+    // Substitute `${name}` with a parse-safe positional marker first: an
+    // omitted argument cannot be written literally (`class:` does not parse),
+    // so the drop must happen after parsing.
+    let text = substitute_markers(fragment, |name| {
         bindings
             .iter()
-            .find(|(n, _)| n == name)
-            .map_or_else(String::new, |(_, binding)| match binding {
-                Binding::Bound(value) => value.clone(),
-                Binding::Free { default } => default.clone().unwrap_or_default(),
-            })
-    })
+            .position(|(n, _)| n == name)
+            .map_or_else(String::new, |index| markers.marker(index).to_owned())
+    });
+    let mut nodes = crate::abbr::parse(&text)
+        .map(|abbr| abbr.0)
+        .map_err(|err| RenderError::Composite {
+            trigger: trigger.to_owned(),
+            message: format!("expansion `{fragment}` does not parse: {err}"),
+        })?;
+    resolve_markers(&mut nodes, bindings, &markers, trigger)?;
+    Ok(nodes)
+}
+
+/// Resolve the argument markers left by [`expand_fragment`] in place.
+fn resolve_markers(
+    nodes: &mut [AbbrNode],
+    bindings: &[(String, Binding)],
+    markers: &ArgMarkers,
+    trigger: &str,
+) -> Result<(), RenderError> {
+    for node in nodes.iter_mut() {
+        // A marker in the WORD (or glued into it) has no argument slot to drop,
+        // so it degrades to value-or-default text.
+        if markers.contains_any(&node.word) {
+            node.word = markers.substitute_text(&node.word, bindings);
+        }
+
+        // Map each argument to its resolved value, or `None` to drop it.
+        let mut new_args: Vec<String> = Vec::with_capacity(node.args.len());
+        let mut dropped: Option<usize> = None;
+        for arg in &node.args {
+            if let Some(index) = markers.index_of(arg) {
+                match &bindings[index].1 {
+                    Binding::Bound(value) => {
+                        if let Some(param) = dropped {
+                            return Err(positional_gap(trigger, &bindings[param].0));
+                        }
+                        new_args.push(value.clone());
+                    }
+                    Binding::Free { .. } => dropped = Some(index),
+                }
+            } else {
+                if let Some(param) = dropped {
+                    return Err(positional_gap(trigger, &bindings[param].0));
+                }
+                new_args.push(if markers.contains_any(arg) {
+                    markers.substitute_text(arg, bindings)
+                } else {
+                    arg.clone()
+                });
+            }
+        }
+        node.args = new_args;
+
+        resolve_markers(&mut node.children, bindings, markers, trigger)?;
+    }
+    Ok(())
+}
+
+/// The positional-gap error: an unbound argument sits before a later one.
+fn positional_gap(trigger: &str, param: &str) -> RenderError {
+    RenderError::Composite {
+        trigger: trigger.to_owned(),
+        message: format!(
+            "unbound parameter `{param}` leaves a positional gap before a later \
+             argument; declare optional params last, or pass `{param}`"
+        ),
+    }
+}
+
+/// Parse-safe placeholders standing in for `${name}` argument positions between
+/// substitution and marker resolution, one per declared parameter (by index).
+struct ArgMarkers {
+    by_index: Vec<String>,
+}
+
+impl ArgMarkers {
+    /// Build markers for `count` parameters. The tokens use only WORD-safe
+    /// characters so they survive parsing in argument *and* word positions, and
+    /// are distinctive enough not to collide with real abbreviation text.
+    fn new(count: usize) -> Self {
+        Self {
+            by_index: (0..count).map(|i| format!("CMMTARG{i}CMMT")).collect(),
+        }
+    }
+
+    /// The marker token for parameter `index`.
+    fn marker(&self, index: usize) -> &str {
+        &self.by_index[index]
+    }
+
+    /// The parameter index whose marker is exactly `arg`, if any.
+    fn index_of(&self, arg: &str) -> Option<usize> {
+        self.by_index.iter().position(|m| m == arg)
+    }
+
+    /// Whether `text` contains any marker as a substring.
+    fn contains_any(&self, text: &str) -> bool {
+        self.by_index.iter().any(|m| text.contains(m.as_str()))
+    }
+
+    /// Replace embedded markers with value-or-default text (the non-argument
+    /// fallback).
+    fn substitute_text(&self, text: &str, bindings: &[(String, Binding)]) -> String {
+        let mut out = text.to_owned();
+        for (index, marker) in self.by_index.iter().enumerate() {
+            if out.contains(marker) {
+                let replacement = match &bindings[index].1 {
+                    Binding::Bound(value) => value.clone(),
+                    Binding::Free { default } => default.clone().unwrap_or_default(),
+                };
+                out = out.replace(marker, &replacement);
+            }
+        }
+        out
+    }
 }
 
 /// Bind a node's explicit and glued arguments to a snippet's parameters.
@@ -1236,6 +1361,17 @@ mod tests {
             ),
             // A composite that references another composite (`cls`).
             composite("nest", vec![], "cls:Inner", &[]),
+            // Two params passed through to one sub-trigger's arg list, for the
+            // pass-through / positional-gap tests.
+            composite(
+                "rng",
+                vec![
+                    param("var", ParamKind::Ident, Some("i")),
+                    param("end", ParamKind::Int, Some("10")),
+                ],
+                "fori:${var},${end}",
+                &[],
+            ),
             // A deliberately self-referential composite: `from_compiled`
             // skips validation, so this reaches the render-time depth cap.
             composite("loopy", vec![], "loopy", &[]),
@@ -1430,19 +1566,54 @@ mod tests {
     // --- composites (alias snippets) -----------------------------------------
 
     #[test]
-    fn composite_base_uses_param_default() {
-        // `cls` → `impl:X>(fn:new)`; the base `fn` sees `impl`'s type-body
-        // scope and gains `&self`.
-        let e = expand("cls", &ctx(), TabstopMode::Strip);
-        assert_eq!(e.body, "impl X {\n    fn new(&self) {\n        \n    }\n}");
+    fn composite_unbound_param_leaves_a_tabstop() {
+        // Bare `cls` → `impl:${name}` with `name` unbound: the argument is
+        // dropped, so `impl`'s own `name` default surfaces as a tabstop
+        // (`${1:Type}`) rather than being substituted as literal text.
+        let e = expand("cls", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "impl ${1:Type} {\n    fn new(&self$2) {\n        $0\n    }\n}"
+        );
     }
 
     #[test]
-    fn composite_param_passes_through_to_underlying_snippet() {
+    fn composite_param_passes_through_as_bound_argument() {
+        // A supplied arg passes through as a literal argument to the sub-trigger.
         let e = expand("cls:Point", &ctx(), TabstopMode::Keep);
         assert_eq!(
             e.body,
             "impl Point {\n    fn new(&self$1) {\n        $0\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn composite_both_params_unbound_pass_through_as_tabstops() {
+        // `rng` → `fori:${var},${end}`, both unbound: both arguments drop, so
+        // `fori`'s own `var`/`end` defaults become tabstops.
+        let e = expand("rng", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "for ${1:i} in 0..${2:10} {\n    $0\n}");
+    }
+
+    #[test]
+    fn composite_trailing_unbound_param_drops() {
+        // `rng:x` binds `var`; the trailing unbound `end` drops to its tabstop.
+        let e = expand("rng:x", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "for x in 0..${1:10} {\n    $0\n}");
+    }
+
+    #[test]
+    fn composite_interior_positional_gap_is_error() {
+        // Glued `5` binds the `int` param `end`, leaving `var` unbound *before*
+        // it — a positional gap the grammar cannot express.
+        assert_eq!(
+            expand_err("rng5"),
+            RenderError::Composite {
+                trigger: "rng".to_owned(),
+                message: "unbound parameter `var` leaves a positional gap before a later \
+                          argument; declare optional params last, or pass `var`"
+                    .to_owned(),
+            }
         );
     }
 

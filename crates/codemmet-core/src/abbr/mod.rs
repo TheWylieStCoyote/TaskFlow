@@ -60,23 +60,33 @@ pub enum Repeat {
     Source(String),
     /// A bare `*`: repeat over the subject named by the enclosing construct.
     Subject,
+    /// `*[a,b,c]`: repeat over an inline collection literal. The string is the
+    /// raw `[…]` body (`a,b,c`, each value optionally `value:type`), parsed
+    /// into items at render time via `Collection::parse_values`.
+    Inline(String),
 }
 
 impl Repeat {
-    /// Parse-time weight for the size budget: the literal count, or 1 for a
-    /// data-driven repeat (whose real size the render budget bounds).
+    /// Parse-time weight for the size budget: the literal count, the item count
+    /// for an inline literal, or 1 for a context-driven repeat (whose real size
+    /// the render budget bounds).
     #[must_use]
-    pub const fn budget_weight(&self) -> u32 {
+    pub fn budget_weight(&self) -> u32 {
         match self {
             Self::Count(n) => *n,
             Self::Source(_) | Self::Subject => 1,
+            // A safe upper bound (empties are dropped at render); the value
+            // budget still catches anything that expands too large.
+            Self::Inline(spec) => u32::try_from(spec.split(',').count()).unwrap_or(u32::MAX),
         }
     }
 
-    /// Whether the count comes from context data (`*@name` or a bare `*`).
+    /// Whether the count comes from a collection rather than a literal count —
+    /// `*@name`, a bare `*`, or an inline `*[…]`. Used to reject data-driven
+    /// repeats where the semantics are undefined (groups, composites).
     #[must_use]
     pub const fn is_data_driven(&self) -> bool {
-        matches!(self, Self::Source(_) | Self::Subject)
+        matches!(self, Self::Source(_) | Self::Subject | Self::Inline(_))
     }
 }
 

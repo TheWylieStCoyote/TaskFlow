@@ -409,13 +409,15 @@ impl Composer<'_> {
         if node.repeat.is_data_driven() {
             return Err(RenderError::Composite {
                 trigger: snippet.trigger.clone(),
-                message: "a data-driven repeat (`*@name` or `*`) is not supported on a composite"
-                    .to_owned(),
+                message:
+                    "a data-driven repeat (`*@name`, `*`, or `*[…]`) is not supported on a composite"
+                        .to_owned(),
             });
         }
         let count = match node.repeat {
             Repeat::Count(n) => n,
-            Repeat::Source(_) | Repeat::Subject => 1,
+            // Unreachable: the data-driven guard above already returned.
+            Repeat::Source(_) | Repeat::Subject | Repeat::Inline(_) => 1,
         };
 
         // Declared params bind first; remaining explicit args select options.
@@ -518,6 +520,16 @@ impl Composer<'_> {
             Repeat::Count(n) => (0..*n).map(|_| None).collect(),
             Repeat::Source(name) => items_of(name),
             Repeat::Subject => subject.map_or_else(|| vec![None], items_of),
+            // An inline literal carries its own items — parsed the same way as
+            // a `--repeat` spec — so it needs no collection in context.
+            Repeat::Inline(spec) => {
+                let items = Collection::parse_values(spec).items;
+                if items.is_empty() {
+                    vec![None]
+                } else {
+                    items.into_iter().map(Some).collect()
+                }
+            }
         }
     }
 
@@ -1931,8 +1943,9 @@ mod tests {
             expand_err("cls*@X"),
             RenderError::Composite {
                 trigger: "cls".to_owned(),
-                message: "a data-driven repeat (`*@name` or `*`) is not supported on a composite"
-                    .to_owned(),
+                message:
+                    "a data-driven repeat (`*@name`, `*`, or `*[…]`) is not supported on a composite"
+                        .to_owned(),
             }
         );
     }
@@ -2019,6 +2032,22 @@ mod tests {
             "{}",
             e.body
         );
+    }
+
+    #[test]
+    fn inline_collection_literal_needs_no_repeat() {
+        // `*[…]` carries its own items — no collection in context required.
+        let e = expand("impl:Point>fn*[new,len,min]", &ctx(), TabstopMode::Strip);
+        for name in ["new", "len", "min"] {
+            assert!(e.body.contains(&format!("fn {name}(&self)")), "{}", e.body);
+        }
+    }
+
+    #[test]
+    fn inline_collection_literal_carries_members() {
+        // `value:type` items expose `${value.type}`, exactly like `--repeat`.
+        let e = expand("fielddef*[x:f64,y:i32]", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "x: f64,\ny: i32,");
     }
 
     #[test]

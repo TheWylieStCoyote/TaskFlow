@@ -8,6 +8,12 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
+  collection right in the abbreviation — no `--repeat` flag or buffer source
+  needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value
+  may carry a member as `value:type` (`field*[x:f64,y:i32]`), parsed exactly
+  like a `--repeat` value. Rejected on groups and composites, like the other
+  data-driven forms.
 - **Data-driven repeats can name the construct, not just fill a body.** The
   current item now reaches a trigger's parameters, so `impl:Point>fn*@Meth`
   (with `--repeat Meth=new,len,area`, or a buffer collection) yields `fn new`,

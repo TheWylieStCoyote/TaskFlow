@@ -125,6 +125,31 @@ match cmd {
 You can repeat a whole group too: `(fori10>pr)*2` produces two copies of the
 loop-with-body. Repeat counts are capped, so very large repeats are rejected.
 
+#### Data-driven repeats: `*@name`, `*`, and `*[…]`
+
+Instead of a fixed count, a repeat can be driven by a **collection** — one copy
+per item. `*@name` draws from a named collection, a bare `*` from the enclosing
+construct's subject, and `*[a,b,c]` from an **inline literal** written right in
+the abbreviation (each value may carry a member as `value:type`). The current
+item names the construct — it auto-binds to the first empty argument — or fills
+`${value}` in the body:
+
+```sh
+codemmet expand --lang rust "impl:Point>fn*[new,len,area]"
+```
+
+```rust
+impl Point {
+    fn new(&self) {  }
+    fn len(&self) {  }
+    fn area(&self) {  }
+}
+```
+
+These forms only apply to a single node (not a group or composite). See the
+[context-aware & data-driven guide](context-codegen.md) for the full model and
+the `${value}` details.
+
 #### The repetition index `${i}`
 
 Within a repeated node, the variable `${i}` expands to the **1-based copy

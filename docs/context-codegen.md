@@ -165,6 +165,25 @@ The [browser playground](https://thewyliestcoyote.github.io/codemmit/) has a
 **Data-driven collections** box that takes the same `name=values` lines, so you
 can try all of this without an editor.
 
+**Inline in the abbreviation.** When the values are short and one-off, skip the
+flag entirely and write them as a literal `*[a,b,c]` (each item optionally
+`value:type`, parsed exactly like a `--repeat` value):
+
+```sh
+codemmet expand --lang rust "impl:Point>fn*[new,len,area]"
+```
+
+```rust
+impl Point {
+    fn new(&self) {  }
+    fn len(&self) {  }
+    fn area(&self) {  }
+}
+```
+
+This works the same in the editor — no buffer collection or flag needed — which
+makes it the quickest way to stamp out a handful of named members on the spot.
+
 ### Defining, then consuming
 
 The `variant`/`field` snippets and the `arm` snippet are mirror images, so the

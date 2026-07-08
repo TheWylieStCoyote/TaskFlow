@@ -264,7 +264,7 @@ impl Parser<'_> {
                 // unknown until render); support it on plain nodes only.
                 if repeat.is_data_driven() {
                     return Err(err(
-                        "data-driven repeat (`*@name` or `*`) is not supported on a group",
+                        "data-driven repeat (`*@name`, `*`, or `*[…]`) is not supported on a group",
                         repeat_span,
                     ));
                 }
@@ -341,9 +341,35 @@ impl Parser<'_> {
                 }
                 Ok(Repeat::Source(self.word()))
             }
+            Some('[') => self.inline_spec(star),
             Some(c) if c.is_ascii_digit() => Ok(Repeat::Count(self.repeat_count(star)?)),
             _ => Ok(Repeat::Subject),
         }
+    }
+
+    /// The inline collection literal after `*`: `[a,b,c]` (each value optionally
+    /// `value:type`). The raw `[…]` body is captured and parsed at render time.
+    fn inline_spec(&mut self, star: Range<usize>) -> Result<Repeat, ParseError> {
+        self.bump(); // consume '['
+        let start = self.pos;
+        while self.peek().is_some_and(|c| c != ']') {
+            self.bump();
+        }
+        if self.peek() != Some(']') {
+            return Err(err(
+                "unclosed inline collection: expected `]` (as in `*[a,b,c]`)",
+                star,
+            ));
+        }
+        let inner = self.input[start..self.pos].to_string();
+        self.bump(); // consume ']'
+        if inner.split(',').all(|v| v.trim().is_empty()) {
+            return Err(err(
+                "inline collection `*[…]` needs at least one value",
+                start..self.pos,
+            ));
+        }
+        Ok(Repeat::Inline(inner))
     }
 
     /// `WORD := [A-Za-z_][A-Za-z0-9_]*` — the caller has checked the first
@@ -743,6 +769,33 @@ mod tests {
     fn star_at_names_an_explicit_source() {
         let nodes = parse("a*@Msg").expect("`*@name` is valid").0;
         assert_eq!(nodes[0].repeat, Repeat::Source("Msg".to_string()));
+    }
+
+    #[test]
+    fn star_bracket_captures_an_inline_collection() {
+        let nodes = parse("a*[new,len,min]").expect("`*[…]` is valid").0;
+        assert_eq!(nodes[0].repeat, Repeat::Inline("new,len,min".to_string()));
+        assert!(nodes[0].repeat.is_data_driven());
+        assert_eq!(nodes[0].repeat.budget_weight(), 3);
+        // Members and surrounding whitespace are preserved verbatim in the body.
+        let nodes = parse("a*[ x:f64 , y:i32 ]").expect("members are valid").0;
+        assert_eq!(
+            nodes[0].repeat,
+            Repeat::Inline(" x:f64 , y:i32 ".to_string())
+        );
+    }
+
+    #[test]
+    fn error_inline_collection_empty_or_unclosed() {
+        assert!(parse("a*[]").is_err(), "empty `*[]` should be rejected");
+        assert!(
+            parse("a*[ , ]").is_err(),
+            "all-empty items should be rejected"
+        );
+        assert!(
+            parse("a*[new,len").is_err(),
+            "unclosed `*[` should be rejected"
+        );
     }
 
     #[test]

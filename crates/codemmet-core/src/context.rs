@@ -56,7 +56,15 @@ impl Collection {
         if name.is_empty() {
             return Err(format!("empty collection name in `{spec}`"));
         }
-        let items = rest
+        Ok((name.to_string(), Self::parse_values(rest)))
+    }
+
+    /// Parse the `v1,v2,…` value list of a spec (the part after `=`, and the
+    /// body of an inline `*[…]` literal). Each value may carry a `:type` member;
+    /// empty values are skipped, so a trailing comma is harmless.
+    #[must_use]
+    pub fn parse_values(values: &str) -> Self {
+        let items = values
             .split(',')
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -70,7 +78,7 @@ impl Collection {
                 None => Item::new(value),
             })
             .collect();
-        Ok((name.to_string(), Self { items }))
+        Self { items }
     }
 }
 

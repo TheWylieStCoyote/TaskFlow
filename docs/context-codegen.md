@@ -65,7 +65,28 @@ snippet body references the current item:
 | `${value.type}` (or any `${value.key}`) | a named member of the item |
 | `${value:default}` | the value, or `default` (as a tabstop) when there is no data |
 
-Three built-in snippets use these, so the common cases work out of the box:
+A snippet only sees the item through these `${value}` spans. So a trigger that
+names itself from a **parameter** — like `fn ${name}(…)` — is *not* filled by a
+collection on its own: `impl:Point>fn*@Meth` just repeats the same `fn`
+skeleton. To name each copy, put `${value}` in the **argument**:
+
+```sh
+codemmet expand --lang rust "impl:Point>fn:${value}*@Meth" --repeat Meth=new,len,area
+```
+```rust
+impl Point {
+    fn new(&self) {  }
+    fn len(&self) {  }
+    fn area(&self) {  }
+}
+```
+
+`${value}`, `${value.member}`, and `${value:default}` all work in an argument
+position (substituted per copy); with no item a bare `${value}` argument falls
+back to that parameter's own tabstop.
+
+Three built-in snippets use these in their bodies, so the common cases work out
+of the box:
 
 | Trigger | Body | Fills from |
 | --- | --- | --- |

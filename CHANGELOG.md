@@ -8,6 +8,14 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`${value}` in argument position for data-driven repeats.** The current item
+  can now name a construct, not just fill a body: `impl:Point>fn:${value}*@Meth`
+  (with `--repeat Meth=new,len,area`, or a buffer collection) yields `fn new`,
+  `fn len`, `fn area` using the stock `fn`. `${value}`, `${value.member}`, and
+  `${value:default}` all substitute per copy in an argument; with no item a bare
+  `${value}` argument falls back to that parameter's tabstop. Previously the
+  item reached a snippet only through `${value}` *body* spans, so a param-named
+  trigger like `fn` ignored the collection.
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a
   higher-level scaffold is built out of the trigger vocabulary you already have

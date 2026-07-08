@@ -1,2 +1,5 @@
 /target
 /demo/.frames
+
+# Local agent worktrees/scratch
+.claude/

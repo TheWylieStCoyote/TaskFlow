@@ -1,5 +1,6 @@
 //! Composition and rendering: abbreviation AST + compiled snippets → text.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -226,7 +227,7 @@ enum CSpan {
 }
 
 /// How one declared parameter is filled for a node.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Binding {
     /// The abbreviation supplied a value: renders as literal text.
     Bound(String),
@@ -296,8 +297,17 @@ impl Composer<'_> {
         if let Some(composite) = &snippet.composite {
             return self.expand_composite(node, snippet, composite, remainder, scope, subject);
         }
-        let bindings = bind_args(snippet, &node.args, remainder)?;
         let template = select_template(snippet, scope, self.raw_node_kinds);
+        // An argument may reference the per-copy data-driven item via `${value}`
+        // (`fn:${value}*@Meth` names each copy). Bind once when no argument
+        // does; otherwise the binding depends on the item, so it is redone per
+        // copy below.
+        let value_arg = node.args.iter().any(|a| arg_is_value_token(a));
+        let shared_bindings = if value_arg {
+            None
+        } else {
+            Some(bind_args(snippet, &node.args, remainder)?)
+        };
         // Children live in the snippet's declared scope; a scope-less
         // snippet passes its own effective scope through unchanged.
         let child_scope = snippet
@@ -322,6 +332,14 @@ impl Composer<'_> {
         for (copy, item) in items.iter().enumerate() {
             // The repetition index is 1-based (`${i}` renders 1, 2, …).
             let index = u32::try_from(copy + 1).unwrap_or(u32::MAX);
+            let bindings: Cow<[(String, Binding)]> = match &shared_bindings {
+                Some(b) => Cow::Borrowed(b.as_slice()),
+                None => Cow::Owned(bind_args(
+                    snippet,
+                    &resolve_item_args(&node.args, item.as_ref()),
+                    remainder,
+                )?),
+            };
             let mut lines = self.instantiate(template, &bindings, index, item.as_ref());
             // Fail fast: repeat counts multiply through nesting, so the
             // budget must trip during composition, not on a finished Vec.
@@ -986,6 +1004,51 @@ impl ArgMarkers {
         }
         out
     }
+}
+
+/// Whether `arg` is a whole `${value…}` data-driven item reference — the forms
+/// `${value}`, `${value.member}`, or `${value:default}`.
+fn arg_is_value_token(arg: &str) -> bool {
+    arg.strip_prefix("${")
+        .and_then(|s| s.strip_suffix('}'))
+        .is_some_and(|inner| {
+            inner == "value" || inner.starts_with("value.") || inner.starts_with("value:")
+        })
+}
+
+/// Resolve each argument against the current data-driven `item`: a whole
+/// `${value…}` token becomes the item's value (or `.member`, or its `:default`);
+/// with no item a bare `${value}` argument is **dropped** so its parameter
+/// falls back to its own tabstop, mirroring how `${value}` behaves in a body.
+fn resolve_item_args(args: &[String], item: Option<&Item>) -> Vec<String> {
+    let mut out = Vec::with_capacity(args.len());
+    for arg in args {
+        let Some(inner) = arg
+            .strip_prefix("${")
+            .and_then(|s| s.strip_suffix('}'))
+            .filter(|i| *i == "value" || i.starts_with("value.") || i.starts_with("value:"))
+        else {
+            out.push(arg.clone());
+            continue;
+        };
+        let (member, default) = inner.strip_prefix("value.").map_or_else(
+            || (None, inner.strip_prefix("value:")),
+            |key| (Some(key), None),
+        );
+        match item {
+            Some(it) => out.push(member.map_or_else(
+                || it.value.clone(),
+                |key| it.members.get(key).cloned().unwrap_or_default(),
+            )),
+            // No item: a `:default` supplies text; a bare `${value}` is dropped.
+            None => {
+                if let Some(def) = default {
+                    out.push(def.to_owned());
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Bind a node's explicit and glued arguments to a snippet's parameters.
@@ -1895,6 +1958,40 @@ mod tests {
         // No `Nope` collection in context → a single copy with the tabstop.
         let e = expand("arm*@Nope", &ctx(), TabstopMode::Strip);
         assert_eq!(e.body, "pattern => ,");
+    }
+
+    #[test]
+    fn data_driven_value_arg_names_each_copy() {
+        // `${value}` in an argument position binds the per-copy item, so a
+        // param-based trigger like `fn` is named by the collection.
+        let ctx = ctx_with("Meth", &["new", "len", "min"]);
+        let e = expand("impl:Point>fn:${value}*@Meth", &ctx, TabstopMode::Strip);
+        for name in ["new", "len", "min"] {
+            assert!(e.body.contains(&format!("fn {name}(&self)")), "{}", e.body);
+        }
+        assert!(!e.body.contains("${value}"), "{}", e.body);
+    }
+
+    #[test]
+    fn data_driven_item_is_not_consumed_without_value() {
+        // The item flows to a snippet ONLY through `${value}`. A stock `fn`
+        // (named from a `name` param, not `${value}`) ignores the collection —
+        // this pins the sharp edge that motivated the value-in-arg feature.
+        let ctx = ctx_with("Meth", &["new", "len"]);
+        let e = expand("impl:Point>fn*@Meth", &ctx, TabstopMode::Strip);
+        assert!(
+            !e.body.contains("new") && !e.body.contains("len"),
+            "the collection values must not be consumed by a param-based `fn`: {}",
+            e.body
+        );
+    }
+
+    #[test]
+    fn data_driven_value_arg_with_no_item_leaves_a_tabstop() {
+        // No collection → one copy, `${value}` arg unbound → the param's tabstop.
+        let e = expand("fn:${value}", &ctx(), TabstopMode::Keep);
+        assert!(e.body.starts_with("fn $1"), "{}", e.body);
+        assert!(!e.body.contains("${value}"), "{}", e.body);
     }
 
     #[test]

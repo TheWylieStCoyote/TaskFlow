@@ -33,9 +33,22 @@ pub struct SnippetDef {
     /// Named parameters, in binding order.
     #[serde(default)]
     pub params: Vec<ParamDef>,
-    /// The template body. May be omitted only when `disabled = true`.
+    /// The template body. May be omitted only when `disabled = true` or when
+    /// this is a composite (`expands` is set).
     #[serde(default)]
     pub body: Option<String>,
+    /// Marks a **composite** (alias) snippet: its value is an *abbreviation*
+    /// that is re-expanded, not a literal template body. Mutually exclusive
+    /// with `body`. `${name}` references a declared parameter; the composite's
+    /// selected options and freeform `>`-children merge into the expansion (see
+    /// `COMPOSITE_SNIPPETS.md`).
+    #[serde(default)]
+    pub expands: Option<String>,
+    /// Named option fragments a caller selects by name (`classp:Point,eq`).
+    /// Each value is an abbreviation fragment merged into the composite's
+    /// expansion as a sibling of the base pieces. Only valid with `expands`.
+    #[serde(default)]
+    pub options: BTreeMap<String, String>,
     /// Normalized scope that `${child}` content lives in (e.g. `"fn-body"`).
     /// Absent means the snippet is scope-transparent to nested children.
     #[serde(default)]

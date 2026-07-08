@@ -25,6 +25,22 @@ pub struct CompiledSnippet {
     pub scope: Option<String>,
     /// Context-conditional templates (M3); first match wins.
     pub variants: Vec<CompiledVariant>,
+    /// Set when this trigger is a **composite** (alias): its expansion is an
+    /// abbreviation re-expanded at render time rather than [`Self::template`]
+    /// (which is empty for a composite). See `COMPOSITE_SNIPPETS.md`.
+    pub composite: Option<CompiledComposite>,
+}
+
+/// A composite (alias) snippet: an abbreviation that is re-expanded, plus the
+/// menu of named option fragments a caller can select into it.
+#[derive(Debug, Clone)]
+pub struct CompiledComposite {
+    /// The base composition abbreviation, with `${name}` parameter markers
+    /// substituted at render time before it is re-parsed.
+    pub expands: String,
+    /// Named option fragments, each an abbreviation merged into the expansion
+    /// as a sibling of the base pieces when the caller selects it by name.
+    pub options: BTreeMap<String, String>,
 }
 
 /// A compiled context-conditional variant.
@@ -111,7 +127,12 @@ impl SnippetSet {
                 snippets.insert(trigger.clone(), compiled);
             }
         }
-        Ok(Self { snippets })
+        let set = Self { snippets };
+        // Composite validation is a whole-set pass: a composite may reference
+        // any trigger in the *merged* set (including ones a later pack added),
+        // so it can only run once the merge is complete.
+        set.validate_composites()?;
+        Ok(set)
     }
 
     /// Build a set directly from compiled snippets (fixtures, tests).
@@ -151,6 +172,134 @@ impl SnippetSet {
     pub fn is_empty(&self) -> bool {
         self.snippets.is_empty()
     }
+
+    /// Validate every composite in the merged set: its `expands` and each
+    /// option must parse, every trigger they reference must resolve, and the
+    /// composite reference graph must be acyclic.
+    ///
+    /// This is the `codemmet check` guard for composites and the invariant the
+    /// renderer relies on — because definitional cycles are rejected here, the
+    /// render-time expansion of a composite always terminates (the runtime
+    /// depth cap is only a defence-in-depth backstop).
+    fn validate_composites(&self) -> Result<(), ConfigError> {
+        // trigger -> composites it references (edges for the cycle graph).
+        let mut edges: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for snippet in self.snippets.values() {
+            let Some(composite) = &snippet.composite else {
+                continue;
+            };
+            let invalid = |message: String| ConfigError::Invalid {
+                trigger: snippet.trigger.clone(),
+                origin: "composite".to_owned(),
+                message,
+            };
+            let fragments = std::iter::once(("expands", composite.expands.as_str())).chain(
+                composite
+                    .options
+                    .iter()
+                    .map(|(name, frag)| (name.as_str(), frag.as_str())),
+            );
+            let mut refs: BTreeSet<&str> = BTreeSet::new();
+            for (label, fragment) in fragments {
+                // Substitute a safe identifier for every `${name}` so the
+                // fragment parses; the concrete values do not affect which
+                // *triggers* it references.
+                let text = substitute_markers(fragment, |_| "x".to_owned());
+                let ast = crate::abbr::parse(&text).map_err(|err| {
+                    invalid(format!(
+                        "{label} fragment `{fragment}` does not parse: {err}"
+                    ))
+                })?;
+                collect_referenced_triggers(self, &ast.0, &mut refs, &invalid)?;
+            }
+            edges.insert(snippet.trigger.as_str(), refs);
+        }
+        detect_cycles(&edges)
+    }
+}
+
+/// Resolve every trigger a composite fragment's nodes reference, recording the
+/// composite-to-composite edges and erroring on an unknown trigger.
+fn collect_referenced_triggers<'s>(
+    set: &'s SnippetSet,
+    nodes: &[crate::abbr::AbbrNode],
+    refs: &mut BTreeSet<&'s str>,
+    invalid: &impl Fn(String) -> ConfigError,
+) -> Result<(), ConfigError> {
+    for node in nodes {
+        match set.resolve_word(&node.word) {
+            None => {
+                return Err(invalid(format!(
+                    "references unknown trigger `{}`",
+                    node.word
+                )));
+            }
+            Some((resolved, _)) if resolved.composite.is_some() => {
+                refs.insert(resolved.trigger.as_str());
+            }
+            Some(_) => {}
+        }
+        collect_referenced_triggers(set, &node.children, refs, invalid)?;
+    }
+    Ok(())
+}
+
+/// Report the first cycle in the composite reference graph, if any.
+fn detect_cycles(edges: &BTreeMap<&str, BTreeSet<&str>>) -> Result<(), ConfigError> {
+    let mut visited: BTreeSet<&str> = BTreeSet::new();
+    let mut on_stack: BTreeSet<&str> = BTreeSet::new();
+    for &start in edges.keys() {
+        visit_for_cycle(start, edges, &mut visited, &mut on_stack)?;
+    }
+    Ok(())
+}
+
+/// DFS one node; `on_stack` holds the current path so a back-edge is a cycle.
+fn visit_for_cycle<'s>(
+    node: &'s str,
+    edges: &BTreeMap<&'s str, BTreeSet<&'s str>>,
+    visited: &mut BTreeSet<&'s str>,
+    on_stack: &mut BTreeSet<&'s str>,
+) -> Result<(), ConfigError> {
+    if visited.contains(node) {
+        return Ok(());
+    }
+    on_stack.insert(node);
+    for &next in edges.get(node).into_iter().flatten() {
+        if on_stack.contains(next) {
+            return Err(ConfigError::Invalid {
+                trigger: node.to_owned(),
+                origin: "composite".to_owned(),
+                message: format!("composite cycle: `{node}` expands through `{next}`"),
+            });
+        }
+        visit_for_cycle(next, edges, visited, on_stack)?;
+    }
+    on_stack.remove(node);
+    visited.insert(node);
+    Ok(())
+}
+
+/// Replace every `${name}` marker in `text` using `value`.
+///
+/// Shared by validation (a safe dummy) and the renderer (the bound argument or
+/// default). A `${` with no closing `}` is emitted verbatim.
+pub fn substitute_markers(text: &str, mut value: impl FnMut(&str) -> String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("${") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+        if let Some(end) = after.find('}') {
+            out.push_str(&value(&after[..end]));
+            rest = &after[end + 1..];
+        } else {
+            out.push_str(&rest[start..]);
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Parse one pack's TOML text against the schema.
@@ -229,6 +378,11 @@ fn compile_snippet(
         origin: origin.to_owned(),
         source,
     };
+
+    // A composite carries `expands` (an abbreviation) instead of a `body`.
+    if def.expands.is_some() {
+        return compile_composite(origin, trigger, def);
+    }
 
     let body = def
         .body
@@ -310,7 +464,118 @@ fn compile_snippet(
         template,
         scope: def.scope.clone(),
         variants,
+        composite: None,
     })
+}
+
+/// Validate and compile a composite (`expands`) snippet definition.
+///
+/// A composite has no template body, scope, or variants — its expansion is an
+/// abbreviation re-expanded at render time. This checks the field exclusions
+/// and parameter rules; the *reference* checks (every trigger resolves, no
+/// definitional cycle) run afterwards over the merged set in
+/// [`SnippetSet::validate_composites`], because a composite may reference a
+/// trigger that a later pack in the merge provides.
+fn compile_composite(
+    origin: &str,
+    trigger: &str,
+    def: &SnippetDef,
+) -> Result<CompiledSnippet, ConfigError> {
+    let invalid = |message: String| ConfigError::Invalid {
+        trigger: trigger.to_owned(),
+        origin: origin.to_owned(),
+        message,
+    };
+    let expands = def
+        .expands
+        .as_deref()
+        .expect("caller checked expands.is_some()");
+
+    if def.body.is_some() {
+        return Err(invalid(
+            "a composite (`expands`) cannot also have a `body`".to_owned(),
+        ));
+    }
+    if def.scope.is_some() {
+        return Err(invalid(
+            "a composite (`expands`) cannot declare a `scope`; the construct it \
+             expands to owns the child scope"
+                .to_owned(),
+        ));
+    }
+    if !def.variants.is_empty() {
+        return Err(invalid(
+            "a composite (`expands`) cannot declare `variants`".to_owned(),
+        ));
+    }
+
+    // Parameter rules mirror the template path: reserved names, no duplicates,
+    // every `${name}` declared, every declared param referenced.
+    let mut declared = BTreeSet::new();
+    for param in &def.params {
+        if param.name == "i" {
+            return Err(invalid(
+                "parameter name `i` is reserved for the repetition index `${i}`".to_owned(),
+            ));
+        }
+        if param.name == "value" {
+            return Err(invalid(
+                "parameter name `value` is reserved for the data-driven repeat item `${value}`"
+                    .to_owned(),
+            ));
+        }
+        if !declared.insert(param.name.as_str()) {
+            return Err(invalid(format!("duplicate parameter `{}`", param.name)));
+        }
+    }
+
+    let fragments = std::iter::once(expands).chain(def.options.values().map(String::as_str));
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    for fragment in fragments {
+        for name in param_markers(fragment) {
+            if !declared.contains(name.as_str()) {
+                return Err(invalid(format!(
+                    "composite references undeclared parameter `{name}`"
+                )));
+            }
+            referenced.insert(name);
+        }
+    }
+    for param in &def.params {
+        if !referenced.contains(&param.name) {
+            return Err(invalid(format!(
+                "parameter `{}` is never referenced by the composite",
+                param.name
+            )));
+        }
+    }
+
+    Ok(CompiledSnippet {
+        trigger: trigger.to_owned(),
+        description: def.description.clone(),
+        params: def.params.clone(),
+        template: Template { lines: Vec::new() },
+        scope: None,
+        variants: Vec::new(),
+        composite: Some(CompiledComposite {
+            expands: expands.to_owned(),
+            options: def.options.clone(),
+        }),
+    })
+}
+
+/// The `${name}` parameter markers a composite fragment references, in order.
+///
+/// Only the `${name}` form is recognized in a composite abbreviation; a `$1`
+/// or bare `$` is left for the underlying snippets to interpret after
+/// re-parsing, so this scans for `${...}` and yields the interior name.
+fn param_markers(fragment: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let _ = substitute_markers(fragment, |name| {
+        names.push(name.to_owned());
+        String::new()
+    });
+    names
 }
 
 /// The default user snippet directory: `<config>/codemmet/snippets`.
@@ -692,6 +957,139 @@ mod tests {
             ConfigError::Toml { origin, .. } => assert_eq!(origin, "user:/tmp/rust.toml"),
             other => panic!("expected Toml, got {other:?}"),
         }
+    }
+
+    // --- composites ----------------------------------------------------------
+
+    /// A pack fixture with a base trigger `foo` plus whatever `extra` adds.
+    fn composite_pack(extra: &str) -> String {
+        format!("[meta]\nlanguage = \"rust\"\n[snippets.foo]\nbody = \"foo();$0\"\n{extra}")
+    }
+
+    #[test]
+    fn composite_compiles_and_records_expands_and_options() {
+        let set = compile_one(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.bar]\n",
+                "description = \"two foos\"\n",
+                "expands = \"foo+foo\"\n",
+                "[snippets.bar.options]\n",
+                "more = \"foo\"\n",
+            )),
+        );
+        let bar = set.get("bar").expect("bar should compile");
+        let composite = bar.composite.as_ref().expect("bar is a composite");
+        assert_eq!(composite.expands, "foo+foo");
+        assert_eq!(
+            composite.options.get("more").map(String::as_str),
+            Some("foo")
+        );
+        assert!(bar.template.lines.is_empty(), "a composite has no template");
+    }
+
+    #[test]
+    fn composite_with_body_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo\"\nbody = \"x\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("cannot also have a `body`")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_with_scope_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo\"\nscope = \"fn-body\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("cannot declare a `scope`")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_undeclared_param_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo:${name}\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message == "composite references undeclared parameter `name`"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_unreferenced_param_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.bar]\n",
+                "params = [{ name = \"name\", kind = \"ident\" }]\n",
+                "expands = \"foo\"\n",
+            )),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message == "parameter `name` is never referenced by the composite"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_referencing_unknown_trigger_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo+nope\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message == "references unknown trigger `nope`"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_cycle_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.a]\nexpands = \"b\"\n",
+                "[snippets.b]\nexpands = \"a\"\n",
+            )),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("composite cycle")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_referencing_a_composite_is_allowed_when_acyclic() {
+        let set = compile_one(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.a]\nexpands = \"foo\"\n",
+                "[snippets.b]\nexpands = \"a+foo\"\n",
+            )),
+        );
+        assert!(set.get("a").and_then(|s| s.composite.as_ref()).is_some());
+        assert!(set.get("b").and_then(|s| s.composite.as_ref()).is_some());
+    }
+
+    #[test]
+    fn composite_with_unparseable_expansion_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo>\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("does not parse")),
+            "{err:?}"
+        );
     }
 
     #[test]

@@ -6,7 +6,9 @@ use std::fmt::Write as _;
 use std::collections::BTreeMap;
 
 use crate::abbr::{AbbrNode, Abbreviation, Repeat};
-use crate::config::loader::{CompiledSnippet, SnippetSet, parse_scope_name};
+use crate::config::loader::{
+    CompiledComposite, CompiledSnippet, SnippetSet, parse_scope_name, substitute_markers,
+};
 use crate::config::schema::ParamKind;
 use crate::context::{Collection, ExpansionContext, Item, Scope};
 use crate::snippet::ir::{Span, Template};
@@ -18,6 +20,15 @@ use crate::snippet::ir::{Span, Template};
 /// The composer checks the running total after every template instantiation
 /// and fails fast with [`RenderError::TooLarge`].
 const MAX_COMPOSED_LINES: usize = 10_000;
+
+/// Maximum nesting depth of composite (alias) expansions.
+///
+/// Definitional cycles are already rejected when a pack is compiled
+/// ([`SnippetSet::validate_composites`](crate::config::loader)), so a valid set
+/// cannot recurse forever; this is a backstop against a pathologically deep —
+/// but acyclic — chain of composites, and against caller-authored nesting like
+/// `classp>classp>classp>…`.
+const MAX_COMPOSITE_DEPTH: u32 = 16;
 
 /// How tabstops appear in the rendered output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +84,40 @@ pub enum RenderError {
         /// The line budget that was exceeded (`MAX_COMPOSED_LINES`).
         limit: usize,
     },
+    /// A caller selected an option name a composite does not define.
+    #[error("composite `{trigger}` has no option `{option}`{}", available(options))]
+    UnknownOption {
+        /// The composite whose option lookup failed.
+        trigger: String,
+        /// The option name the caller asked for.
+        option: String,
+        /// The option names the composite does define, sorted.
+        options: Vec<String>,
+    },
+    /// A composite's expansion could not be re-parsed or was misused (e.g. a
+    /// data-driven repeat on a composite).
+    #[error("cannot expand composite `{trigger}`: {message}")]
+    Composite {
+        /// The composite that failed to expand.
+        trigger: String,
+        /// What went wrong.
+        message: String,
+    },
+    /// Composite expansion nested deeper than [`MAX_COMPOSITE_DEPTH`].
+    #[error("composite expansion nested too deep (more than {limit} levels)")]
+    CompositeTooDeep {
+        /// The depth cap that was exceeded (`MAX_COMPOSITE_DEPTH`).
+        limit: u32,
+    },
+}
+
+/// Render the `(one, two)` option-name hint for [`RenderError::UnknownOption`].
+fn available(options: &[String]) -> String {
+    if options.is_empty() {
+        String::new()
+    } else {
+        format!(" (options: {})", options.join(", "))
+    }
 }
 
 /// Render a parsed abbreviation against a language's snippet set.
@@ -138,6 +183,7 @@ fn compose(
         composed_lines: 0,
         keep_child_slot,
         collections: &ctx.collections,
+        composite_depth: 0,
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -205,6 +251,9 @@ struct Composer<'a> {
     keep_child_slot: bool,
     /// Named collections in scope, for data-driven repeats.
     collections: &'a BTreeMap<String, Collection>,
+    /// Current composite-expansion nesting depth, capped at
+    /// [`MAX_COMPOSITE_DEPTH`].
+    composite_depth: u32,
 }
 
 impl Composer<'_> {
@@ -233,6 +282,12 @@ impl Composer<'_> {
                     word: node.word.clone(),
                     suggestion: suggest(self.set, &node.word),
                 })?;
+        // A composite resolves to an abbreviation, not a template body: expand
+        // it (recursively) and merge its selected options + the caller's
+        // freeform children before composing the result.
+        if let Some(composite) = &snippet.composite {
+            return self.expand_composite(node, snippet, composite, remainder, scope, subject);
+        }
         let bindings = bind_args(snippet, &node.args, remainder)?;
         let template = select_template(snippet, scope, self.raw_node_kinds);
         // Children live in the snippet's declared scope; a scope-less
@@ -292,6 +347,109 @@ impl Composer<'_> {
                 lines = splice_children(lines, children);
             }
             out.extend(lines);
+        }
+        Ok(out)
+    }
+
+    /// Expand a composite node: substitute its params, splice in the selected
+    /// options and the caller's freeform `>`-children, then re-expand the
+    /// resulting abbreviation and compose it at the node's position.
+    ///
+    /// Argument split: the composite's declared params bind first (glued and
+    /// explicit args, exactly as a normal snippet); any *remaining* explicit
+    /// args select options by name. A literal `*n` repeats the whole
+    /// expansion; a data-driven repeat on a composite is rejected.
+    fn expand_composite(
+        &mut self,
+        node: &AbbrNode,
+        snippet: &CompiledSnippet,
+        composite: &CompiledComposite,
+        remainder: &str,
+        scope: Scope,
+        subject: Option<&str>,
+    ) -> Result<Vec<Line>, RenderError> {
+        if node.repeat.is_data_driven() {
+            return Err(RenderError::Composite {
+                trigger: snippet.trigger.clone(),
+                message: "a data-driven repeat (`*@name` or `*`) is not supported on a composite"
+                    .to_owned(),
+            });
+        }
+        let count = match node.repeat {
+            Repeat::Count(n) => n,
+            Repeat::Source(_) | Repeat::Subject => 1,
+        };
+
+        // Declared params bind first; remaining explicit args select options.
+        let param_count = node.args.len().min(snippet.params.len());
+        let (param_args, option_args) = node.args.split_at(param_count);
+        let bindings = bind_args(snippet, param_args, remainder)?;
+
+        let mut selected: Vec<&str> = Vec::with_capacity(option_args.len());
+        for name in option_args {
+            match composite.options.get(name) {
+                Some(fragment) => selected.push(fragment.as_str()),
+                None => {
+                    return Err(RenderError::UnknownOption {
+                        trigger: snippet.trigger.clone(),
+                        option: name.clone(),
+                        options: composite.options.keys().cloned().collect(),
+                    });
+                }
+            }
+        }
+
+        if self.composite_depth >= MAX_COMPOSITE_DEPTH {
+            return Err(RenderError::CompositeTooDeep {
+                limit: MAX_COMPOSITE_DEPTH,
+            });
+        }
+        self.composite_depth += 1;
+        let result = self.compose_composite_copies(
+            node, snippet, composite, &bindings, &selected, count, scope, subject,
+        );
+        self.composite_depth -= 1;
+        result
+    }
+
+    /// Compose `count` independent copies of a composite's merged expansion.
+    #[allow(clippy::too_many_arguments)]
+    fn compose_composite_copies(
+        &mut self,
+        node: &AbbrNode,
+        snippet: &CompiledSnippet,
+        composite: &CompiledComposite,
+        bindings: &[(String, Binding)],
+        selected: &[&str],
+        count: u32,
+        scope: Scope,
+        subject: Option<&str>,
+    ) -> Result<Vec<Line>, RenderError> {
+        let parse = |fragment: &str, label: &str| {
+            let text = substitute_params_into_abbr(fragment, bindings);
+            crate::abbr::parse(&text)
+                .map(|abbr| abbr.0)
+                .map_err(|err| RenderError::Composite {
+                    trigger: snippet.trigger.clone(),
+                    message: format!("{label} `{text}` does not parse: {err}"),
+                })
+        };
+
+        let mut out = Vec::new();
+        for _ in 0..count {
+            let mut base = parse(&composite.expands, "expansion")?;
+            // Extras merge as siblings of the base pieces: selected options
+            // first (in selection order), then the caller's freeform children.
+            let mut extras: Vec<AbbrNode> = Vec::new();
+            for fragment in selected {
+                extras.extend(parse(fragment, "option")?);
+            }
+            extras.extend(node.children.iter().cloned());
+            merge_extras(&mut base, extras);
+
+            for top in &base {
+                out.extend(self.compose_node(top, scope, subject)?);
+            }
         }
         Ok(out)
     }
@@ -593,6 +751,40 @@ fn dedent(text: &str) -> String {
         .map(|line| line.strip_prefix(common).unwrap_or(line))
         .collect();
     lines.join("\n")
+}
+
+/// Merge a composite's extra pieces (options + freeform children) into its
+/// base expansion at the single insertion point.
+///
+/// The insertion point is the children of the **last top-level node** of the
+/// base abbreviation, so `class:Name>(init+str+repr)` gains the extras as
+/// further siblings of the base methods inside the class body. When the base
+/// is a single leaf node (`class:Name`) the extras simply become its children.
+fn merge_extras(base: &mut [AbbrNode], extras: Vec<AbbrNode>) {
+    if extras.is_empty() {
+        return;
+    }
+    if let Some(last) = base.last_mut() {
+        last.children.extend(extras);
+    }
+}
+
+/// Substitute `${name}` param markers in a composite abbreviation fragment.
+///
+/// A bound param becomes its literal argument, an unbound one its declared
+/// default (empty when it has none). The result is re-parsed as an
+/// abbreviation, so a composite's own params render as literal text; tabstops
+/// in the output come from the underlying snippets.
+fn substitute_params_into_abbr(fragment: &str, bindings: &[(String, Binding)]) -> String {
+    substitute_markers(fragment, |name| {
+        bindings
+            .iter()
+            .find(|(n, _)| n == name)
+            .map_or_else(String::new, |(_, binding)| match binding {
+                Binding::Bound(value) => value.clone(),
+                Binding::Free { default } => default.clone().unwrap_or_default(),
+            })
+    })
 }
 
 /// Bind a node's explicit and glued arguments to a snippet's parameters.
@@ -923,6 +1115,7 @@ mod tests {
             template: parse_template(body).expect("fixture body should parse"),
             scope: None,
             variants: Vec::new(),
+            composite: None,
         }
     }
 
@@ -930,6 +1123,30 @@ mod tests {
     fn scoped(mut snippet: CompiledSnippet, scope: &str) -> CompiledSnippet {
         snippet.scope = Some(scope.to_owned());
         snippet
+    }
+
+    /// Build a composite fixture snippet.
+    fn composite(
+        trigger: &str,
+        params: Vec<ParamDef>,
+        expands: &str,
+        options: &[(&str, &str)],
+    ) -> CompiledSnippet {
+        CompiledSnippet {
+            trigger: trigger.to_owned(),
+            description: None,
+            params,
+            template: Template { lines: Vec::new() },
+            scope: None,
+            variants: Vec::new(),
+            composite: Some(CompiledComposite {
+                expands: expands.to_owned(),
+                options: options
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                    .collect(),
+            }),
+        }
     }
 
     /// Attach a context variant to a fixture snippet.
@@ -1009,6 +1226,19 @@ mod tests {
             // A construct with both a `${child}` body and a later `$0` (like a
             // try/catch): wrap should target the child body, not `$0`.
             snip("tc", vec![], "try {\n\t${child}\n} catch {\n\t$0\n}\n"),
+            // Composites (alias snippets). `cls` builds an `impl` with a base
+            // `fn new`; options and freeform children merge into the body.
+            composite(
+                "cls",
+                vec![param("name", ParamKind::Ident, Some("X"))],
+                "impl:${name}>(fn:new)",
+                &[("log", "stmt"), ("pair", "stmt+stmt")],
+            ),
+            // A composite that references another composite (`cls`).
+            composite("nest", vec![], "cls:Inner", &[]),
+            // A deliberately self-referential composite: `from_compiled`
+            // skips validation, so this reaches the render-time depth cap.
+            composite("loopy", vec![], "loopy", &[]),
         ])
     }
 
@@ -1195,6 +1425,119 @@ mod tests {
     fn siblings_concatenate() {
         let e = expand("if+el", &ctx(), TabstopMode::Keep);
         assert_eq!(e.body, "if $1 {\n    $2\n}\nelse {\n    $0\n}");
+    }
+
+    // --- composites (alias snippets) -----------------------------------------
+
+    #[test]
+    fn composite_base_uses_param_default() {
+        // `cls` → `impl:X>(fn:new)`; the base `fn` sees `impl`'s type-body
+        // scope and gains `&self`.
+        let e = expand("cls", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "impl X {\n    fn new(&self) {\n        \n    }\n}");
+    }
+
+    #[test]
+    fn composite_param_passes_through_to_underlying_snippet() {
+        let e = expand("cls:Point", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self$1) {\n        $0\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn composite_glued_arg_binds_like_a_normal_param() {
+        // A glued ident binds the composite's `name` param, exactly as it
+        // would for a plain snippet.
+        let e = expand("clsWidget", &ctx(), TabstopMode::Strip);
+        assert!(e.body.starts_with("impl Widget {"), "{}", e.body);
+    }
+
+    #[test]
+    fn composite_selected_option_merges_as_sibling() {
+        let e = expand("cls:Point,log", &ctx(), TabstopMode::Strip);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self) {\n        \n    }\n    stmt();\n}"
+        );
+    }
+
+    #[test]
+    fn composite_freeform_child_merges_into_body() {
+        let e = expand("cls:Point>pr", &ctx(), TabstopMode::Strip);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self) {\n        \n    }\n    println!(\"\");\n}"
+        );
+    }
+
+    #[test]
+    fn composite_option_then_freeform_child_both_merge_in_order() {
+        // Base `fn new`, then the `pair` option (two `stmt`s), then the
+        // freeform `pr` — all siblings inside the class body, in that order.
+        let e = expand("cls:Point,pair>pr", &ctx(), TabstopMode::Strip);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self) {\n        \n    }\n    \
+             stmt();\n    stmt();\n    println!(\"\");\n}"
+        );
+    }
+
+    #[test]
+    fn composite_repeat_produces_independent_copies() {
+        let e = expand("cls:Point*2", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "impl Point {\n    fn new(&self$1) {\n        $2\n    }\n}\n\
+             impl Point {\n    fn new(&self$3) {\n        $0\n    }\n}"
+        );
+    }
+
+    #[test]
+    fn composite_references_another_composite() {
+        // `nest` → `cls:Inner` → `impl Inner>(fn:new)`.
+        let e = expand("nest", &ctx(), TabstopMode::Strip);
+        assert_eq!(
+            e.body,
+            "impl Inner {\n    fn new(&self) {\n        \n    }\n}"
+        );
+    }
+
+    #[test]
+    fn composite_unknown_option_is_error() {
+        assert_eq!(
+            expand_err("cls:Point,bogus"),
+            RenderError::UnknownOption {
+                trigger: "cls".to_owned(),
+                option: "bogus".to_owned(),
+                options: vec!["log".to_owned(), "pair".to_owned()],
+            }
+        );
+    }
+
+    #[test]
+    fn composite_rejects_data_driven_repeat() {
+        assert_eq!(
+            expand_err("cls*@X"),
+            RenderError::Composite {
+                trigger: "cls".to_owned(),
+                message: "a data-driven repeat (`*@name` or `*`) is not supported on a composite"
+                    .to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn composite_recursion_hits_the_depth_cap() {
+        // `loopy` expands to itself; validation would normally reject this,
+        // but the fixture bypasses it, so the render-time cap must fire.
+        assert_eq!(
+            expand_err("loopy"),
+            RenderError::CompositeTooDeep {
+                limit: MAX_COMPOSITE_DEPTH,
+            }
+        );
     }
 
     // --- data-driven repeats -------------------------------------------------

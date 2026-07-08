@@ -53,6 +53,8 @@ pub struct FileOutput {
     pub on_create: Option<String>,
     /// What to do when the target already exists.
     pub on_exists: OnExists,
+    /// For `inject`: the container name to target (already param-substituted).
+    pub into: Option<String>,
     /// Whether this is the primary file (the one that keeps tabstops).
     pub primary: bool,
 }
@@ -155,6 +157,7 @@ pub fn scaffold(
             content: render_piece(engine, language, piece, &values, ctx, piece_mode)?,
             on_create: piece.on_create.as_deref().map(|p| subst(p, &values)),
             on_exists: piece.on_exists,
+            into: piece.into.as_deref().map(|p| subst(p, &values)),
             primary: is_primary,
         });
     }
@@ -349,6 +352,7 @@ mod tests {
             target,
             content: PieceContent::Body("x".to_owned()),
             on_exists: OnExists::default(),
+            into: None,
             on_create: None,
             primary,
         }

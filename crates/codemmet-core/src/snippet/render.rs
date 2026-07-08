@@ -118,6 +118,12 @@ pub enum RenderError {
         /// The depth cap that was exceeded (`MAX_COMPOSITE_DEPTH`).
         limit: u32,
     },
+    /// A multi-file snippet was used where a single expansion is expected.
+    #[error("`{trigger}` is a multi-file snippet; use `codemmet scaffold`")]
+    MultiFile {
+        /// The multi-file trigger.
+        trigger: String,
+    },
 }
 
 /// Render the `(one, two)` option-name hint for [`RenderError::UnknownOption`].
@@ -324,6 +330,13 @@ impl Composer<'_> {
                     word: node.word.clone(),
                     suggestion: suggest(self.set, &node.word),
                 })?;
+        // A multi-file snippet is not a single tree: it is resolved by the
+        // `scaffold` pipeline, so it cannot appear in an ordinary expansion.
+        if snippet.multifile.is_some() {
+            return Err(RenderError::MultiFile {
+                trigger: snippet.trigger.clone(),
+            });
+        }
         // A composite resolves to an abbreviation, not a template body: expand
         // it (recursively) and merge its selected options + the caller's
         // freeform children before composing the result.

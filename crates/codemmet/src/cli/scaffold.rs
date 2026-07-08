@@ -184,7 +184,9 @@ fn plan(out: &FileOutput, lang: &str, indent: &str) -> Result<Planned, String> {
 fn plan_inject(out: &FileOutput, lang: &str, indent: &str) -> Result<(Action, String), String> {
     let existing = std::fs::read_to_string(&out.path)
         .map_err(|err| format!("cannot read {}: {err}", out.path.display()))?;
-    if let Some(inj) = codemmet_tsctx::inject(lang, &existing, &out.content, indent) {
+    if let Some(inj) =
+        codemmet_tsctx::inject(lang, &existing, &out.content, indent, out.into.as_deref())
+    {
         Ok((Action::Inject { offset: inj.offset }, inj.text))
     } else {
         eprintln!(

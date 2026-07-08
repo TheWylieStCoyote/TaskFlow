@@ -31,6 +31,11 @@ up in `codemmet list` alongside the base triggers and are documented, with the
 full built-in set, under
 [custom snippets → composite snippets](snippets.md#composite-snippets).
 
+A few triggers are **multi-file** snippets — they scaffold across several files
+and are run with [`codemmet scaffold`](cli.md#scaffold) rather than `expand`
+(Rust `mmod`, Python `mmod`, C `munit`, C++ `mcls`). See
+[custom snippets → multi-file snippets](snippets.md#multi-file-snippets).
+
 You can regenerate any of the trigger lists below live from your installed
 build with `codemmet list --lang <id>`, and `--json` is available for
 machine-readable output:

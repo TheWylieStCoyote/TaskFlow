@@ -334,6 +334,10 @@ fn every_builtin_trigger_expands() {
     for lang in engine().registry().languages() {
         let id = lang.profile.id;
         for snippet in lang.set.iter() {
+            // Multi-file snippets are expanded by `scaffold`, not `expand`.
+            if snippet.multifile.is_some() {
+                continue;
+            }
             for mode in [TabstopMode::Keep, TabstopMode::Strip] {
                 let result = engine().expand(&snippet.trigger, id, &ctx(), mode);
                 assert!(

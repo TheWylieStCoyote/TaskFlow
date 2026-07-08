@@ -429,3 +429,22 @@ expands = "tmod>test"
 description = "#[derive]d enum (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "derive+enum:${name}>variant"
+
+[snippets.mmod]
+description = "module in a new file, declared from the current file (multi-file)"
+params = [{ name = "name", kind = "ident", default = "thing" }]
+
+[snippets.mmod.files.decl]
+target = "self"
+on_exists = "append"
+body = "mod ${name};"
+
+[snippets.mmod.files.module]
+path = "${name}.rs"
+on_exists = "create"
+primary = true
+body = '''
+pub fn ${name}() {
+    $0
+}
+'''

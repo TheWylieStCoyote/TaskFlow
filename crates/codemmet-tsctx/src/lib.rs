@@ -253,20 +253,22 @@ pub struct Injection {
 
 /// Find a structural insertion point for `content` in an existing file.
 ///
-/// It injects inside the body of the **last type-like container** (class,
-/// struct, impl, trait, interface, …), so `content` becomes a new member at the
-/// body's indentation. Returns `None` when the language is unsupported or the
-/// file has no such container — the caller should fall back to appending.
+/// It injects inside the body of a type-like container (class, struct, impl,
+/// trait, interface, …), so `content` becomes a new member at the body's
+/// indentation. Returns `None` when the language is unsupported or the file has
+/// no such container — the caller should fall back to appending.
 ///
-/// This is deliberately container-directed and single-shot: it does not try to
-/// choose an access section or a specific named class (a header with more than
-/// one type takes the last). Those refinements can layer on later.
+/// `into` names the container to target (matched against its name/type); when
+/// `None`, or no container has that name, the **last** container is used. For a
+/// C/C++ class with a `public:` section the member lands at the end of that
+/// section rather than at the very end of the body (which might be `private`).
 #[must_use]
 pub fn inject(
     language_id: &str,
     text: &str,
     content: &str,
     indent_unit: &str,
+    into: Option<&str>,
 ) -> Option<Injection> {
     let spec = spec_for(language_id)?;
     let language = (spec.grammar)();
@@ -274,13 +276,25 @@ pub fn inject(
     parser.set_language(&language).ok()?;
     let tree = parser.parse(text, None)?;
 
-    let container = last_type_body(tree.root_node(), spec)?;
+    let container = choose_container(tree.root_node(), spec, text, into)?;
     let body = spec.body_node(container)?;
     let member_indent = format!("{}{indent_unit}", line_indent(text, container.start_byte()));
     let block = indent_block(content.trim_end_matches('\n'), &member_indent);
 
+    // Prefer the end of a C/C++ `public:` section, so a declared method lands
+    // among the public members rather than after a trailing `private:` one.
+    if let Some(offset) = public_section_end(body, text) {
+        return Some(Injection {
+            offset,
+            text: format!("\n{block}"),
+        });
+    }
+
     let mut cursor = body.walk();
-    let members: Vec<Node<'_>> = body.named_children(&mut cursor).collect();
+    let members: Vec<Node<'_>> = body
+        .named_children(&mut cursor)
+        .filter(|n| n.kind() != "comment")
+        .collect();
     Some(members.last().map_or_else(
         || {
             // Empty body: insert just after the opening brace, then re-close.
@@ -303,25 +317,67 @@ pub fn inject(
     ))
 }
 
-/// The last outermost type-body container (class/struct/impl/…) in document
-/// order. Outermost: once one is found the walk does not descend into it, so a
-/// nested type never shadows the type you meant.
-fn last_type_body<'t>(root: Node<'t>, spec: &LangSpec) -> Option<Node<'t>> {
-    let mut found: Option<Node<'t>> = None;
+/// Choose the container to inject into: the one named `into` (matched against
+/// its `name`/`type` field), else the last outermost type-body in document
+/// order. Outermost: the walk does not descend into a container once found, so
+/// a nested type never shadows the type you meant.
+fn choose_container<'t>(
+    root: Node<'t>,
+    spec: &LangSpec,
+    text: &str,
+    into: Option<&str>,
+) -> Option<Node<'t>> {
+    let mut containers: Vec<Node<'t>> = Vec::new();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
         if spec.scope_for(node.kind()) == Some(Scope::TypeBody) {
-            if found.is_none_or(|f| node.start_byte() > f.start_byte()) {
-                found = Some(node);
-            }
-            continue; // do not descend into a container
+            containers.push(node);
+            continue;
         }
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             stack.push(child);
         }
     }
-    found
+    containers.sort_by_key(Node::start_byte);
+    if let Some(name) = into
+        && let Some(hit) = containers
+            .iter()
+            .rev()
+            .find(|c| container_name(**c, text) == Some(name))
+    {
+        return Some(*hit);
+    }
+    containers.last().copied()
+}
+
+/// A container's declared name (`name` field, else `type` for a Rust `impl`).
+fn container_name<'a>(node: Node<'_>, text: &'a str) -> Option<&'a str> {
+    node.child_by_field_name("name")
+        .or_else(|| node.child_by_field_name("type"))
+        .map(|n| &text[n.byte_range()])
+}
+
+/// The byte offset ending the last `public:` section of a C/C++ body (after its
+/// last member, or after the `public:` specifier itself when the section is
+/// empty), or `None` when the body has no `public:` specifier.
+fn public_section_end(body: Node<'_>, text: &str) -> Option<usize> {
+    let mut cursor = body.walk();
+    let mut in_public = false;
+    let mut seen_public = false;
+    let mut anchor = None;
+    for child in body.children(&mut cursor) {
+        if child.kind() == "access_specifier" {
+            in_public = text[child.byte_range()].trim_start().starts_with("public");
+            if in_public {
+                seen_public = true;
+                anchor = Some(child.end_byte());
+            }
+        } else if in_public && child.is_named() && child.kind() != "comment" {
+            anchor = Some(child.end_byte());
+        }
+    }
+    seen_public.then_some(anchor).flatten()
 }
 
 /// The leading whitespace of the line containing `offset`.
@@ -934,15 +990,25 @@ mod tests {
         TreeSitterProvider::new().context_at(&doc, offset)
     }
 
-    /// Apply [`inject`] to `text` (four-space indent) and return the result, or
-    /// `None` when no container is found.
+    /// Apply [`inject`] to `text` (four-space indent, into `target`) and return
+    /// the result, or `None` when no container is found.
     #[cfg(any(feature = "lang-rust", feature = "lang-cpp", feature = "lang-python"))]
-    fn injected(language: &str, text: &str, content: &str) -> Option<String> {
-        inject(language, text, content, "    ").map(|inj| {
+    fn injected_into(
+        language: &str,
+        text: &str,
+        content: &str,
+        target: Option<&str>,
+    ) -> Option<String> {
+        inject(language, text, content, "    ", target).map(|inj| {
             let mut out = text.to_owned();
             out.insert_str(inj.offset, &inj.text);
             out
         })
+    }
+
+    #[cfg(any(feature = "lang-rust", feature = "lang-cpp", feature = "lang-python"))]
+    fn injected(language: &str, text: &str, content: &str) -> Option<String> {
+        injected_into(language, text, content, None)
     }
 
     #[cfg(feature = "lang-cpp")]
@@ -984,6 +1050,34 @@ mod tests {
     #[test]
     fn inject_returns_none_without_a_container() {
         assert_eq!(injected("rust", "fn free() {}\n", "fn x() {}"), None);
+    }
+
+    #[cfg(feature = "lang-cpp")]
+    #[test]
+    fn inject_targets_the_public_section_not_the_end() {
+        // The member should land at the end of `public:`, ahead of `private:`.
+        let src = "class C {\npublic:\n    int a();\nprivate:\n    int b_;\n};\n";
+        assert_eq!(
+            injected("cpp", src, "int c();").as_deref(),
+            Some("class C {\npublic:\n    int a();\n    int c();\nprivate:\n    int b_;\n};\n")
+        );
+    }
+
+    #[cfg(feature = "lang-cpp")]
+    #[test]
+    fn inject_into_names_the_target_class() {
+        let src = "class A {\npublic:\n    int a();\n};\nclass B {\npublic:\n    int b();\n};\n";
+        // Default (no name) takes the last class, `B`.
+        assert_eq!(
+            injected("cpp", src, "int z();")
+                .as_deref()
+                .map(|s| s.contains("int b();\n    int z();")),
+            Some(true)
+        );
+        // Naming `A` targets the first class instead.
+        let into_a = injected_into("cpp", src, "int z();", Some("A")).expect("A resolves");
+        assert!(into_a.contains("int a();\n    int z();"), "{into_a}");
+        assert!(into_a.contains("int b();\n};"), "B untouched: {into_a}");
     }
 
     /// Run `validate_wrap` over a fixture with `«` and `»` selection

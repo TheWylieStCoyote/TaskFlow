@@ -249,14 +249,16 @@ follows [Semantic Versioning](https://semver.org/).
   One trigger scaffolds a whole feature (a Django model + view + route; a C++
   declaration + definition). `codemmet scaffold <trigger:args>` prints a
   manifest (`--json`) or applies it (`--write`): it **creates** new files (with
-  an optional `on_create` header) and **appends** to existing ones; the single
-  `primary` file keeps its tabstops (others insert plain text, since tabstops
-  cannot cross files). `on_exists = "inject"` places the content structurally —
-  a method into an existing class/struct body (Rust, C, C++, Python, …), via
-  tree-sitter — falling back to an append when the file has no such container.
-  Project-local packs (`.codemmet/snippets`) make these repo-specific, and
-  `codemmet check` validates them. In Neovim, `:CodemmetScaffold` runs it on the
-  current file (shelling out like capture) and opens the primary file. See
+  an optional `on_create` header), **appends** to existing ones, and — for
+  `on_exists = "inject"` — places the content **structurally**, inserting a
+  member into an existing class/struct body (Rust, C, C++, Python, JS/TS, Go)
+  via tree-sitter, at the end of a C/C++ `public:` section and into the class
+  named by `into` when given. The single `primary` file keeps its tabstops
+  (others insert plain text, since tabstops cannot cross files); in Neovim
+  `:CodemmetScaffold` writes the supporting files and opens the primary as a
+  **live snippet**. Builtin multi-file snippets ship for Rust (`mmod`), Python
+  (`mmod`), C (`munit`), and C++ (`mcls`). Project-local packs make these
+  repo-specific, and `codemmet check` validates them. See
   [`MULTIFILE_SNIPPETS.md`](MULTIFILE_SNIPPETS.md).
 - **Composite (alias) snippets.** A snippet can now define `expands` instead of
   `body` — an *abbreviation* that is re-expanded at render time — so a

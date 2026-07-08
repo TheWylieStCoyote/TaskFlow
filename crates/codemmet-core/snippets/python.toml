@@ -326,3 +326,27 @@ ${value:name}: ${value.type:type}
 description = "context manager class with __enter__/__exit__ (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "class:${name}>(init+def:__enter__+def:__exit__)"
+
+[snippets.mmod]
+description = "a module plus its test file (multi-file)"
+params = [{ name = "name", kind = "ident", default = "thing" }]
+
+[snippets.mmod.files.module]
+path = "${name}.py"
+on_exists = "create"
+primary = true
+body = '''
+def ${name}():
+    ${1:pass}
+'''
+
+[snippets.mmod.files.test]
+path = "test_${name}.py"
+on_exists = "create"
+body = '''
+from ${name} import ${name}
+
+
+def test_${name}():
+    ${name}()
+'''

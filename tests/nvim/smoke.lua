@@ -323,6 +323,33 @@ if require("codemmet.completion").engine() ~= "nvim-cmp" then
 end
 package.loaded.cmp = nil
 io.write("smoke: completion config scenario passed\n")
+-- Scenario 9: scaffold a multi-file snippet. The builtin rust `mmod` appends
+-- `mod helper;` to the current file (written to disk) and creates `helper.rs`
+-- as the primary, which is opened with a live snippet (its `$0` tabstop is
+-- interactive, so the buffer shows the rendered body).
+local scaffold_buf = rust_buf("scaffold", { "fn main() {}" })
+local scaffold_file = vim.api.nvim_buf_get_name(scaffold_buf)
+local scaffold_dir = vim.fs.dirname(scaffold_file)
+vim.cmd.write() -- the `self`-append needs the file on disk
+require("codemmet").scaffold({ abbr = "mmod:helper" })
+
+-- The primary file `helper.rs` opens with the expanded `pub fn helper()` body.
+local scaffolded = vim.wait(5000, function()
+  return vim.api.nvim_buf_get_name(0):match("helper%.rs$") ~= nil
+    and vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] == "pub fn helper() {"
+end, 50)
+if not scaffolded then
+  fail("scaffold: helper.rs did not open with the expanded module body")
+end
+-- The supporting file (the current module) got `mod helper;` appended on disk.
+local decl = table.concat(vim.fn.readfile(scaffold_file), "\n")
+if not decl:find("mod helper;", 1, true) then
+  fail("scaffold: `mod helper;` was not appended to " .. scaffold_file)
+end
+os.remove(scaffold_dir .. "/helper.rs")
+io.write("smoke: scaffold scenario passed\n")
+
+reset_state()
 
 io.write("SMOKE OK\n")
 os.exit(0)

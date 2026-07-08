@@ -142,3 +142,31 @@ expands = "guard>class:${name}"
 description = "namespaced class (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "ns>class:${name}"
+
+[snippets.mcls]
+description = "a class split across a .hpp header and .cpp source (multi-file)"
+params = [{ name = "name", kind = "ident", default = "Widget" }]
+
+[snippets.mcls.files.header]
+path = "${name}.hpp"
+on_exists = "create"
+primary = true
+body = '''
+#pragma once
+
+class ${name} {
+public:
+    ${name}();
+    $0
+};
+'''
+
+[snippets.mcls.files.source]
+path = "${name}.cpp"
+on_exists = "create"
+body = '''
+#include "${name}.hpp"
+
+${name}::${name}() {
+}
+'''

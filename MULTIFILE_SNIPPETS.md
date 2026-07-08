@@ -66,10 +66,22 @@ Each `[files.<label>]` section:
 | `body` | A template body (LSP snippet syntax + `${param}`). |
 | `expands` | *Instead of* `body`: a composite-style abbreviation re-expanded for this file. |
 | `on_exists` | `inject` \| `append` \| `create` when the target already exists (default `inject`). |
+| `into` | For `inject`: the name of the container (class/struct/…) to inject into, `${param}`-substituted. Absent injects into the last container. |
 | `on_create` | Text prepended only when the file is created (e.g. `#pragma once`, an import block). |
 | `primary` | This section receives the tabstops/final cursor (at most one). |
 
 Exactly one of `path`/`target` and one of `body`/`expands` per section.
+
+## Built-in multi-file snippets
+
+Each language ships one to get started:
+
+| Lang | Trigger | What it scaffolds |
+| --- | --- | --- |
+| Rust | `mmod:name` | a `name.rs` module (primary) + `mod name;` appended to the current file |
+| Python | `mmod:name` | a `name.py` module (primary) + a `test_name.py` importing it |
+| C | `munit:name` | a `name.h` header (guard + decl) + a `name.c` source (primary) |
+| C++ | `mcls:Name` | a `Name.hpp` header with a class (primary) + a `Name.cpp` source |
 
 ## Parameters are concrete
 
@@ -103,42 +115,41 @@ The **action** per file is decided against the filesystem:
   `on_exists = "create"` section errors if its target already exists.
 
 **Injection** (`on_exists = "inject"`, the default) places the content
-*structurally*: tree-sitter finds the last type-like container (class, struct,
-impl, trait, interface) in the existing file and inserts the content as a new
-member at the body's indentation. With no such container — or in a
-tree-sitter-free build — it falls back to appending. A JSON manifest entry for
-an inject carries the byte `offset` so an editor can apply it without
-re-parsing.
+*structurally*: tree-sitter finds a type-like container (class, struct, impl,
+trait, interface) in the existing file and inserts the content as a new member
+at the body's indentation. It targets the container named by `into` (else the
+last one), and for a C/C++ class it lands the member at the end of the
+`public:` section rather than after a trailing `private:` one. With no matching
+container — or in a tree-sitter-free build — it falls back to appending. A JSON
+manifest entry for an inject carries the byte `offset` so an editor can apply it
+without re-parsing.
 
 `--root <DIR>` is the base for `path` targets (default: the working directory).
 `--from <FILE>` supplies the current file that `self`/sibling targets need.
 
 ## Editor integration
 
-The manifest is the seam. A future `codemmet.scaffold` LSP command returns the
-same JSON; the editor creates/opens the files, applies the edits, and focuses
-the primary file to drive its tabstops. (Not built in Phase 1.)
+In Neovim, `:CodemmetScaffold {abbr}` (or `require("codemmet").scaffold`) shells
+out to `codemmet scaffold --json --tabstops keep` with `--from` the current
+file and `--root` the project root (the read-only server never writes). It
+writes every supporting file to disk and opens the **primary** file with its
+content inserted as a live `vim.snippet` session, so the primary's tabstops are
+interactive. The JSON manifest is the seam any other editor can build on.
 
 ## Status / phases
 
-- **Phase 1 (done):** core + CLI. `path`/`target` resolution, per-piece
-  rendering, the manifest, `scaffold --json`/`--write`, and `check` validation.
-- **Phase 2 (done):** tree-sitter structural **injection** — insert a member
-  into the last class/struct/impl body of an existing file (Rust, C, C++,
-  Python, JS/TS, Go), so `on_exists = "inject"` is real.
-- **Phase 3 (done):** the Neovim `:CodemmetScaffold` wrapper. Like capture, it
-  shells out to `codemmet scaffold --write` (the read-only server never writes)
-  with `--from` the current file and `--root` the project root, then opens the
-  file the CLI marks primary. Driving *interactive tabstops* in the primary
-  file is still open (the created files carry plain text).
+- **Phase 1:** core + CLI. `path`/`target` resolution, per-piece rendering, the
+  manifest, `scaffold --json`/`--write`, and `check` validation.
+- **Phase 2:** tree-sitter structural **injection** — insert a member into a
+  class/struct/impl body of an existing file (Rust, C, C++, Python, JS/TS, Go),
+  targeting a named container (`into`) and the C/C++ `public:` section.
+- **Phase 3:** the Neovim `:CodemmetScaffold` wrapper, with the primary file
+  opened as a live, interactive snippet.
 
 ## Known limitations
 
-- Injection targets the **last** container in a file and inserts after its last
-  member; it does not choose a named class or a specific access section
-  (`public:`/`private:`). Those refinements can layer on later.
 - Unknown sub-triggers inside a piece's `expands` are caught at scaffold time,
   not by `check` (composite-style whole-set validation for pieces is future
   work).
 - No cross-file tabstops (a fundamental LSP limitation): only the primary file
-  is interactive.
+  is interactive; supporting files are inserted as plain text.

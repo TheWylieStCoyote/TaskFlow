@@ -351,11 +351,66 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 251 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 287 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 The full authoring guide — schema, parameters, body syntax, overriding,
 disabling, and context-aware variants — is in [custom snippets](snippets.md).
+
+## 10. Scaffolding across files
+
+Some things you add to a project touch **several files at once** — a new module
+plus its test, a class split across a header and a source. A *multi-file
+snippet* captures that as one trigger, run with `codemmet scaffold`.
+
+Every language ships one. In C++, `mcls` scaffolds a class across a `.hpp` and a
+`.cpp`. Preview it with a dry run:
+
+```sh
+codemmet scaffold --lang cpp "mcls:Point"
+```
+
+```text
+# create ./Point.hpp (primary)
+#pragma once
+
+class Point {
+public:
+    Point();
+
+};
+
+# create ./Point.cpp
+#include "Point.hpp"
+
+Point::Point() {
+}
+```
+
+`--json` prints the same plan as a machine-readable manifest; `--write` applies
+it, creating both files (relative to `--root`, which defaults to the working
+directory):
+
+```sh
+codemmet scaffold --lang cpp "mcls:Point" --write
+```
+
+```text
+create ./Point.hpp (primary)
+create ./Point.cpp
+```
+
+The **primary** file is the one you'll edit first (here `Point.hpp`); it's the
+only file that carries tabstops. Python's `mmod:parser` makes `parser.py` and a
+`test_parser.py`; Rust's `mmod:util` makes `util.rs` and appends `mod util;` to
+the file you ran it from; C's `munit` makes a `.h`/`.c` pair.
+
+In Neovim, `:CodemmetScaffold mcls:Point` does the same but opens the primary
+file as a **live snippet** — you land in `Point.hpp` with the cursor on the
+first tabstop, ready to add members, while the supporting files are written for
+you. Authoring your own (path templates, `self`/sibling targets, structural
+`inject` into an existing class) is covered in
+[custom snippets → multi-file snippets](snippets.md#multi-file-snippets).
 
 ## Where to go next
 

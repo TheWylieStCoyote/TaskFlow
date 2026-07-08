@@ -707,12 +707,25 @@ A section targets its file with a `path` template **or** a `target` — `"self"`
 (the current file) or a sibling by extension (`".cpp"`), for which the CLI needs
 `--from <FILE>`. Each new file may carry an `on_create` header (a `#pragma once`
 or import block added only on creation), and `on_exists` chooses `append` /
-`create` / `inject` when the target is already there.
+`create` / `inject` when the target is already there. `inject` places the
+content *structurally* — into an existing class/struct body (tree-sitter),
+at the end of a C/C++ `public:` section, or into the class named by `into`:
+
+```toml
+[snippets.mmethod.files.decl]
+target    = "self"                 # the header you're editing
+on_exists = "inject"
+into      = "${cls}"               # inject into class ${cls}
+body      = "void ${name}();"
+```
 
 Parameters resolve to **concrete text** here (they appear in file paths), so —
 unlike a composite — they are not tabstops; only the single `primary` file keeps
 tabstops, since these cannot cross files. `codemmet scaffold` prints a manifest
-(`--json`) or applies it (`--write`). Full details and the design are in
+(`--json`) or applies it (`--write`); in Neovim `:CodemmetScaffold` writes the
+supporting files and opens the primary as a live, interactive snippet. Builtins
+ship for Rust (`mmod`), Python (`mmod`), C (`munit`), and C++ (`mcls`). Full
+details and the design are in
 [`MULTIFILE_SNIPPETS.md`](../MULTIFILE_SNIPPETS.md); the command reference is in
 the [CLI reference](cli.md#scaffold).
 

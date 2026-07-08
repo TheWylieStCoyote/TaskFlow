@@ -57,6 +57,8 @@ pub struct CompiledFilePiece {
     pub content: PieceContent,
     /// What to do when the target already exists.
     pub on_exists: OnExists,
+    /// The container name to inject into (`${param}`-templated), if any.
+    pub into: Option<String>,
     /// Text prepended only when the target file is created.
     pub on_create: Option<String>,
     /// Whether this piece receives the tabstops/final cursor.
@@ -871,9 +873,11 @@ fn compile_file_piece(
         }
     };
 
-    // Collect and check every `${name}` this section references (path + content).
+    // Collect and check every `${name}` this section references (path + `into`
+    // + content).
     let path_refs = file.path.as_deref().map(param_markers).unwrap_or_default();
-    for name in path_refs.into_iter().chain(content_refs) {
+    let into_refs = file.into.as_deref().map(param_markers).unwrap_or_default();
+    for name in path_refs.into_iter().chain(into_refs).chain(content_refs) {
         if !declared.contains(name.as_str()) {
             return Err(invalid(format!(
                 "file section `{label}` references undeclared parameter `{name}`"
@@ -887,6 +891,7 @@ fn compile_file_piece(
         target,
         content,
         on_exists: file.on_exists,
+        into: file.into.clone(),
         on_create: file.on_create.clone(),
         primary: file.primary,
     })

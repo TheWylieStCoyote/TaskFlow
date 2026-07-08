@@ -287,6 +287,11 @@ fn every_trigger_expands_in_every_language() {
         let id = lang.profile.id;
         let context = ctx_for(id);
         for snippet in lang.set.iter() {
+            // Multi-file snippets are expanded by the `scaffold` pipeline, not
+            // by `expand`, so a bare expansion deliberately errors.
+            if snippet.multifile.is_some() {
+                continue;
+            }
             for mode in [TabstopMode::Keep, TabstopMode::Strip] {
                 let result = engine().expand(&snippet.trigger, id, &context, mode);
                 assert!(

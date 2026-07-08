@@ -93,10 +93,14 @@ pub struct FileDef {
     /// exclusive with `body`.
     #[serde(default)]
     pub expands: Option<String>,
-    /// What to do when the target file already exists (default: `inject`,
-    /// which degrades to `append` until the tree-sitter injector lands).
+    /// What to do when the target file already exists (default: `inject`).
     #[serde(default)]
     pub on_exists: OnExists,
+    /// For `on_exists = "inject"`: the name of the container (class/struct/…)
+    /// to inject into, `${param}`-substituted. Absent injects into the last
+    /// container in the file.
+    #[serde(default)]
+    pub into: Option<String>,
     /// Text prepended only when the file is *created* (e.g. `#pragma once`, an
     /// import block).
     #[serde(default)]

@@ -279,3 +279,31 @@ expands = "guard>struct:${name}"
 description = "include-guarded enum for a header (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "guard>enum:${name}>variant"
+
+[snippets.munit]
+description = "a .h/.c translation unit for one function (multi-file)"
+params = [{ name = "name", kind = "ident", default = "unit" }]
+
+[snippets.munit.files.header]
+path = "${name}.h"
+on_exists = "create"
+body = '''
+#ifndef ${name}_h
+#define ${name}_h
+
+void ${name}(void);
+
+#endif
+'''
+
+[snippets.munit.files.source]
+path = "${name}.c"
+on_exists = "create"
+primary = true
+body = '''
+#include "${name}.h"
+
+void ${name}(void) {
+    $0
+}
+'''

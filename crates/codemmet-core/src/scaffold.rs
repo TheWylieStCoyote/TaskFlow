@@ -315,6 +315,8 @@ fn render_template(
 }
 
 #[cfg(test)]
+// Expected values like `${1:x}` are LSP snippet syntax, not format strings.
+#[allow(clippy::literal_string_with_formatting_args)]
 mod tests {
     use super::*;
     use crate::config::loader::{CompiledMultiFile, PieceContent};
@@ -429,7 +431,7 @@ mod tests {
         };
         let path_piece = piece("m", FileTarget::Path("${app}/models.py".to_owned()), false);
         assert_eq!(
-            resolve_path(&path_piece, &v, &opts_no_file).unwrap(),
+            resolve_path(&path_piece, &v, &opts_no_file).expect("path target resolves"),
             Path::new("/proj/blog/models.py")
         );
 
@@ -438,10 +440,13 @@ mod tests {
             current_file: Some(cur),
         };
         let self_piece = piece("s", FileTarget::SelfFile, false);
-        assert_eq!(resolve_path(&self_piece, &v, &opts).unwrap(), cur);
+        assert_eq!(
+            resolve_path(&self_piece, &v, &opts).expect("self target resolves"),
+            cur
+        );
         let sib = piece("d", FileTarget::Sibling(".cpp".to_owned()), false);
         assert_eq!(
-            resolve_path(&sib, &v, &opts).unwrap(),
+            resolve_path(&sib, &v, &opts).expect("sibling target resolves"),
             Path::new("/proj/src/widget.cpp")
         );
 
@@ -454,17 +459,18 @@ mod tests {
 
     #[test]
     fn standalone_node_rejects_chains() {
-        assert!(standalone_node(&crate::abbr::parse("djfeature:blog").unwrap()).is_ok());
+        let parse = |a: &str| crate::abbr::parse(a).expect("fixture parses");
+        assert!(standalone_node(&parse("djfeature:blog")).is_ok());
         assert!(matches!(
-            standalone_node(&crate::abbr::parse("a>b").unwrap()),
+            standalone_node(&parse("a>b")),
             Err(ScaffoldError::NotStandalone)
         ));
         assert!(matches!(
-            standalone_node(&crate::abbr::parse("a+b").unwrap()),
+            standalone_node(&parse("a+b")),
             Err(ScaffoldError::NotStandalone)
         ));
         assert!(matches!(
-            standalone_node(&crate::abbr::parse("a*2").unwrap()),
+            standalone_node(&parse("a*2")),
             Err(ScaffoldError::NotStandalone)
         ));
     }

@@ -268,3 +268,8 @@ ${value.type:Type} ${value:name};
 description = "include-guarded struct for a header (composite)"
 params = [{ name = "name", kind = "ident", default = "Name" }]
 expands = "guard>struct:${name}"
+
+[snippets.henum]
+description = "include-guarded enum for a header (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "guard>enum:${name}>variant"

@@ -51,12 +51,17 @@ triggers that already exist in its pack, so it stays DRY):
 | Python | `classp:Name` | `class>init+str+repr` (+options `eq`/`hash`/`len`) | class with common dunders |
 | Python | `ctxmgr:Name` | `class>init+__enter__+__exit__` | context-manager class |
 | Rust | `dstruct:Name` | `derive+struct>field` | `#[derive]`d struct |
+| Rust | `denum:Name` | `derive+enum>variant` | `#[derive]`d enum |
 | Rust | `newtype:Name` | `(struct>field)+impl` | struct paired with an impl block |
 | Rust | `testmod` | `tmod>test` | test module with a first test |
 | Go | `stringer:Name` | `(struct>field)+meth:String` | struct + a `String()` method |
+| Go | `errtype:Name` | `(struct>field)+meth:Error` | error struct + an `Error()` method |
 | Go | `maincmd` | `pkg:main+main` | `package main` + `func main` |
 | TS/JS | `classc:Name` | `class>ctor` | class with a constructor |
 | C | `hstruct:Name` | `guard>struct` | include-guarded struct for a header |
+| C | `henum:Name` | `guard>enum>variant` | include-guarded enum for a header |
+| C++ | `hclass:Name` | `guard>class` | include-guarded class for a header |
+| C++ | `nsclass:Name` | `ns>class` | class inside a namespace |
 
 Each accepts the name inline (`newtype:Point`) or leaves a tabstop when bare
 (`newtype`), takes freeform `>`-children (`ctxmgr:Timer>def:reset`), and — for
@@ -260,8 +265,7 @@ every failure and exits non-zero. A composite is rejected when it:
   (`references unknown trigger \`nosuchtrigger\``);
 - forms a definitional cycle with other composites.
 
-The builtin `classp` in the Python pack passes `check` (7 languages, 265
-triggers).
+The builtin composites all pass `check` (7 languages, 281 triggers).
 
 ---
 

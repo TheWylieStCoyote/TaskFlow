@@ -127,3 +127,13 @@ description = "lambda expression"
 body = '''
 [$1]($2) { $0 }
 '''
+
+[snippets.hclass]
+description = "include-guarded class for a header (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "guard>class:${name}"
+
+[snippets.nsclass]
+description = "namespaced class (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "ns>class:${name}"

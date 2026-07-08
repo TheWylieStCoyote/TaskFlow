@@ -23,6 +23,14 @@ JavaScript pack.
 Every trigger name in the tables below links to a detailed, runnable example
 on that language's page under [examples](examples/README.md).
 
+The tables list each pack's base triggers. Every pack also ships a few
+**composite** triggers — aliases that expand to a scaffold built from these
+base triggers (Rust `dstruct`/`denum`, Go `stringer`/`errtype`, C `hstruct`/
+`henum`, C++ `hclass`/`nsclass`, Python `classp`/`ctxmgr`, and more). They show
+up in `codemmet list` alongside the base triggers and are documented, with the
+full built-in set, under
+[custom snippets → composite snippets](snippets.md#composite-snippets).
+
 You can regenerate any of the trigger lists below live from your installed
 build with `codemmet list --lang <id>`, and `--json` is available for
 machine-readable output:

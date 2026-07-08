@@ -348,3 +348,8 @@ expands = "(struct:${name}>field)+meth:String"
 [snippets.maincmd]
 description = "package main with a main function (composite)"
 expands = "pkg:main+main"
+
+[snippets.errtype]
+description = "error struct with an Error() method (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "(struct:${name}>field)+meth:Error"

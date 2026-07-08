@@ -165,7 +165,7 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 252 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 282 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 Confirm the trigger is registered (`list` shows it merged in alphabetically):
@@ -242,10 +242,12 @@ Field by field:
 | `params[].name` | param entry | The name referenced as `${name}` in the body. |
 | `params[].kind` | param entry | One of `ident`, `int`, `str` (default `str`). Controls glued-argument binding. |
 | `params[].default` | param entry | Placeholder shown when no argument is supplied. |
-| `body` | `[snippets.<trigger>]` | Required unless `disabled`. The template. |
+| `body` | `[snippets.<trigger>]` | Required unless `disabled` or `expands`. The template. |
 | `scope` | `[snippets.<trigger>]` | Optional. The scope `${child}` content lives in. |
 | `variants` | `[[snippets.<trigger>.variants]]` | Optional context-conditional bodies. |
 | `disabled` | `[snippets.<trigger>]` | In a user pack, removes the builtin of this name. |
+| `expands` | `[snippets.<trigger>]` | Makes this a [composite](#composite-snippets): an abbreviation re-expanded at render time (mutually exclusive with `body`). |
+| `options` | `[snippets.<trigger>.options]` | Named selectable fragments for a composite; the caller picks them by name. |
 
 ## Parameters and argument binding
 
@@ -435,6 +437,142 @@ Variants are matched top to bottom; the first whose `context` matches the
 surrounding scope wins, otherwise the top-level `body` is used. A `context` may
 also be `ts:<node_kind>` to match a raw tree-sitter node kind directly.
 
+## Composite snippets
+
+A normal snippet has a literal `body`. A **composite** has an `expands` field
+instead: an *abbreviation* that is re-expanded at render time. It lets you build
+a higher-level scaffold — a class with the common dunders, a derived struct, an
+include-guarded header — out of the trigger vocabulary you already have, so the
+scaffold stays DRY: improve the underlying `class`/`struct`/`guard` triggers and
+every composite built on them follows.
+
+```toml
+[meta]
+language = "rust"
+
+[snippets.dstruct]
+description = "#[derive]d struct"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "derive+struct:${name}>field"
+```
+
+```sh
+codemmet expand --lang rust "dstruct:Point"
+```
+
+```text
+#[derive(Debug, Clone)]
+struct Point {
+    name: Type,
+}
+```
+
+Because a composite expands to an ordinary abbreviation, everything the parser
+and renderer already do — composition (`>`/`+`/`*`), tabstops, context
+variants, indentation, global tabstop renumbering — just works. The only new
+piece is *resolution*: substitute the parameters, then re-parse and compose.
+
+### `expands` and `body` are mutually exclusive
+
+A composite declares `expands` and **not** `body`. It also may **not** declare
+`scope` or `variants` — the construct it expands to (say `struct`) already owns
+its child scope and any context variants. `description` and `params` work
+exactly as for a normal snippet.
+
+### `${name}` is passed through, not substituted as text
+
+A `${name}` in `expands` marks an **argument position** for a sub-trigger
+(`struct:${name}`). It is resolved by passing the composite's argument *through*
+to that sub-trigger, so the underlying snippet handles it natively:
+
+- a **bound** param (the caller supplied it) emits the value as that argument —
+  `dstruct:Point` → `struct:Point` → `struct Point`;
+- an **unbound** param **drops** the argument, so the sub-trigger's own default
+  surfaces as a real *tabstop* — bare `dstruct` → `struct` → `struct ${1:Name}`
+  in keep mode, a tabstop you can tab into. The composite param's `default` is
+  **not** pasted in as text.
+
+Because values are spliced back through the abbreviation grammar, **composite
+params should be `ident` or `int` kind**. A `str` value containing operator
+characters (`>`, `+`, `:`) would be re-parsed as grammar and fail at render
+time.
+
+One consequence: an unbound argument that sits *before* a bound one in the same
+sub-trigger's argument list can't be expressed (the grammar has no empty
+positional slot) and is rejected with a clear error. The fix is to declare
+droppable (optional) params **last**.
+
+### Options and freeform children
+
+A composite carries up to three kinds of content, merged as siblings at one
+insertion point — the **children of the last top-level node** of `expands` —
+in this order:
+
+1. the **base** pieces written directly in `expands`;
+2. **selectable options** the caller picks by name from an `options` table;
+3. **freeform `>`-children** the caller supplies.
+
+The `[snippets.<trigger>.options]` table is a menu of named abbreviation
+fragments. Any bare argument left after the declared params bind is treated as
+an option name:
+
+```toml
+[snippets.classp]
+description = "class with common dunder methods"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "class:${name}>(init+str+repr)"
+
+[snippets.classp.options]
+eq   = "def:__eq__"
+hash = "def:__hash__"
+len  = "def:__len__"
+```
+
+```sh
+# base only; base + selected options; base + option + freeform child
+codemmet expand --lang python "classp:Point"
+codemmet expand --lang python "classp:Point,eq,hash"
+codemmet expand --lang python "classp:Point,eq>def:validate"
+```
+
+An unknown option name is an error (`composite \`classp\` has no option \`…\``).
+
+### Full-node semantics and safety
+
+A composite is a normal node in a chain: `classp:P>def:x` merges `def:x` into
+the class body, `classp:P+pr` adds a sibling, `ifmain>classp:P` nests the whole
+expansion one level deeper, and `classp:P*2` stamps two independent copies.
+A composite may reference other composites; **definitional cycles are rejected
+at compile time** and a runtime depth cap (16 levels) bounds pathological
+caller nesting. A **data-driven** repeat (`classp*@Msg`) is *not* supported on a
+composite — it has no single collection subject.
+
+### Built-in composites
+
+Every language pack ships a starter set, each built only from triggers that
+already exist in its pack:
+
+| Lang | Trigger | Expands to | What you get |
+| --- | --- | --- | --- |
+| Python | `classp:Name` | `class>init+str+repr` (+options `eq`/`hash`/`len`/`ord`) | class with common dunders |
+| Python | `ctxmgr:Name` | `class>init+__enter__+__exit__` | context-manager class |
+| Rust | `dstruct:Name` | `derive+struct>field` | `#[derive]`d struct |
+| Rust | `denum:Name` | `derive+enum>variant` | `#[derive]`d enum |
+| Rust | `newtype:Name` | `(struct>field)+impl` | struct paired with an impl block |
+| Rust | `testmod` | `tmod>test` | test module with a first test |
+| Go | `stringer:Name` | `(struct>field)+meth:String` | struct + a `String()` method |
+| Go | `errtype:Name` | `(struct>field)+meth:Error` | error struct + an `Error()` method |
+| Go | `maincmd` | `pkg:main+main` | `package main` + `func main` |
+| TS/JS | `classc:Name` | `class>ctor` | class with a constructor |
+| C | `hstruct:Name` | `guard>struct` | include-guarded struct for a header |
+| C | `henum:Name` | `guard>enum>variant` | include-guarded enum for a header |
+| C++ | `hclass:Name` | `guard>class` | include-guarded class for a header |
+| C++ | `nsclass:Name` | `ns>class` | class inside a namespace |
+
+`codemmet check` validates composites like any other snippet, and additionally
+rejects an `expands`/option fragment that doesn't parse, a reference to a
+trigger that doesn't resolve, and definitional cycles.
+
 ## Validating with `codemmet check`
 
 `codemmet check` validates the override directory and reports the first
@@ -464,7 +602,7 @@ codemmet check
 ```
 
 ```text
-ok: 7 languages, 250 triggers (user snippets: /home/you/.config/codemmet/snippets)
+ok: 7 languages, 281 triggers (user snippets: /home/you/.config/codemmet/snippets)
 ```
 
 ## See also

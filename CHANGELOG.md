@@ -8,6 +8,20 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Composite (alias) snippets.** A snippet can now define `expands` instead of
+  `body` — an *abbreviation* that is re-expanded at render time — so a
+  higher-level scaffold is built out of the trigger vocabulary you already have
+  and stays DRY. `${name}` params are passed through to the underlying
+  sub-triggers (a bound arg becomes a value, an unbound one drops to that
+  trigger's own tabstop), an optional `[snippets.x.options]` table offers
+  caller-selectable named fragments (`classp:Point,eq`), and freeform
+  `>`-children merge into the scaffold. Composites are ordinary chain nodes,
+  may reference other composites (definitional cycles and >16-level nesting are
+  rejected), and are validated by `codemmet check`. Builtins ship for every
+  language — Python `classp`/`ctxmgr`, Rust `dstruct`/`denum`/`newtype`/
+  `testmod`, Go `stringer`/`errtype`/`maincmd`, TS/JS `classc`, C
+  `hstruct`/`henum`, and C++ `hclass`/`nsclass`. See
+  [custom snippets → composite snippets](docs/snippets.md#composite-snippets).
 - **Capture a snippet from example.** `codemmet capture --lang X --name trigger`
   (and `:CodemmetCapture` on a Neovim selection) turns a chunk of real code into
   a reusable parameterized snippet in a project pack — repeated identifiers

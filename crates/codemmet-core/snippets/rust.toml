@@ -405,3 +405,8 @@ expands = "(struct:${name}>field)+impl:${name}"
 [snippets.testmod]
 description = "test module with a first test case (composite)"
 expands = "tmod>test"
+
+[snippets.denum]
+description = "#[derive]d enum (composite)"
+params = [{ name = "name", kind = "ident", default = "Name" }]
+expands = "derive+enum:${name}>variant"

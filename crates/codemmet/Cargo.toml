@@ -22,7 +22,7 @@ codemmet-tsctx = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 lsp-server = { workspace = true }
 lsp-types = { workspace = true }
-ratatui = { version = "0.29", optional = true }
+ratatui = { version = "0.30", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

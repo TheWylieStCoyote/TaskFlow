@@ -51,7 +51,11 @@ fn event_loop<B: Backend>(
     events: &mut impl EventSource,
 ) -> io::Result<()> {
     loop {
-        terminal.draw(|frame| render(frame, trainer))?;
+        // ratatui 0.30 gave `Backend` an associated `Error` type, so `draw`
+        // no longer returns `io::Result`; fold the backend error into one.
+        terminal
+            .draw(|frame| render(frame, trainer))
+            .map_err(|err| io::Error::other(err.to_string()))?;
         let Some(event) = events.next_event()? else {
             break;
         };

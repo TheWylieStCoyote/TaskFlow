@@ -487,30 +487,37 @@ to that sub-trigger, so the underlying snippet handles it natively:
 
 - a **bound** param (the caller supplied it) emits the value as that argument —
   `dstruct:Point` → `struct:Point` → `struct Point`;
-- an **unbound** param **drops** the argument, so the sub-trigger's own default
-  surfaces as a real *tabstop* — bare `dstruct` → `struct` → `struct ${1:Name}`
-  in keep mode, a tabstop you can tab into. The composite param's `default` is
-  **not** pasted in as text.
+- an **unbound** param passes through as a *tabstop* carrying the composite
+  param's own `default` as placeholder — bare `dstruct` → `struct ${1:Name}` in
+  keep mode, a tabstop you can tab into.
 
-Because values are spliced back through the abbreviation grammar, **composite
-params should be `ident` or `int` kind**. A `str` value containing operator
-characters (`>`, `+`, `:`) would be re-parsed as grammar and fail at render
-time.
+When one unbound param flows into **several** sub-triggers, they share a single
+tabstop and **mirror** each other, so the editor keeps them in sync. Rust
+`newtype` = `(struct:${name}>field)+impl:${name}` is the motivating case — bare,
+its `name` renders once with a placeholder (`struct ${1:Name}`) and once as a
+bare mirror (`impl $1`).
 
-One consequence: an unbound argument that sits *before* a bound one in the same
-sub-trigger's argument list can't be expressed (the grammar has no empty
-positional slot) and is rejected with a clear error. The fix is to declare
-droppable (optional) params **last**.
+Values are spliced into the sub-trigger's arguments *after* parsing, so operator
+characters (`>`, `+`, `:`, `,`) in a value pass through verbatim — a composite
+param may be any kind (`ident`, `int`, or `str`). And because a passed-through
+tabstop keeps its position filled, an unbound argument may sit before a bound
+one (`fori:${var},${end}` with only `end` supplied renders `var` as a tabstop
+ahead of it).
 
 ### Options and freeform children
 
 A composite carries up to three kinds of content, merged as siblings at one
-insertion point — the **children of the last top-level node** of `expands` —
-in this order:
+insertion point — by default the **children of the last top-level node** of
+`expands` — in this order:
 
 1. the **base** pieces written directly in `expands`;
 2. **selectable options** the caller picks by name from an `options` table;
 3. **freeform `>`-children** the caller supplies.
+
+To place them somewhere else, write `${child}` directly in `expands` (at most
+once): the extras go there instead of at the last node — for example
+`expands = "(impl:${name}>${child})+pr"` drops them into the `impl` body rather
+than after the trailing `pr`.
 
 The `[snippets.<trigger>.options]` table is a menu of named abbreviation
 fragments. Any bare argument left after the declared params bind is treated as

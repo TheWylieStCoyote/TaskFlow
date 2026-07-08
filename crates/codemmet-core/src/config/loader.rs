@@ -203,8 +203,9 @@ impl SnippetSet {
             for (label, fragment) in fragments {
                 // Substitute a safe identifier for every `${name}` so the
                 // fragment parses; the concrete values do not affect which
-                // *triggers* it references.
-                let text = substitute_markers(fragment, |_| "x".to_owned());
+                // *triggers* it references. `${child}` becomes its parse-safe
+                // sentinel, which `collect_referenced_triggers` skips.
+                let text = substitute_markers(&substitute_child_slot(fragment), |_| "x".to_owned());
                 let ast = crate::abbr::parse(&text).map_err(|err| {
                     invalid(format!(
                         "{label} fragment `{fragment}` does not parse: {err}"
@@ -227,6 +228,12 @@ fn collect_referenced_triggers<'s>(
     invalid: &impl Fn(String) -> ConfigError,
 ) -> Result<(), ConfigError> {
     for node in nodes {
+        // The `${child}` insertion point parses as this sentinel word; it is
+        // not a trigger, so skip it (the renderer replaces it with the extras).
+        if node.word == CHILD_SENTINEL {
+            collect_referenced_triggers(set, &node.children, refs, invalid)?;
+            continue;
+        }
         match set.resolve_word(&node.word) {
             None => {
                 return Err(invalid(format!(
@@ -300,6 +307,23 @@ pub fn substitute_markers(text: &str, mut value: impl FnMut(&str) -> String) -> 
     }
     out.push_str(rest);
     out
+}
+
+/// The reserved `${child}` insertion-point name in a composite's `expands`.
+pub const COMPOSITE_CHILD_NAME: &str = "child";
+
+/// The parse-safe word a composite's `${child}` marker becomes before parsing.
+///
+/// It is a real WORD (so it parses as a node) that is distinctive enough never
+/// to collide with a real trigger; the renderer replaces the resulting node
+/// with the composite's extras, and validation skips it.
+pub const CHILD_SENTINEL: &str = "CMMTCHILDSLOTCMMT";
+
+/// Rewrite a composite fragment's `${child}` markers to [`CHILD_SENTINEL`] so
+/// the fragment parses and the marker survives as a locatable node.
+#[must_use]
+pub fn substitute_child_slot(text: &str) -> String {
+    text.replace("${child}", CHILD_SENTINEL)
 }
 
 /// Parse one pack's TOML text against the schema.
@@ -524,15 +548,34 @@ fn compile_composite(
                     .to_owned(),
             ));
         }
+        if param.name == COMPOSITE_CHILD_NAME {
+            return Err(invalid(
+                "parameter name `child` is reserved for the `${child}` insertion point".to_owned(),
+            ));
+        }
         if !declared.insert(param.name.as_str()) {
             return Err(invalid(format!("duplicate parameter `{}`", param.name)));
         }
     }
 
+    // `${child}` is the explicit insertion point for options and freeform
+    // children; it belongs in `expands` and at most once.
+    if expands.matches("${child}").count() > 1 {
+        return Err(invalid(
+            "a composite may use `${child}` at most once in `expands`".to_owned(),
+        ));
+    }
+    if def.options.values().any(|f| f.contains("${child}")) {
+        return Err(invalid(
+            "`${child}` may only appear in `expands`, not in an option fragment".to_owned(),
+        ));
+    }
+
     let fragments = std::iter::once(expands).chain(def.options.values().map(String::as_str));
     let mut referenced: BTreeSet<String> = BTreeSet::new();
     for fragment in fragments {
-        for name in param_markers(fragment) {
+        // `${child}` is not a parameter reference; hide it before scanning.
+        for name in param_markers(&substitute_child_slot(fragment)) {
             if !declared.contains(name.as_str()) {
                 return Err(invalid(format!(
                     "composite references undeclared parameter `{name}`"
@@ -1088,6 +1131,60 @@ mod tests {
         );
         assert!(
             matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("does not parse")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_with_explicit_child_slot_compiles() {
+        // `${child}` is a valid insertion point, not an undeclared parameter.
+        let set = compile_one(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo>${child}\"\n"),
+        );
+        let bar = set.get("bar").expect("bar should compile");
+        assert_eq!(
+            bar.composite.as_ref().map(|c| c.expands.as_str()),
+            Some("foo>${child}")
+        );
+    }
+
+    #[test]
+    fn composite_reserved_child_param_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack(
+                "[snippets.bar]\nparams = [{ name = \"child\", kind = \"ident\" }]\nexpands = \"foo\"\n",
+            ),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("`child` is reserved")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_child_slot_in_option_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack(
+                "[snippets.bar]\nexpands = \"foo\"\n[snippets.bar.options]\nx = \"foo>${child}\"\n",
+            ),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("only appear in `expands`")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn composite_multiple_child_slots_is_error() {
+        let err = compile_err(
+            "user",
+            &composite_pack("[snippets.bar]\nexpands = \"foo>${child}+foo>${child}\"\n"),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("at most once")),
             "{err:?}"
         );
     }

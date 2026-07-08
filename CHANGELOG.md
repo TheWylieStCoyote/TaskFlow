@@ -24,6 +24,12 @@ follows [Semantic Versioning](https://semver.org/).
   [custom snippets → composite snippets](docs/snippets.md#composite-snippets).
   The trainer gains a new capstone **level 8 (composites)** — curated lessons,
   drills, and spaced-repetition review all cover them (`train --level 8`).
+  Composite params are further refined: an unbound param used in several
+  sub-triggers now renders one **mirrored** tabstop (so `newtype` tabs through a
+  single linked name), a `str` value with operator characters passes through
+  verbatim (any param kind is safe), an `expands` may place an explicit
+  `${child}` insertion point instead of defaulting to the last node, and the
+  LSP completes a composite's **option names** after the trigger's comma.
 - **Capture a snippet from example.** `codemmet capture --lang X --name trigger`
   (and `:CodemmetCapture` on a Neovim selection) turns a chunk of real code into
   a reusable parameterized snippet in a project pack — repeated identifiers

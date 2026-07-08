@@ -126,60 +126,65 @@ text:
 
 - a **bound** param (the caller supplied it) → the value is emitted as that
   argument: `classp:Point` → `class:Point` → renders `class Point`;
-- an **unbound** param → the argument is **dropped**, so the sub-trigger's own
-  parameter default surfaces: bare `classp` → `class` (no arg) → renders
-  `class ${1:Name}` in keep mode — a tabstop you can tab into. The declared
-  default is **not** substituted as text.
+- an **unbound** param → a **shared tabstop** is passed through, so the
+  sub-trigger renders a tabstop carrying the *composite* param's own default:
+  bare `classp` → `class` → `class ${1:Name}` in keep mode, a tabstop you can
+  tab into.
 
 ```sh
 codemmet expand --lang python --tabstops keep "classp"        # class ${1:Name}$2: …
 codemmet expand --lang python --tabstops keep "classp:Point"  # class Point$1: …
 ```
 
-The same rule applies to every `${name}` and to option fragments; a name used in
-several sub-triggers passes through to each. Tabstop renumbering stays global
-across the whole merged tree, so the passed-through tabstops interleave
-correctly with the base pieces, options, and freeform children.
+**Mirroring.** A single unbound param used in **several** sub-triggers passes
+the *same* tabstop identity through to each, so the editor keeps them all in
+sync. Rust `newtype` = `(struct:${name}>field)+impl:${name}` is the motivating
+case — bare, its `name` renders once with a placeholder and once as a bare
+mirror:
 
-**Mechanism.** Substitution can't drop an argument at the string level
-(`class:` does not parse), so markers are resolved on the *parsed* tree: each
-`${name}` is first replaced by a parse-safe placeholder, the fragment is parsed,
-then each placeholder that is a **whole argument** is either replaced by the
-bound value or removed. Because values are spliced back through the abbreviation
-grammar, **composite params should be `ident`/`int` kind** — a `str` value
-containing abbreviation operators (`>`, `+`, `:`, …) would be re-interpreted as
-grammar and produce a render-time parse error (`cannot expand composite …`).
-
-**Non-argument markers.** A `${name}` that is *not* a whole argument (embedded
-in a longer arg, or glued into a word) has no argument slot to drop, so it falls
-back to value-or-default **text** substitution. Composite params are meant for
-argument positions; the text fallback keeps odd shapes working rather than
-failing.
-
-**Positional gap (documented limitation).** The abbreviation grammar has no
-empty positional slot, so an **unbound argument that sits *before* a later
-argument** in the same sub-trigger's list cannot be expressed. Example:
-`fori:${var},${end}` with `var` unbound but `end` bound (e.g. via a glued int).
-This is **rejected with a clear error** rather than silently mis-binding:
-
-```text
-unbound parameter `var` leaves a positional gap before a later argument;
-declare optional params last, or pass `var`
+```sh
+codemmet expand --lang rust --tabstops keep "newtype"
+# struct ${1:Name} {           ← placeholder
+#     ${2:name}: ${3:Type},
+# }
+# impl $1 {                    ← mirror of the same tabstop
+#     $0
+# }
 ```
 
-The clean shapes — a single param, or several params where the unbound ones are
-**trailing** (`fori:${var},${end}` with `end` unbound drops cleanly to its
-tabstop) — all work. The rule: put optional (droppable) params last.
+The same identity is shared across the base pieces, selected options, freeform
+children, **and** nested composites. Tabstop renumbering stays global across the
+whole merged tree, so the passed-through tabstops interleave correctly.
 
-Because the pass-through resolves the composite param to the sub-trigger's
-argument, a composite param's own `default` is only observed for the
-non-argument text fallback; in an argument position the *sub-trigger's* default
-governs the unbound case.
+**Mechanism.** Substitution can't drop or blank an argument at the string level
+(`class:` does not parse), so markers are resolved on the *parsed* tree: each
+`${name}` is first replaced by a parse-safe placeholder, the fragment is parsed,
+then each placeholder that is a **whole argument** is replaced by the bound value
+or, when unbound, by a *shared-stop sentinel* that renders as the mirrored
+tabstop. Because a value is spliced into the sub-trigger's argument list **after**
+parsing, it is never re-interpreted as grammar: a `str` value containing operator
+characters (`>`, `+`, `:`, `,`) passes through verbatim, so composite params may
+be any kind (`ident`, `int`, or `str`).
+
+**Non-argument markers.** A `${name}` that is *not* a whole argument (embedded
+in a longer arg, or glued into a word) has no argument slot, so it falls back to
+value-or-default **text** substitution — an unbound embedded use is the plain
+default text, not a tabstop. Composite params are meant for argument positions;
+the text fallback keeps odd shapes working rather than failing.
+
+**Interior arguments.** Because the shared-stop sentinel keeps the position
+filled, an unbound argument that sits *before* a later one — `fori:${var},${end}`
+with `var` unbound but `end` bound via a glued int — is no longer a positional
+gap: `var` simply renders as a tabstop ahead of the bound `end`.
+
+In an argument position the composite param's own `default` is the tabstop
+placeholder (rather than the sub-trigger's default), which is what makes a
+mirrored param show one consistent placeholder across every occurrence.
 
 ### The merge (insertion point)
 
 The base pieces, the selected options, and the freeform children all become
-**siblings at one insertion point**, in that order:
+**siblings at one insertion point**, in that order. By default:
 
 > The insertion point is the **children of the last top-level node** of the
 > parsed `expands`.
@@ -190,6 +195,19 @@ inside the class body. When the base is a single leaf (`class:${name}` with no
 `>`), the extras simply become that node's children. If the last top-level node
 is itself a leaf snippet with no `${child}` slot, the extras append after its
 lines (the engine's existing no-slot behaviour).
+
+**Explicit `${child}` slot.** A composite may instead write `${child}` directly
+in its `expands` to place the extras somewhere other than the last node — for
+example into an inner group, or into the first of several top-level nodes:
+
+```toml
+# extras land in the impl body, not after the trailing `pr`
+expands = "(impl:${name}>${child})+pr"
+```
+
+`${child}` may appear **at most once** and only in `expands` (not in an option
+fragment); `check` enforces both. With no extras to insert, the marker simply
+vanishes.
 
 ```sh
 codemmet expand --lang python "classp:Point,eq>def:validate"
@@ -303,25 +321,24 @@ error: invalid snippet `b` in composite: composite cycle: `b` expands through `a
 
 ---
 
+## Resolved refinements
+
+- **Multi-use param mirroring.** An unbound param used in several sub-triggers
+  now shares one tabstop identity (see "Mirroring" above), so `newtype` and
+  friends tab through one linked name instead of retyping it.
+- **Explicit `${child}` slot in `expands`.** A composite may place `${child}` in
+  its `expands` string to control where options and freeform children land,
+  instead of the implicit "last top-level node" default.
+- **`str`-value injection safety.** Values are spliced into the sub-trigger
+  argument list after parsing, so operator characters survive verbatim; any
+  param kind is safe.
+- **Interior arguments.** An unbound argument before a bound one is handled (it
+  renders as a tabstop) rather than rejected as a positional gap.
+- **LSP completion of option names.** The server offers a composite's option
+  names after the trigger's comma.
+
 ## Open questions / future work (designed, not built)
 
-- **Interior positional gaps.** An unbound argument *before* a bound one in the
-  same sub-trigger arg list is rejected (see "Positional gap" above) rather than
-  handled. Handling it would need either named arguments or an empty-slot syntax
-  in the abbreviation grammar; the trailing-optional convention avoids it in
-  practice.
-- **Explicit `${child}` slot in `expands`.** The insertion point is currently
-  implicit ("last top-level node"), which covers the common scaffold cleanly. A
-  dedicated slot marker would let a composite place the extras somewhere other
-  than the last node (e.g. into an inner group). The sketch: substitute the
-  marker to a reserved sentinel node, then splice the extras at that node's
-  position after parsing.
-- **`str`-value injection safety.** Rather than documenting "use `ident`
-  params", the renderer could quote/escape substituted `str` values so operator
-  characters survive re-parsing verbatim.
 - **Error origin.** Composite validation reports the offending trigger but a
   generic `in composite` origin rather than the source file; threading the pack
   origin onto the compiled snippet would sharpen the message.
-- **LSP completion of option names.** Options are discoverable via
-  `list`/docs today; a completion provider could offer them after the composite
-  trigger's comma.

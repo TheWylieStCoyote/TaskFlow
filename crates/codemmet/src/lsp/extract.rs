@@ -148,6 +148,60 @@ pub fn final_segment(candidate: &str) -> Option<&str> {
     is_word.then_some(segment)
 }
 
+/// Node-boundary operators: the ones that separate whole nodes, as opposed to
+/// `:`/`,` which separate a node's arguments.
+const NODE_OPS: &[char] = &['>', '+', '*', '(', ')', '^'];
+
+/// The trigger word and argument pieces of the **last node** in `candidate`,
+/// split for option-name completion.
+#[derive(Debug, PartialEq, Eq)]
+pub struct NodeArgs<'a> {
+    /// The node's leading word (a bare or glued trigger, e.g. `classp` or
+    /// `classpWidget`), before the first `:`/`,`.
+    pub trigger: &'a str,
+    /// The `:`/`,`-separated argument pieces after the trigger, in order. The
+    /// **last** piece is the one being typed (possibly empty); earlier pieces
+    /// are committed. Empty when no argument has been introduced yet.
+    pub args: Vec<&'a str>,
+}
+
+/// Parse the final node of `candidate` into its trigger and argument pieces,
+/// for composite option-name completion. Quote-aware (a `,` inside a quoted
+/// argument does not split). Returns `None` when the cursor sits inside an open
+/// quote or escape.
+pub fn current_node_args(candidate: &str) -> Option<NodeArgs<'_>> {
+    // The node starts just after the last unquoted node-boundary operator.
+    let mut scanner = QuoteScanner::default();
+    let mut node_start = 0;
+    for (i, c) in candidate.char_indices() {
+        if scanner.step(c) == Step::Plain && NODE_OPS.contains(&c) {
+            node_start = i + c.len_utf8();
+        }
+    }
+    let node = &candidate[node_start..];
+
+    // Split the node at its unquoted `:`/`,` argument separators.
+    let mut scanner = QuoteScanner::default();
+    let mut pieces: Vec<&str> = Vec::new();
+    let mut piece_start = 0;
+    for (i, c) in node.char_indices() {
+        if scanner.step(c) == Step::Plain && (c == ':' || c == ',') {
+            pieces.push(&node[piece_start..i]);
+            piece_start = i + c.len_utf8();
+        }
+    }
+    if scanner.is_open() {
+        return None;
+    }
+    pieces.push(&node[piece_start..]);
+
+    let (trigger, args) = pieces.split_first()?;
+    Some(NodeArgs {
+        trigger,
+        args: args.to_vec(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +321,40 @@ mod tests {
         assert_eq!(final_segment("pr:\"hel"), None);
         assert_eq!(final_segment("pr:a\\"), None);
         assert_eq!(final_segment("pr:\"a b\""), None);
+    }
+
+    fn node(candidate: &str) -> Option<(&str, Vec<&str>)> {
+        current_node_args(candidate).map(|n| (n.trigger, n.args))
+    }
+
+    #[test]
+    fn current_node_args_splits_trigger_and_args() {
+        assert_eq!(node("classp"), Some(("classp", vec![])));
+        assert_eq!(node("classp:Point"), Some(("classp", vec!["Point"])));
+        assert_eq!(node("classp:Point,"), Some(("classp", vec!["Point", ""])));
+        assert_eq!(
+            node("classp:Point,eq,"),
+            Some(("classp", vec!["Point", "eq", ""]))
+        );
+        assert_eq!(node("classpWidget,e"), Some(("classpWidget", vec!["e"])));
+    }
+
+    #[test]
+    fn current_node_args_uses_only_the_last_node() {
+        assert_eq!(
+            node("ifmain>classp:Point,"),
+            Some(("classp", vec!["Point", ""]))
+        );
+        assert_eq!(node("a+classp:P,e"), Some(("classp", vec!["P", "e"])));
+    }
+
+    #[test]
+    fn current_node_args_respects_quotes() {
+        // A comma inside a quoted argument does not split; pieces keep their
+        // raw text (quotes included — option names are never quoted, so it
+        // does not matter for completion).
+        assert_eq!(node("note:\"a,b\","), Some(("note", vec!["\"a,b\"", ""])));
+        // An open quote means the cursor is mid-argument: no node.
+        assert_eq!(node("note:\"a,b"), None);
     }
 }

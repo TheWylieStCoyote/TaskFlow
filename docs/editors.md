@@ -13,7 +13,9 @@ There are two ways to trigger an expansion:
   expansion with tabstops (`$1`, `${1:x}`, `$0`) you can jump between. This works
   in every LSP client with completion support and needs no extra key bindings.
   Completion is intentionally suppressed inside strings and comments (the server
-  is tree-sitter aware).
+  is tree-sitter aware). After a [composite](snippets.md#composite-snippets)
+  trigger and its argument, typing a comma also offers that composite's
+  selectable **option names** (`classp:Point,` → `eq`, `hash`, `len`).
 - **Explicit expand and wrap commands.** The server exposes two workspace
   commands: `codemmet.expand` expands the abbreviation before the cursor, and
   `codemmet.wrap` wraps a selection in an abbreviation. Binding these to keys

@@ -1,13 +1,15 @@
 //! Composition and rendering: abbreviation AST + compiled snippets → text.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Write as _;
 
 use std::collections::BTreeMap;
 
 use crate::abbr::{AbbrNode, Abbreviation, Repeat};
 use crate::config::loader::{
-    CompiledComposite, CompiledSnippet, SnippetSet, parse_scope_name, substitute_markers,
+    CHILD_SENTINEL, CompiledComposite, CompiledSnippet, SnippetSet, parse_scope_name,
+    substitute_child_slot, substitute_markers,
 };
 use crate::config::schema::ParamKind;
 use crate::context::{Collection, ExpansionContext, Item, Scope};
@@ -184,6 +186,7 @@ fn compose(
         keep_child_slot,
         collections: &ctx.collections,
         composite_depth: 0,
+        shared_emitted: HashSet::new(),
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -254,6 +257,11 @@ struct Composer<'a> {
     /// Current composite-expansion nesting depth, capped at
     /// [`MAX_COMPOSITE_DEPTH`].
     composite_depth: u32,
+    /// Shared tabstop identities (from unbound composite params) already
+    /// emitted once; a second occurrence renders as a bare mirror. Composite
+    /// param pass-through gives every occurrence of one unbound param the same
+    /// [`StopId`] so the editor keeps them in sync (see [`stop_sentinel`]).
+    shared_emitted: HashSet<StopId>,
 }
 
 impl Composer<'_> {
@@ -425,16 +433,28 @@ impl Composer<'_> {
         scope: Scope,
         subject: Option<&str>,
     ) -> Result<Vec<Line>, RenderError> {
-        let expand = |fragment: &str| expand_fragment(fragment, bindings, &snippet.trigger);
-
         let mut out = Vec::new();
         for _ in 0..count {
-            let mut base = expand(&composite.expands)?;
+            // One shared tabstop identity per *unbound* composite param,
+            // allocated fresh for this copy (so `*n` copies stay independent).
+            // Passing the same id through every `${name}` occurrence — in the
+            // base, in selected options, and across nested composites — makes
+            // the editor keep them all in sync. A bound param yields `None`
+            // and passes its value through as literal text instead.
+            let shared_ids: Vec<Option<StopId>> = bindings
+                .iter()
+                .map(|(_, b)| match b {
+                    Binding::Free { default } => Some(self.alloc(default.clone())),
+                    Binding::Bound(_) => None,
+                })
+                .collect();
+            let trigger = &snippet.trigger;
+            let mut base = expand_fragment(&composite.expands, bindings, &shared_ids, trigger)?;
             // Extras merge as siblings of the base pieces: selected options
             // first (in selection order), then the caller's freeform children.
             let mut extras: Vec<AbbrNode> = Vec::new();
             for fragment in selected {
-                extras.extend(expand(fragment)?);
+                extras.extend(expand_fragment(fragment, bindings, &shared_ids, trigger)?);
             }
             extras.extend(node.children.iter().cloned());
             merge_extras(&mut base, extras);
@@ -545,7 +565,19 @@ impl Composer<'_> {
     ) -> CSpan {
         let binding = bindings.iter().find(|(n, _)| n == name).map(|(_, b)| b);
         match binding {
-            Some(Binding::Bound(value)) => CSpan::Text(sub_repeat_index(value, index)),
+            Some(Binding::Bound(value)) => {
+                // A shared-stop sentinel (an unbound composite param passed
+                // through to this sub-trigger) renders as a tabstop with a
+                // pre-allocated identity, so every sub-trigger that received the
+                // same param stays in sync. The first occurrence carries the
+                // placeholder; the rest mirror it.
+                if let Some(id) = parse_stop_sentinel(value) {
+                    let mirror = !self.shared_emitted.insert(id);
+                    CSpan::Stop { id, mirror }
+                } else {
+                    CSpan::Text(sub_repeat_index(value, index))
+                }
+            }
             other => {
                 // `None` means the body references an undeclared name; treat
                 // it as a free parameter with no default.
@@ -748,16 +780,50 @@ fn dedent(text: &str) -> String {
 /// Merge a composite's extra pieces (options + freeform children) into its
 /// base expansion at the single insertion point.
 ///
-/// The insertion point is the children of the **last top-level node** of the
-/// base abbreviation, so `class:Name>(init+str+repr)` gains the extras as
-/// further siblings of the base methods inside the class body. When the base
-/// is a single leaf node (`class:Name`) the extras simply become its children.
-fn merge_extras(base: &mut [AbbrNode], extras: Vec<AbbrNode>) {
-    if extras.is_empty() {
+/// If `expands` contains an explicit `${child}` marker (parsed as a
+/// [`CHILD_SENTINEL`] node), the extras **replace** that node — spliced into
+/// its parent's child list at that position — so a composite can place them
+/// anywhere, e.g. into an inner group. Otherwise the insertion point is the
+/// children of the **last top-level node**, so `class:Name>(init+str+repr)`
+/// gains the extras as further siblings inside the class body, and a single
+/// leaf base (`class:Name`) simply takes them as its children.
+///
+/// Any leftover sentinel nodes (a `${child}` with no extras, or a stray one)
+/// are stripped so they never reach trigger resolution.
+fn merge_extras(base: &mut Vec<AbbrNode>, mut extras: Vec<AbbrNode>) {
+    if splice_at_child_sentinel(base, &mut extras) {
+        strip_child_sentinels(base);
         return;
     }
-    if let Some(last) = base.last_mut() {
+    if let Some(last) = base.last_mut()
+        && !extras.is_empty()
+    {
         last.children.extend(extras);
+    }
+}
+
+/// Replace the first [`CHILD_SENTINEL`] node (depth-first) with `extras`,
+/// splicing them into its parent's child list at that position. Returns whether
+/// a sentinel was found.
+fn splice_at_child_sentinel(nodes: &mut Vec<AbbrNode>, extras: &mut Vec<AbbrNode>) -> bool {
+    if let Some(pos) = nodes.iter().position(|n| n.word == CHILD_SENTINEL) {
+        let taken = std::mem::take(extras);
+        nodes.splice(pos..=pos, taken);
+        return true;
+    }
+    for node in nodes.iter_mut() {
+        if splice_at_child_sentinel(&mut node.children, extras) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Remove any remaining [`CHILD_SENTINEL`] nodes, recursively.
+fn strip_child_sentinels(nodes: &mut Vec<AbbrNode>) {
+    nodes.retain(|n| n.word != CHILD_SENTINEL);
+    for node in nodes.iter_mut() {
+        strip_child_sentinels(&mut node.children);
     }
 }
 
@@ -770,28 +836,35 @@ fn merge_extras(base: &mut [AbbrNode], extras: Vec<AbbrNode>) {
 ///
 /// - **bound** (the caller supplied it) → the value is emitted as that argument
 ///   (`classp:Point` → `class:Point`);
-/// - **unbound** → the argument is **dropped**, so the sub-trigger's own
-///   parameter default surfaces as a tabstop (`classp` → `class` →
-///   `class ${1:Name}`). The declared default is *not* substituted as text.
+/// - **unbound** → a **shared-stop sentinel** ([`stop_sentinel`]) is emitted as
+///   that argument, carrying the identity in `shared_ids[index]`. Every unbound
+///   occurrence of one param passes the *same* id through, so the sub-triggers
+///   render one **mirrored** tabstop (`newtype` → `struct $1 … impl $1`) rather
+///   than independent ones. The composite param's own default is the
+///   placeholder.
 ///
 /// A marker that is not a whole argument (embedded in a word or in longer arg
-/// text) has no argument slot to drop, so it falls back to value-or-default
-/// text substitution.
+/// text) has no argument slot, so it falls back to value-or-default text
+/// substitution (an unbound embedded use is plain default text, not a tabstop).
 ///
-/// Markers are resolved on the parsed tree (not the string) so an unbound
-/// argument can simply be removed; because the abbreviation grammar has no
-/// empty positional slot, an unbound argument *before* a later argument in the
-/// same list is a positional gap and is rejected with a clear error.
+/// Markers are resolved on the parsed tree (not the string) because an omitted
+/// argument cannot be written literally; the sentinel keeps the position filled
+/// so an unbound argument *before* a later one is no longer a positional gap.
 fn expand_fragment(
     fragment: &str,
     bindings: &[(String, Binding)],
+    shared_ids: &[Option<StopId>],
     trigger: &str,
 ) -> Result<Vec<AbbrNode>, RenderError> {
     let markers = ArgMarkers::new(bindings.len());
-    // Substitute `${name}` with a parse-safe positional marker first: an
-    // omitted argument cannot be written literally (`class:` does not parse),
-    // so the drop must happen after parsing.
-    let text = substitute_markers(fragment, |name| {
+    // Turn any explicit `${child}` insertion point into a locatable sentinel
+    // node before the argument markers go in; `merge_extras` splices the extras
+    // there (or strips it) after parsing.
+    let fragment_text = substitute_child_slot(fragment);
+    // Substitute `${name}` with a parse-safe positional marker: an omitted
+    // argument cannot be written literally (`class:` does not parse), so it is
+    // resolved (to a value or a shared-stop sentinel) after parsing.
+    let text = substitute_markers(&fragment_text, |name| {
         bindings
             .iter()
             .position(|(n, _)| n == name)
@@ -803,7 +876,7 @@ fn expand_fragment(
             trigger: trigger.to_owned(),
             message: format!("expansion `{fragment}` does not parse: {err}"),
         })?;
-    resolve_markers(&mut nodes, bindings, &markers, trigger)?;
+    resolve_markers(&mut nodes, bindings, shared_ids, &markers);
     Ok(nodes)
 }
 
@@ -811,34 +884,32 @@ fn expand_fragment(
 fn resolve_markers(
     nodes: &mut [AbbrNode],
     bindings: &[(String, Binding)],
+    shared_ids: &[Option<StopId>],
     markers: &ArgMarkers,
-    trigger: &str,
-) -> Result<(), RenderError> {
+) {
     for node in nodes.iter_mut() {
-        // A marker in the WORD (or glued into it) has no argument slot to drop,
-        // so it degrades to value-or-default text.
+        // A marker in the WORD (or glued into it) has no argument slot, so it
+        // degrades to value-or-default text.
         if markers.contains_any(&node.word) {
             node.word = markers.substitute_text(&node.word, bindings);
         }
 
-        // Map each argument to its resolved value, or `None` to drop it.
+        // Map each whole-argument marker to its resolved value: a bound param's
+        // value, or a shared-stop sentinel for an unbound one (so it renders a
+        // mirrored tabstop). A marker embedded in longer arg text takes the
+        // text path instead.
         let mut new_args: Vec<String> = Vec::with_capacity(node.args.len());
-        let mut dropped: Option<usize> = None;
         for arg in &node.args {
             if let Some(index) = markers.index_of(arg) {
                 match &bindings[index].1 {
-                    Binding::Bound(value) => {
-                        if let Some(param) = dropped {
-                            return Err(positional_gap(trigger, &bindings[param].0));
+                    Binding::Bound(value) => new_args.push(value.clone()),
+                    Binding::Free { .. } => {
+                        if let Some(id) = shared_ids[index] {
+                            new_args.push(stop_sentinel(id));
                         }
-                        new_args.push(value.clone());
                     }
-                    Binding::Free { .. } => dropped = Some(index),
                 }
             } else {
-                if let Some(param) = dropped {
-                    return Err(positional_gap(trigger, &bindings[param].0));
-                }
                 new_args.push(if markers.contains_any(arg) {
                     markers.substitute_text(arg, bindings)
                 } else {
@@ -848,20 +919,25 @@ fn resolve_markers(
         }
         node.args = new_args;
 
-        resolve_markers(&mut node.children, bindings, markers, trigger)?;
+        resolve_markers(&mut node.children, bindings, shared_ids, markers);
     }
-    Ok(())
 }
 
-/// The positional-gap error: an unbound argument sits before a later one.
-fn positional_gap(trigger: &str, param: &str) -> RenderError {
-    RenderError::Composite {
-        trigger: trigger.to_owned(),
-        message: format!(
-            "unbound parameter `{param}` leaves a positional gap before a later \
-             argument; declare optional params last, or pass `{param}`"
-        ),
-    }
+/// A word-safe-free sentinel string standing in for an unbound composite param
+/// passed through to a sub-trigger's argument. It carries a pre-allocated
+/// [`StopId`]; [`Composer::instantiate_param`] turns it into a mirrored
+/// tabstop. The `\u{1}` guards keep it from ever colliding with real arg text.
+fn stop_sentinel(id: StopId) -> String {
+    format!("\u{1}CMMTSTOP{id}\u{1}")
+}
+
+/// The [`StopId`] carried by a [`stop_sentinel`] value, if `value` is one.
+fn parse_stop_sentinel(value: &str) -> Option<StopId> {
+    value
+        .strip_prefix("\u{1}CMMTSTOP")?
+        .strip_suffix('\u{1}')?
+        .parse()
+        .ok()
 }
 
 /// Parse-safe placeholders standing in for `${name}` argument positions between
@@ -1372,6 +1448,37 @@ mod tests {
                 "fori:${var},${end}",
                 &[],
             ),
+            // One param passed through to two sub-triggers, for the mirroring
+            // test: both `impl`s must share a single tabstop identity.
+            composite(
+                "twin",
+                vec![param("name", ParamKind::Ident, Some("T"))],
+                "impl:${name}+impl:${name}",
+                &[],
+            ),
+            // A `str`-param leaf and a composite that passes a `str` value
+            // through to it — for the injection-safety tests (operator
+            // characters in the value must survive verbatim, not re-parse).
+            snip(
+                "note",
+                vec![param("text", ParamKind::Str, Some("todo"))],
+                "// ${text}$0\n",
+            ),
+            composite(
+                "cnote",
+                vec![param("msg", ParamKind::Str, Some("hi"))],
+                "note:${msg}",
+                &[],
+            ),
+            // An explicit `${child}` slot inside the *first* of two top-level
+            // nodes: extras must land in the `impl` body, not the trailing `pr`
+            // (which is where the last-top-level-node default would put them).
+            composite(
+                "slotc",
+                vec![param("name", ParamKind::Ident, Some("X"))],
+                "(impl:${name}>${child})+pr",
+                &[],
+            ),
             // A deliberately self-referential composite: `from_compiled`
             // skips validation, so this reaches the render-time depth cap.
             composite("loopy", vec![], "loopy", &[]),
@@ -1567,14 +1674,23 @@ mod tests {
 
     #[test]
     fn composite_unbound_param_leaves_a_tabstop() {
-        // Bare `cls` → `impl:${name}` with `name` unbound: the argument is
-        // dropped, so `impl`'s own `name` default surfaces as a tabstop
-        // (`${1:Type}`) rather than being substituted as literal text.
+        // Bare `cls` → `impl:${name}` with `name` unbound: the argument passes
+        // through as a shared-stop sentinel, so it renders a tabstop carrying
+        // the *composite* param's own default (`${1:X}`), not literal text.
         let e = expand("cls", &ctx(), TabstopMode::Keep);
         assert_eq!(
             e.body,
-            "impl ${1:Type} {\n    fn new(&self$2) {\n        $0\n    }\n}"
+            "impl ${1:X} {\n    fn new(&self$2) {\n        $0\n    }\n}"
         );
+    }
+
+    #[test]
+    fn composite_unbound_param_mirrors_across_sub_triggers() {
+        // `twin` → `impl:${name}+impl:${name}`, `name` unbound: both `impl`s
+        // must share ONE tabstop identity so the editor keeps them in sync —
+        // the first carries the placeholder, the second mirrors it as `$1`.
+        let e = expand("twin", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "impl ${1:T} {\n    $2\n}\nimpl $1 {\n    $0\n}");
     }
 
     #[test]
@@ -1585,6 +1701,17 @@ mod tests {
             e.body,
             "impl Point {\n    fn new(&self$1) {\n        $0\n    }\n}"
         );
+    }
+
+    #[test]
+    fn composite_str_value_with_operators_passes_through_verbatim() {
+        // A `str` value is spliced into the sub-trigger's arguments *after*
+        // parsing, so operator characters (`>`, `+`, `:`, `,`) survive verbatim
+        // and are never re-interpreted as abbreviation grammar.
+        let e = expand("cnote:\"a>b+c\"", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "// a>b+c");
+        let e = expand("cnote:\"k:v,w\"", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "// k:v,w");
     }
 
     #[test]
@@ -1603,18 +1730,13 @@ mod tests {
     }
 
     #[test]
-    fn composite_interior_positional_gap_is_error() {
+    fn composite_interior_unbound_param_becomes_a_tabstop() {
         // Glued `5` binds the `int` param `end`, leaving `var` unbound *before*
-        // it — a positional gap the grammar cannot express.
-        assert_eq!(
-            expand_err("rng5"),
-            RenderError::Composite {
-                trigger: "rng".to_owned(),
-                message: "unbound parameter `var` leaves a positional gap before a later \
-                          argument; declare optional params last, or pass `var`"
-                    .to_owned(),
-            }
-        );
+        // it. The shared-stop sentinel keeps the position filled, so what used
+        // to be an un-expressible positional gap now renders `var` as a tabstop
+        // ahead of the bound `end`.
+        let e = expand("rng5", &ctx(), TabstopMode::Keep);
+        assert_eq!(e.body, "for ${1:i} in 0..5 {\n    $0\n}");
     }
 
     #[test]
@@ -1632,6 +1754,22 @@ mod tests {
             e.body,
             "impl Point {\n    fn new(&self) {\n        \n    }\n    stmt();\n}"
         );
+    }
+
+    #[test]
+    fn composite_explicit_child_slot_places_extras_there() {
+        // `slotc` marks `${child}` inside the first top-level node, so the
+        // freeform child lands in the `impl` body — not the trailing `pr`,
+        // where the last-top-level-node default would otherwise put it.
+        let e = expand("slotc:Foo>stmt", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "impl Foo {\n    stmt();\n}\nprintln!(\"\");");
+    }
+
+    #[test]
+    fn composite_explicit_child_slot_with_no_extras_is_dropped() {
+        // A `${child}` with nothing to insert leaves no stray sentinel node.
+        let e = expand("slotc:Foo", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "impl Foo {\n    \n}\nprintln!(\"\");");
     }
 
     #[test]

@@ -66,9 +66,68 @@ pub fn compute(
     if let Some(item) = expansion_item(engine, lang, candidate, range, &ctx) {
         items.push(item);
     }
+    items.extend(option_items(lang, candidate));
     items.extend(prefix_items(lang, candidate));
 
     if items.is_empty() { None } else { Some(items) }
+}
+
+/// Named-option items when the cursor is positioned to type an **option name**
+/// for a composite — i.e. the current node's trigger is a composite and the
+/// argument being typed is past the declared parameters (`classp:Point,‸`).
+///
+/// Options that are already selected are omitted, and the list is filtered by
+/// the partial name being typed. Like [`prefix_items`], these are plain word
+/// items that the client completes against the typed prefix.
+fn option_items(lang: &LanguageSnippets, candidate: &str) -> Vec<CompletionItem> {
+    let Some(node) = extract::current_node_args(candidate) else {
+        return Vec::new();
+    };
+    // No argument introduced yet: still typing the trigger itself.
+    if node.args.is_empty() {
+        return Vec::new();
+    }
+    let Some((snippet, remainder)) = lang.set.resolve_word(node.trigger) else {
+        return Vec::new();
+    };
+    let Some(composite) = &snippet.composite else {
+        return Vec::new();
+    };
+    // A glued argument (`classpWidget`) consumes one parameter without an
+    // explicit piece, so it lowers how many explicit args are still params.
+    let param_pieces = snippet
+        .params
+        .len()
+        .saturating_sub(usize::from(!remainder.is_empty()));
+    // The last piece is the partial being typed; earlier ones are committed.
+    let partial = *node.args.last().unwrap_or(&"");
+    let partial_index = node.args.len() - 1;
+    if partial_index < param_pieces {
+        // Still filling positional parameters, not selecting an option.
+        return Vec::new();
+    }
+    let already: std::collections::HashSet<&str> = node.args[param_pieces..node.args.len() - 1]
+        .iter()
+        .copied()
+        .collect();
+
+    composite
+        .options
+        .iter()
+        .filter(|(name, _)| name.starts_with(partial) && !already.contains(name.as_str()))
+        .map(|(name, fragment)| CompletionItem {
+            label: name.clone(),
+            kind: Some(CompletionItemKind::ENUM_MEMBER),
+            detail: Some(fragment.clone()),
+            label_details: Some(CompletionItemLabelDetails {
+                detail: None,
+                description: Some(format!("{} option", snippet.trigger)),
+            }),
+            sort_text: Some(format!("0{name}")),
+            filter_text: Some(name.clone()),
+            ..CompletionItem::default()
+        })
+        .collect()
 }
 
 /// The single whole-abbreviation snippet item, when `candidate` renders.
@@ -225,6 +284,39 @@ mod tests {
                 .iter()
                 .all(|i| i.kind == Some(CompletionItemKind::KEYWORD))
         );
+    }
+
+    fn option_labels(text: &str) -> Vec<String> {
+        complete(text, "python", CompletionMode::Always)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|i| i.kind == Some(CompletionItemKind::ENUM_MEMBER))
+            .map(|i| i.label)
+            .collect()
+    }
+
+    #[test]
+    fn composite_options_completed_after_the_comma() {
+        // `classp` (one `name` param) ships options eq/hash/len; after the
+        // param, a comma offers them as ENUM_MEMBER items.
+        let all = option_labels("classp:Point,");
+        assert!(all.contains(&"eq".to_owned()), "{all:?}");
+        assert!(all.contains(&"hash".to_owned()), "{all:?}");
+        // Filtered by the partial name being typed.
+        assert_eq!(option_labels("classp:Point,ha"), vec!["hash".to_owned()]);
+        // An already-selected option is not offered again.
+        let rest = option_labels("classp:Point,eq,");
+        assert!(!rest.contains(&"eq".to_owned()), "{rest:?}");
+        assert!(rest.contains(&"hash".to_owned()), "{rest:?}");
+    }
+
+    #[test]
+    fn no_option_items_while_typing_the_parameter() {
+        // The first arg fills `name`, so no options yet.
+        assert!(option_labels("classp:Point").is_empty());
+        assert!(option_labels("classp").is_empty());
+        // A non-composite trigger never offers options.
+        assert!(option_labels("def:foo,").is_empty());
     }
 
     #[test]

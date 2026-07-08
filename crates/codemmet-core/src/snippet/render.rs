@@ -1359,9 +1359,17 @@ mod tests {
         snippet
     }
 
-    /// Fixtures mirroring the real Rust/Python packs.
+    /// Fixtures mirroring the real Rust/Python packs: base snippets plus the
+    /// composite (alias) fixtures the composite tests exercise.
     fn fixture_set() -> SnippetSet {
-        SnippetSet::from_compiled([
+        let mut snippets = base_fixtures();
+        snippets.extend(composite_fixtures());
+        SnippetSet::from_compiled(snippets)
+    }
+
+    /// The plain (non-composite) snippet fixtures.
+    fn base_fixtures() -> Vec<CompiledSnippet> {
+        vec![
             scoped(
                 with_variant(
                     snip(
@@ -1427,8 +1435,21 @@ mod tests {
             // A construct with both a `${child}` body and a later `$0` (like a
             // try/catch): wrap should target the child body, not `$0`.
             snip("tc", vec![], "try {\n\t${child}\n} catch {\n\t$0\n}\n"),
-            // Composites (alias snippets). `cls` builds an `impl` with a base
-            // `fn new`; options and freeform children merge into the body.
+            // A `str`-param leaf a composite passes a `str` value through to
+            // (injection-safety tests): operators must survive verbatim.
+            snip(
+                "note",
+                vec![param("text", ParamKind::Str, Some("todo"))],
+                "// ${text}$0\n",
+            ),
+        ]
+    }
+
+    /// The composite (alias) snippet fixtures.
+    fn composite_fixtures() -> Vec<CompiledSnippet> {
+        vec![
+            // `cls` builds an `impl` with a base `fn new`; options and freeform
+            // children merge into the body.
             composite(
                 "cls",
                 vec![param("name", ParamKind::Ident, Some("X"))],
@@ -1438,7 +1459,7 @@ mod tests {
             // A composite that references another composite (`cls`).
             composite("nest", vec![], "cls:Inner", &[]),
             // Two params passed through to one sub-trigger's arg list, for the
-            // pass-through / positional-gap tests.
+            // pass-through / interior-argument tests.
             composite(
                 "rng",
                 vec![
@@ -1456,14 +1477,7 @@ mod tests {
                 "impl:${name}+impl:${name}",
                 &[],
             ),
-            // A `str`-param leaf and a composite that passes a `str` value
-            // through to it — for the injection-safety tests (operator
-            // characters in the value must survive verbatim, not re-parse).
-            snip(
-                "note",
-                vec![param("text", ParamKind::Str, Some("todo"))],
-                "// ${text}$0\n",
-            ),
+            // Passes a `str` value through to the `note` leaf.
             composite(
                 "cnote",
                 vec![param("msg", ParamKind::Str, Some("hi"))],
@@ -1482,7 +1496,7 @@ mod tests {
             // A deliberately self-referential composite: `from_compiled`
             // skips validation, so this reaches the render-time depth cap.
             composite("loopy", vec![], "loopy", &[]),
-        ])
+        ]
     }
 
     fn ctx() -> ExpansionContext {

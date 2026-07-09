@@ -348,11 +348,12 @@ impl Composer<'_> {
             // The repetition index is 1-based (`${i}` renders 1, 2, …).
             let index = u32::try_from(copy + 1).unwrap_or(u32::MAX);
             let bindings: Cow<[(String, Binding)]> = if value_arg {
-                Cow::Owned(bind_args(
-                    snippet,
-                    &resolve_item_args(&node.args, item.as_ref(), outer.as_ref()),
-                    remainder,
-                )?)
+                let resolved = resolve_item_args(&node.args, item.as_ref(), outer.as_ref())
+                    .map_err(|message| RenderError::ArgBinding {
+                        trigger: snippet.trigger.clone(),
+                        message,
+                    })?;
+                Cow::Owned(bind_args(snippet, &resolved, remainder)?)
             } else if let (Some(idx), Some(it)) = (auto_bind, item.as_ref()) {
                 let mut bound = base.clone();
                 bound[idx].1 = Binding::Bound(it.value.clone());
@@ -1097,49 +1098,51 @@ fn template_uses_value(template: &Template) -> bool {
 }
 
 /// A parsed `${value…}` / `${outer…}` argument token: the source (`outer`), an
-/// optional `.member`, and an optional `:default`.
+/// optional `.member`, an optional `|transform` (raw name, validated at
+/// resolution), and an optional `:default`.
 struct ItemToken<'a> {
     outer: bool,
     member: Option<&'a str>,
+    transform: Option<&'a str>,
     default: Option<&'a str>,
 }
 
 /// Parse a whole-argument item token (`${value}`, `${outer.member}`,
-/// `${value:default}`, …), or `None` when `arg` is not one.
+/// `${value|snake:default}`, …), or `None` when `arg` is not one. The token
+/// order matches the template body: `source → .member → |transform →
+/// :default`, so a `|` inside the default stays literal.
 fn item_token(arg: &str) -> Option<ItemToken<'_>> {
     let inner = arg.strip_prefix("${").and_then(|s| s.strip_suffix('}'))?;
-    let (outer, rest) = inner.strip_prefix("value").map_or_else(
+    let (outer, mut rest) = inner.strip_prefix("value").map_or_else(
         || inner.strip_prefix("outer").map(|rest| (true, rest)),
         |rest| Some((false, rest)),
     )?;
-    match rest {
-        "" => Some(ItemToken {
-            outer,
-            member: None,
-            default: None,
-        }),
-        // `.member`, optionally followed by `:default` — the same combined
-        // form the template body accepts (`${value.type:Type}`).
-        r if r.starts_with('.') => {
-            let (member, default) = r[1..]
-                .split_once(':')
-                .map_or((&r[1..], None), |(m, d)| (m, Some(d)));
-            if member.is_empty() {
-                return None;
-            }
-            Some(ItemToken {
-                outer,
-                member: Some(member),
-                default,
-            })
+    let mut member = None;
+    if let Some(r) = rest.strip_prefix('.') {
+        let end = r.find(['|', ':']).unwrap_or(r.len());
+        if r[..end].is_empty() {
+            return None;
         }
-        r if r.starts_with(':') => Some(ItemToken {
-            outer,
-            member: None,
-            default: Some(&r[1..]),
-        }),
-        _ => None,
+        member = Some(&r[..end]);
+        rest = &r[end..];
     }
+    let mut transform = None;
+    if let Some(r) = rest.strip_prefix('|') {
+        let end = r.find(':').unwrap_or(r.len());
+        transform = Some(&r[..end]);
+        rest = &r[end..];
+    }
+    let default = match rest {
+        "" => None,
+        r if r.starts_with(':') => Some(&r[1..]),
+        _ => return None,
+    };
+    Some(ItemToken {
+        outer,
+        member,
+        transform,
+        default,
+    })
 }
 
 /// Whether `arg` is a whole `${value…}`/`${outer…}` item reference.
@@ -1147,29 +1150,61 @@ fn arg_is_item_token(arg: &str) -> bool {
     item_token(arg).is_some()
 }
 
+/// Validate an item token's raw `|transform` name.
+///
+/// # Errors
+/// A message naming the bad transform and the valid names.
+fn parse_arg_transform(raw: Option<&str>) -> Result<Option<CaseTransform>, String> {
+    let Some(name) = raw else {
+        return Ok(None);
+    };
+    if name.contains('|') {
+        return Err("at most one case transform per reference".to_owned());
+    }
+    CaseTransform::parse(name).map(Some).ok_or_else(|| {
+        format!(
+            "unknown case transform `{name}` (expected one of: {})",
+            crate::snippet::transform::TRANSFORM_NAMES.join(", ")
+        )
+    })
+}
+
 /// Resolve each argument against the current `item` and enclosing `outer` item:
 /// a whole `${value…}`/`${outer…}` token becomes that item's value (or
-/// `.member`, or its `:default`); with no item a bare token is **dropped** so
-/// its parameter falls back to its own tabstop, mirroring the body behaviour.
-fn resolve_item_args(args: &[String], item: Option<&Item>, outer: Option<&Item>) -> Vec<String> {
+/// `.member`, or its `:default`), re-cased by its `|transform`; with no item a
+/// bare token is **dropped** so its parameter falls back to its own tabstop,
+/// mirroring the body behaviour. Transforms re-case data-supplied text only:
+/// a `:default` (caller-written) always passes through verbatim.
+///
+/// # Errors
+/// A message when a token carries an unknown or chained `|transform`.
+fn resolve_item_args(
+    args: &[String],
+    item: Option<&Item>,
+    outer: Option<&Item>,
+) -> Result<Vec<String>, String> {
     let mut out = Vec::with_capacity(args.len());
     for arg in args {
         let Some(tok) = item_token(arg) else {
             out.push(arg.clone());
             continue;
         };
+        let transform = parse_arg_transform(tok.transform)?;
+        let cased = |text: String| match transform {
+            Some(t) => t.apply(&text),
+            None => text,
+        };
         let src = if tok.outer { outer } else { item };
         match src {
-            // A member absent on a present item falls back to the `:default`,
-            // matching the body behaviour.
             Some(it) => out.push(tok.member.map_or_else(
-                || it.value.clone(),
+                || cased(it.value.clone()),
                 |key| {
+                    // A member absent on a present item falls back to the
+                    // `:default` (verbatim), matching the body behaviour.
                     it.members
                         .get(key)
                         .cloned()
-                        .or_else(|| tok.default.map(str::to_owned))
-                        .unwrap_or_default()
+                        .map_or_else(|| tok.default.map(str::to_owned).unwrap_or_default(), cased)
                 },
             )),
             // No item: a `:default` supplies text; a bare token is dropped.
@@ -1180,7 +1215,7 @@ fn resolve_item_args(args: &[String], item: Option<&Item>, outer: Option<&Item>)
             }
         }
     }
-    out
+    Ok(out)
 }
 
 /// Bind a node's explicit and glued arguments to a snippet's parameters.
@@ -2120,6 +2155,51 @@ mod tests {
             assert!(e.body.contains(&format!("fn {name}(&self)")), "{}", e.body);
         }
         assert!(!e.body.contains("${value}"), "{}", e.body);
+    }
+
+    #[test]
+    fn arg_transform_recases_each_resolved_item() {
+        // The flagship: `|snake` at the use site, without touching the pack.
+        let ctx = ctx_with("Meth", &["maxSize", "HTTPError"]);
+        let e = expand(
+            "impl:Point>fn:${value|snake}*@Meth",
+            &ctx,
+            TabstopMode::Strip,
+        );
+        for name in ["max_size", "http_error"] {
+            assert!(e.body.contains(&format!("fn {name}(&self)")), "{}", e.body);
+        }
+    }
+
+    #[test]
+    fn arg_transform_default_stays_verbatim_without_item() {
+        // Known-text-only contract in argument position too: the caller's
+        // `:default` is not data, so it is never re-cased.
+        let e = expand("fn:${value|pascal:rawName}", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains("fn rawName("), "{}", e.body);
+    }
+
+    #[test]
+    fn arg_transform_unknown_name_is_an_error() {
+        let err = expand_err("fn:${value|bogus}*[maxSize]");
+        let RenderError::ArgBinding { trigger, message } = err else {
+            panic!("expected an arg-binding error, got {err:?}");
+        };
+        assert_eq!(trigger, "fn");
+        assert_eq!(
+            message,
+            "unknown case transform `bogus` \
+             (expected one of: camel, kebab, lower, pascal, snake, upper)"
+        );
+    }
+
+    #[test]
+    fn arg_transform_chaining_is_an_error() {
+        let err = expand_err("fn:${value|snake|upper}*[maxSize]");
+        let RenderError::ArgBinding { message, .. } = err else {
+            panic!("expected an arg-binding error, got {err:?}");
+        };
+        assert_eq!(message, "at most one case transform per reference");
     }
 
     #[test]

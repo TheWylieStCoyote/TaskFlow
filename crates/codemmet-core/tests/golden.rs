@@ -134,6 +134,28 @@ golden!(
     "mod*[parser,lexer]>mtest*[empty,unicode]"
 );
 golden!(rust_mtest_bare, "rust", "mtest");
+// Case transforms (`|snake` etc., see CASE_TRANSFORMS_PLAN.md): re-case
+// data-driven items at the use site. Transforms apply to known text only.
+golden!(
+    rust_case_transform_fn_snake,
+    "rust",
+    "impl:Api>fn:${value|snake}*[maxSize,HTTPError]"
+);
+golden!(
+    rust_case_transform_const_upper,
+    "rust",
+    "const:${value|upper}*[maxSize,minSize]"
+);
+golden!(
+    rust_case_transform_member_pascal,
+    "rust",
+    "fn:${value.type|pascal:Kind}*[read:getFile,write:putFile]"
+);
+golden_err!(
+    err_unknown_case_transform_in_arg,
+    "rust",
+    "fn:${value|bogus}*[maxSize]"
+);
 golden!(rust_matchres, "rust", "matchres");
 golden!(rust_struct_point, "rust", "struct:Point");
 golden!(rust_enum_op_arm, "rust", "enum:Op>arm");

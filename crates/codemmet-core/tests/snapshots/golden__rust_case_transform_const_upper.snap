@@ -1,0 +1,11 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+assertion_line: 144
+expression: "case(\"rust\", \"const:${value|upper}*[maxSize,minSize]\")"
+---
+== keep ==
+const MAX_SIZE: ${1:Type} = $2;
+const MIN_SIZE: ${3:Type} = $0;
+== strip ==
+const MAX_SIZE: Type = ;
+const MIN_SIZE: Type = ‸;

@@ -56,6 +56,12 @@ pub struct SnippetDef {
     /// Context-conditional bodies (M3); first matching variant wins.
     #[serde(default)]
     pub variants: Vec<VariantDef>,
+    /// Import requirements: per-language specs (e.g. Rust
+    /// `"std::collections::HashMap"`, C `"<stdio.h>"`, Python
+    /// `"dataclasses:dataclass"`) whose imports editors insert alongside the
+    /// expansion when missing. See `lang::imports` for the spec forms.
+    #[serde(default)]
+    pub requires: Vec<String>,
     /// In a user override file: remove this builtin trigger entirely.
     #[serde(default)]
     pub disabled: bool,
@@ -96,4 +102,10 @@ pub struct VariantDef {
     pub context: String,
     /// The variant's template body.
     pub body: String,
+    /// Import requirements for this variant. When the variant is selected and
+    /// this is declared (even as `[]`), it **replaces** the snippet-level
+    /// `requires` — mirroring how the variant's body replaces the default
+    /// body. Absent means inherit the snippet-level list.
+    #[serde(default)]
+    pub requires: Option<Vec<String>>,
 }

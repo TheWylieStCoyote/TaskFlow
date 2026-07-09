@@ -276,7 +276,9 @@ fn ts_variant_fires_on_raw_node_kind() {
         variants: vec![CompiledVariant {
             context: "ts:impl_item".to_owned(),
             template: parse_template("self.log(\"$0\");\n").expect("fixture body should parse"),
+            requires: None,
         }],
+        requires: Vec::new(),
         composite: None,
     }]);
     let abbr = codemmet_core::abbr::parse("pr").expect("abbreviation should parse");

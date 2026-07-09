@@ -35,6 +35,7 @@ pub fn run(sources: &Sources) -> ExitCode {
                     warn_misnamed_packs(dir);
                 }
             }
+            warn_unsupported_requires(&registry);
             let languages = registry.languages().count();
             let triggers: usize = registry.languages().map(|lang| lang.set.len()).sum();
             println!("ok: {languages} languages, {triggers} triggers");
@@ -46,6 +47,39 @@ pub fn run(sources: &Sources) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(err) => config_failure(&err),
+    }
+}
+
+/// Warn (stderr) about snippets that declare `requires` for a language
+/// without an import formatter (JavaScript/TypeScript today): the specs are
+/// schema-valid but editors silently ignore them, so the author should know.
+fn warn_unsupported_requires(registry: &codemmet_core::lang::registry::Registry) {
+    for lang in registry.languages() {
+        if codemmet_core::lang::imports::supports(lang.profile.id) {
+            continue;
+        }
+        let triggers: Vec<&str> = lang
+            .set
+            .iter()
+            .filter(|snippet| {
+                !snippet.requires.is_empty()
+                    || snippet
+                        .variants
+                        .iter()
+                        .any(|v| v.requires.as_ref().is_some_and(|r| !r.is_empty()))
+            })
+            .map(|snippet| snippet.trigger.as_str())
+            .collect();
+        if triggers.is_empty() {
+            continue;
+        }
+        eprintln!(
+            "warning: {} snippets declare `requires` ({}) but import insertion \
+             is not implemented for {}; they are ignored",
+            lang.profile.id,
+            triggers.join(", "),
+            lang.profile.id,
+        );
     }
 }
 

@@ -61,6 +61,11 @@ pub struct Expansion {
     pub is_snippet: bool,
     /// Where the cursor lands, for [`TabstopMode::Strip`] output.
     pub cursor: Option<CursorPos>,
+    /// Import requirement specs of every snippet this expansion actually
+    /// rendered (variant-aware; composites aggregate their sub-triggers'),
+    /// deduplicated in first-appearance order. Raw spec strings — see
+    /// `lang::imports` for formatting them per language.
+    pub requires: Vec<String>,
 }
 
 /// A failure while resolving or composing an abbreviation.
@@ -132,9 +137,11 @@ pub fn render(
     mode: TabstopMode,
 ) -> Result<Expansion, RenderError> {
     // Normal expansion: a leaf's `${child}` slot degrades to the final cursor.
-    let (lines, placeholders) = compose(abbr, set, ctx, false)?;
+    let (lines, placeholders, requires) = compose(abbr, set, ctx, false)?;
     let lines = renumber(lines, &placeholders);
-    Ok(materialize(&lines, ctx, mode))
+    let mut expansion = materialize(&lines, ctx, mode);
+    expansion.requires = requires;
+    Ok(expansion)
 }
 
 /// Render an abbreviation with `selection` wrapped at its final cursor.
@@ -163,11 +170,17 @@ pub fn render_with_selection(
 ) -> Result<Expansion, RenderError> {
     // Keep the `${child}` slot so the selection injects into the construct's
     // body (e.g. a `try` body, not its `except` clause where `$0` sits).
-    let (lines, placeholders) = compose(abbr, set, ctx, true)?;
+    let (lines, placeholders, requires) = compose(abbr, set, ctx, true)?;
     let lines = inject_selection(lines, selection);
     let lines = renumber(lines, &placeholders);
-    Ok(materialize(&lines, ctx, mode))
+    let mut expansion = materialize(&lines, ctx, mode);
+    expansion.requires = requires;
+    Ok(expansion)
 }
+
+/// Composition output: the line IR, the tabstop placeholder table, and the
+/// collected import requirement specs.
+type Composed = (Vec<Line>, Vec<Option<String>>, Vec<String>);
 
 /// Compose an abbreviation into the line IR plus its placeholder table.
 ///
@@ -179,7 +192,7 @@ fn compose(
     set: &SnippetSet,
     ctx: &ExpansionContext,
     keep_child_slot: bool,
-) -> Result<(Vec<Line>, Vec<Option<String>>), RenderError> {
+) -> Result<Composed, RenderError> {
     let mut composer = Composer {
         set,
         raw_node_kinds: &ctx.raw_node_kinds,
@@ -190,6 +203,7 @@ fn compose(
         composite_depth: 0,
         shared_emitted: HashSet::new(),
         outer_stack: Vec::new(),
+        requires: Vec::new(),
     };
     // A top-level node lives in the buffer's innermost scope.
     let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
@@ -197,7 +211,7 @@ fn compose(
     for node in &abbr.0 {
         lines.extend(composer.compose_node(node, scope, None)?);
     }
-    Ok((lines, composer.placeholders))
+    Ok((lines, composer.placeholders, composer.requires))
 }
 
 /// A tabstop identity: an index into the composer's placeholder table.
@@ -269,6 +283,9 @@ struct Composer<'a> {
     /// resolves to the top; each data-driven copy pushes its item before
     /// composing its children and pops afterwards.
     outer_stack: Vec<Item>,
+    /// Import requirement specs of every snippet rendered so far,
+    /// deduplicated in first-appearance order.
+    requires: Vec<String>,
 }
 
 impl Composer<'_> {
@@ -276,6 +293,16 @@ impl Composer<'_> {
     fn alloc(&mut self, placeholder: Option<String>) -> StopId {
         self.placeholders.push(placeholder);
         self.placeholders.len() - 1
+    }
+
+    /// Record `specs` in the expansion's requires, skipping ones already
+    /// collected (dedup by raw spec string).
+    fn push_requires(&mut self, specs: &[String]) {
+        for spec in specs {
+            if !self.requires.contains(spec) {
+                self.requires.push(spec.clone());
+            }
+        }
     }
 
     /// Compose one abbreviation node (including `*n` copies and children).
@@ -303,7 +330,16 @@ impl Composer<'_> {
         if let Some(composite) = &snippet.composite {
             return self.expand_composite(node, snippet, composite, remainder, scope, subject);
         }
-        let template = select_template(snippet, scope, self.raw_node_kinds);
+        let variant = active_variant(snippet, scope, self.raw_node_kinds);
+        let template = variant.map_or(&snippet.template, |v| &v.template);
+        // Effective requires: a selected variant that *declares* `requires`
+        // (even empty) replaces the snippet-level list — mirroring how the
+        // variant's body replaces the default body; absent inherits.
+        self.push_requires(
+            variant
+                .and_then(|v| v.requires.as_deref())
+                .unwrap_or(&snippet.requires),
+        );
         // How the per-copy data-driven item reaches this node's parameters:
         //   * an explicit `${value}` argument (`fn:${value}*@Meth`), resolved
         //     per copy; or
@@ -437,6 +473,10 @@ impl Composer<'_> {
             // Unreachable: the data-driven guard above already returned.
             Repeat::Source(_) | Repeat::Subject | Repeat::Inline(_) => 1,
         };
+        // The composite's own requires; the snippets its expansion references
+        // add theirs as the re-expanded abbreviation composes through
+        // `compose_node`, so aggregation is automatic.
+        self.push_requires(&snippet.requires);
 
         // Declared params bind first; remaining explicit args select options.
         let param_count = node.args.len().min(snippet.params.len());
@@ -698,13 +738,14 @@ fn sub_repeat_index(text: &str, index: u32) -> String {
 }
 
 /// The variant of `snippet` that fires in `scope`, or `None` when the
-/// default template applies.
+/// default template applies (and, with it, the snippet-level `requires`).
 ///
 /// The first matching variant wins; a variant matches when its context is
 /// the scope's normalized name, or when it is `ts:<kind>` and `<kind>` is
 /// one of the buffer's raw node kinds. Public so listings (the LSP
 /// `codemmet.list` command) report the variant the renderer would pick
-/// without duplicating the rule.
+/// without duplicating the rule. Selection changes only the template and
+/// requires — params and description always come from the snippet itself.
 #[must_use]
 pub fn active_variant<'s>(
     snippet: &'s CompiledSnippet,
@@ -1453,6 +1494,9 @@ fn materialize(lines: &[NumberedLine], ctx: &ExpansionContext, mode: TabstopMode
         body,
         is_snippet: mode == TabstopMode::Keep,
         cursor,
+        // Filled by the callers that composed the lines (`render` /
+        // `render_with_selection`); materialization is requires-agnostic.
+        requires: Vec::new(),
     }
 }
 
@@ -1525,7 +1569,6 @@ fn push_escaped_placeholder(out: &mut String, text: &str) {
 mod tests {
     use super::*;
     use crate::abbr::parse;
-    use crate::config::loader::CompiledVariant;
     use crate::config::schema::ParamDef;
     use crate::context::IndentUnit;
     use crate::snippet::template::parse_template;
@@ -1546,8 +1589,15 @@ mod tests {
             template: parse_template(body).expect("fixture body should parse"),
             scope: None,
             variants: Vec::new(),
+            requires: Vec::new(),
             composite: None,
         }
+    }
+
+    /// Attach import requirement specs to a fixture snippet.
+    fn with_requires(mut snippet: CompiledSnippet, specs: &[&str]) -> CompiledSnippet {
+        snippet.requires = specs.iter().map(|s| (*s).to_owned()).collect();
+        snippet
     }
 
     /// Attach a declared `${child}` scope to a fixture snippet.
@@ -1570,6 +1620,7 @@ mod tests {
             template: Template { lines: Vec::new() },
             scope: None,
             variants: Vec::new(),
+            requires: Vec::new(),
             composite: Some(CompiledComposite {
                 expands: expands.to_owned(),
                 options: options
@@ -1585,6 +1636,7 @@ mod tests {
         snippet.variants.push(CompiledVariant {
             context: context.to_owned(),
             template: parse_template(body).expect("fixture variant should parse"),
+            requires: None,
         });
         snippet
     }
@@ -2828,5 +2880,83 @@ mod tests {
         assert_eq!(dedent("    a\n\n    b"), "a\n\nb");
         // Tabs and spaces never width-equate: no common prefix here.
         assert_eq!(dedent("\ta\n    b"), "\ta\n    b");
+    }
+
+    // ===== import requires collection =====
+
+    /// Fixtures carrying `requires`, for the aggregation tests below.
+    fn requires_set() -> SnippetSet {
+        let hmap = with_requires(
+            snip("hmap", vec![], "let m = HashMap::new();$0\n"),
+            &["std::collections::HashMap"],
+        );
+        let hset = with_requires(
+            snip("hset", vec![], "let s = HashSet::new();$0\n"),
+            &["std::collections::HashSet", "std::collections::HashMap"],
+        );
+        let plain = snip("pr", vec![], "println!(\"$0\");\n");
+        // In type-body a variant declares `requires = []`, replacing the base.
+        let mut varied = with_requires(
+            snip("disp", vec![], "impl Display$0\n"),
+            &["std::fmt::Display"],
+        );
+        varied.variants.push(CompiledVariant {
+            context: "type-body".to_owned(),
+            template: parse_template("fmt$0\n").expect("fixture variant should parse"),
+            requires: Some(Vec::new()),
+        });
+        let combo = composite("combo", vec![], "hmap+pr", &[]);
+        let mut owned = composite("owned", vec![], "pr", &[]);
+        owned.requires = vec!["std::fmt::Write".to_owned()];
+        SnippetSet::from_compiled([hmap, hset, plain, varied, combo, owned])
+    }
+
+    fn requires_of(abbr: &str, ctx: &ExpansionContext) -> Vec<String> {
+        let abbr = parse(abbr).expect("abbreviation should parse");
+        render(&abbr, &requires_set(), ctx, TabstopMode::Keep)
+            .expect("abbreviation should render")
+            .requires
+    }
+
+    #[test]
+    fn requires_collect_across_nodes_with_dedup() {
+        // `hmap` contributes HashMap; `hset` re-lists it — dedup keeps the
+        // first appearance and the declaration order.
+        assert_eq!(
+            requires_of("hmap+hset", &ctx()),
+            ["std::collections::HashMap", "std::collections::HashSet"]
+        );
+        assert!(requires_of("pr", &ctx()).is_empty());
+    }
+
+    #[test]
+    fn variant_requires_replace_when_declared() {
+        // At root the default body carries the snippet-level requires…
+        assert_eq!(requires_of("disp", &ctx()), ["std::fmt::Display"]);
+        // …in type-body the selected variant declares `requires = []`,
+        // which replaces (not merges with) the snippet-level list.
+        assert!(requires_of("disp", &ctx_in(Scope::TypeBody)).is_empty());
+    }
+
+    #[test]
+    fn composite_aggregates_sub_trigger_and_own_requires() {
+        // `combo` declares nothing itself; its `hmap` sub-trigger's requires
+        // flow through the re-expansion.
+        assert_eq!(requires_of("combo", &ctx()), ["std::collections::HashMap"]);
+        // `owned` declares its own requires on top of a requires-free base.
+        assert_eq!(requires_of("owned", &ctx()), ["std::fmt::Write"]);
+    }
+
+    #[test]
+    fn wrap_render_collects_requires_too() {
+        let abbr = parse("hmap").expect("abbreviation should parse");
+        let e = render_with_selection(&abbr, &requires_set(), &ctx(), TabstopMode::Keep, "x();")
+            .expect("wrap should render");
+        assert_eq!(e.requires, ["std::collections::HashMap"]);
+    }
+
+    #[test]
+    fn repeat_copies_record_requires_once() {
+        assert_eq!(requires_of("hmap*3", &ctx()), ["std::collections::HashMap"]);
     }
 }

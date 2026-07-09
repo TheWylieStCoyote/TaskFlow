@@ -25,6 +25,10 @@ pub struct CompiledSnippet {
     pub scope: Option<String>,
     /// Context-conditional templates (M3); first match wins.
     pub variants: Vec<CompiledVariant>,
+    /// Import requirement specs — raw strings, validated for the pack's
+    /// language at compile time when supported (see `lang::imports`); they
+    /// are formatted into import lines at the point of use.
+    pub requires: Vec<String>,
     /// Set when this trigger is a **composite** (alias): its expansion is an
     /// abbreviation re-expanded at render time rather than [`Self::template`]
     /// (which is empty for a composite). See `COMPOSITE_SNIPPETS.md`.
@@ -50,6 +54,10 @@ pub struct CompiledVariant {
     pub context: String,
     /// The variant's template.
     pub template: Template,
+    /// Import requirement specs. `Some` (even empty) **replaces** the
+    /// snippet-level `requires` when this variant is selected; `None`
+    /// inherits it.
+    pub requires: Option<Vec<String>>,
 }
 
 /// A language's merged, validated triggers.
@@ -123,7 +131,7 @@ impl SnippetSet {
                     snippets.remove(trigger);
                     continue;
                 }
-                let compiled = compile_snippet(origin, trigger, def)?;
+                let compiled = compile_snippet(origin, &file.meta.language, trigger, def)?;
                 snippets.insert(trigger.clone(), compiled);
             }
         }
@@ -386,9 +394,35 @@ fn referenced_params(template: &Template) -> impl Iterator<Item = &str> {
         })
 }
 
+/// Validate one `requires` list for the pack's language: no duplicates, and
+/// (when the language has an import formatter) every spec parses. Packs for
+/// languages without a formatter keep their specs verbatim; `codemmet check`
+/// warns about those.
+fn validate_requires(
+    invalid: &impl Fn(String) -> ConfigError,
+    language: &str,
+    specs: &[String],
+) -> Result<(), ConfigError> {
+    let mut seen = BTreeSet::new();
+    for spec in specs {
+        if !seen.insert(spec.as_str()) {
+            return Err(invalid(format!("duplicate requires spec `{spec}`")));
+        }
+        if crate::lang::imports::supports(language) {
+            crate::lang::imports::parse_spec(language, spec)
+                .map_err(|message| invalid(format!("invalid requires spec `{spec}`: {message}")))?;
+        }
+    }
+    Ok(())
+}
+
 /// Validate and compile one non-disabled snippet definition.
+///
+/// `language` is the pack's `meta.language`, used to validate `requires`
+/// specs against that language's import-spec grammar.
 fn compile_snippet(
     origin: &str,
+    language: &str,
     trigger: &str,
     def: &SnippetDef,
 ) -> Result<CompiledSnippet, ConfigError> {
@@ -402,6 +436,8 @@ fn compile_snippet(
         origin: origin.to_owned(),
         source,
     };
+
+    validate_requires(&invalid, language, &def.requires)?;
 
     // A composite carries `expands` (an abbreviation) instead of a `body`.
     if def.expands.is_some() {
@@ -433,9 +469,13 @@ fn compile_snippet(
                 variant.context
             )));
         }
+        if let Some(requires) = &variant.requires {
+            validate_requires(&invalid, language, requires)?;
+        }
         variants.push(CompiledVariant {
             context: variant.context.clone(),
             template: parse_template(&variant.body).map_err(snippet_err)?,
+            requires: variant.requires.clone(),
         });
     }
 
@@ -494,6 +534,7 @@ fn compile_snippet(
         template,
         scope: def.scope.clone(),
         variants,
+        requires: def.requires.clone(),
         composite: None,
     })
 }
@@ -612,6 +653,9 @@ fn compile_composite(
         template: Template { lines: Vec::new() },
         scope: None,
         variants: Vec::new(),
+        // A composite's own requires; the requires of the snippets its
+        // expansion references are aggregated at render time.
+        requires: def.requires.clone(),
         composite: Some(CompiledComposite {
             expands: expands.to_owned(),
             options: def.options.clone(),
@@ -1029,6 +1073,136 @@ mod tests {
             ConfigError::Toml { origin, .. } => assert_eq!(origin, "user:/tmp/rust.toml"),
             other => panic!("expected Toml, got {other:?}"),
         }
+    }
+
+    // --- requires -------------------------------------------------------------
+
+    #[test]
+    fn requires_compiles_and_is_recorded() {
+        let set = compile_one(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.hmap]\n",
+                "requires = [\"std::collections::HashMap\"]\n",
+                "body = \"let m = HashMap::new();$0\"\n",
+            ),
+        );
+        let hmap = set.get("hmap").expect("hmap should compile");
+        assert_eq!(hmap.requires, ["std::collections::HashMap"]);
+    }
+
+    #[test]
+    fn invalid_requires_spec_is_error() {
+        let err = compile_err(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.bad]\n",
+                "requires = [\"use std::fmt;\"]\n",
+                "body = \"x$0\"\n",
+            ),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("invalid requires spec")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn duplicate_requires_spec_is_error() {
+        let err = compile_err(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.bad]\n",
+                "requires = [\"std::fmt::Display\", \"std::fmt::Display\"]\n",
+                "body = \"x$0\"\n",
+            ),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("duplicate requires")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn variant_requires_compile_and_validate() {
+        let set = compile_one(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.disp]\n",
+                "requires = [\"std::fmt::Display\"]\n",
+                "body = \"x$0\"\n",
+                "[[snippets.disp.variants]]\ncontext = \"type-body\"\nrequires = []\nbody = \"y$0\"\n",
+            ),
+        );
+        let disp = set.get("disp").expect("disp should compile");
+        assert_eq!(disp.requires, ["std::fmt::Display"]);
+        // Declared-empty is preserved as `Some([])` (replace), not `None`.
+        assert_eq!(disp.variants[0].requires, Some(Vec::new()));
+
+        let err = compile_err(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.disp]\nbody = \"x$0\"\n",
+                "[[snippets.disp.variants]]\ncontext = \"type-body\"\nrequires = [\"nope;\"]\nbody = \"y$0\"\n",
+            ),
+        );
+        assert!(
+            matches!(err, ConfigError::Invalid { ref message, .. } if message.contains("invalid requires spec")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn variant_without_requires_stays_inheriting_none() {
+        let set = compile_one(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.fn]\nbody = \"fn f() {}\"\n",
+                "[[snippets.fn.variants]]\ncontext = \"type-body\"\nbody = \"fn m(&self) {}\"\n",
+            ),
+        );
+        assert_eq!(
+            set.get("fn").expect("fn compiles").variants[0].requires,
+            None
+        );
+    }
+
+    #[test]
+    fn composite_may_declare_requires() {
+        let set = compile_one(
+            "user",
+            &composite_pack(concat!(
+                "[snippets.bar]\n",
+                "requires = [\"std::fmt::Write\"]\n",
+                "expands = \"foo\"\n",
+            )),
+        );
+        assert_eq!(
+            set.get("bar").expect("bar compiles").requires,
+            ["std::fmt::Write"]
+        );
+    }
+
+    #[test]
+    fn unsupported_language_requires_are_kept_verbatim() {
+        // JavaScript has no import formatter yet: specs pass through
+        // unvalidated (`codemmet check` warns about them).
+        let set = compile_one(
+            "user",
+            concat!(
+                "[meta]\nlanguage = \"javascript\"\n",
+                "[snippets.rf]\n",
+                "requires = [\"node:fs\"]\n",
+                "body = \"readFileSync($0)\"\n",
+            ),
+        );
+        assert_eq!(set.get("rf").expect("rf compiles").requires, ["node:fs"]);
     }
 
     // --- composites ----------------------------------------------------------

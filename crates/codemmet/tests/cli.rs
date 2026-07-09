@@ -952,3 +952,91 @@ fn global_flag_before_subcommand_still_selects_the_subcommand() {
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
     assert!(stdout(&out).contains("fori"), "stdout: {}", stdout(&out));
 }
+
+/// `--json` reports each collected requires spec with its formatted line.
+#[test]
+fn expand_json_reports_requires_with_formatted_lines() {
+    let dir = scratch_dir("expand-json-requires");
+    std::fs::write(
+        dir.join("rust.toml"),
+        concat!(
+            "[meta]\nlanguage = \"rust\"\n",
+            "[snippets.zz]\n",
+            "requires = [\"std::collections::HashMap\"]\n",
+            "body = \"let m = HashMap::new();$0\"\n",
+        ),
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args(["expand", "--lang", "rust", "--json", "zz"])
+        .args(["--config", dir.to_str().expect("scratch path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout(&out)).expect("stdout should be JSON");
+    assert_eq!(value["requires"][0]["spec"], "std::collections::HashMap");
+    assert_eq!(
+        value["requires"][0]["line"],
+        "use std::collections::HashMap;"
+    );
+    // Plain-text mode stays pipeable code: no requires anywhere.
+    let plain = bin()
+        .args(["expand", "--lang", "rust", "zz"])
+        .args(["--config", dir.to_str().expect("scratch path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(stdout(&plain), "let m = HashMap::new();\n");
+}
+
+/// A malformed requires spec is a config error (exit 3) from any command.
+#[test]
+fn check_reports_invalid_requires_spec_exits_3() {
+    let dir = scratch_dir("check-bad-requires");
+    std::fs::write(
+        dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.zz]\nrequires = [\"use std::fmt;\"]\nbody = \"x$0\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 3, "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("invalid requires spec"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+/// Requires on a language without an import formatter loads fine but `check`
+/// warns that editors ignore it.
+#[test]
+fn check_warns_on_requires_for_unsupported_language() {
+    let dir = scratch_dir("check-js-requires");
+    std::fs::write(
+        dir.join("javascript.toml"),
+        "[meta]\nlanguage = \"javascript\"\n[snippets.zz]\nrequires = [\"node:fs\"]\nbody = \"x$0\"\n",
+    )
+    .expect("override pack should be writable");
+    let out = bin()
+        .args([
+            "check",
+            "--config",
+            dir.to_str().expect("scratch path is UTF-8"),
+        ])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(
+        stderr(&out).contains("not implemented for javascript"),
+        "stderr: {}",
+        stderr(&out)
+    );
+    assert!(stderr(&out).contains("zz"), "stderr: {}", stderr(&out));
+}

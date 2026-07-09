@@ -87,7 +87,7 @@ pub fn run(sources: &Sources, args: &ExpandArgs) -> ExitCode {
     let mut ctx = ExpansionContext::plain(args.base_indent.clone(), indent_unit);
     ctx.collections = collections;
     match engine.expand(&abbr, &args.lang, &ctx, args.tabstops.into()) {
-        Ok(expansion) => emit(&expansion, args.json),
+        Ok(expansion) => emit(&expansion, &args.lang, args.json),
         Err(err) => {
             eprintln!("error: cannot expand `{abbr}`: {err}");
             let code = match err {
@@ -150,16 +150,34 @@ fn read_abbr(arg: Option<&str>) -> Result<String, String> {
 }
 
 /// Print the expansion to stdout, as plain text or a one-line JSON object.
-fn emit(expansion: &Expansion, json: bool) -> ExitCode {
+///
+/// Plain-text mode ignores `requires` (stdout stays pipeable code); JSON
+/// mode reports each spec with its formatted import line (`null` when the
+/// language has no import formatter).
+fn emit(expansion: &Expansion, language: &str, json: bool) -> ExitCode {
     if json {
         let cursor = expansion.cursor.map_or(
             serde_json::Value::Null,
             |pos| serde_json::json!({ "line": pos.line, "character": pos.character }),
         );
+        // `--lang` accepts extensions and LSP ids; specs format against the
+        // canonical profile id.
+        let profile_id = codemmet_core::lang::profile::find(language).map(|p| p.id);
+        let requires: Vec<serde_json::Value> = expansion
+            .requires
+            .iter()
+            .map(|spec| {
+                let line = profile_id
+                    .and_then(|id| codemmet_core::lang::imports::parse_spec(id, spec).ok())
+                    .map(|parsed| parsed.line());
+                serde_json::json!({ "spec": spec, "line": line })
+            })
+            .collect();
         let value = serde_json::json!({
             "text": expansion.body,
             "cursor": cursor,
             "is_snippet": expansion.is_snippet,
+            "requires": requires,
         });
         println!("{value}");
     } else {

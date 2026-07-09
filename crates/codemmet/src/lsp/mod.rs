@@ -11,6 +11,7 @@ mod commands;
 mod completion;
 mod extract;
 mod line_index;
+mod requires;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -269,10 +270,21 @@ pub fn run(
     }
 }
 
-/// The full server lifecycle: handshake, main loop, teardown.
+/// The full server lifecycle over stdio: handshake, main loop, teardown.
 fn serve(default_user_dir: Option<&Path>, default_paths_file: Option<&Path>) -> anyhow::Result<()> {
     let (connection, io_threads) = Connection::stdio();
+    serve_connection(connection, default_user_dir, default_paths_file)?;
+    io_threads.join()?;
+    Ok(())
+}
 
+/// The server lifecycle over any [`Connection`] (stdio in production,
+/// [`Connection::memory`] in tests): handshake, main loop, teardown.
+fn serve_connection(
+    connection: Connection,
+    default_user_dir: Option<&Path>,
+    default_paths_file: Option<&Path>,
+) -> anyhow::Result<()> {
     let (initialize_id, initialize_params) = connection.initialize_start()?;
     let params: InitializeParams = serde_json::from_value(initialize_params)?;
     let options: InitOptions = params
@@ -330,7 +342,6 @@ fn serve(default_user_dir: Option<&Path>, default_paths_file: Option<&Path>) -> 
     }
 
     drop(connection);
-    io_threads.join()?;
     Ok(())
 }
 
@@ -637,4 +648,228 @@ fn invalid_params(id: lsp_server::RequestId, err: &dyn std::fmt::Display) -> Res
 /// An `InternalError` error response.
 fn internal_error(id: lsp_server::RequestId, err: &dyn std::fmt::Display) -> Response {
     Response::new_err(id, ErrorCode::InternalError as i32, err.to_string())
+}
+
+// In-process integration tests: the real server lifecycle over
+// `Connection::memory()`, no child process. The import-insertion test needs
+// the tree-sitter provider, so the module rides the same feature.
+#[cfg(all(test, feature = "tree-sitter"))]
+mod tests {
+    use std::time::Duration;
+
+    use lsp_server::Notification;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    /// A client half driving an in-process server thread.
+    struct MemoryClient {
+        connection: Connection,
+        server: Option<std::thread::JoinHandle<anyhow::Result<()>>>,
+        next_id: i32,
+    }
+
+    impl MemoryClient {
+        /// Spawn the server over a memory connection and run the handshake,
+        /// negotiating UTF-8 positions and pointing `snippets_dir` at
+        /// `pack_dir`.
+        fn start(pack_dir: &Path) -> Self {
+            let (server_side, client_side) = Connection::memory();
+            let dir = pack_dir.to_path_buf();
+            let server =
+                std::thread::spawn(move || serve_connection(server_side, Some(&dir), None));
+            let mut client = Self {
+                connection: client_side,
+                server: Some(server),
+                next_id: 0,
+            };
+            let result = client.request(
+                "initialize",
+                json!({
+                    "capabilities": { "general": { "positionEncodings": ["utf-8"] } },
+                }),
+            );
+            assert_eq!(result["capabilities"]["positionEncoding"], "utf-8");
+            client.notify("initialized", json!({}));
+            client
+        }
+
+        /// Send one request and return its result (panics on an error
+        /// response or a ten-second stall).
+        fn request(&mut self, method: &str, params: Value) -> Value {
+            self.next_id += 1;
+            let id = lsp_server::RequestId::from(self.next_id);
+            self.connection
+                .sender
+                .send(Message::Request(Request::new(
+                    id.clone(),
+                    method.to_owned(),
+                    params,
+                )))
+                .expect("send should succeed");
+            loop {
+                let message = self
+                    .connection
+                    .receiver
+                    .recv_timeout(Duration::from_secs(10))
+                    .expect("server should respond");
+                if let Message::Response(response) = message
+                    && response.id == id
+                {
+                    assert!(
+                        response.error.is_none(),
+                        "unexpected error: {:?}",
+                        response.error
+                    );
+                    return response.result.unwrap_or(Value::Null);
+                }
+            }
+        }
+
+        fn notify(&self, method: &str, params: Value) {
+            self.connection
+                .sender
+                .send(Message::Notification(Notification::new(
+                    method.to_owned(),
+                    params,
+                )))
+                .expect("send should succeed");
+        }
+
+        /// Open a Rust document at `uri` with `text`.
+        fn open(&self, uri: &str, text: &str) {
+            self.notify(
+                "textDocument/didOpen",
+                json!({
+                    "textDocument": {
+                        "uri": uri,
+                        "languageId": "rust",
+                        "version": 1,
+                        "text": text,
+                    }
+                }),
+            );
+        }
+
+        /// The completion items at `line`:`character` in `uri`.
+        fn complete(&mut self, uri: &str, line: u32, character: u32) -> Value {
+            self.request(
+                "textDocument/completion",
+                json!({
+                    "textDocument": { "uri": uri },
+                    "position": { "line": line, "character": character },
+                }),
+            )
+        }
+
+        /// Clean shutdown: request + exit, then join the server thread.
+        fn shutdown(mut self) {
+            self.request("shutdown", Value::Null);
+            self.notify("exit", Value::Null);
+            self.server
+                .take()
+                .expect("server thread present")
+                .join()
+                .expect("server thread should not panic")
+                .expect("server should exit cleanly");
+        }
+    }
+
+    /// A scratch pack dir carrying a Rust trigger with `requires`.
+    fn requires_pack(test: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join("codemmet-lsp-memory")
+            .join(format!("{test}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir should be creatable");
+        std::fs::write(
+            dir.join("rust.toml"),
+            concat!(
+                "[meta]\nlanguage = \"rust\"\n",
+                "[snippets.zmap]\n",
+                "requires = [\"std::collections::HashMap\"]\n",
+                "body = \"let mut ${1:map} = HashMap::new();$0\"\n",
+            ),
+        )
+        .expect("scratch pack should be writable");
+        dir
+    }
+
+    /// The snippet-kind item labeled `label`, if any.
+    fn snippet_item(items: &Value, label: &str) -> Option<Value> {
+        items
+            .as_array()
+            .expect("completion result is an array")
+            .iter()
+            .find(|item| item["label"] == label && item["kind"] == 15)
+            .cloned()
+    }
+
+    #[test]
+    fn completion_attaches_missing_import_as_additional_text_edit() {
+        let mut client = MemoryClient::start(&requires_pack("attach"));
+        let uri = "file:///attach.rs";
+        client.open(uri, "use std::fs;\n\nfn main() {\n    zmap\n}\n");
+
+        let items = client.complete(uri, 3, 8);
+        let item = snippet_item(&items, "zmap").expect("zmap snippet item expected");
+        let edits = &item["additionalTextEdits"];
+        assert_eq!(
+            edits[0]["newText"], "use std::collections::HashMap;\n",
+            "items: {items}"
+        );
+        // A pure insertion on the blank line after the last `use`.
+        assert_eq!(
+            edits[0]["range"]["start"],
+            json!({ "line": 1, "character": 0 })
+        );
+        assert_eq!(edits[0]["range"]["start"], edits[0]["range"]["end"]);
+        client.shutdown();
+    }
+
+    #[test]
+    fn completion_omits_the_edit_when_the_import_exists() {
+        let mut client = MemoryClient::start(&requires_pack("dedup"));
+        let uri = "file:///dedup.rs";
+        client.open(
+            uri,
+            "use std::collections::{HashMap, HashSet};\n\nfn main() {\n    zmap\n}\n",
+        );
+
+        let items = client.complete(uri, 3, 8);
+        let item = snippet_item(&items, "zmap").expect("zmap snippet item expected");
+        assert!(
+            item.get("additionalTextEdits").is_none_or(Value::is_null),
+            "no import edit expected: {item}"
+        );
+        client.shutdown();
+    }
+
+    #[test]
+    fn second_expansion_sees_the_first_ones_import() {
+        // Simulates accepting the first completion: the client applies both
+        // edits and sends didChange; the next request must not re-insert.
+        let mut client = MemoryClient::start(&requires_pack("twice"));
+        let uri = "file:///twice.rs";
+        client.open(uri, "use std::fs;\n\nfn main() {\n    zmap\n}\n");
+        let items = client.complete(uri, 3, 8);
+        assert!(snippet_item(&items, "zmap").expect("item")["additionalTextEdits"].is_array());
+
+        // Whole-document change reflecting an accepted completion.
+        client.notify(
+            "textDocument/didChange",
+            json!({
+                "textDocument": { "uri": uri, "version": 2 },
+                "contentChanges": [{
+                    "text": "use std::fs;\nuse std::collections::HashMap;\n\nfn main() {\n    let mut map = HashMap::new();\n    zmap\n}\n"
+                }],
+            }),
+        );
+        let items = client.complete(uri, 5, 8);
+        let item = snippet_item(&items, "zmap").expect("zmap snippet item expected");
+        assert!(
+            item.get("additionalTextEdits").is_none_or(Value::is_null),
+            "dedup should catch the buffer's import: {item}"
+        );
+        client.shutdown();
+    }
 }

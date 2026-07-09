@@ -63,7 +63,27 @@ pub fn compute(
         start: index.position(text, start, encoding),
         end: index.position(text, offset, encoding),
     };
-    if let Some(item) = expansion_item(engine, lang, candidate, range, &ctx) {
+    if let Some((mut item, expansion_requires)) =
+        expansion_item(engine, lang, candidate, range, &ctx)
+    {
+        // Missing `requires` imports ride along as `additionalTextEdits`:
+        // the standard auto-import mechanism, applied atomically with the
+        // main edit by any LSP client. A provider without syntax awareness
+        // returns no scan and the requires are skipped, never guessed.
+        if !expansion_requires.is_empty()
+            && let Some(scan) = provider.import_scan(&doc)
+            && let Some(edit) = super::requires::import_edit(
+                &doc.language,
+                &expansion_requires,
+                &scan,
+                index,
+                text,
+                encoding,
+                range.start,
+            )
+        {
+            item.additional_text_edits = Some(vec![edit]);
+        }
         items.push(item);
     }
     items.extend(option_items(lang, candidate));
@@ -130,7 +150,9 @@ fn option_items(lang: &LanguageSnippets, candidate: &str) -> Vec<CompletionItem>
         .collect()
 }
 
-/// The single whole-abbreviation snippet item, when `candidate` renders.
+/// The single whole-abbreviation snippet item, when `candidate` renders,
+/// paired with the expansion's collected `requires` specs (the caller
+/// attaches any missing-import edit).
 ///
 /// The engine's `expand` already parses and resolves the whole abbreviation,
 /// returning an error for anything unrenderable, so the `.ok()?` gate is the
@@ -147,7 +169,7 @@ fn expansion_item(
     candidate: &str,
     range: Range,
     ctx: &ExpansionContext,
-) -> Option<CompletionItem> {
+) -> Option<(CompletionItem, Vec<String>)> {
     let keep = engine
         .expand(candidate, lang.profile.id, ctx, TabstopMode::Keep)
         .ok()?;
@@ -157,7 +179,7 @@ fn expansion_item(
         .resolve_word(candidate)
         .and_then(|(snippet, _)| snippet.description.clone());
 
-    Some(CompletionItem {
+    let item = CompletionItem {
         label: candidate.to_owned(),
         label_details: Some(CompletionItemLabelDetails {
             detail: None,
@@ -176,7 +198,8 @@ fn expansion_item(
             new_text: keep.body,
         })),
         ..CompletionItem::default()
-    })
+    };
+    Some((item, keep.requires))
 }
 
 /// Plain word items for registered triggers the final segment is a prefix of.

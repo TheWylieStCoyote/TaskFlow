@@ -619,6 +619,121 @@ fn expand_data_driven_repeat_falls_back_without_data() {
 }
 
 #[test]
+fn expand_member_flag_zips_a_parallel_list() {
+    // The ZIPPED_COLLECTIONS_PLAN.md flagship: two lists in, paired items out.
+    let out = run(
+        "expand-member-zip",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "struct:W>field*@P",
+            "--repeat",
+            "P=host,port",
+            "--member",
+            "P.type=String,u16",
+        ],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "struct W {\n    host: String,\n    port: u16,\n}\n"
+    );
+}
+
+#[test]
+fn expand_member_flag_empty_slot_skips_an_item() {
+    // A sparse slot leaves the member absent: that item's `${value.type:Type}`
+    // falls back to its default (rendered as placeholder text in strip mode).
+    let out = run(
+        "expand-member-sparse",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "struct:W>field*@P",
+            "--repeat",
+            "P=a,b",
+            "--member",
+            "P.type=i32,",
+        ],
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(stdout(&out), "struct W {\n    a: i32,\n    b: Type,\n}\n");
+}
+
+#[test]
+fn expand_member_flag_rejects_length_mismatch() {
+    let out = run(
+        "expand-member-mismatch",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "struct:W>field*@P",
+            "--repeat",
+            "P=a,b,c",
+            "--member",
+            "P.type=i32,f64",
+        ],
+    );
+    assert_eq!(code(&out), 3);
+    assert!(
+        stderr(&out).contains("--member P.type: 2 value(s) for 3 item(s)"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
+fn expand_member_flag_rejects_unknown_collection_and_bad_spec() {
+    // No `--repeat P=…` to attach to.
+    let out = run(
+        "expand-member-unknown",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "field*@P",
+            "--member",
+            "P.type=i32",
+        ],
+    );
+    assert_eq!(code(&out), 3);
+    assert!(
+        stderr(&out).contains("no `--repeat P=…` collection"),
+        "stderr: {}",
+        stderr(&out)
+    );
+
+    // Malformed spec: no `.key` before the `=`.
+    let out = run(
+        "expand-member-malformed",
+        &[
+            "expand",
+            "--lang",
+            "rust",
+            "--no-project",
+            "field*@P",
+            "--repeat",
+            "P=a",
+            "--member",
+            "P=i32",
+        ],
+    );
+    assert_eq!(code(&out), 3);
+    assert!(
+        stderr(&out).contains("expected NAME.key"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+#[test]
 fn expand_enum_with_variants_defines_and_data_fills() {
     // The definition side, symmetric with `match … > arm*`: `variant` nests in
     // `enum` and fills from a collection (falling back to a `Name` tabstop).

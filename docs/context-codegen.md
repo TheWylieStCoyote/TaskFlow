@@ -162,6 +162,40 @@ struct Wrapper {
 }
 ```
 
+**Zipping two lists: `--member`.** When the data arrives as two (or more)
+parallel lists — say, from a script that produces names in one column and types
+in another — you don't have to pre-zip them into `value:type` form. `--member
+NAME.key=v1,v2,…` attaches a parallel value list as member `key` of the
+collection `NAME`, one value per item in order:
+
+```sh
+codemmet expand --lang rust "struct:W>field*@P" \
+    --repeat P=host,port --member P.type=String,u16
+```
+
+```rust
+struct W {
+    host: String,
+    port: u16,
+}
+```
+
+Bodies and arguments read an attached member exactly like any other:
+`${value.key}`, with `${value.key:default}` falling back to a tabstop when the
+member is absent. The rules:
+
+- **Counts must match exactly.** `--member` lists one value per item; a length
+  mismatch is an error. To skip an item, write an **empty slot**
+  (`--member P.vis=pub,,pub` attaches `vis` to the first and third items only).
+- **Slot text is kept nearly verbatim**: leading whitespace is trimmed (so
+  `a, b` reads naturally), but **trailing whitespace is preserved** — members
+  are display-ready fragments, and a value like `pub ` (with its trailing
+  space) renders cleanly as `${value.vis}${value}`. Don't put a space before a
+  comma unless you mean to keep it.
+- The key must be an identifier (`${value.key}` can only reference identifier
+  keys), and the named collection must come from a `--repeat` flag in the same
+  invocation; flag order doesn't matter.
+
 The [browser playground](https://thewyliestcoyote.github.io/codemmit/) has a
 **Data-driven collections** box that takes the same `name=values` lines, so you
 can try all of this without an editor.

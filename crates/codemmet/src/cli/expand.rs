@@ -45,6 +45,14 @@ pub struct ExpandArgs {
     #[arg(long, value_name = "NAME=v1,v2,…")]
     repeat: Vec<String>,
 
+    /// Attach a parallel value list as a named member of a `--repeat`
+    /// collection ("zip" two lists), as `NAME.key=v1,v2,…` — one value per
+    /// item, in order; bodies read it as `${value.key}`. An empty slot skips
+    /// that item. Repeatable. Example: `--repeat P=host,port` with
+    /// `--member P.type=String,u16`.
+    #[arg(long, value_name = "NAME.key=v1,v2,…")]
+    member: Vec<String>,
+
     /// The abbreviation; omitted or `-` reads it from stdin.
     #[arg(value_name = "ABBR")]
     abbr: Option<String>,
@@ -68,7 +76,10 @@ pub fn run(sources: &Sources, args: &ExpandArgs) -> ExitCode {
     };
 
     let collections = match parse_repeat(&args.repeat) {
-        Ok(collections) => collections,
+        Ok(mut collections) => match attach_members(&mut collections, &args.member) {
+            Ok(()) => collections,
+            Err(msg) => return config_failure(&msg),
+        },
         Err(msg) => return config_failure(&msg),
     };
 
@@ -99,6 +110,28 @@ pub(super) fn parse_repeat(specs: &[String]) -> Result<BTreeMap<String, Collecti
         collections.insert(name, collection);
     }
     Ok(collections)
+}
+
+/// Apply `--member NAME.key=v1,v2,…` specs to the parsed collections: each
+/// attaches a parallel value list as member `key` of collection `NAME`, one
+/// slot per item. Runs after every `--repeat` is parsed, so flag order does
+/// not matter. The slot count must match the item count exactly (an empty
+/// slot skips that item); referencing an unknown collection is an error.
+fn attach_members(
+    collections: &mut BTreeMap<String, Collection>,
+    specs: &[String],
+) -> Result<(), String> {
+    for spec in specs {
+        let (name, key, slots) =
+            Collection::parse_member_spec(spec).map_err(|err| format!("--member {err}"))?;
+        let collection = collections.get_mut(&name).ok_or_else(|| {
+            format!("--member {name}.{key}: no `--repeat {name}=…` collection to attach to")
+        })?;
+        collection
+            .attach_member(&key, slots)
+            .map_err(|err| format!("--member {name}.{key}: {err}"))?;
+    }
+    Ok(())
 }
 
 /// Resolve the abbreviation argument; `None` or `-` reads stdin, trimming

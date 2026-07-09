@@ -147,6 +147,18 @@ follows [Semantic Versioning](https://semver.org/).
   notifies with the `FILE:LINE` diagnostic; on success you land in snippet
   navigation (see the re-entry entry above). New `keymaps.render` setup
   field (set it to `false` to disable).
+- **`--member`: zip a second list onto a collection.** `--member
+  NAME.key=v1,v2,…` attaches a parallel value list as a named member of a
+  `--repeat` collection, one value per item in order — so two lists pair up
+  without pre-zipping them shell-side: `--repeat P=host,port --member
+  P.type=String,u16` with `struct:W>field*@P` writes `host: String` and
+  `port: u16`. Bodies and arguments read the member as `${value.key}`. An
+  empty slot skips that item (its `${value.key:default}` falls back to a
+  tabstop); any other length mismatch is an error. Slot text keeps trailing
+  whitespace (only leading whitespace is trimmed), so display-ready members
+  like `vis` values (`pub `) survive. See `ZIPPED_COLLECTIONS_PLAN.md` for
+  the design (and why this is the zip feature, rather than new syntax).
+
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

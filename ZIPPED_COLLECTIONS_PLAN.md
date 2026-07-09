@@ -343,19 +343,20 @@ In-scope list bindings (all languages) stay member-less element text.
 
 ## Risks and open questions
 
-- **Member-absent rendering** (the biggest behavioral call): keep today's
-  literal-default text, or switch to tabstop-with-default? The switch is
-  better for partially-zipped data but changes existing goldens and strip-
-  mode output. Leaning: switch, with a CHANGELOG note.
-- **Trimming vs display-ready members**: `--member` slots need to preserve
-  meaningful trailing space for `vis`-style members, but untrimmed slots
-  surprise casual callers. Options: trim leading only; or bless `vis` as the
-  one key extractors emit with trailing space while CLI callers write bodies
-  accordingly. Needs an owner decision before IM0 freezes the spec.
-- **`--member` vs extending `--repeat`** (`--repeat P=@names:type=@types`):
-  one flag fewer, and it visually previews the reserved grammar form — but
-  it overloads `--repeat`'s value position with reference semantics (`@`
-  prefix) and reopens separator questions. Leaning: separate `--member`.
+- **Member-absent rendering** — **RESOLVED (implemented)**: switched to
+  tabstop-with-default, landed together with the arg-position
+  `${value.member:default}` parity fix (`fix/item-member-parity`, merged
+  here); strip-mode output is unchanged.
+- **Trimming vs display-ready members** — **RESOLVED (Q2)**: `--member`
+  slots trim **leading** whitespace only and preserve trailing whitespace;
+  a slot that is empty after the leading trim means the member is absent.
+  Members are display-ready fragments (`vis` = `pub `, `optional` = `?`)
+  and extractors emit them that way. Spelled out in
+  `Collection::parse_member_spec`'s docs and `docs/context-codegen.md`,
+  including the sharp edge (a space before a comma is preserved).
+- **`--member` vs extending `--repeat`** — **RESOLVED**: separate
+  `--member` flag (overloading `--repeat`'s value position with `@`
+  references reopens separator questions).
 - **Blessed-key drift**: extractors across 7 languages must agree on member
   semantics (`optional` as marker text vs boolean-ish `"true"`). The
   display-ready convention answers this, but each IM1 extractor PR should

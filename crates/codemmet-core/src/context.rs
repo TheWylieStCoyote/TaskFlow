@@ -59,6 +59,76 @@ impl Collection {
         Ok((name.to_string(), Self::parse_values(rest)))
     }
 
+    /// Parse a `NAME.key=v1,v2,…` member spec (the CLI `--member` flag): a
+    /// parallel value list to attach as member `key` of the collection `NAME`,
+    /// one slot per item — the data-layer "zip". Returns
+    /// `(collection_name, key, slots)`; apply the slots with
+    /// [`Collection::attach_member`].
+    ///
+    /// Slot text is taken **almost verbatim**: only *leading* whitespace is
+    /// trimmed (so `a, b` reads naturally), while trailing whitespace is
+    /// preserved — members are display-ready fragments, and a value like
+    /// `pub ` keeps its meaningful trailing space. A slot that is empty after
+    /// the leading trim means the member is **absent** for that item (the
+    /// sparse escape hatch: `P.vis=pub,,pub`).
+    ///
+    /// # Errors
+    /// Returns a message when the spec has no `=`, the left side has no `.`,
+    /// the collection name is empty, or the key is empty or not an identifier
+    /// (`${value.key}` can only reference identifier keys).
+    pub fn parse_member_spec(spec: &str) -> Result<(String, String, Vec<Option<String>>), String> {
+        let (target, values) = spec
+            .split_once('=')
+            .ok_or_else(|| format!("expected NAME.key=values, got `{spec}`"))?;
+        let (name, key) = target
+            .split_once('.')
+            .ok_or_else(|| format!("expected NAME.key before `=`, got `{target}`"))?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(format!("empty collection name in `{spec}`"));
+        }
+        let key = key.trim();
+        if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err(format!(
+                "member key must be an identifier (as in `NAME.key=…`), got `{key}`"
+            ));
+        }
+        let slots = values
+            .split(',')
+            .map(|slot| {
+                let slot = slot.trim_start();
+                (!slot.is_empty()).then(|| slot.to_string())
+            })
+            .collect();
+        Ok((name.to_string(), key.to_string(), slots))
+    }
+
+    /// Attach a parallel value list as member `key` of this collection's
+    /// items, one slot per item in order. A `None` slot leaves the member
+    /// absent on that item (a `${value.key:default}` reference falls back to
+    /// a tabstop).
+    ///
+    /// # Errors
+    /// The slot count must equal the item count **exactly** (write an empty
+    /// slot, not nothing, to skip an item); a mismatch is an error, because
+    /// where this is used the data is explicit and a length drift is almost
+    /// always a bug in the producing script.
+    pub fn attach_member(&mut self, key: &str, slots: Vec<Option<String>>) -> Result<(), String> {
+        if slots.len() != self.items.len() {
+            return Err(format!(
+                "{} value(s) for {} item(s); the counts must match exactly (use an empty slot to skip an item)",
+                slots.len(),
+                self.items.len()
+            ));
+        }
+        for (item, slot) in self.items.iter_mut().zip(slots) {
+            if let Some(value) = slot {
+                item.members.insert(key.to_string(), value);
+            }
+        }
+        Ok(())
+    }
+
     /// Parse the `v1,v2,…` value list of a spec (the part after `=`, and the
     /// body of an inline `*[…]` literal). Each value may carry a `:type` member;
     /// empty values are skipped, so a trailing comma is harmless.
@@ -271,6 +341,68 @@ mod tests {
         // No `=`, and an empty name, are both errors.
         assert!(Collection::parse_spec("nope").is_err());
         assert!(Collection::parse_spec("=A,B").is_err());
+    }
+
+    #[test]
+    fn parse_member_spec_trims_leading_and_keeps_trailing_whitespace() {
+        // Q2 decision: leading trim only. `pub ` keeps its display-ready
+        // trailing space; an empty slot means "absent".
+        let (name, key, slots) =
+            Collection::parse_member_spec("P.vis=pub , ,pub(crate) ").expect("valid");
+        assert_eq!(name, "P");
+        assert_eq!(key, "vis");
+        assert_eq!(
+            slots,
+            [
+                Some("pub ".to_string()),
+                None,
+                Some("pub(crate) ".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_member_spec_rejects_malformed() {
+        // No `=`, no `.`, empty name, empty key, non-identifier key.
+        assert!(Collection::parse_member_spec("P.vis").is_err());
+        assert!(Collection::parse_member_spec("Pvis=a,b").is_err());
+        assert!(Collection::parse_member_spec(".vis=a,b").is_err());
+        assert!(Collection::parse_member_spec("P.=a,b").is_err());
+        assert!(Collection::parse_member_spec("P.a-b=x,y").is_err());
+    }
+
+    #[test]
+    fn attach_member_zips_slots_onto_items() {
+        let (_, mut collection) = Collection::parse_spec("P=host,port").expect("valid");
+        collection
+            .attach_member("type", vec![Some("String".into()), Some("u16".into())])
+            .expect("lengths match");
+        assert_eq!(collection.items[0].members["type"], "String");
+        assert_eq!(collection.items[1].members["type"], "u16");
+    }
+
+    #[test]
+    fn attach_member_sparse_slot_leaves_member_absent() {
+        let (_, mut collection) = Collection::parse_spec("P=a,b,c").expect("valid");
+        collection
+            .attach_member("vis", vec![Some("pub ".into()), None, Some("pub ".into())])
+            .expect("lengths match");
+        assert!(collection.items[0].members.contains_key("vis"));
+        assert!(!collection.items[1].members.contains_key("vis"));
+        assert!(collection.items[2].members.contains_key("vis"));
+    }
+
+    #[test]
+    fn attach_member_rejects_length_mismatch() {
+        let (_, mut collection) = Collection::parse_spec("P=a,b,c").expect("valid");
+        let err = collection
+            .attach_member("type", vec![Some("i32".into())])
+            .expect_err("too few slots");
+        assert!(err.contains("1 value(s) for 3 item(s)"), "got: {err}");
+        let err = collection
+            .attach_member("type", vec![None; 4])
+            .expect_err("too many slots");
+        assert!(err.contains("4 value(s) for 3 item(s)"), "got: {err}");
     }
 
     #[test]

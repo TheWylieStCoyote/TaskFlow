@@ -805,6 +805,21 @@ mod tests {
     }
 
     #[test]
+    fn reserved_zip_spellings_stay_parse_errors() {
+        // ZIPPED_COLLECTIONS_PLAN.md reserves these for a possible future
+        // in-buffer zip. They must stay parse errors with stable messages so
+        // the syntax remains free to claim; if either starts parsing, that
+        // plan's grammar reservation has been silently spent.
+        let e = parse_err("a*@x@y");
+        assert_eq!(e.message, "unexpected '@'");
+        assert_eq!(e.span, 4..5);
+
+        let e = parse_err("a*@x:k=@y");
+        assert_eq!(e.message, "unexpected ':'");
+        assert_eq!(e.span, 4..5);
+    }
+
+    #[test]
     fn error_data_driven_repeat_on_a_group() {
         let e = parse_err("(a+b)*@x");
         assert!(e.message.contains("not supported on a group"));

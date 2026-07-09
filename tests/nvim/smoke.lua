@@ -27,6 +27,10 @@ end
 require("codemmet").setup({
   cmd = { binary, "lsp" },
   init_options = { snippets_dir = "/tmp/codemmet-smoke-nonexistent" },
+  -- Table form of the preview option: exercises normalization and the
+  -- configurable debounce while keeping the preview off for the scenarios
+  -- (scenario 5 drives it explicitly).
+  preview = { enabled = false, debounce_ms = 30 },
 })
 
 ---Create a rust buffer with the given lines and wait for the codemmet client to attach.
@@ -180,6 +184,11 @@ end
 -- The preview never edits the buffer.
 if vim.api.nvim_buf_get_lines(preview_buf, 1, 2, false)[1] ~= "    fori10" then
   fail("preview: the buffer text should be unchanged by the preview", preview_buf)
+end
+-- clear() removes the ghost lines (and drops any pending request bookkeeping).
+preview.clear(preview_buf)
+if #vim.api.nvim_buf_get_extmarks(preview_buf, preview_ns, 0, -1, {}) ~= 0 then
+  fail("preview: clear() left ghost virtual lines behind", preview_buf)
 end
 io.write("smoke: preview scenario passed\n")
 

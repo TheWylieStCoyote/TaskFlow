@@ -8,6 +8,17 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Neovim: configurable preview debounce + in-flight request cancellation.**
+  The `preview` setup option now also accepts a table,
+  `preview = { enabled = true, debounce_ms = 100 }`, controlling the typing
+  pause before the live ghost preview queries the server (the boolean form is
+  still supported: `true` ≡ `{ enabled = true, debounce_ms = 60 }`; an invalid
+  `debounce_ms` falls back to 60 ms with a warning at setup). When typing
+  outruns the server, the plugin now cancels the superseded in-flight
+  `codemmet.preview` request and drops stale responses, so an outdated ghost
+  expansion never overwrites a newer one. Deferred as future work: an
+  accept-the-preview key and an inline `virt_text` mode for single-line
+  expansions.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

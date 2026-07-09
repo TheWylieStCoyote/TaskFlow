@@ -115,7 +115,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
 | `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw" }` | Key bindings to install. Set either field to `false` to disable that binding. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
-| `preview` | `boolean` | `false` | Show a live ghost-line preview of the expansion while you type (see below). |
+| `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
 | `notes_file` | `string` | `<data>/codemmet/notes.md` | Where `:CodemmetNote` appends dogfooding notes. |
 
 On setup, a `FileType` autocommand starts the server with `vim.lsp.start` for each
@@ -149,14 +149,37 @@ action through its user command or by calling the Lua function directly.
 
 ### Live preview
 
-With `preview = true`, the plugin shows the expansion as **dimmed virtual lines
-below the current line** while you type an abbreviation in insert mode — no
-buffer edit, no completion menu required. It updates as you type (debounced) and
-clears when you accept the abbreviation, leave insert mode, or move away.
+With the preview enabled, the plugin shows the expansion as **dimmed virtual
+lines below the current line** while you type an abbreviation in insert mode —
+no buffer edit, no completion menu required. It updates as you type (debounced)
+and clears when you accept the abbreviation, leave insert mode, or move away.
 
 ```lua
 require("codemmet").setup({ preview = true })
 ```
+
+The option also takes a table for finer control:
+
+```lua
+require("codemmet").setup({
+  preview = {
+    enabled = true,     -- default true when a table is given
+    debounce_ms = 100,  -- typing-pause before the server is queried (default 60)
+  },
+})
+```
+
+The boolean form remains fully supported: `preview = true` is shorthand for
+`{ enabled = true, debounce_ms = 60 }`, and `false` (the default) or omitting
+the option disables the preview. In the table form, `enabled` defaults to
+`true` — passing a table opts in unless you set `enabled = false` explicitly
+(useful to pre-configure `debounce_ms` for `:CodemmetPreviewToggle` without
+turning the preview on everywhere). `debounce_ms` must be a positive integer;
+an invalid value falls back to the default 60 ms with a warning at setup.
+
+When you type faster than the server replies, the plugin cancels the
+superseded in-flight `codemmet.preview` request (and ignores its response if
+it arrives anyway), so a stale ghost expansion never overwrites a newer one.
 
 The preview is off by default because it updates on every keystroke; enable it
 globally as above, or toggle it per buffer at runtime:

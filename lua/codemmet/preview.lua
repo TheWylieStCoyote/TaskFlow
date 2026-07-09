@@ -7,10 +7,38 @@ local lsp = require("codemmet.lsp")
 
 local NS = vim.api.nvim_create_namespace("codemmet_preview")
 local HL = "CodemmetPreview"
-local DEBOUNCE_MS = 60
+local DEFAULT_DEBOUNCE_MS = 60
+
+-- Debounce delay before the server is queried; setup() overrides this from
+-- the `preview.debounce_ms` option (validated there).
+local debounce_ms = DEFAULT_DEBOUNCE_MS
 
 -- Per-buffer debounce timers, keyed by bufnr.
 local timers = {}
+-- Per-buffer in-flight `codemmet.preview` request ({ client, id }), cancelled
+-- when a newer request supersedes it or the preview is cleared.
+local pending = {}
+-- Per-buffer monotonically increasing token. Each request captures the token
+-- current at send time; a response whose token no longer matches is stale
+-- (cancellation is only best-effort) and is dropped.
+local generation = {}
+
+---Set the debounce delay (milliseconds) used before querying the server.
+---setup() calls this with the validated `preview.debounce_ms` value.
+---@param ms integer
+function M.set_debounce(ms)
+  debounce_ms = ms
+end
+
+---Cancel a buffer's in-flight preview request, if any (best-effort).
+---@param bufnr integer
+local function cancel_pending(bufnr)
+  local request = pending[bufnr]
+  pending[bufnr] = nil
+  if request then
+    lsp.cancel(request.client, request.id)
+  end
+end
 
 local function ensure_highlight()
   if vim.fn.hlexists(HL) == 0 then
@@ -18,9 +46,12 @@ local function ensure_highlight()
   end
 end
 
----Remove any preview virtual lines from a buffer.
+---Remove any preview virtual lines from a buffer, cancel its in-flight
+---request, and invalidate outstanding responses (bump the generation token).
 ---@param bufnr integer
 function M.clear(bufnr)
+  generation[bufnr] = (generation[bufnr] or 0) + 1
+  cancel_pending(bufnr)
   if vim.api.nvim_buf_is_valid(bufnr) then
     vim.api.nvim_buf_clear_namespace(bufnr, NS, 0, -1)
   end
@@ -75,14 +106,24 @@ local function refresh(bufnr)
   if not client then
     return
   end
+  -- Supersede any still-pending request so stale ghost text never wins a race
+  -- against fast typing: cancel it and bump the generation token.
+  cancel_pending(bufnr)
+  generation[bufnr] = (generation[bufnr] or 0) + 1
+  local gen = generation[bufnr]
   local position = vim.lsp.util.make_position_params(0, client.offset_encoding).position
-  lsp.exec(client, bufnr, "codemmet.preview", {
+  local ok, request_id = lsp.exec(client, bufnr, "codemmet.preview", {
     {
       uri = vim.uri_from_bufnr(bufnr),
       position = position,
       formatting_options = lsp.formatting_options(bufnr),
     },
   }, function(err, result)
+    if gen ~= generation[bufnr] then
+      -- Superseded or cancelled after the reply was already on the wire.
+      return
+    end
+    pending[bufnr] = nil -- this generation's request has completed
     if err or not previewing(bufnr) then
       return
     end
@@ -96,6 +137,9 @@ local function refresh(bufnr)
     -- Otherwise a half-typed abbreviation (`{}`): keep the current preview,
     -- so it doesn't flicker while you type through incomplete states.
   end)
+  if ok and request_id then
+    pending[bufnr] = { client = client, id = request_id }
+  end
 end
 
 ---Restart the buffer's debounce timer.
@@ -108,7 +152,7 @@ local function schedule(bufnr)
   end
   timer:stop()
   timer:start(
-    DEBOUNCE_MS,
+    debounce_ms,
     0,
     vim.schedule_wrap(function()
       refresh(bufnr)
@@ -156,6 +200,8 @@ function M.attach(bufnr)
     buffer = bufnr,
     callback = function()
       drop_timer(bufnr)
+      cancel_pending(bufnr)
+      generation[bufnr] = nil
     end,
   })
 end

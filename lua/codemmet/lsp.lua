@@ -17,6 +17,8 @@ end
 ---@param command string e.g. "codemmet.expand"
 ---@param arguments any[] command arguments
 ---@param handler fun(err: lsp.ResponseError|nil, result: any)
+---@return boolean ok whether the request was sent
+---@return integer? request_id id of the in-flight request, usable with [`cancel`]
 function M.exec(client, bufnr, command, arguments, handler)
   local params = { command = command, arguments = arguments }
   if has_011 then
@@ -24,6 +26,20 @@ function M.exec(client, bufnr, command, arguments, handler)
   end
   ---@diagnostic disable-next-line: param-type-mismatch
   return client.request("workspace/executeCommand", params, handler, bufnr)
+end
+
+---Best-effort cancellation of an in-flight request issued through [`exec`].
+---The server may still reply before the `$/cancelRequest` lands, so callers
+---must also guard their handlers against stale responses.
+---@param client vim.lsp.Client
+---@param request_id integer
+function M.cancel(client, request_id)
+  if has_011 then
+    client:cancel_request(request_id)
+  else
+    ---@diagnostic disable-next-line: param-type-mismatch
+    client.cancel_request(request_id)
+  end
 end
 
 ---LSP FormattingOptions for a buffer.

@@ -6,12 +6,16 @@ local M = {}
 ---@field expand string|false insert- and normal-mode mapping for expand(); false disables
 ---@field wrap string|false visual-mode mapping for wrap(); false disables
 
+---@class codemmet.PreviewOpts
+---@field enabled? boolean turn the preview on when the server attaches (default true for the table form)
+---@field debounce_ms? integer typing-pause before the server is queried, in ms (default 60)
+
 ---@class codemmet.SetupOpts
 ---@field cmd? string[] command used to start the language server
 ---@field filetypes? string[] filetypes the server is started for
 ---@field keymaps? codemmet.KeymapOpts
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
----@field preview? boolean show a live ghost-line preview while typing (default false)
+---@field preview? boolean|codemmet.PreviewOpts live ghost-line preview while typing (default false); `true` ≡ `{ enabled = true, debounce_ms = 60 }`
 ---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
 
 local defaults = {
@@ -50,11 +54,52 @@ function M.capture(opts)
   require("codemmet.capture").capture(opts)
 end
 
+local PREVIEW_DEBOUNCE_DEFAULT = 60
+
+---Normalize the `preview` option into its table form, warning (once, at setup)
+---about invalid values. Booleans are shorthand: `true` ≡ `{ enabled = true }`,
+---`false`/nil ≡ `{ enabled = false }`. In the table form `enabled` defaults to
+---true (passing a table opts in), and a `debounce_ms` that is not a positive
+---integer falls back to the default of 60 ms.
+---@param value boolean|codemmet.PreviewOpts|nil
+---@return { enabled: boolean, debounce_ms: integer }
+local function normalize_preview(value)
+  if type(value) ~= "table" then
+    if value ~= nil and type(value) ~= "boolean" then
+      vim.notify(
+        "codemmet: `preview` must be a boolean or a table (got "
+          .. type(value)
+          .. "); preview disabled",
+        vim.log.levels.WARN
+      )
+    end
+    return { enabled = value == true, debounce_ms = PREVIEW_DEBOUNCE_DEFAULT }
+  end
+  local ms = value.debounce_ms
+  if ms == nil then
+    ms = PREVIEW_DEBOUNCE_DEFAULT
+  elseif type(ms) ~= "number" or ms <= 0 or ms % 1 ~= 0 then
+    vim.notify(
+      ("codemmet: `preview.debounce_ms` must be a positive integer (got %s); using %d"):format(
+        vim.inspect(value.debounce_ms),
+        PREVIEW_DEBOUNCE_DEFAULT
+      ),
+      vim.log.levels.WARN
+    )
+    ms = PREVIEW_DEBOUNCE_DEFAULT
+  end
+  return { enabled = value.enabled ~= false, debounce_ms = ms }
+end
+
 ---Configure codemmet: start the language server for the configured filetypes and
 ---install buffer-local keymaps when it attaches.
 ---@param opts? codemmet.SetupOpts
 function M.setup(opts)
   local config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  config.preview = normalize_preview(config.preview)
+  -- Always forward the debounce so `:CodemmetPreviewToggle` honors it even
+  -- when the preview is not enabled at attach time.
+  require("codemmet.preview").set_debounce(config.preview.debounce_ms)
   require("codemmet.notes").set_file(config.notes_file)
   local group = vim.api.nvim_create_augroup("codemmet", { clear = true })
 
@@ -92,7 +137,7 @@ function M.setup(opts)
           M.wrap()
         end, { buffer = ev.buf, desc = "codemmet: wrap selection" })
       end
-      if config.preview then
+      if config.preview.enabled then
         require("codemmet.preview").attach(ev.buf)
       end
     end,

@@ -1447,18 +1447,30 @@ mod tests {
         );
         // The value is the match-ready pattern: a unit variant is bare, a struct
         // variant gets `{ .. }`, and a tuple variant gets `(..)`, so a generated
-        // `match:Msg>arm*` compiles without naming each payload field.
+        // `match:Msg>arm*` compiles without naming each payload field. The bare
+        // name stays reachable as the `name` member.
         assert_eq!(values(&map, "Msg"), ["Quit", "Move { .. }", "Write(..)"]);
+        let msg = &map["Msg"];
+        assert_eq!(msg.items[1].members["name"], "Move");
+        assert_eq!(msg.items[2].members["name"], "Write");
     }
 
     #[cfg(feature = "lang-rust")]
     #[test]
     fn rust_struct_fields_carry_types() {
-        let map = cols("rust", "struct Point { x: i32, y: f64 }\nfn f() { §\n}\n");
-        assert_eq!(values(&map, "Point"), ["x", "y"]);
+        let map = cols(
+            "rust",
+            "struct Point { pub x: i32, y: f64, pub(crate) z: u8 }\nfn f() { §\n}\n",
+        );
+        assert_eq!(values(&map, "Point"), ["x", "y", "z"]);
         let point = &map["Point"];
         assert_eq!(point.items[0].members["type"], "i32");
         assert_eq!(point.items[1].members["type"], "f64");
+        // Visibility is display-ready (trailing space); a private field
+        // carries no `vis` at all.
+        assert_eq!(point.items[0].members["vis"], "pub ");
+        assert!(!point.items[1].members.contains_key("vis"));
+        assert_eq!(point.items[2].members["vis"], "pub(crate) ");
     }
 
     #[cfg(feature = "lang-rust")]
@@ -1488,12 +1500,19 @@ mod tests {
     fn typescript_enums_unions_and_interfaces() {
         let map = cols(
             "typescript",
-            "enum Color { Red, Green = 2 }\ntype Dir = \"n\" | \"s\";\ninterface Point { x: number; y: string; }\n§\n",
+            "enum Color { Red, Green = 2 }\ntype Dir = \"n\" | \"s\";\ninterface Point { x: number; y?: string; }\n§\n",
         );
         assert_eq!(values(&map, "Color"), ["Red", "Green"]);
+        // An assigned enum value is carried as the `value` member.
+        assert!(!map["Color"].items[0].members.contains_key("value"));
+        assert_eq!(map["Color"].items[1].members["value"], "2");
         assert_eq!(values(&map, "Dir"), ["\"n\"", "\"s\""]);
         assert_eq!(values(&map, "Point"), ["x", "y"]);
         assert_eq!(map["Point"].items[0].members["type"], "number");
+        // `?` optionality is display-ready: the marker itself, or absent.
+        assert!(!map["Point"].items[0].members.contains_key("optional"));
+        assert_eq!(map["Point"].items[1].members["optional"], "?");
+        assert_eq!(map["Point"].items[1].members["type"], "string");
     }
 
     #[cfg(feature = "lang-c")]
@@ -1501,9 +1520,12 @@ mod tests {
     fn c_enum_and_struct() {
         let map = cols(
             "c",
-            "enum Color { RED, GREEN, BLUE };\nstruct Point { int x; double y; };\nvoid f() { §; }\n",
+            "enum Color { RED, GREEN = 2, BLUE };\nstruct Point { int x; double y; };\nvoid f() { §; }\n",
         );
         assert_eq!(values(&map, "Color"), ["RED", "GREEN", "BLUE"]);
+        // An enumerator's assigned value is carried as the `value` member.
+        assert!(!map["Color"].items[0].members.contains_key("value"));
+        assert_eq!(map["Color"].items[1].members["value"], "2");
         assert_eq!(values(&map, "Point"), ["x", "y"]);
         assert_eq!(map["Point"].items[0].members["type"], "int");
     }
@@ -1520,16 +1542,35 @@ mod tests {
         assert_eq!(values(&map, "items"), ["1", "2", "3"]);
     }
 
+    #[cfg(feature = "lang-go")]
+    #[test]
+    fn go_iota_const_group_reads_as_an_enum() {
+        // An iota const group is Go's enum: keyed by the first spec's declared
+        // type, items are every spec's names. A non-iota const group and an
+        // untyped iota group contribute nothing.
+        let map = cols(
+            "go",
+            "type Color int\n\nconst (\n\tRed Color = iota\n\tGreen\n\tBlue\n)\n\nconst (\n\tA = 1\n\tB = 2\n)\n\nfunc f() {\n\t§\n}\n",
+        );
+        assert_eq!(values(&map, "Color"), ["Red", "Green", "Blue"]);
+        assert!(!map.contains_key("A"), "non-iota consts are not a group");
+    }
+
     #[cfg(feature = "lang-python")]
     #[test]
     fn python_enum_dataclass_and_list() {
         let map = cols(
             "python",
-            "class Color(Enum):\n    RED = 1\n    GREEN = 2\n\n@dataclass\nclass Point:\n    x: int\n    y: float\n\nitems = [1, 2, 3]\n§\n",
+            "class Color(Enum):\n    RED = 1\n    GREEN = 2\n\n@dataclass\nclass Point:\n    x: int\n    y: float = 0.5\n\nitems = [1, 2, 3]\n§\n",
         );
         assert_eq!(values(&map, "Color"), ["RED", "GREEN"]);
+        // An enum member's assigned value is the `value` member.
+        assert_eq!(map["Color"].items[0].members["value"], "1");
         assert_eq!(values(&map, "Point"), ["x", "y"]);
         assert_eq!(map["Point"].items[0].members["type"], "int");
+        // An annotated field's initializer is the `default` member.
+        assert!(!map["Point"].items[0].members.contains_key("default"));
+        assert_eq!(map["Point"].items[1].members["default"], "0.5");
         assert_eq!(values(&map, "items"), ["1", "2", "3"]);
     }
 

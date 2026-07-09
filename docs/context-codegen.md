@@ -121,7 +121,9 @@ tree-sitter. Three kinds are recognized:
 
 - **Enum variants**, keyed by the enum name. Typing `match:msg>arm*@Msg` (or
   the shorthand `match:Msg>arm*`, which infers the subject) reads the variants
-  of a same-file `enum Msg` and writes one arm each.
+  of a same-file `enum Msg` and writes one arm each. In Go, an
+  `iota` const group (`const ( Red Color = iota; Green; Blue )`) reads as an
+  enum, keyed by its declared type.
 - **Struct / record fields**, keyed by the type name, each carrying its declared
   `type`. `struct:Wrapper>field*@Point` copies `Point`'s fields, and
   `${value.type}` renders each field's type.
@@ -132,6 +134,27 @@ Enum and struct/record definitions are visible anywhere in the file (a
 definition may sit below its use). A list binding must be **lexically in scope**
 and appear **before the cursor**; when two in-scope bindings share a name, the
 nearest one wins.
+
+### Member vocabulary
+
+Beyond `type`, extraction fills a small **blessed vocabulary** of members
+wherever the source carries the data. Any snippet body (yours or a builtin) can
+rely on these names; free-form keys still work everywhere (`--repeat`'s
+`value:type`, `--member NAME.key=…`, and `${value.key}` accept any identifier).
+
+| Member | Meaning | Filled from |
+| --- | --- | --- |
+| `type` | declared type | struct/record/interface fields (all languages that have them) |
+| `optional` | optionality marker, e.g. `?` | TypeScript `x?: number` |
+| `vis` | visibility prefix, e.g. `pub ` | Rust field visibility |
+| `default` | initializer text | Python `x: int = 0` |
+| `name` | the bare name, when the value is a richer form | Rust variants (value `Write(..)`, name `Write`) |
+| `value` | an enum member's assigned value | C `GREEN = 2`, TS `Green = 2`, Python `GREEN = 2` |
+
+Prefix/suffix members are **display-ready**: they carry their own spacing and
+punctuation (`vis` is `pub ` with a trailing space, `optional` is the bare
+`?`), so a body can write `${value.vis}${value}${value.optional}` and an absent
+member simply renders nothing — no conditional syntax needed.
 
 **On the CLI** there is no buffer, so you supply collections explicitly with
 `--repeat name=item1,item2,…` (repeatable). Each item may carry a member after a

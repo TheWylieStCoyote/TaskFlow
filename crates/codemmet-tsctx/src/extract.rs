@@ -11,6 +11,16 @@
 //! * **struct/record fields** (CX3) — keyed by the type name (`Point` → its
 //!   fields), each field carrying a `type` member for `${value.type}`. Also
 //!   file-wide.
+//!
+//! Beyond `type`, extraction fills the blessed member vocabulary where the
+//! grammar carries the data (IM1, see `ZIPPED_COLLECTIONS_PLAN.md`): `vis`
+//! (Rust field visibility), `optional` (TS `?`), `default` (Python field
+//! initializers), `value` (C/TS enum assigned values, Python enum members),
+//! and `name` (a Rust variant's bare name, since its item value is the
+//! match-ready pattern). Members that render as optional prefixes/suffixes
+//! are **display-ready** — they carry their own spacing and punctuation
+//! (`vis` = `"pub "`, `optional` = `"?"`) — so bodies can join them without
+//! conditionals and an absent member simply vanishes.
 //! * **in-scope list bindings** (CX1) — keyed by the variable name
 //!   (`items` → its elements). Only bindings lexically in scope at the cursor
 //!   and declared textually before it are offered; on a name clash the nearest
@@ -111,7 +121,10 @@ fn insert_def(map: &mut BTreeMap<String, Collection>, name: &str, items: Vec<Ite
 /// Enum-like definitions whose members are the direct named children of a
 /// container field. A member's value is its `name` field when it has one
 /// (Rust `enum_variant`, C `enumerator`, TS `enum_assignment`), else the
-/// member's own text (a bare TS enum member, a union `literal_type`).
+/// member's own text (a bare TS enum member, a union `literal_type`). An
+/// assigned value, when the grammar exposes one (`GREEN = 2` — a C
+/// enumerator's or TS enum assignment's `value` field), is carried as the
+/// item's `value` member for `${value.value}`.
 fn extract_enum(
     root: Node<'_>,
     text: &str,
@@ -127,7 +140,15 @@ fn extract_enum(
         let items = field_children(def, container_field)
             .into_iter()
             .filter(|m| member_kinds.contains(&m.kind()))
-            .map(|m| Item::new(field_text(m, "name", text).unwrap_or_else(|| node_text(m, text))))
+            .map(|m| {
+                let mut item =
+                    Item::new(field_text(m, "name", text).unwrap_or_else(|| node_text(m, text)));
+                if let Some(value) = field_text(m, "value", text) {
+                    item.members
+                        .insert("value".to_owned(), value.trim().to_owned());
+                }
+                item
+            })
             .collect();
         insert_def(map, name, items);
     }
@@ -140,7 +161,8 @@ fn extract_enum(
 fn rust_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection>) {
     // Rust variants can carry a payload, so the item value is the match-ready
     // pattern — `Quit`, `Write(..)`, `Move { .. }` — not just the name, so
-    // `match:Msg>arm*` produces arms that actually compile.
+    // `match:Msg>arm*` produces arms that actually compile. The bare name is
+    // still reachable as the `name` member (`${value.name}`).
     for def in descendants_of(root, &["enum_item"]) {
         let Some(name) = field_text(def, "name", text) else {
             continue;
@@ -148,7 +170,12 @@ fn rust_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection>)
         let items = field_children(def, "body")
             .into_iter()
             .filter(|v| v.kind() == "enum_variant")
-            .filter_map(|v| Some(Item::new(rust_variant_pattern(v, text)?)))
+            .filter_map(|v| {
+                let bare = field_text(v, "name", text)?;
+                let mut item = Item::new(rust_variant_pattern(v, text)?);
+                item.members.insert("name".to_owned(), bare.to_owned());
+                Some(item)
+            })
             .collect();
         insert_def(map, name, items);
     }
@@ -212,6 +239,34 @@ fn c_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection>) {
 }
 
 fn go_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection>) {
+    // `const ( Red Color = iota; Green; Blue )` — an iota const group is Go's
+    // enum. It is keyed by the declared type of its **first** spec (an
+    // untyped group has no name to key by and is skipped); the items are
+    // every spec's names, in order.
+    for decl in descendants_of(root, &["const_declaration"]) {
+        let specs = descendants_of(decl, &["const_spec"]);
+        let Some(ty) = specs.first().and_then(|s| field_text(*s, "type", text)) else {
+            continue;
+        };
+        let uses_iota = specs.iter().any(|s| {
+            s.child_by_field_name("value").is_some_and(|v| {
+                node_text(v, text)
+                    .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                    .any(|token| token == "iota")
+            })
+        });
+        if !uses_iota {
+            continue;
+        }
+        let mut items = Vec::new();
+        for spec in &specs {
+            let mut cursor = spec.walk();
+            for name in spec.children_by_field_name("name", &mut cursor) {
+                items.push(Item::new(node_text(name, text)));
+            }
+        }
+        insert_def(map, &clean_type(ty), items);
+    }
     // Go structs live under `type_spec name: … type: (struct_type …)`.
     for spec in descendants_of(root, &["type_spec"]) {
         let Some(name) = field_text(spec, "name", text) else {
@@ -275,6 +330,14 @@ fn python_defs(root: Node<'_>, text: &str, map: &mut BTreeMap<String, Collection
                 item.members
                     .insert("type".to_owned(), clean_type(node_text(ty, text)));
             }
+            // The assignment's right side: an enum member's assigned value
+            // (`RED = 1` → `value`), or an annotated field's initializer
+            // (`x: int = 0` → `default`).
+            if let Some(rhs) = assign.child_by_field_name("right") {
+                let key = if is_enum { "value" } else { "default" };
+                item.members
+                    .insert(key.to_owned(), node_text(rhs, text).trim().to_owned());
+            }
             items.push(item);
         }
         insert_def(map, name, items);
@@ -297,12 +360,33 @@ fn rust_variant_pattern(variant: Node<'_>, text: &str) -> Option<String> {
 }
 
 /// A struct field whose name is in a `name` field and type in a `type` field
-/// (Rust, Go, TypeScript). The `type` member is omitted when absent.
+/// (Rust, Go, TypeScript). The `type` member is omitted when absent. Two
+/// further display-ready members are captured where the grammar carries them
+/// (each is a prefix/suffix fragment that renders cleanly next to the name,
+/// and simply vanishes when absent):
+///
+/// * `vis` — a Rust `visibility_modifier` (`pub`, `pub(crate)`), **with a
+///   trailing space**, so `${value.vis}${value}` reads `pub x` / `x`;
+/// * `optional` — a TS `property_signature`'s `?` marker, so
+///   `${value}${value.optional}` reads `x?` / `x`.
 fn named_field_item(field: Node<'_>, text: &str) -> Option<Item> {
     let name = field_text(field, "name", text)?;
     let mut item = Item::new(name);
     if let Some(ty) = field_text(field, "type", text) {
         item.members.insert("type".to_owned(), clean_type(ty));
+    }
+    let mut cursor = field.walk();
+    for child in field.children(&mut cursor) {
+        match child.kind() {
+            "visibility_modifier" => {
+                item.members
+                    .insert("vis".to_owned(), format!("{} ", node_text(child, text)));
+            }
+            "?" => {
+                item.members.insert("optional".to_owned(), "?".to_owned());
+            }
+            _ => {}
+        }
     }
     Some(item)
 }

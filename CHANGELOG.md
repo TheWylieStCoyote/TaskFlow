@@ -159,6 +159,18 @@ follows [Semantic Versioning](https://semver.org/).
   like `vis` values (`pub `) survive. See `ZIPPED_COLLECTIONS_PLAN.md` for
   the design (and why this is the zip feature, rather than new syntax).
 
+- **Richer buffer extraction: the blessed member vocabulary.** Collections
+  extracted from the buffer now carry more than `type`, so `${value.key}` can
+  reach data that was previously dropped: `vis` (Rust field visibility, as a
+  display-ready `pub ` prefix), `optional` (a TypeScript field's `?`),
+  `default` (a Python field's initializer), `value` (an assigned enum value —
+  C, TypeScript, Python), and `name` (a Rust variant's bare name next to its
+  match-ready pattern value). Go `iota` const groups are now extracted as
+  enums, keyed by their declared type. Prefix/suffix members are
+  display-ready — they carry their own spacing/punctuation and vanish when
+  absent — so bodies join them without conditionals. See "Member vocabulary"
+  in `docs/context-codegen.md`.
+
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

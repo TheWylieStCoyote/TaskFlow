@@ -586,26 +586,30 @@ impl Composer<'_> {
                         outer: is_outer,
                         member,
                         default,
-                    } => (if *is_outer { outer } else { item }).map_or_else(
-                        // No item: leave a tabstop carrying the default.
-                        || CSpan::Stop {
-                            id: self.alloc(default.clone()),
-                            mirror: false,
-                        },
-                        |it| {
-                            let text = member.as_ref().map_or_else(
-                                || it.value.clone(),
-                                |key| {
-                                    it.members
-                                        .get(key)
-                                        .cloned()
-                                        .or_else(|| default.clone())
-                                        .unwrap_or_default()
+                    } => {
+                        let src = if *is_outer { outer } else { item };
+                        match (src, member.as_ref()) {
+                            // No item: leave a tabstop carrying the default.
+                            (None, _) => CSpan::Stop {
+                                id: self.alloc(default.clone()),
+                                mirror: false,
+                            },
+                            (Some(it), None) => CSpan::Text(it.value.clone()),
+                            (Some(it), Some(key)) => match it.members.get(key) {
+                                Some(text) => CSpan::Text(text.clone()),
+                                // Member absent on a present item: parity with
+                                // the missing-item case — a tabstop carrying
+                                // the default, not the default pasted as text,
+                                // so partially-populated data leaves holes the
+                                // user can tab through.
+                                None if default.is_some() => CSpan::Stop {
+                                    id: self.alloc(default.clone()),
+                                    mirror: false,
                                 },
-                            );
-                            CSpan::Text(text)
-                        },
-                    ),
+                                None => CSpan::Text(String::new()),
+                            },
+                        }
+                    }
                     Span::ChildSlot => CSpan::Slot,
                     Span::FinalCursor => CSpan::Final,
                 });
@@ -1096,11 +1100,21 @@ fn item_token(arg: &str) -> Option<ItemToken<'_>> {
             member: None,
             default: None,
         }),
-        r if r.starts_with('.') => Some(ItemToken {
-            outer,
-            member: Some(&r[1..]),
-            default: None,
-        }),
+        // `.member`, optionally followed by `:default` — the same combined
+        // form the template body accepts (`${value.type:Type}`).
+        r if r.starts_with('.') => {
+            let (member, default) = r[1..]
+                .split_once(':')
+                .map_or((&r[1..], None), |(m, d)| (m, Some(d)));
+            if member.is_empty() {
+                return None;
+            }
+            Some(ItemToken {
+                outer,
+                member: Some(member),
+                default,
+            })
+        }
         r if r.starts_with(':') => Some(ItemToken {
             outer,
             member: None,
@@ -1128,9 +1142,17 @@ fn resolve_item_args(args: &[String], item: Option<&Item>, outer: Option<&Item>)
         };
         let src = if tok.outer { outer } else { item };
         match src {
+            // A member absent on a present item falls back to the `:default`,
+            // matching the body behaviour.
             Some(it) => out.push(tok.member.map_or_else(
                 || it.value.clone(),
-                |key| it.members.get(key).cloned().unwrap_or_default(),
+                |key| {
+                    it.members
+                        .get(key)
+                        .cloned()
+                        .or_else(|| tok.default.map(str::to_owned))
+                        .unwrap_or_default()
+                },
             )),
             // No item: a `:default` supplies text; a bare token is dropped.
             None => {
@@ -1569,6 +1591,8 @@ mod tests {
                 "match-body",
             ),
             snip("fielddef", vec![], "${value}: ${value.type},\n"),
+            // A member reference with a default — for the member-absent tests.
+            snip("tfield", vec![], "${value:name}: ${value.type:Type},\n"),
             // References the enclosing repeat's item via `${outer}` (and its own
             // via `${value}`) — for the nested `${outer}` tests.
             snip("dv", vec![], "${outer}.${value}$0\n"),
@@ -2148,6 +2172,36 @@ mod tests {
         let e = expand("impl*[A,B]>note:${outer}*[x,y]", &ctx(), TabstopMode::Strip);
         assert_eq!(e.body.matches("// A").count(), 2, "{}", e.body);
         assert_eq!(e.body.matches("// B").count(), 2, "{}", e.body);
+    }
+
+    #[test]
+    fn arg_member_with_default_resolves_member_then_default() {
+        // `${value.member:default}` in argument position: the member when the
+        // item carries it, the default when it doesn't. (Regression: the
+        // member key used to be parsed as `type:T`, so both rendered empty.)
+        let e = expand("let:${value.type:T}*[x:i32,y]", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains("let i32"), "{}", e.body);
+        assert!(e.body.contains("let T"), "{}", e.body);
+    }
+
+    #[test]
+    fn member_absent_on_present_item_is_a_tabstop() {
+        // A present item with an absent member renders a tabstop carrying the
+        // default — parity with the missing-item case — not pasted text.
+        let e = expand("tfield*[x:i32,y]", &ctx(), TabstopMode::Keep);
+        assert!(e.body.contains("x: i32,"), "{}", e.body);
+        assert!(e.body.contains("y: ${1:Type},"), "{}", e.body);
+        // Strip mode is unchanged: the placeholder renders as text.
+        let e = expand("tfield*[x:i32,y]", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains("y: Type,"), "{}", e.body);
+    }
+
+    #[test]
+    fn member_absent_without_default_stays_empty() {
+        // No default to carry: the span renders empty, as before.
+        let e = expand("fielddef*[x:i32,y]", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains("x: i32,"), "{}", e.body);
+        assert!(e.body.contains("y: ,"), "{}", e.body);
     }
 
     #[test]

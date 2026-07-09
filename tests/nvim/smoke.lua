@@ -24,6 +24,18 @@ if vim.fn.executable(binary) ~= 1 then
   fail(binary .. " is not built; run `cargo build -p codemmet` first")
 end
 
+-- Spy on vim.lsp.completion.enable (when this Neovim has it) so scenario 1 can
+-- assert the plugin auto-enabled built-in completion on attach.
+local completion_calls = {}
+if vim.lsp.completion then
+  local real_enable = vim.lsp.completion.enable
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.lsp.completion.enable = function(enable, client_id, bufnr, opts)
+    completion_calls[#completion_calls + 1] = { enable = enable, opts = opts }
+    return real_enable(enable, client_id, bufnr, opts)
+  end
+end
+
 require("codemmet").setup({
   cmd = { binary, "lsp" },
   init_options = { snippets_dir = "/tmp/codemmet-smoke-nonexistent" },
@@ -74,6 +86,18 @@ if not expanded then
   fail('expand: line 1 never became "for i in 0..10 {"', expand_buf)
 end
 io.write("smoke: expand scenario passed\n")
+
+-- With completion on by default (and no cmp/blink loaded here), the attach above
+-- must have enabled built-in LSP completion with autotrigger — on 0.11+ only.
+if require("codemmet.completion").supported() then
+  local call = completion_calls[1]
+  if not call or call.enable ~= true or not (call.opts and call.opts.autotrigger == true) then
+    fail("completion: vim.lsp.completion.enable was not called with autotrigger on attach")
+  end
+  io.write("smoke: completion auto-enable scenario passed\n")
+else
+  io.write("smoke: completion auto-enable skipped (Neovim < 0.11)\n")
+end
 
 reset_state()
 
@@ -266,6 +290,32 @@ os.remove(pack)
 io.write("smoke: capture scenario passed\n")
 
 reset_state()
+
+-- Scenario 8: completion config shape — boolean shorthand, mode → init_options
+-- precedence, and engine detection. Pure config assertions (no server, no buffers),
+-- so re-running setup() here cannot disturb the finished scenarios.
+require("codemmet").setup({ completion = { mode = "operators-only" } })
+if require("codemmet")._config.init_options.completion ~= "operators-only" then
+  fail("completion config: completion.mode did not flow into init_options.completion")
+end
+require("codemmet").setup({
+  completion = { mode = "operators-only" },
+  init_options = { completion = "off" },
+})
+if require("codemmet")._config.init_options.completion ~= "off" then
+  fail("completion config: explicit init_options.completion must win over completion.mode")
+end
+require("codemmet").setup({ completion = false })
+local bool_config = require("codemmet")._config
+if bool_config.completion.enabled ~= false or bool_config.completion.autotrigger ~= true then
+  fail("completion config: boolean shorthand did not normalize to { enabled = false, ... }")
+end
+package.loaded.cmp = {}
+if require("codemmet.completion").engine() ~= "nvim-cmp" then
+  fail("completion config: a loaded nvim-cmp was not detected")
+end
+package.loaded.cmp = nil
+io.write("smoke: completion config scenario passed\n")
 
 io.write("SMOKE OK\n")
 os.exit(0)

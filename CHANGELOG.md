@@ -27,6 +27,21 @@ follows [Semantic Versioning](https://semver.org/).
   expansion never overwrites a newer one. Deferred as future work: an
   accept-the-preview key and an inline `virt_text` mode for single-line
   expansions.
+- **Neovim plugin: completion wired up by default.** `setup()` now auto-enables
+  Neovim's built-in LSP completion (with autotrigger) for the codemmet client
+  when it attaches, so expansions pop up as you type with no completion plugin
+  installed. Needs Neovim 0.11+ (`vim.lsp.completion`); on 0.10 the wiring
+  quietly no-ops. When nvim-cmp or blink.cmp is loaded the auto-enable is
+  skipped — those engines already surface codemmet's LSP completions, so their
+  users need nothing extra. The new `completion` setup option controls it: a
+  boolean (`completion = false` disables the wiring) or a table
+  `{ enabled = true, autotrigger = true, mode = "always"|"operators-only"|"off" }`,
+  where `mode` is the first-class spelling of the server's completion gate and
+  flows into `initializationOptions.completion` (an explicit
+  `init_options.completion` wins). A minimal `:checkhealth codemmet` reports
+  the binary and version, built-in completion support, and whether the wiring
+  is active or skipped and why. See
+  [editor setup → completion](docs/editors.md#completion).
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

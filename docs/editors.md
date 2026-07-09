@@ -30,8 +30,10 @@ installing the binary see the [installation](installation.md) guide.
 
 This repository ships a Neovim plugin under `lua/` and `plugin/`. It requires
 **Neovim >= 0.10** (it uses `vim.snippet`). The plugin starts the server for the
-right filetypes, wires up completion through your existing completion UI, and
-installs expand and wrap key bindings.
+right filetypes, enables completion as you type (built-in LSP completion on
+Neovim 0.11+, or through your completion plugin), and installs expand and wrap
+key bindings. `:checkhealth codemmet` reports the binary, version support, and
+whether completion wiring is active.
 
 ### Install
 
@@ -114,12 +116,13 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | `cmd` | `string[]` | `{ "codemmet", "lsp" }` | Command used to start the language server. Use an absolute path if `codemmet` is not on `PATH`. |
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
 | `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw" }` | Key bindings to install. Set either field to `false` to disable that binding. |
+| `completion` | `boolean` or `table` | `{ enabled = true, autotrigger = true }` | Completion wiring; see [completion](#completion). A boolean is shorthand for `{ enabled = ... }`. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
 | `notes_file` | `string` | `<data>/codemmet/notes.md` | Where `:CodemmetNote` appends dogfooding notes. |
 
 On setup, a `FileType` autocommand starts the server with `vim.lsp.start` for each
-configured filetype. Completion then flows through whatever completion UI you use.
+configured filetype. Completion works out of the box — see [completion](#completion).
 
 ### Keymaps and commands
 
@@ -229,17 +232,54 @@ require("codemmet").wrap({ abbreviation = "fori10" })
 The selected lines become the content the abbreviation wraps around. This is
 useful for a fixed, frequently used wrapping abbreviation bound to its own key.
 
-### Using a specific completion engine
+### Completion
 
-The server is an ordinary LSP completion source, so any completion UI picks it up
-once the server is attached:
+Completion is wired up for you, on by default. When the server attaches, the
+plugin enables Neovim's **built-in LSP completion** for it with autotrigger
+(`vim.lsp.completion.enable(true, client_id, bufnr, { autotrigger = true })`),
+so expansions pop up in the completion menu as you type — no completion plugin
+required. The full option shape, with its defaults:
 
-- **Built-in `vim.lsp.completion`** — enable it for the buffer and codemmet
-  completions appear alongside other LSP sources.
-- **nvim-cmp** — add the `nvim_lsp` source (as you would for any language
-  server); codemmet's items show up automatically.
-- **blink.cmp** — its LSP source surfaces codemmet completions with no extra
-  configuration.
+```lua
+require("codemmet").setup({
+  completion = {
+    enabled = true,     -- auto-enable built-in LSP completion on attach
+    autotrigger = true, -- open the menu automatically while typing
+    mode = nil,         -- server gate: "always" | "operators-only" | "off"
+                        -- nil keeps the server default ("always")
+  },
+})
+```
+
+A plain boolean still works as shorthand: `completion = false` disables the
+wiring entirely (and `completion = true` is the default behavior spelled out).
+
+Two things to know:
+
+- **nvim-cmp / blink.cmp users need nothing extra.** Those engines already
+  consume LSP completion sources, so codemmet's items show up in them
+  automatically — and when either is loaded the plugin skips the built-in
+  auto-enable to avoid a double completion menu. (Detection looks at loaded
+  plugins on each attach; if you lazy-load your engine *after* opening a
+  codemmet buffer and see two menus, set `completion = false`.)
+- **Built-in auto-enable needs Neovim 0.11+.** The plugin itself runs on 0.10,
+  but `vim.lsp.completion` with per-client enable landed in 0.11; on 0.10 the
+  wiring quietly no-ops. Run `:checkhealth codemmet` to see whether completion
+  wiring is active or skipped and why — the health check also reports the
+  binary (`codemmet --version`) and your Neovim's support.
+
+`completion.mode` is the first-class way to set the server's completion gate
+(described in the [initializationOptions reference](#initializationoptions-reference)
+below): it flows into `initializationOptions.completion`. Precedence: if you
+also pass `init_options = { completion = ... }` explicitly, that verbatim value
+wins and `completion.mode` is ignored.
+
+```lua
+-- Only offer completions for abbreviations with a composition operator:
+require("codemmet").setup({
+  completion = { mode = "operators-only" },
+})
+```
 
 ### initializationOptions reference
 
@@ -271,13 +311,18 @@ The `completion` values behave as follows:
 - `"off"` — no completion items at all; you rely on the expand and wrap commands
   or keymaps. Unknown values are treated as `"always"`.
 
+With the plugin, prefer setting the gate through the first-class
+`completion = { mode = ... }` option (see [completion](#completion)); it fills
+in `init_options.completion` for you. An explicit `init_options.completion`
+takes precedence over `completion.mode`.
+
 Example, forwarding both options through the plugin:
 
 ```lua
 require("codemmet").setup({
   init_options = {
     snippets_dir = vim.fn.expand("~/.config/codemmet/snippets"),
-    completion = "operators-only",
+    completion = "operators-only", -- or: completion = { mode = "operators-only" }
   },
 })
 ```

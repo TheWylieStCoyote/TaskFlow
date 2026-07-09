@@ -10,10 +10,16 @@ local M = {}
 ---@field enabled? boolean turn the preview on when the server attaches (default true for the table form)
 ---@field debounce_ms? integer typing-pause before the server is queried, in ms (default 60)
 
+---@class codemmet.CompletionOpts
+---@field enabled? boolean auto-enable built-in LSP completion on attach (default true)
+---@field autotrigger? boolean open the completion menu while typing (default true)
+---@field mode? "always"|"operators-only"|"off" server-side completion gate; nil keeps the server default
+
 ---@class codemmet.SetupOpts
 ---@field cmd? string[] command used to start the language server
 ---@field filetypes? string[] filetypes the server is started for
 ---@field keymaps? codemmet.KeymapOpts
+---@field completion? boolean|codemmet.CompletionOpts built-in completion wiring; a boolean is shorthand for `{ enabled = ... }`
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
 ---@field preview? boolean|codemmet.PreviewOpts live ghost-line preview while typing (default false); `true` ≡ `{ enabled = true, debounce_ms = 60 }`
 ---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
@@ -32,6 +38,7 @@ local defaults = {
     "go",
   },
   keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+  completion = { enabled = true, autotrigger = true },
   init_options = {},
   preview = false,
 }
@@ -94,11 +101,28 @@ local function normalize_preview(value)
   return { enabled = value.enabled ~= false, debounce_ms = ms }
 end
 
----Configure codemmet: start the language server for the configured filetypes and
----install buffer-local keymaps when it attaches.
+---Resolved setup() configuration; read by `:checkhealth codemmet`. Nil until setup runs.
+---@type table|nil
+M._config = nil
+
+---Configure codemmet: start the language server for the configured filetypes,
+---install buffer-local keymaps when it attaches, and (by default) enable
+---Neovim's built-in LSP completion for it.
 ---@param opts? codemmet.SetupOpts
 function M.setup(opts)
-  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  opts = opts and vim.deepcopy(opts) or {}
+  -- Back-compat shorthand: `completion = true/false` means enabled/disabled with
+  -- the remaining fields (autotrigger, mode) at their defaults.
+  if type(opts.completion) == "boolean" then
+    opts.completion = { enabled = opts.completion }
+  end
+  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
+  -- `completion.mode` is the first-class spelling of the server's completion gate.
+  -- An explicit `init_options.completion` is the verbatim escape hatch and wins.
+  if config.init_options.completion == nil and config.completion.mode ~= nil then
+    config.init_options.completion = config.completion.mode
+  end
+  M._config = config
   config.preview = normalize_preview(config.preview)
   -- Always forward the debounce so `:CodemmetPreviewToggle` honors it even
   -- when the preview is not enabled at attach time.
@@ -122,7 +146,7 @@ function M.setup(opts)
 
   vim.api.nvim_create_autocmd("LspAttach", {
     group = group,
-    desc = "Buffer-local codemmet keymaps",
+    desc = "Buffer-local codemmet keymaps and completion",
     callback = function(ev)
       local client = vim.lsp.get_client_by_id(ev.data.client_id)
       if not client or client.name ~= "codemmet" then
@@ -143,6 +167,7 @@ function M.setup(opts)
       if config.preview.enabled then
         require("codemmet.preview").attach(ev.buf)
       end
+      require("codemmet.completion").attach(client, ev.buf, config.completion)
     end,
   })
 end

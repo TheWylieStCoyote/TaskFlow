@@ -70,6 +70,7 @@ try {
 
 [snippets.cout]
 description = "std::cout line"
+requires = ["<iostream>"]
 body = '''
 std::cout << $0 << '\n';
 '''
@@ -93,24 +94,28 @@ template <typename ${1:T}>$0
 
 [snippets.vec]
 description = "std::vector variable"
+requires = ["<vector>"]
 body = '''
 std::vector<${1:int}> ${2:values};$0
 '''
 
 [snippets.map]
 description = "std::unordered_map variable"
+requires = ["<unordered_map>", "<string>"]
 body = '''
 std::unordered_map<${1:std::string}, ${2:int}> ${3:map};$0
 '''
 
 [snippets.uptr]
 description = "std::make_unique binding"
+requires = ["<memory>"]
 body = '''
 auto ${1:ptr} = std::make_unique<${2:Type}>($3);$0
 '''
 
 [snippets.sptr]
 description = "std::make_shared binding"
+requires = ["<memory>"]
 body = '''
 auto ${1:ptr} = std::make_shared<${2:Type}>($3);$0
 '''

@@ -301,6 +301,51 @@ fn completion_expands_fori10_with_exact_text_edit() {
 }
 
 #[test]
+fn completion_of_builtin_hmap_auto_imports_hashmap() {
+    // The builtin `hmap` declares `requires = ["std::collections::HashMap"]`:
+    // its completion item carries the missing `use` as additionalTextEdits.
+    let (mut client, _) = LspClient::start("hmap-import", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "use std::fs;\n\nfn main() {\n    hmap\n}\n");
+
+    let result = client.complete(URI, 3, 8);
+    let snippets = snippet_items(&result);
+    assert_eq!(snippets.len(), 1, "items: {result}");
+    let item = snippets[0];
+    assert_eq!(item["label"], json!("hmap"));
+    assert!(
+        item["textEdit"]["newText"]
+            .as_str()
+            .expect("newText is a string")
+            .contains("HashMap::new()"),
+        "item: {item}"
+    );
+    let edits = &item["additionalTextEdits"];
+    assert_eq!(
+        edits[0]["newText"],
+        json!("use std::collections::HashMap;\n")
+    );
+    assert_eq!(
+        edits[0]["range"],
+        json!({ "start": { "line": 1, "character": 0 }, "end": { "line": 1, "character": 0 } })
+    );
+
+    // With the import already in the file the item carries no extra edits.
+    let uri2 = "file:///imported.rs";
+    client.open(
+        uri2,
+        "rust",
+        "use std::collections::HashMap;\n\nfn main() {\n    hmap\n}\n",
+    );
+    let result = client.complete(uri2, 3, 8);
+    let snippets = snippet_items(&result);
+    assert!(
+        snippets[0].get("additionalTextEdits").is_none(),
+        "items: {result}"
+    );
+    client.shutdown();
+}
+
+#[test]
 fn completion_offers_trigger_prefix_discovery() {
     let (mut client, _) = LspClient::start("prefix", &["utf-8"], &json!({}));
     client.open(URI, "rust", "fo");

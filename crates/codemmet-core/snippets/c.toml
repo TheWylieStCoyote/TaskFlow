@@ -159,12 +159,14 @@ return $0;
 
 [snippets.pr]
 description = "printf a line to stdout"
+requires = ["<stdio.h>"]
 body = '''
 printf("$0\n");
 '''
 
 [snippets.prf]
 description = "printf with a format string and arguments"
+requires = ["<stdio.h>"]
 params = [
   { name = "fmt", default = '%d\n' },
   { name = "args", default = "value" },
@@ -208,6 +210,7 @@ ${child}
 
 [snippets.malloc]
 description = "malloc a typed buffer"
+requires = ["<stdlib.h>"]
 params = [
   { name = "type", default = "int" },
   { name = "ptr", kind = "ident", default = "ptr" },
@@ -219,6 +222,7 @@ ${type} *${ptr} = malloc(${count} * sizeof(${type}));$0
 
 [snippets.free]
 description = "free a pointer and null it"
+requires = ["<stdlib.h>"]
 params = [{ name = "ptr", kind = "ident", default = "ptr" }]
 body = '''
 free(${ptr});
@@ -233,12 +237,14 @@ sizeof($0)
 
 [snippets.assert]
 description = "assert statement"
+requires = ["<assert.h>"]
 body = '''
 assert($0);
 '''
 
 [snippets.aeq]
 description = "equality assertion"
+requires = ["<assert.h>"]
 body = '''
 assert(${1:actual} == $0);
 '''

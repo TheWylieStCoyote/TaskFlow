@@ -339,6 +339,14 @@ In Neovim:
 or bind it, e.g. `vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action)`.
 The edit is plain text, so it applies in any LSP client.
 
+### Automatic imports
+
+Snippets that declare [import requirements](snippets.md#import-requirements-requires) (`requires = ["std::collections::HashMap"]` on the builtin Rust `hmap`, `<stdio.h>` on the C `pr`, `fmt` on the Go `pr`, …) bring their imports with them:
+
+- **Completion**: the snippet completion item carries the missing import as a standard `additionalTextEdits` entry, so *any* LSP client applies it atomically with the expansion — no plugin cooperation needed.
+- **`codemmet.expand` / `codemmet.wrap`**: the command result gains an `extraEdits` array (present only when something is missing); the shipped Neovim plugin applies those after the main snippet edit. Clients unaware of the field keep working, just without the import.
+- Nothing is inserted when the file already imports the symbol (brace groups, `from m import a, b`, and grouped Go imports all count), and the [live preview](#live-preview) never shows the import — it previews the local expansion only.
+
 ### Wrapping a selection
 
 The `wrap` binding operates line-wise. Select the lines you want to wrap in

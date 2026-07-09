@@ -409,6 +409,25 @@ field.
 - **IR4 — docs + polish.** A `docs/` guide, cookbook examples, playground
   note (WASM shows the `requires` list textually), `PLAN.md` entry.
 
+## Decision record (implementation, post-approval)
+
+The design was approved and implemented as recommended; the open questions
+below are retained for history, resolved as follows:
+
+- **Q1 — builtin bodies un-qualify: YES.** `hmap` renders `HashMap::new()`
+  and declares `requires = ["std::collections::HashMap"]`. The editor is the
+  primary surface; the CLI `--json` output reports the requirement, and the
+  plain-CLI/no-tree-sitter cost (an unqualified name without its import) was
+  accepted.
+- **Q2 — variant `requires` replace-when-declared.** `Some` (even `[]`)
+  replaces the snippet-level list; absent inherits — mirroring variant body
+  semantics.
+- **Q3 — same-line collision drops the import edit.** No client ever sees an
+  edit touching the main edit's line; the expansion stands alone.
+- The preview hint and the `raw:` escape hatch remain deferred (not
+  implemented); JS/TS remain deferred per §5, with the `codemmet check`
+  warning in place.
+
 ## Open questions
 
 - **Do builtin bodies un-qualify?** Making `hmap` render `HashMap::new()` +

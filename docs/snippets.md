@@ -219,6 +219,9 @@ params = [                  # optional; declared parameters, in binding order
   { name = "msg", kind = "str", default = "message" },
 ]
 scope = "loop"              # optional; the scope the ${child} content lives in
+requires = [                # optional; imports the snippet needs (see below)
+  "tracing::info",
+]
 body = '''
 tracing::info!("${msg}");$0
 '''                         # required (unless disabled = true)
@@ -245,6 +248,7 @@ Field by field:
 | `body` | `[snippets.<trigger>]` | Required unless `disabled` or `expands`. The template. |
 | `scope` | `[snippets.<trigger>]` | Optional. The scope `${child}` content lives in. |
 | `variants` | `[[snippets.<trigger>.variants]]` | Optional context-conditional bodies. |
+| `requires` | `[snippets.<trigger>]` (and variant entries) | Optional. [Import requirements](#import-requirements-requires): per-language specs whose imports editors insert alongside the expansion. |
 | `disabled` | `[snippets.<trigger>]` | In a user pack, removes the builtin of this name. |
 | `expands` | `[snippets.<trigger>]` | Makes this a [composite](#composite-snippets): an abbreviation re-expanded at render time (mutually exclusive with `body`). |
 | `options` | `[snippets.<trigger>.options]` | Named selectable fragments for a composite; the caller picks them by name. |
@@ -353,6 +357,57 @@ but tabs are the rule and adapt cleanly to any target. Any other indentation
 ```text
 error: invalid snippet `two` in /path/go.toml: line 2: indentation must be tabs or groups of 4 spaces
 ```
+
+## Import requirements (`requires`)
+
+A snippet can declare the imports its body needs; expanding it in an editor
+then also inserts the missing `use`/`import`/`#include` at the right place in
+the file — *if* it is not already there. The builtin Rust `hmap` is the
+flagship:
+
+```toml
+[snippets.hmap]
+description = "HashMap binding"
+requires = ["std::collections::HashMap"]
+body = '''
+let mut ${1:map} = HashMap::new();$0
+'''
+```
+
+Each entry is a small language-specific **spec**, validated by `codemmet
+check` (and at load time):
+
+| language | spec form | inserted line |
+| --- | --- | --- |
+| rust | `std::collections::HashMap` | `use std::collections::HashMap;` |
+| go | `fmt`, `net/http` | joins the grouped `import ( … )` block, else `import "fmt"` |
+| python | `json` | `import json` |
+| python | `dataclasses:dataclass` | `from dataclasses import dataclass` |
+| c / cpp | `<stdio.h>` or `"local.h"` | `#include <stdio.h>` (the delimiters are required) |
+
+Rules and behavior:
+
+- **Insertion point**: after the file's last existing import; with none,
+  each language's natural anchor (Rust: after `#![…]`/`//!` prelude; Go:
+  after the `package` clause; Python: after the module docstring; C/C++:
+  after `#pragma once` or an `#ifndef` guard's `#define`).
+- **Dedup is conservative**: an import already provided by an existing
+  statement — including Rust brace groups like `use std::collections::{HashMap,
+  HashSet};` and Python `from m import a, b` — is not re-inserted. Uncertain
+  cases (globs, aliases) err toward inserting a harmless visible duplicate
+  rather than silently skipping a needed import.
+- **Variants replace**: a `[[…variants]]` entry may declare its own
+  `requires`; when that variant is selected it **replaces** the snippet-level
+  list (declare `requires = []` to opt a variant out), mirroring how the
+  variant body replaces the default body. A variant without the key inherits.
+- **Composites aggregate**: a composite picks up the requires of every
+  snippet its expansion renders, plus any `requires` of its own.
+- **Editors only**: insertion needs the tree-sitter provider. The plain CLI
+  reports requirements in `--json` output and never touches them otherwise; a
+  minimal no-tree-sitter build skips them silently.
+- **JavaScript/TypeScript are not supported yet**: packs may declare
+  `requires` for them (the schema accepts it), but editors ignore them and
+  `codemmet check` warns.
 
 ## Overriding a builtin
 

@@ -426,10 +426,14 @@ codemmet expand --lang rust "hmap"
 ```
 
 ```rust
-let mut map = std::collections::HashMap::new();
+let mut map = HashMap::new();
 ```
 
-Binds a new mutable `HashMap` to `map` using its fully qualified path.
+Binds a new mutable `HashMap` to `map`. The snippet declares
+`requires = ["std::collections::HashMap"]`, so expanding it in an editor also
+inserts `use std::collections::HashMap;` after the file's last `use` — if it
+is not already imported. On the plain CLI the requirement is reported in
+`--json` output instead.
 
 ### `if`
 

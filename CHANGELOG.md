@@ -188,6 +188,28 @@ follows [Semantic Versioning](https://semver.org/).
   `codemmet check` catches them in packs; argument position reports them at
   expansion (where such tokens previously rendered as silent literal text).
   Design notes in `CASE_TRANSFORMS_PLAN.md`.
+- **Import requirements (`requires`).** A snippet can declare the imports its
+  body needs (`requires = ["std::collections::HashMap"]`); expanding it in an
+  editor also inserts the missing `use`/`import`/`#include` after the file's
+  last import (or the language's zero-import anchor) — if it is not already
+  there. Delivered as standard `additionalTextEdits` on completion (works in
+  any LSP client, applied atomically) and as `extraEdits` on the
+  `codemmet.expand`/`codemmet.wrap` command results, which the Neovim plugin
+  now applies. Specs are per-language (Rust paths, Go import paths, Python
+  `module[:name]`, C/C++ delimited headers) and validated by `codemmet
+  check`; dedup against existing imports is conservative (an uncertain case
+  inserts a visible duplicate rather than silently skipping). Variants may
+  declare `requires` to **replace** the snippet-level list; composites
+  aggregate the requires of everything they render. `codemmet expand --json`
+  reports collected requirements with formatted lines. JavaScript/TypeScript
+  insertion is deferred; `check` warns when their packs declare requires.
+  Builtins now using it: Rust `hmap` (whose body drops the
+  `std::collections::` qualification); C `pr`/`prf` (`<stdio.h>`),
+  `malloc`/`free` (`<stdlib.h>`), `assert`/`aeq` (`<assert.h>`); C++ `cout`
+  (`<iostream>`), `vec` (`<vector>`), `map` (`<unordered_map>`, `<string>`),
+  `uptr`/`sptr` (`<memory>`); Go `pr`/`prf`/`prd` (`fmt`), `err` (`errors`),
+  `test`/`aeq` (`testing`).
+
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

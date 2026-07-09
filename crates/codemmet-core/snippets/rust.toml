@@ -360,8 +360,12 @@ vec![$0]
 
 [snippets.hmap]
 description = "HashMap binding"
+# `requires`: editors insert the missing `use` alongside the expansion, so
+# the body uses the bare name. Plain-CLI/no-tree-sitter output reports the
+# requirement (`--json`) instead of qualifying it.
+requires = ["std::collections::HashMap"]
 body = '''
-let mut ${1:map} = std::collections::HashMap::new();$0
+let mut ${1:map} = HashMap::new();$0
 '''
 
 [snippets.test]

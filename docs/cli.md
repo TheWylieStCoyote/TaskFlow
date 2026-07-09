@@ -100,6 +100,16 @@ codemmet expand --lang rust --json --tabstops keep "pr"
 {"cursor":null,"is_snippet":true,"text":"println!(\"$0\");"}
 ```
 
+The object also carries `requires`: the [import requirements](snippets.md#import-requirements-requires) the expansion collected, each with its raw `spec` and the formatted import `line` (`null` when the language has no import formatter). The CLI has no file to edit, so plain-text output ignores requirements entirely — stdout stays pipeable code:
+
+```sh
+codemmet expand --lang rust --json "hmap"
+```
+
+```json
+{"cursor":{"character":29,"line":0},"is_snippet":false,"requires":[{"line":"use std::collections::HashMap;","spec":"std::collections::HashMap"}],"text":"let mut map = HashMap::new();"}
+```
+
 ### Reading from standard input
 
 Omit the abbreviation or pass `-` to read it from standard input, which lets you pipe the abbreviation in:
@@ -347,6 +357,8 @@ ok: N languages, M triggers
 ```
 
 If the directory contains a `*.toml` file whose name does not match a supported language pack, `check` warns about that file on standard error but still exits 0. A parse error or schema error in a correctly-named file causes an exit code of 3.
+
+`check` also validates every snippet's `requires` specs against its language's import-spec grammar (a malformed spec is a schema error, exit 3), and warns — without failing — when a pack declares `requires` for a language whose import insertion is not implemented yet (JavaScript/TypeScript), since editors silently ignore those.
 
 ## lsp
 

@@ -20,7 +20,9 @@ follows [Semantic Versioning](https://semver.org/).
   `:default` suffixes as `${value}`), while `${value}` stays the current level's
   item — so each copy can name both levels. With no enclosing repeat, `${outer}`
   falls back to a tabstop like `${value}`. `outer` is now a reserved parameter
-  name.
+  name. The Rust pack ships a builtin that uses it — `mtest`, a grouped test
+  case named `${outer:group}_${value:case}`, so
+  `mod*[parser,lexer]>mtest*[empty,unicode]` writes a test matrix.
 - **Data-driven repeats can name the construct, not just fill a body.** The
   current item now reaches a trigger's parameters, so `impl:Point>fn*@Meth`
   (with `--repeat Meth=new,len,area`, or a buffer collection) yields `fn new`,

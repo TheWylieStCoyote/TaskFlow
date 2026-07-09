@@ -708,6 +708,50 @@ mod util {
 
 An inline `mod` with a glued name argument (`:util`). Nesting items with `>` places them inside the module.
 
+### `mtest`
+
+grouped test case, named `${outer}_${value}`.
+
+```sh
+codemmet expand --lang rust "mtest"
+```
+
+```rust
+#[test]
+fn group_case() {
+    
+}
+```
+
+```sh
+codemmet expand --lang rust "mod*[parser,lexer]>mtest*[empty,unicode]"
+```
+
+```rust
+mod parser {
+    #[test]
+    fn parser_empty() {
+        
+    }
+    #[test]
+    fn parser_unicode() {
+        
+    }
+}
+mod lexer {
+    #[test]
+    fn lexer_empty() {
+        
+    }
+    #[test]
+    fn lexer_unicode() {
+        
+    }
+}
+```
+
+The inner node of a nested data-driven repeat: `${outer}` is the enclosing repeat's item (the module) and `${value}` is this one (the case), so a `mod × case` matrix names each test `parser_empty`, `parser_unicode`, …. On its own, `mtest` degrades to a single test with `group`/`case` tabstops.
+
 ### `pr`
 
 println! to stdout.

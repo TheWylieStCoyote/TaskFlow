@@ -126,6 +126,14 @@ golden!(rust_if_el, "rust", "if+el");
 golden!(rust_if_elif_el, "rust", "if+elif+el");
 golden!(rust_match_cmd_arm3, "rust", "match:cmd>arm*3");
 golden!(rust_repeat_index_tests, "rust", "test:case${i}*3");
+// `mtest` is the builtin `${outer}` example: nested data-driven repeats name
+// each test `${outer}_${value}` (module × case matrix).
+golden!(
+    rust_mtest_matrix,
+    "rust",
+    "mod*[parser,lexer]>mtest*[empty,unicode]"
+);
+golden!(rust_mtest_bare, "rust", "mtest");
 golden!(rust_matchres, "rust", "matchres");
 golden!(rust_struct_point, "rust", "struct:Point");
 golden!(rust_enum_op_arm, "rust", "enum:Op>arm");

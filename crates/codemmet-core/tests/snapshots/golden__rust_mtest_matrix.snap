@@ -1,0 +1,46 @@
+---
+source: crates/codemmet-core/tests/golden.rs
+expression: "case(\"rust\", \"mod*[parser,lexer]>mtest*[empty,unicode]\")"
+---
+== keep ==
+mod parser {
+    #[test]
+    fn parser_empty() {
+        $1
+    }
+    #[test]
+    fn parser_unicode() {
+        $2
+    }
+}
+mod lexer {
+    #[test]
+    fn lexer_empty() {
+        $3
+    }
+    #[test]
+    fn lexer_unicode() {
+        $0
+    }
+}
+== strip ==
+mod parser {
+    #[test]
+    fn parser_empty() {
+        
+    }
+    #[test]
+    fn parser_unicode() {
+        
+    }
+}
+mod lexer {
+    #[test]
+    fn lexer_empty() {
+        
+    }
+    #[test]
+    fn lexer_unicode() {
+        ‸
+    }
+}

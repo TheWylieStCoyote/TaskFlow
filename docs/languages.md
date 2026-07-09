@@ -73,6 +73,7 @@ id `rust` | extensions: `rs` | LSP ids: `rust` | default indent: 4 spaces
 | [`match`](examples/rust.md#match) | match expression |
 | [`matchres`](examples/rust.md#matchres) | match on a Result with Ok/Err arms |
 | [`mod`](examples/rust.md#mod) | inline module |
+| [`mtest`](examples/rust.md#mtest) | grouped test case, named `${outer}_${value}` |
 | [`pr`](examples/rust.md#pr) | println! to stdout |
 | [`prd`](examples/rust.md#prd) | debug-print a value with {:?} |
 | [`prf`](examples/rust.md#prf) | println! with a format string and arguments |

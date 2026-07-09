@@ -208,16 +208,32 @@ the `fn`), and `${value}` inside a level refers to that level's item.
 
 To reach the **enclosing** item from inside the inner body or an inner argument,
 use `${outer}` — it names the nearest surrounding data-driven repeat's item (and
-takes the same `.member` / `:default` suffixes as `${value}`). So a body that
-pairs the two,
+takes the same `.member` / `:default` suffixes as `${value}`). The Rust builtin
+`mtest` (a grouped test case) uses it to name a test-matrix from both levels:
 
 ```sh
-codemmet expand --lang rust "impl*[Point,Line]>const*[X,Y]"
-# where `const` is `const ${outer}_${value}: …` → Point_X, Point_Y, Line_X, Line_Y
+codemmet expand --lang rust "mod*[parser,lexer]>mtest*[empty,unicode]"
 ```
 
-writes the cross product with both levels' items in each copy. With no enclosing
-repeat, a bare `${outer}` falls back to its own tabstop, exactly like `${value}`.
+```rust
+mod parser {
+    #[test]
+    fn parser_empty() {  }
+    #[test]
+    fn parser_unicode() {  }
+}
+mod lexer {
+    #[test]
+    fn lexer_empty() {  }
+    #[test]
+    fn lexer_unicode() {  }
+}
+```
+
+Its body is `fn ${outer:group}_${value:case}()`, so each copy pairs the module
+(`${outer}`) with the case (`${value}`). With no enclosing repeat, a bare
+`${outer}` falls back to its own tabstop (as here `${outer:group}`), exactly like
+`${value}` — so `mtest` on its own is still a valid single test.
 
 ### Defining, then consuming
 

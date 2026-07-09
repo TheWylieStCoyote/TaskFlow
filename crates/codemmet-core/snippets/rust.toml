@@ -386,6 +386,21 @@ mod tests {
 }
 '''
 
+[snippets.mtest]
+description = "grouped test case, named ${outer}_${value}"
+# The inner node of a nested data-driven repeat: `${outer}` is the enclosing
+# repeat's item and `${value}` is this one. So a test matrix
+# `mod*[parser,lexer]>mtest*[empty,unicode]` writes `parser_empty`,
+# `parser_unicode`, `lexer_empty`, `lexer_unicode`. With no enclosing repeat
+# both degrade to tabstops, so a bare `mtest` is still a valid single test.
+scope = "fn-body"
+body = '''
+#[test]
+fn ${outer:group}_${value:case}() {
+	${child}
+}
+'''
+
 [snippets.aeq]
 description = "assert_eq! statement"
 body = '''

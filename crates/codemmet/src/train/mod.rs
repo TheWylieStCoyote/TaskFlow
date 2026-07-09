@@ -68,7 +68,7 @@ pub struct TrainArgs {
     #[arg(long, value_enum, default_value_t = ModeArg::Lessons)]
     mode: ModeArg,
 
-    /// Focus a single level (1-8); otherwise lessons cover all levels in order
+    /// Focus a single level (1-9); otherwise lessons cover all levels in order
     /// and drills mix them.
     #[arg(long, value_name = "N")]
     level: Option<u8>,
@@ -158,7 +158,7 @@ pub fn run(sources: &Sources, args: &TrainArgs) -> ExitCode {
 fn parse_level(level: Option<u8>) -> Result<Option<Level>, ExitCode> {
     level.map_or(Ok(None), |n| {
         Level::from_number(n).map(Some).ok_or_else(|| {
-            eprintln!("error: --level must be between 1 and 8");
+            eprintln!("error: --level must be between 1 and 9");
             ExitCode::from(EXIT_CONFIG)
         })
     })

@@ -45,7 +45,7 @@ $ codemmet train --lang python                # train another language
 
 ### Levels
 
-Lessons and focused drills are organized into eight levels, taught in order:
+Lessons and focused drills are organized into nine levels, taught in order:
 
 1. **Single triggers** — `pr`, `ret`
 2. **Arguments** — `fn:main`, `fori:i,10`
@@ -56,9 +56,12 @@ Lessons and focused drills are organized into eight levels, taught in order:
 7. **Grouping** `( )` — `(fn:main>pr)+ret`
 8. **Composites** — `dstruct:Point`, `classp:Point` (aliases that expand to a
    whole scaffold — see [composite snippets](snippets.md#composite-snippets))
+9. **Data-driven** `*[…]` — `struct:P>field*[x:i32,y:f64]`,
+   `mod*[parser,lexer]>mtest*[empty,unicode]` (an inline collection repeats a
+   node once per item — see [data-driven expansion](context-codegen.md))
 
-Pass `--level N` (1–8) to focus a single level; otherwise lessons cover all
-eight in sequence and drills mix them.
+Pass `--level N` (1–9) to focus a single level; otherwise lessons cover all
+nine in sequence and drills mix them.
 
 ## Keys
 

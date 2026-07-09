@@ -23,6 +23,12 @@ follows [Semantic Versioning](https://semver.org/).
   name. The Rust pack ships a builtin that uses it — `mtest`, a grouped test
   case named `${outer:group}_${value:case}`, so
   `mod*[parser,lexer]>mtest*[empty,unicode]` writes a test matrix.
+- **Trainer level 9 (data-driven).** The interactive trainer gains a new
+  capstone level covering data-driven repeats, taught with self-contained inline
+  collection literals — `struct:P>field*[x:i32,y:f64]`, `impl:Point>fn*[new,len]`,
+  and `mod*[…]>mtest*[…]` for `${outer}`. Curated lessons ship for every
+  language, and random drills and spaced-repetition review cover it too
+  (`train --level 9`).
 - **Data-driven repeats can name the construct, not just fill a body.** The
   current item now reaches a trigger's parameters, so `impl:Point>fn*@Meth`
   (with `--repeat Meth=new,len,area`, or a buffer collection) yields `fn new`,

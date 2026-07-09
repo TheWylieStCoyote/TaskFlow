@@ -49,11 +49,14 @@ pub enum Level {
     Grouping,
     /// Composite triggers that expand to a whole scaffold (`dstruct:Point`).
     Composite,
+    /// Data-driven repeats from an inline collection literal
+    /// (`struct:P>field*[x:i32,y:f64]`, `impl:Point>fn*[new,len]`).
+    DataDriven,
 }
 
 impl Level {
     /// Every level, in teaching order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::SingleTrigger,
         Self::Arguments,
         Self::Nesting,
@@ -62,6 +65,7 @@ impl Level {
         Self::ClimbUp,
         Self::Grouping,
         Self::Composite,
+        Self::DataDriven,
     ];
 
     /// The 1-based level number.
@@ -76,6 +80,7 @@ impl Level {
             Self::ClimbUp => 6,
             Self::Grouping => 7,
             Self::Composite => 8,
+            Self::DataDriven => 9,
         }
     }
 
@@ -91,6 +96,7 @@ impl Level {
             6 => Some(Self::ClimbUp),
             7 => Some(Self::Grouping),
             8 => Some(Self::Composite),
+            9 => Some(Self::DataDriven),
             _ => None,
         }
     }
@@ -107,6 +113,7 @@ impl Level {
             Self::ClimbUp => "climb-up (^)",
             Self::Grouping => "grouping ( )",
             Self::Composite => "composites",
+            Self::DataDriven => "data-driven (*[…])",
         }
     }
 
@@ -146,6 +153,12 @@ impl Level {
                 "A composite trigger expands to a whole scaffold built from other\n\
                  triggers: `dstruct:Point` yields a derived struct, `classp:Point`\n\
                  a class with the common dunders. Use one like any other trigger."
+            }
+            Self::DataDriven => {
+                "`*[a,b,c]` repeats a node once per item in an inline collection,\n\
+                 filling each copy from that item: `field*[x:i32,y:f64]` writes both\n\
+                 fields, `fn*[new,len]` names each method. `${outer}` reaches the\n\
+                 enclosing repeat's item when they nest."
             }
         }
     }
@@ -189,6 +202,8 @@ impl Concept {
             Self::Operator('+') => Level::Siblings,
             Self::Operator('*') => Level::Repeat,
             Self::Operator('^') => Level::ClimbUp,
+            // `[` is the inline collection literal `*[…]` of a data-driven repeat.
+            Self::Operator('[') => Level::DataDriven,
             Self::Operator(_) => Level::Grouping,
         }
     }
@@ -359,6 +374,16 @@ fn compose(vocab: &Vocab, level: Level, rng: &mut Rng) -> Option<(String, Vec<Co
         Level::Composite => {
             let s = rng.choice(&vocab.composites).copied()?;
             call(s, rng, &mut concepts)
+        }
+        Level::DataDriven => {
+            let a = rng.choice(&vocab.blocks).copied()?;
+            let b = rng.choice(&vocab.leaves).copied()?;
+            let sa = call(a, rng, &mut concepts);
+            // Repeat the child from an inline collection literal: each copy
+            // auto-binds its item (or just repeats, for a param-less leaf).
+            concepts.push(Concept::Trigger(b.trigger.clone()));
+            concepts.push(Concept::Operator('['));
+            format!("{sa}>{}*[a,b,c]", b.trigger)
         }
     };
     Some((abbr, concepts))
@@ -758,6 +783,6 @@ mod tests {
             assert_eq!(Level::from_number(level.number()), Some(level));
         }
         assert_eq!(Level::from_number(0), None);
-        assert_eq!(Level::from_number(9), None);
+        assert_eq!(Level::from_number(10), None);
     }
 }

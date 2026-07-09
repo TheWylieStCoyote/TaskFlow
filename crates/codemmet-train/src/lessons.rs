@@ -54,6 +54,12 @@ const fn rust(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["dstruct:Point", "denum:Color", "newtype:Meters", "testmod"],
+        Level::DataDriven => &[
+            "struct:P>field*[x:i32,y:f64]",
+            "impl:Point>fn*[new,len,area]",
+            "enum:Color>variant*[Red,Green,Blue]",
+            "mod*[parser,lexer]>mtest*[empty,unicode]",
+        ],
     }
 }
 
@@ -67,6 +73,11 @@ const fn python(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["def:main>fori:i,10>pr^ret", "def:run>if>pr^ret"],
         Level::Grouping => &["(def:main>pr)+def:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["classp:Point", "ctxmgr:Timer"],
+        Level::DataDriven => &[
+            "class:Shape>def*[area,perim]",
+            "class:P>field*[x,y]",
+            "match:cmd>arm*[Quit,Move]",
+        ],
     }
 }
 
@@ -80,6 +91,11 @@ const fn c(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["hstruct:Node", "henum:Color"],
+        Level::DataDriven => &[
+            "struct:P>field*[x:int,y:int]",
+            "enum:Color>variant*[Red,Green]",
+            "switch:cmd>case*[A,B]",
+        ],
     }
 }
 
@@ -98,6 +114,11 @@ const fn cpp(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["hclass:Widget", "nsclass:Shape", "henum:Mode"],
+        Level::DataDriven => &[
+            "struct:P>field*[x:int,y:int]",
+            "enum:Mode>variant*[On,Off]",
+            "switch:cmd>case*[A,B]",
+        ],
     }
 }
 
@@ -116,6 +137,7 @@ const fn javascript(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["classc:Widget"],
+        Level::DataDriven => &["switch:cmd>case*[A,B]", "class:S>fn*[area,perim]"],
     }
 }
 
@@ -134,6 +156,11 @@ const fn typescript(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["classc:Shape"],
+        Level::DataDriven => &[
+            "int:Shape>field*[x:number,y:number]",
+            "enum:Color>variant*[Red,Green]",
+            "switch:cmd>case*[A,B]",
+        ],
     }
 }
 
@@ -147,6 +174,7 @@ const fn go(level: Level) -> &'static [&'static str] {
         Level::ClimbUp => &["fn:main>fori:i,10>pr^ret", "fn:run>if>pr^ret"],
         Level::Grouping => &["(fn:main>pr)+fn:helper", "(fori:i,10>pr)+ret"],
         Level::Composite => &["stringer:Point", "errtype:ParseError", "maincmd"],
+        Level::DataDriven => &["struct:P>field*[X:int,Y:int]", "switch:cmd>case*[A,B]"],
     }
 }
 

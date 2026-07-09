@@ -15,6 +15,7 @@ use crate::config::loader::{
 use crate::config::schema::ParamKind;
 use crate::context::{Collection, ExpansionContext, Item, Scope};
 use crate::snippet::ir::{Span, Template};
+use crate::snippet::transform::CaseTransform;
 
 /// Maximum number of composed lines per expansion.
 ///
@@ -566,8 +567,8 @@ impl Composer<'_> {
             for span in &ir_line.spans {
                 spans.push(match span {
                     Span::Text(t) => CSpan::Text(t.clone()),
-                    Span::Param { name } => {
-                        self.instantiate_param(name, bindings, index, &mut param_ids)
+                    Span::Param { name, transform } => {
+                        self.instantiate_param(name, *transform, bindings, index, &mut param_ids)
                     }
                     Span::Tabstop {
                         index: ti,
@@ -585,8 +586,16 @@ impl Composer<'_> {
                     Span::ItemValue {
                         outer: is_outer,
                         member,
+                        transform,
                         default,
                     } => {
+                        // The transform re-cases *data-supplied* text only;
+                        // an author-written default renders verbatim.
+                        let cased = |text: &str| {
+                            CSpan::Text(
+                                transform.map_or_else(|| text.to_owned(), |t| t.apply(text)),
+                            )
+                        };
                         let src = if *is_outer { outer } else { item };
                         match (src, member.as_ref()) {
                             // No item: leave a tabstop carrying the default.
@@ -594,9 +603,9 @@ impl Composer<'_> {
                                 id: self.alloc(default.clone()),
                                 mirror: false,
                             },
-                            (Some(it), None) => CSpan::Text(it.value.clone()),
+                            (Some(it), None) => cased(&it.value),
                             (Some(it), Some(key)) => match it.members.get(key) {
-                                Some(text) => CSpan::Text(text.clone()),
+                                Some(text) => cased(text),
                                 // Member absent on a present item: parity with
                                 // the missing-item case — a tabstop carrying
                                 // the default, not the default pasted as text,
@@ -622,10 +631,12 @@ impl Composer<'_> {
         lines
     }
 
-    /// Instantiate one `${name}` reference for copy `index`.
+    /// Instantiate one `${name}` / `${name|transform}` reference for copy
+    /// `index`.
     fn instantiate_param<'b>(
         &mut self,
         name: &'b str,
+        transform: Option<CaseTransform>,
         bindings: &[(String, Binding)],
         index: u32,
         param_ids: &mut HashMap<&'b str, StopId>,
@@ -637,12 +648,19 @@ impl Composer<'_> {
                 // through to this sub-trigger) renders as a tabstop with a
                 // pre-allocated identity, so every sub-trigger that received the
                 // same param stays in sync. The first occurrence carries the
-                // placeholder; the rest mirror it.
+                // placeholder; the rest mirror it. Like any unbound param it
+                // is future typing, so a transform stays inert on it.
                 if let Some(id) = parse_stop_sentinel(value) {
                     let mirror = !self.shared_emitted.insert(id);
                     CSpan::Stop { id, mirror }
                 } else {
-                    CSpan::Text(sub_repeat_index(value, index))
+                    // The transform re-cases the caller-supplied text, after
+                    // `${i}` substitution so the copy number is part of it.
+                    let text = sub_repeat_index(value, index);
+                    CSpan::Text(match transform {
+                        Some(t) => t.apply(&text),
+                        None => text,
+                    })
                 }
             }
             other => {
@@ -1596,6 +1614,18 @@ mod tests {
             // References the enclosing repeat's item via `${outer}` (and its own
             // via `${value}`) — for the nested `${outer}` tests.
             snip("dv", vec![], "${outer}.${value}$0\n"),
+            // Case-transform fixtures (CASE_TRANSFORMS_PLAN.md).
+            snip("tsnake", vec![], "${value|snake} => $0,\n"),
+            snip("tcase", vec![], "${value|snake}: ${value.type|upper},\n"),
+            snip("tcased", vec![], "${value|pascal:rawDefault} => $0,\n"),
+            snip(
+                "setter",
+                vec![
+                    param("field", ParamKind::Ident, Some("field")),
+                    param("ty", ParamKind::Str, Some("()")),
+                ],
+                "fn set_${field|snake}(&mut self, v: ${ty}) {\n\tself.${field|snake} = v;\n}\n",
+            ),
             snip("if", vec![], "if $1 {\n\t${child}\n}\n"),
             snip("el", vec![], "else {\n\t${child}\n}\n"),
             snip(
@@ -2263,6 +2293,76 @@ mod tests {
         );
         let e = expand("fielddef*@Point", &ctx, TabstopMode::Strip);
         assert_eq!(e.body, "x: f64,\ny: i32,");
+    }
+
+    // --- case transforms -----------------------------------------------------
+
+    #[test]
+    fn body_value_transform_recases_each_item() {
+        let ctx = ctx_with("Msg", &["maxSize", "HTTPError"]);
+        let e = expand("tsnake*@Msg", &ctx, TabstopMode::Strip);
+        assert_eq!(e.body, "max_size => ,\nhttp_error => ,");
+    }
+
+    #[test]
+    fn body_member_transform_recases_member_text() {
+        let e = expand(
+            "tcase*[maxSize:sizeLimit,minSize:u32]",
+            &ctx(),
+            TabstopMode::Strip,
+        );
+        assert_eq!(e.body, "max_size: SIZE_LIMIT,\nmin_size: U32,");
+    }
+
+    #[test]
+    fn item_transform_missing_item_keeps_default_verbatim() {
+        // Known-text-only contract: with no item the fallback tabstop's
+        // placeholder is the author's default, never transformed.
+        let e = expand("tcased*@Nope", &ctx(), TabstopMode::Strip);
+        assert_eq!(e.body, "rawDefault => ,");
+    }
+
+    #[test]
+    fn bound_param_transform_recases_the_argument() {
+        let e = expand("setter:maxSize", &ctx(), TabstopMode::Strip);
+        assert_eq!(
+            e.body,
+            "fn set_max_size(&mut self, v: ()) {\n    self.max_size = v;\n}"
+        );
+    }
+
+    #[test]
+    fn param_transform_applies_after_repeat_index_substitution() {
+        // `${i}` substitutes into the bound argument first, so the copy
+        // number is part of the re-cased text.
+        let e = expand("setter:maxSize${i}*2", &ctx(), TabstopMode::Strip);
+        assert!(e.body.contains("set_max_size1"), "{}", e.body);
+        assert!(e.body.contains("set_max_size2"), "{}", e.body);
+    }
+
+    #[test]
+    fn unbound_param_transform_is_inert_and_mirrors() {
+        // Known-text-only contract: no argument → the plain mirrored tabstop
+        // of an untransformed param, declared default verbatim as placeholder.
+        let e = expand("setter", &ctx(), TabstopMode::Keep);
+        assert_eq!(
+            e.body,
+            "fn set_${1:field}(&mut self, v: ${2:()}) {\n    self.$1 = v;\n}$0"
+        );
+    }
+
+    #[test]
+    fn data_driven_setter_flagship() {
+        // The plan's flagship: one correctly-cased setter per struct field.
+        let e = expand(
+            "setter:${value},${value.type}*[maxSize:usize]",
+            &ctx(),
+            TabstopMode::Strip,
+        );
+        assert_eq!(
+            e.body,
+            "fn set_max_size(&mut self, v: usize) {\n    self.max_size = v;\n}"
+        );
     }
 
     #[test]

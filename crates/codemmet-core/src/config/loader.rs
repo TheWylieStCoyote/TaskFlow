@@ -381,7 +381,7 @@ fn referenced_params(template: &Template) -> impl Iterator<Item = &str> {
         .iter()
         .flat_map(|line| line.spans.iter())
         .filter_map(|span| match span {
-            Span::Param { name } => Some(name.as_str()),
+            Span::Param { name, .. } => Some(name.as_str()),
             _ => None,
         })
 }

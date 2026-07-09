@@ -4,6 +4,8 @@
 //! plain text and the renderer owns indentation, so brace languages and
 //! indentation languages (Python) share one pipeline.
 
+use crate::snippet::transform::CaseTransform;
+
 /// A parsed snippet body: what a TOML `body` string compiles to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Template {
@@ -35,30 +37,40 @@ pub enum Span {
         /// Placeholder text, if the body used `${n:placeholder}`.
         placeholder: Option<String>,
     },
-    /// A named parameter reference from `${name}` in the body.
+    /// A named parameter reference from `${name}` / `${name|transform}` in
+    /// the body.
     ///
-    /// Renders as literal text when the abbreviation supplied an argument,
-    /// otherwise as a tabstop whose placeholder is the param's default.
-    /// Repeated references to one name become mirrors.
+    /// Renders as literal text when the abbreviation supplied an argument
+    /// (re-cased by `transform` when one is given), otherwise as a tabstop
+    /// whose placeholder is the param's default — always verbatim: transforms
+    /// apply only to caller-supplied text. Repeated references to one name
+    /// become mirrors.
     Param {
         /// The parameter name; must exist in the snippet's `params` list.
         name: String,
+        /// The case transform from `${name|snake}`, if any.
+        transform: Option<CaseTransform>,
     },
     /// `${i}`: the 1-based repetition index of the enclosing node.
     ///
     /// Renders the copy number when the node is repeated with `*n` (`1`, `2`,
     /// …), and `1` when the node is not repeated.
     RepeatIndex,
-    /// `${value}` / `${value.key}` / `${value:default}` (and the `${outer…}`
-    /// forms): a data-driven repeat item. `${value}` is the current level's
-    /// item; `${outer}` is the nearest *enclosing* data-driven item (for nested
-    /// repeats). Renders the item's value (or a named member) when there is one,
-    /// otherwise a tabstop carrying `default`.
+    /// `${value}` / `${value.key}` / `${value|transform}` / `${value:default}`
+    /// (and the `${outer…}` forms): a data-driven repeat item. `${value}` is
+    /// the current level's item; `${outer}` is the nearest *enclosing*
+    /// data-driven item (for nested repeats). Renders the item's value (or a
+    /// named member), re-cased by `transform` when one is given; otherwise a
+    /// tabstop carrying `default` — always verbatim: transforms apply only to
+    /// data-supplied text. Token order: `source → .member → |transform →
+    /// :default`.
     ItemValue {
         /// `true` for `${outer…}` (the enclosing item), `false` for `${value…}`.
         outer: bool,
         /// The member key from `${value.key}`; `None` for the primary value.
         member: Option<String>,
+        /// The case transform from `${value|snake}`, if any.
+        transform: Option<CaseTransform>,
         /// The `${value:default}` fallback, used when there is no item.
         default: Option<String>,
     },

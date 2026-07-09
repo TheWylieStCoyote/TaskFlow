@@ -4,12 +4,18 @@
 //! `\` escaping `$`, `}`, `\`) plus two extensions: `${child}` (composition
 //! target, at most one) and `${name}` (named parameter reference).
 //!
+//! Parameter and item references take an optional case transform
+//! (`${name|snake}`, `${value.key|pascal:fallback}` — token order `source →
+//! .member → |transform → :default`); see
+//! [`transform`](crate::snippet::transform).
+//!
 //! Indentation rules: each leading tab is one depth level; runs of exactly
 //! four spaces are accepted and normalized to one level; mixing tabs and
 //! spaces in one line's indent, or space runs not divisible by four, are
 //! errors.
 
 use super::ir::{IrLine, Span, Template};
+use super::transform::{CaseTransform, TRANSFORM_NAMES};
 
 /// A template body that violates the schema rules.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -151,6 +157,12 @@ fn parse_braced(
                         placeholder: Some(placeholder),
                     })
                 }
+                // A tabstop is always future typing — there is nothing known
+                // to transform (see CASE_TRANSFORMS_PLAN.md §3).
+                Some('|') => Err(err(
+                    line_no,
+                    "case transforms apply to ${value…} and parameter references, not tabstops",
+                )),
                 _ => Err(err(line_no, "expected '}' or ':' after tabstop index")),
             }
         }
@@ -166,7 +178,7 @@ fn parse_braced(
             }
             // `${value…}` (current item) and `${outer…}` (enclosing item):
             // data-driven repeat items. Handled before the `}` check because of
-            // the `.`/`:` suffixes.
+            // the `.`/`|`/`:` suffixes.
             if name == "value" || name == "outer" {
                 let outer = name == "outer";
                 let member = if chars.peek() == Some(&'.') {
@@ -187,40 +199,86 @@ fn parse_braced(
                 } else {
                     None
                 };
+                let transform = parse_transform(chars, line_no)?;
                 return match chars.next() {
                     Some('}') => Ok(Span::ItemValue {
                         outer,
                         member,
+                        transform,
                         default: None,
                     }),
                     Some(':') => Ok(Span::ItemValue {
                         outer,
                         member,
+                        transform,
                         default: Some(parse_placeholder(chars, line_no)?),
                     }),
                     _ => Err(err(line_no, "expected '}' or ':' in ${value}/${outer}")),
                 };
             }
+            let transform = parse_transform(chars, line_no)?;
             if chars.next() != Some('}') {
                 return Err(err(line_no, "expected '}' after parameter name"));
             }
             match name.as_str() {
                 "child" => {
+                    if transform.is_some() {
+                        return Err(err(line_no, "${child} cannot take a case transform"));
+                    }
                     if *saw_child {
                         return Err(err(line_no, "at most one ${child} per snippet"));
                     }
                     *saw_child = true;
                     Ok(Span::ChildSlot)
                 }
-                // `${i}` is the reserved repetition-index variable.
-                "i" => Ok(Span::RepeatIndex),
-                _ => Ok(Span::Param { name }),
+                // `${i}` is the reserved repetition-index variable. It renders
+                // a number, on which every case transform is a no-op.
+                "i" => {
+                    if transform.is_some() {
+                        return Err(err(line_no, "${i} cannot take a case transform"));
+                    }
+                    Ok(Span::RepeatIndex)
+                }
+                _ => Ok(Span::Param { name, transform }),
             }
         }
         Some('}') => Err(err(line_no, "empty '${}'")),
         Some(_) => Err(err(line_no, "invalid '${...}' expression")),
         None => Err(err(line_no, "unclosed '${'")),
     }
+}
+
+/// Parse an optional `|transform` suffix; the cursor sits on the `|` if one
+/// is present. At most one transform per reference (no chaining).
+fn parse_transform(
+    chars: &mut Chars<'_>,
+    line_no: usize,
+) -> Result<Option<CaseTransform>, TemplateError> {
+    if chars.peek() != Some(&'|') {
+        return Ok(None);
+    }
+    chars.next();
+    let mut name = String::new();
+    while let Some(c) = chars.peek().copied() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            chars.next();
+            name.push(c);
+        } else {
+            break;
+        }
+    }
+    if chars.peek() == Some(&'|') {
+        return Err(err(line_no, "at most one case transform per reference"));
+    }
+    CaseTransform::parse(&name).map(Some).ok_or_else(|| {
+        err(
+            line_no,
+            &format!(
+                "unknown case transform `{name}` (expected one of: {})",
+                TRANSFORM_NAMES.join(", ")
+            ),
+        )
+    })
 }
 
 /// Parse a run of ASCII digits into a tabstop index.
@@ -383,39 +441,137 @@ mod tests {
                 Span::ItemValue {
                     outer: false,
                     member: None,
+                    transform: None,
                     default: None
                 },
                 text(" "),
                 Span::ItemValue {
                     outer: false,
                     member: Some("type".to_owned()),
+                    transform: None,
                     default: None
                 },
                 text(" "),
                 Span::ItemValue {
                     outer: false,
                     member: None,
+                    transform: None,
                     default: Some("d".to_owned())
                 },
                 text(" "),
                 Span::ItemValue {
                     outer: true,
                     member: None,
+                    transform: None,
                     default: None
                 },
                 text(" "),
                 Span::ItemValue {
                     outer: true,
                     member: Some("k".to_owned()),
+                    transform: None,
                     default: None
                 },
                 text(" "),
                 Span::ItemValue {
                     outer: true,
                     member: None,
+                    transform: None,
                     default: Some("e".to_owned())
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn value_and_param_case_transforms() {
+        // Token order: source → .member → |transform → :default.
+        assert_eq!(
+            parse("${value|snake} ${value.type|pascal} ${outer|upper:Fallback} ${name|kebab}")
+                .lines[0]
+                .spans,
+            vec![
+                Span::ItemValue {
+                    outer: false,
+                    member: None,
+                    transform: Some(CaseTransform::Snake),
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: false,
+                    member: Some("type".to_owned()),
+                    transform: Some(CaseTransform::Pascal),
+                    default: None
+                },
+                text(" "),
+                Span::ItemValue {
+                    outer: true,
+                    member: None,
+                    transform: Some(CaseTransform::Upper),
+                    default: Some("Fallback".to_owned())
+                },
+                text(" "),
+                Span::Param {
+                    name: "name".to_owned(),
+                    transform: Some(CaseTransform::Kebab),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn error_unknown_case_transform() {
+        assert_eq!(
+            parse_err("${value|bogus}"),
+            "line 1: unknown case transform `bogus` \
+             (expected one of: camel, kebab, lower, pascal, snake, upper)"
+        );
+    }
+
+    #[test]
+    fn error_chained_case_transforms() {
+        assert_eq!(
+            parse_err("${value|snake|upper}"),
+            "line 1: at most one case transform per reference"
+        );
+    }
+
+    #[test]
+    fn error_case_transform_on_reserved_and_numbered_forms() {
+        assert_eq!(
+            parse_err("${i|snake}"),
+            "line 1: ${i} cannot take a case transform"
+        );
+        assert_eq!(
+            parse_err("${child|snake}"),
+            "line 1: ${child} cannot take a case transform"
+        );
+        assert_eq!(
+            parse_err("${1|snake}"),
+            "line 1: case transforms apply to ${value…} and parameter references, not tabstops"
+        );
+    }
+
+    #[test]
+    fn pipe_in_defaults_and_placeholders_stays_literal() {
+        // Back-compat: the transform sits *before* `:`, so a `|` inside a
+        // default or placeholder is plain text, exactly as before.
+        assert_eq!(
+            parse("${value:max|snake}").lines[0].spans,
+            vec![Span::ItemValue {
+                outer: false,
+                member: None,
+                transform: None,
+                default: Some("max|snake".to_owned())
+            }]
+        );
+        assert_eq!(
+            parse("${1:a|b}").lines[0].spans,
+            vec![Span::Tabstop {
+                index: 1,
+                placeholder: Some("a|b".to_owned())
+            }]
         );
     }
 
@@ -426,11 +582,13 @@ mod tests {
             vec![
                 text("for "),
                 Span::Param {
-                    name: "var".to_owned()
+                    name: "var".to_owned(),
+                    transform: None,
                 },
                 text(" in "),
                 Span::Param {
-                    name: "end".to_owned()
+                    name: "end".to_owned(),
+                    transform: None,
                 },
             ]
         );
@@ -442,13 +600,15 @@ mod tests {
             parse("${x} $1 ${x} $1").lines[0].spans,
             vec![
                 Span::Param {
-                    name: "x".to_owned()
+                    name: "x".to_owned(),
+                    transform: None,
                 },
                 text(" "),
                 stop(1),
                 text(" "),
                 Span::Param {
-                    name: "x".to_owned()
+                    name: "x".to_owned(),
+                    transform: None,
                 },
                 text(" "),
                 stop(1),
@@ -517,11 +677,13 @@ mod tests {
                     spans: vec![
                         text("for "),
                         Span::Param {
-                            name: "var".to_owned()
+                            name: "var".to_owned(),
+                            transform: None,
                         },
                         text(" in 0.."),
                         Span::Param {
-                            name: "end".to_owned()
+                            name: "end".to_owned(),
+                            transform: None,
                         },
                         text(" {"),
                     ],
@@ -546,7 +708,8 @@ mod tests {
             vec![
                 text("fn "),
                 Span::Param {
-                    name: "name".to_owned()
+                    name: "name".to_owned(),
+                    transform: None,
                 },
                 text("(&self"),
                 stop(1),

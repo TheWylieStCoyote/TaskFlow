@@ -252,6 +252,29 @@ pub enum WrapSelection {
     },
 }
 
+/// What a provider knows about a document's imports, backing the insertion
+/// of missing `requires` imports (see `IMPORT_REQUIRES_PLAN.md`).
+///
+/// Produced by [`ContextProvider::import_scan`]; consumed by the LSP layer
+/// (never the engine), which formats the required import lines, drops the
+/// ones an existing statement already satisfies, and builds a plain text
+/// edit at the insertion offset.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ImportScan {
+    /// Text of each existing import statement, for dedup matching.
+    pub statements: Vec<String>,
+    /// Byte offset (a line start, or end-of-file) where a new import line is
+    /// inserted.
+    pub insertion_offset: usize,
+    /// Go only: line-start byte offset inside the last grouped
+    /// `import ( … )` block, just before its `)`, when one exists. New Go
+    /// imports join the group rather than adding a standalone line.
+    pub grouped_insertion_offset: Option<usize>,
+    /// Insert a blank line before the import (Go: separating the first
+    /// import from the `package` clause).
+    pub leading_blank: bool,
+}
+
 /// A ready-to-apply code-generation edit the provider found at the cursor —
 /// the backing for editor code actions (e.g. "fill match arms from an enum").
 ///
@@ -281,6 +304,17 @@ pub trait ContextProvider {
     /// completing a `match` from an in-scope enum).
     fn fill_targets(&mut self, _doc: &DocSnapshot, _offset: usize) -> Vec<FillTarget> {
         Vec::new()
+    }
+
+    /// Scan `doc` for its existing imports and the insertion point for a new
+    /// one, backing `requires` import insertion.
+    ///
+    /// Defaults to `None`: a provider without syntax awareness cannot answer,
+    /// and requires are then skipped rather than guessed (a text-heuristic
+    /// insertion would risk Python docstrings and C header guards). The
+    /// tree-sitter provider implements it per language.
+    fn import_scan(&mut self, _doc: &DocSnapshot) -> Option<ImportScan> {
+        None
     }
 }
 

@@ -18,7 +18,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
 
 use codemmet_core::context::{
-    DocSnapshot, ExpansionContext, FillTarget, IndentUnit, NullContextProvider, Scope,
+    DocSnapshot, ExpansionContext, FillTarget, ImportScan, IndentUnit, NullContextProvider, Scope,
     WrapSelection,
 };
 use codemmet_core::lang::profile;
@@ -28,6 +28,7 @@ pub use codemmet_core::context::ContextProvider;
 
 mod codegen;
 mod extract;
+mod imports;
 
 /// Whether this build carries a grammar for `language_id`.
 ///
@@ -771,6 +772,12 @@ impl ContextProvider for TreeSitterProvider {
             "rust" => codegen::match_arm_fills(tree.root_node(), text, offset, &indent.as_str()),
             _ => Vec::new(),
         }
+    }
+
+    fn import_scan(&mut self, doc: &DocSnapshot) -> Option<ImportScan> {
+        let spec = spec_for(&doc.language)?;
+        let tree = self.tree_for(doc, spec)?;
+        imports::scan(&doc.language, tree.root_node(), &doc.text)
     }
 }
 

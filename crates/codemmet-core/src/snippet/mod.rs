@@ -5,3 +5,4 @@ pub mod ir;
 pub mod merge;
 pub mod render;
 pub mod template;
+pub mod transform;

@@ -4,10 +4,11 @@
 //! `workspace/applyEdit`, because applied edits cannot carry tabstops; the
 //! client deletes the range and hands the snippet to its own expander.
 
+use codemmet_core::config::loader::scope_name;
 use codemmet_core::context::{
-    ContextProvider, DocSnapshot, ExpansionContext, IndentUnit, WrapSelection,
+    ContextProvider, DocSnapshot, ExpansionContext, IndentUnit, Scope, WrapSelection,
 };
-use codemmet_core::snippet::render::TabstopMode;
+use codemmet_core::snippet::render::{TabstopMode, active_variant};
 use lsp_types::{Position, Range, Uri};
 use serde::Deserialize;
 
@@ -70,6 +71,15 @@ pub struct WrapArgs {
     /// Editor indent preferences; detected from the line when absent.
     #[serde(default, alias = "formattingOptions")]
     pub formatting_options: Option<FormattingOptions>,
+}
+
+/// Arguments of `codemmet.list` and `codemmet.context`: a document position.
+#[derive(Debug, Deserialize)]
+pub struct AtArgs {
+    /// The document to inspect.
+    pub uri: Uri,
+    /// The cursor position the context is computed at.
+    pub position: Position,
 }
 
 /// Run `codemmet.expand`: expand the abbreviation left of `position`.
@@ -208,6 +218,99 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
         end: index.position(&doc.text, snapped.end, server.encoding),
     };
     Ok(result(range, &expansion.body))
+}
+
+/// Run `codemmet.list`: every trigger registered for the document's language,
+/// resolved through the per-document engine (so path-mapped and project pack
+/// tiers apply to the file being edited), annotated with the context at
+/// `position`.
+///
+/// Each entry carries the keep-mode `body` the bare trigger renders at the
+/// cursor — insertable directly by a snippet client — a one-line strip-mode
+/// `hint` for menus, and `activeContext`: the variant context the renderer
+/// would pick at the cursor, or null for the default template. A trigger that
+/// cannot render bare (an argument-less data binding failure) carries null
+/// `body`/`hint` but is still listed for discovery.
+pub fn list(server: &mut Server, args: &AtArgs) -> Result<serde_json::Value, CommandError> {
+    let doc = server.snapshot(&args.uri)?;
+    let index = LineIndex::new(&doc.text);
+    let offset = index.offset(&doc.text, args.position, server.encoding);
+    let engine = server.engine_for(&args.uri);
+    let mut ctx = server.provider.context_at(&doc, offset);
+    // Bodies go to snippet clients that re-indent continuation lines from the
+    // insertion position (see `expand`), so render with an empty base indent.
+    ctx.base_indent = String::new();
+    let lang = engine
+        .registry()
+        .language(&doc.language)
+        .ok_or_else(|| CommandError(format!("unsupported language `{}`", doc.language)))?;
+    // The renderer matches variants against the innermost scope.
+    let scope = ctx.scopes.last().copied().unwrap_or(Scope::Root);
+
+    let snippets: Vec<serde_json::Value> = lang
+        .set
+        .iter()
+        .map(|snippet| {
+            let body = engine
+                .expand(&snippet.trigger, &doc.language, &ctx, TabstopMode::Keep)
+                .ok()
+                .map(|expansion| expansion.body);
+            let hint = engine
+                .expand(&snippet.trigger, &doc.language, &ctx, TabstopMode::Strip)
+                .ok()
+                .map(|expansion| one_line_hint(&expansion.body));
+            serde_json::json!({
+                "trigger": snippet.trigger,
+                "description": snippet.description,
+                "composite": snippet.composite.is_some(),
+                "activeContext": active_variant(snippet, scope, &ctx.raw_node_kinds)
+                    .map(|variant| variant.context.as_str()),
+                "body": body,
+                "hint": hint,
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "language": doc.language, "snippets": snippets }))
+}
+
+/// Run `codemmet.context`: the expansion context active at `position` — the
+/// scope stack (outermost first) and the in-scope collections the provider
+/// extracted from the buffer.
+///
+/// Without the tree-sitter provider (a `--no-default-features` build) the
+/// null provider answers: a bare `["root"]` stack and no collections.
+pub fn context(server: &mut Server, args: &AtArgs) -> Result<serde_json::Value, CommandError> {
+    let doc = server.snapshot(&args.uri)?;
+    let index = LineIndex::new(&doc.text);
+    let offset = index.offset(&doc.text, args.position, server.encoding);
+    let ctx = server.provider.context_at(&doc, offset);
+
+    let scopes: Vec<&str> = ctx.scopes.iter().map(|scope| scope_name(*scope)).collect();
+    let collections: Vec<serde_json::Value> = ctx
+        .collections
+        .iter()
+        .map(|(name, collection)| {
+            let items: Vec<serde_json::Value> = collection
+                .items
+                .iter()
+                .map(|item| serde_json::json!({ "value": item.value, "members": item.members }))
+                .collect();
+            serde_json::json!({ "name": name, "items": items })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "language": doc.language,
+        "scopes": scopes,
+        "inStringOrComment": ctx.in_string_or_comment,
+        "collections": collections,
+    }))
+}
+
+/// One display line summarizing a strip-mode expansion: its first line, with
+/// an ellipsis when more follow.
+fn one_line_hint(body: &str) -> String {
+    body.split_once('\n')
+        .map_or_else(|| body.to_owned(), |(first, _)| format!("{first} …"))
 }
 
 /// Ask the provider for the context at `offset`; the editor's explicit

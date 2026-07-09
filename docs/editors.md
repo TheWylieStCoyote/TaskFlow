@@ -23,6 +23,14 @@ There are two ways to trigger an expansion:
   This path needs a client that can invoke arbitrary commands (`workspace/executeCommand`)
   and apply the returned snippet edit.
 
+The server also ships read-only introspection commands any client can call:
+`codemmet.list` returns every trigger registered for a document (resolved
+through that document's snippet tiers, with a rendered body and the scope
+variant that would fire at a given position), and `codemmet.context` returns
+the expansion context at a position — the scope stack and the in-scope
+collections data-driven repeats can expand over. The Neovim plugin surfaces
+them as a snippet browser and a context viewer (see below).
+
 For a general overview see the [documentation home](README.md), and for
 installing the binary see the [installation](installation.md) guide.
 
@@ -115,7 +123,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | --- | --- | --- | --- |
 | `cmd` | `string[]` | `{ "codemmet", "lsp" }` | Command used to start the language server. Use an absolute path if `codemmet` is not on `PATH`. |
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
-| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw" }` | Key bindings to install. Set either field to `false` to disable that binding. |
+| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw", snippets = "<leader>cl", context = "<leader>cv" }` | Key bindings to install. Set any field to `false` to disable that binding. |
 | `completion` | `boolean` or `table` | `{ enabled = true, autotrigger = true }` | Completion wiring; see [completion](#completion). A boolean is shorthand for `{ enabled = ... }`. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
@@ -133,6 +141,8 @@ The key bindings are installed buffer-locally when the server attaches
 | --- | --- | --- | --- |
 | `keymaps.expand` | `<A-e>` | insert and normal | Expand the abbreviation immediately before the cursor. |
 | `keymaps.wrap` | `<leader>cw` | visual | Wrap the selected lines in an abbreviation (prompts for it). |
+| `keymaps.snippets` | `<leader>cl` | normal | Browse the buffer's snippets in a picker and expand the picked one. |
+| `keymaps.context` | `<leader>cv` | normal | Show the codemmet context (scopes, collections) at the cursor. |
 
 The plugin also defines these user commands:
 
@@ -141,6 +151,8 @@ The plugin also defines these user commands:
 | `:CodemmetExpand` | no | Expand the abbreviation before the cursor. |
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
 | `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
+| `:CodemmetSnippets` | no | Browse the buffer's snippets in a picker and expand the picked one at the cursor. |
+| `:CodemmetContext` | no | Show the codemmet context (scope stack, in-scope collections) at the cursor. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
@@ -209,6 +221,29 @@ returns the clean (strip-mode) expansion of the abbreviation before the cursor,
 so it works in any client that can call `workspace/executeCommand` and render
 virtual text — the shipped Neovim plugin renders it with `nvim_buf_set_extmark`
 virtual lines.
+
+### Snippet browser and context viewer
+
+`:CodemmetSnippets` (default `<leader>cl`) opens a `vim.ui.select` picker over
+every trigger registered for the current buffer — through that buffer's own
+snippet tiers, so project packs and path-mapped overrides are included. Each
+entry shows the trigger, its description, the scope variant that would fire at
+the cursor (e.g. `fn` inside an `impl` shows `[type-body]`), and a one-line
+hint of what it expands to. Picking an entry expands it at the cursor with
+tabstops, exactly like the expand keymap. Because it goes through
+`vim.ui.select`, pickers such as telescope, fzf-lua, or snacks take over
+automatically when they are installed.
+
+`:CodemmetContext` (default `<leader>cv`) shows the codemmet context at the
+cursor in a small floating window: the syntactic scope stack (e.g.
+`root > fn-body`) and the in-scope collections — enum variants, struct fields,
+list bindings — that [data-driven repeats](context-codegen.md) like
+`match:Msg>arm*` can expand over. Useful for checking what a `*@name` repeat
+would see before you type it. The float closes when the cursor moves.
+
+Both are read-only server commands (`codemmet.list`, `codemmet.context`), so
+any LSP client able to call `workspace/executeCommand` can build the same
+surfaces.
 
 ### Code actions
 

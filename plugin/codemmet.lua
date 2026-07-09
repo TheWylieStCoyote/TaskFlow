@@ -23,6 +23,14 @@ end, {
   desc = "Capture the selected lines into the project snippet pack",
 })
 
+vim.api.nvim_create_user_command("CodemmetSnippets", function()
+  require("codemmet").snippets()
+end, { desc = "Browse codemmet snippets for this buffer and expand the picked one" })
+
+vim.api.nvim_create_user_command("CodemmetContext", function()
+  require("codemmet").context()
+end, { desc = "Show the codemmet context (scopes, collections) at the cursor" })
+
 vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()
 end, { desc = "Toggle the codemmet live ghost-line preview in this buffer" })

@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use crate::abbr::{AbbrNode, Abbreviation, Repeat};
 use crate::config::loader::{
-    CHILD_SENTINEL, CompiledComposite, CompiledSnippet, SnippetSet, parse_scope_name,
-    substitute_child_slot, substitute_markers,
+    CHILD_SENTINEL, CompiledComposite, CompiledSnippet, CompiledVariant, SnippetSet,
+    parse_scope_name, substitute_child_slot, substitute_markers,
 };
 use crate::config::schema::ParamKind;
 use crate::context::{Collection, ExpansionContext, Item, Scope};
@@ -674,11 +674,31 @@ fn sub_repeat_index(text: &str, index: u32) -> String {
     }
 }
 
-/// Pick the template to instantiate for a node in `scope`.
+/// The variant of `snippet` that fires in `scope`, or `None` when the
+/// default template applies.
 ///
 /// The first matching variant wins; a variant matches when its context is
 /// the scope's normalized name, or when it is `ts:<kind>` and `<kind>` is
-/// one of the buffer's raw node kinds. No match falls back to the default
+/// one of the buffer's raw node kinds. Public so listings (the LSP
+/// `codemmet.list` command) report the variant the renderer would pick
+/// without duplicating the rule.
+#[must_use]
+pub fn active_variant<'s>(
+    snippet: &'s CompiledSnippet,
+    scope: Scope,
+    raw_node_kinds: &[String],
+) -> Option<&'s CompiledVariant> {
+    snippet.variants.iter().find(|variant| {
+        variant.context.strip_prefix("ts:").map_or_else(
+            || parse_scope_name(&variant.context) == Some(scope),
+            |kind| raw_node_kinds.iter().any(|k| k == kind),
+        )
+    })
+}
+
+/// Pick the template to instantiate for a node in `scope`.
+///
+/// No matching variant ([`active_variant`]) falls back to the default
 /// template. Selection changes only the template — params and description
 /// always come from the snippet itself.
 fn select_template<'s>(
@@ -686,16 +706,7 @@ fn select_template<'s>(
     scope: Scope,
     raw_node_kinds: &[String],
 ) -> &'s Template {
-    snippet
-        .variants
-        .iter()
-        .find(|variant| {
-            variant.context.strip_prefix("ts:").map_or_else(
-                || parse_scope_name(&variant.context) == Some(scope),
-                |kind| raw_node_kinds.iter().any(|k| k == kind),
-            )
-        })
-        .map_or(&snippet.template, |variant| &variant.template)
+    active_variant(snippet, scope, raw_node_kinds).map_or(&snippet.template, |v| &v.template)
 }
 
 /// Insert composed child lines at the parent's `${child}` slot.

@@ -218,6 +218,8 @@ fn initialize_advertises_capabilities_and_exits_cleanly() {
             "codemmet.expand",
             "codemmet.wrap",
             "codemmet.preview",
+            "codemmet.list",
+            "codemmet.context",
             "codemmet.reloadSnippets"
         ])
     );
@@ -1033,6 +1035,202 @@ fn execute_command_preview_without_candidate_is_null() {
         }),
     );
     assert_eq!(result, Value::Null, "expected null preview, got {result}");
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_list_returns_every_trigger_with_body_and_hint() {
+    let (mut client, _) = LspClient::start("list", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.list",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 4 } }],
+        }),
+    );
+    assert_eq!(result["language"], json!("rust"));
+    let snippets = result["snippets"]
+        .as_array()
+        .expect("snippets should be an array");
+    assert!(snippets.len() >= 30, "got {} snippets", snippets.len());
+
+    let fori = snippets
+        .iter()
+        .find(|s| s["trigger"] == json!("fori"))
+        .expect("fori should be listed");
+    assert_eq!(fori["description"], json!("for loop over integer range"));
+    assert_eq!(fori["composite"], json!(false));
+    // At the cursor no variant fires, so the default template applies.
+    assert_eq!(fori["activeContext"], Value::Null);
+    // The keep-mode body is directly insertable by a snippet client (no base
+    // indent baked in, same as `codemmet.expand`); the bare trigger leaves
+    // its params as defaulted tabstops.
+    assert_eq!(fori["body"], json!("for ${1:i} in 0..${2:10} {\n    $0\n}"));
+    // The hint is the strip-mode first line, elided when more follow.
+    assert_eq!(fori["hint"], json!("for i in 0..10 { …"));
+
+    // Composites are flagged so a client can annotate them.
+    let dstruct = snippets
+        .iter()
+        .find(|s| s["trigger"] == json!("dstruct"))
+        .expect("dstruct should be listed");
+    assert_eq!(dstruct["composite"], json!(true));
+    client.shutdown();
+}
+
+/// The per-document engine backs `codemmet.list`, so a project pack trigger
+/// shows up (with its override), not just builtins.
+#[test]
+fn execute_command_list_reflects_the_project_pack() {
+    let root = scratch_dir("list-project");
+    let pack_dir = root.join(".codemmet").join("snippets");
+    std::fs::create_dir_all(&pack_dir).expect("project snippets dir should be creatable");
+    std::fs::write(
+        pack_dir.join("rust.toml"),
+        "[meta]\nlanguage = \"rust\"\n[snippets.pr]\ndescription = \"project print\"\nbody = \"PROJECT!($0);\"\n",
+    )
+    .expect("project pack should be writable");
+    let uri = format!(
+        "file://{}/main.rs",
+        root.to_str().expect("scratch is UTF-8")
+    );
+
+    let (mut client, _) = LspClient::start(
+        "list-project",
+        &["utf-8"],
+        &json!({ "project_snippets": true }),
+    );
+    client.open(&uri, "rust", "fn main() {\n}\n");
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.list",
+            "arguments": [{ "uri": uri, "position": { "line": 0, "character": 0 } }],
+        }),
+    );
+    let snippets = result["snippets"]
+        .as_array()
+        .expect("snippets should be an array");
+    let pr = snippets
+        .iter()
+        .find(|s| s["trigger"] == json!("pr"))
+        .expect("pr should be listed");
+    assert_eq!(pr["description"], json!("project print"));
+    assert_eq!(pr["body"], json!("PROJECT!($0);"));
+    client.shutdown();
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// Inside an `impl` body the `fn` entry names the variant that would fire,
+/// and its body is the variant's (`&self`).
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_list_annotates_the_variant_firing_at_the_cursor() {
+    let (mut client, _) = LspClient::start("list-variant", &["utf-8"], &json!({}));
+    client.open(URI, "rust", "impl Point {\n    \n}\n");
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.list",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 4 } }],
+        }),
+    );
+    let snippets = result["snippets"]
+        .as_array()
+        .expect("snippets should be an array");
+    let fn_item = snippets
+        .iter()
+        .find(|s| s["trigger"] == json!("fn"))
+        .expect("fn should be listed");
+    assert_eq!(fn_item["activeContext"], json!("type-body"));
+    let body = fn_item["body"].as_str().expect("body should be a string");
+    assert!(body.contains("&self"), "body: {body}");
+    // A trigger with no matching variant stays on its default template.
+    let fori = snippets
+        .iter()
+        .find(|s| s["trigger"] == json!("fori"))
+        .expect("fori should be listed");
+    assert_eq!(fori["activeContext"], Value::Null);
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_context_reports_the_scope_stack() {
+    let (mut client, _) = LspClient::start("context", &["utf-8"], &json!({}));
+    client.open(URI, "rust", DOC);
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.context",
+            "arguments": [{ "uri": URI, "position": { "line": 1, "character": 4 } }],
+        }),
+    );
+    assert_eq!(result["language"], json!("rust"));
+    assert_eq!(result["inStringOrComment"], json!(false));
+    // Outermost first; the null provider (no tree-sitter) reports just root.
+    let scopes = result["scopes"].as_array().expect("scopes is an array");
+    assert_eq!(scopes.first(), Some(&json!("root")), "scopes: {scopes:?}");
+    assert!(result["collections"].is_array());
+    client.shutdown();
+}
+
+/// Inside `fn main` with a same-file enum, the context carries the fn-body
+/// scope stack and the enum as a named collection.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn execute_command_context_reports_collections_and_scopes() {
+    let (mut client, _) = LspClient::start("context-enum", &["utf-8"], &json!({}));
+    client.open(
+        URI,
+        "rust",
+        "enum Msg { Quit, Move, Write }\nfn main() {\n    \n}\n",
+    );
+
+    let result = client.request(
+        "workspace/executeCommand",
+        &json!({
+            "command": "codemmet.context",
+            "arguments": [{ "uri": URI, "position": { "line": 2, "character": 4 } }],
+        }),
+    );
+    assert_eq!(result["scopes"], json!(["root", "fn-body"]));
+    let collections = result["collections"]
+        .as_array()
+        .expect("collections is an array");
+    let msg = collections
+        .iter()
+        .find(|c| c["name"] == json!("Msg"))
+        .expect("Msg should be in scope");
+    let values: Vec<&str> = msg["items"]
+        .as_array()
+        .expect("items is an array")
+        .iter()
+        .map(|item| item["value"].as_str().expect("value is a string"))
+        .collect();
+    assert_eq!(values, ["Quit", "Move", "Write"]);
+    client.shutdown();
+}
+
+#[test]
+fn execute_command_list_and_context_error_on_unopened_document() {
+    let (mut client, _) = LspClient::start("list-err", &["utf-8"], &json!({}));
+    for command in ["codemmet.list", "codemmet.context"] {
+        let error = client.request_err(
+            "workspace/executeCommand",
+            &json!({
+                "command": command,
+                "arguments": [{ "uri": "file:///not/open.rs", "position": { "line": 0, "character": 0 } }],
+            }),
+        );
+        let message = error["message"]
+            .as_str()
+            .expect("error should have a message");
+        assert!(message.contains("document not open"), "message: {message}");
+    }
     client.shutdown();
 }
 

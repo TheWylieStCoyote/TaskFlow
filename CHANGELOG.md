@@ -49,6 +49,16 @@ follows [Semantic Versioning](https://semver.org/).
   scope features degrade silently), the snippet packs pass `codemmet check`,
   built-in completion support and the wiring status (active or skipped, and
   why), and the language server is running with its attached buffers listed.
+- **Snippet browser and context viewer in Neovim.** `:CodemmetSnippets`
+  (`<leader>cl`) opens a `vim.ui.select` picker over every trigger registered
+  for the buffer — resolved through the buffer's own snippet tiers, so project
+  and path-mapped packs show up — with each entry annotated with its
+  description, the scope variant that would fire at the cursor, and a one-line
+  expansion hint; picking one expands it at the cursor. `:CodemmetContext`
+  (`<leader>cv`) shows the context at the cursor in a float: the scope stack
+  and the in-scope collections data-driven repeats can expand over. Both are
+  backed by new read-only LSP commands (`codemmet.list`, `codemmet.context`)
+  any `workspace/executeCommand`-capable client can call.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

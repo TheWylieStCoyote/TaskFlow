@@ -384,6 +384,8 @@ fn capabilities(encoding: PositionEncoding) -> ServerCapabilities {
                 "codemmet.expand".to_owned(),
                 "codemmet.wrap".to_owned(),
                 "codemmet.preview".to_owned(),
+                "codemmet.list".to_owned(),
+                "codemmet.context".to_owned(),
                 "codemmet.reloadSnippets".to_owned(),
             ],
             ..ExecuteCommandOptions::default()
@@ -506,6 +508,15 @@ impl Server {
             }
             "codemmet.preview" => {
                 command_args(params.arguments).map(|args| commands::preview(self, &args))
+            }
+            // Read-only: the snippet browser (every trigger for the document,
+            // annotated with the context at the cursor).
+            "codemmet.list" => {
+                command_args(params.arguments).and_then(|args| commands::list(self, &args))
+            }
+            // Read-only: the context viewer (scope stack + collections).
+            "codemmet.context" => {
+                command_args(params.arguments).and_then(|args| commands::context(self, &args))
             }
             // Read-only: drop the per-document engine cache so the next request
             // re-reads packs from disk. The editor calls this after writing a

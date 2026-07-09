@@ -5,6 +5,8 @@ local M = {}
 ---@class codemmet.KeymapOpts
 ---@field expand string|false insert- and normal-mode mapping for expand(); false disables
 ---@field wrap string|false visual-mode mapping for wrap(); false disables
+---@field snippets string|false normal-mode mapping for snippets(); false disables
+---@field context string|false normal-mode mapping for context(); false disables
 
 ---@class codemmet.PreviewOpts
 ---@field enabled? boolean turn the preview on when the server attaches (default true for the table form)
@@ -42,7 +44,12 @@ local defaults = {
     "typescriptreact",
     "go",
   },
-  keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+  keymaps = {
+    expand = "<A-e>",
+    wrap = "<leader>cw",
+    snippets = "<leader>cl",
+    context = "<leader>cv",
+  },
   completion = { enabled = true, autotrigger = true },
   init_options = {},
   preview = false,
@@ -67,6 +74,18 @@ end
 ---@param opts? codemmet.CaptureOpts
 function M.capture(opts)
   require("codemmet.capture").capture(opts)
+end
+
+---Browse every trigger registered for this buffer in a `vim.ui.select` picker
+---and expand the picked one at the cursor.
+function M.snippets()
+  require("codemmet.browse").pick()
+end
+
+---Show the codemmet context at the cursor: the scope stack and the in-scope
+---collections data-driven repeats can expand over.
+function M.context()
+  require("codemmet.browse").context()
 end
 
 local PREVIEW_DEBOUNCE_DEFAULT = 60
@@ -164,6 +183,18 @@ function M.setup(opts)
         vim.keymap.set("x", keymaps.wrap, function()
           M.wrap()
         end, { buffer = ev.buf, desc = "codemmet: wrap selection" })
+      end
+      if keymaps.snippets then
+        vim.keymap.set("n", keymaps.snippets, M.snippets, {
+          buffer = ev.buf,
+          desc = "codemmet: browse snippets",
+        })
+      end
+      if keymaps.context then
+        vim.keymap.set("n", keymaps.context, M.context, {
+          buffer = ev.buf,
+          desc = "codemmet: show context at cursor",
+        })
       end
       if config.preview.enabled then
         require("codemmet.preview").attach(ev.buf)

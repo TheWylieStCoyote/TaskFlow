@@ -217,6 +217,16 @@ follows [Semantic Versioning](https://semver.org/).
   captured trigger works in the same session. The LSP resolves the pack stack
   per document and caches an engine per resolved directory list.
 
+### Fixed
+
+- `${value.member:default}` in **argument position** parsed the member key as
+  `member:default`, so it never matched and rendered empty; it now takes the
+  member when the item carries it and the default otherwise, matching the body
+  form. And a **member absent on a present item** pasted the `:default` as
+  literal text; it now renders a tabstop carrying the default — parity with the
+  missing-item case — so partially-populated data leaves holes you can tab
+  through (`--tabstops strip` output is unchanged).
+
 ## [0.3.0] - 2026-07-07
 
 ### Added

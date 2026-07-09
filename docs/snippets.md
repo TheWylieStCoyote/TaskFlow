@@ -309,6 +309,39 @@ A body is LSP snippet syntax plus three codemmet extensions.
 - Escape a literal dollar sign as `\$`. In strip mode it renders as `$`; in
   keep mode it stays escaped as `\$`.
 
+### Case transforms on parameters
+
+`${name|snake}` (also `camel`, `pascal`, `upper`, `kebab`, `lower`) re-cases
+the parameter's value before inserting it, so one argument can appear in
+several conventions:
+
+```toml
+[snippets.setter]
+description = "setter method"
+params = [{ name = "field" }, { name = "ty", default = "()" }]
+body = '''
+fn set_${field|snake}(&mut self, v: ${ty}) {
+	self.${field|snake} = v;
+}
+'''
+```
+
+`setter:maxSize` writes `fn set_max_size(…) { self.max_size = v; }`, and
+`setter:${value},${value.type}*@Config` stamps one correctly-cased setter per
+struct field. The same suffix works on data-driven `${value…}` / `${outer…}`
+references (order `source → .member → |transform → :default`, so a `|` inside
+a `:default` stays literal) — see the [data-driven
+guide](context-codegen.md#case-transforms).
+
+Transforms apply to **known text only**: a bound argument, a resolved item, or
+a member. When the parameter is *unbound*, the reference renders exactly as
+without the transform — a tabstop (mirrored across occurrences) whose
+placeholder is the declared `default`, verbatim. The engine cannot re-case
+text the user has yet to type, so `struct ${name|pascal}` + `fn
+new_${name|snake}` gives no case linkage while typing into the tabstop; supply
+the argument (or drive the snippet from a collection) to get the re-casing.
+One transform per reference; an unknown or chained name fails `check`.
+
 ### Indentation must be tabs
 
 Indent the body with **tabs**, one tab per nesting level. The renderer converts

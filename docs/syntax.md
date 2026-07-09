@@ -254,6 +254,52 @@ always safe to type.
 > name the source (`@Msg`). `value` and `outer` are reserved parameter names
 > because of `${value}` / `${outer}`.
 
+#### Case transforms: `${value|snake}`
+
+Collections carry their *source* spelling, but each target position wants its
+own convention — repeating `fn` over `maxSize, minSize` should write
+`fn max_size`, not `fn maxSize`. A `|name` suffix inside a `${value…}` /
+`${outer…}` reference re-cases the item at the use site:
+
+```sh
+codemmet expand --lang rust 'impl:Api>fn:${value|snake}*[maxSize,HTTPError]'
+```
+
+```rust
+impl Api {
+    fn max_size(&self) {  }
+    fn http_error(&self) {  }
+}
+```
+
+Six transforms exist; each is a total re-casing from *any* input spelling:
+
+| transform | `maxSize` becomes | convention |
+| --- | --- | --- |
+| `\|snake` | `max_size` | snake_case |
+| `\|camel` | `maxSize` | camelCase |
+| `\|pascal` | `MaxSize` | PascalCase |
+| `\|upper` | `MAX_SIZE` | SCREAMING_SNAKE |
+| `\|kebab` | `max-size` | kebab-case |
+| `\|lower` | `maxsize` | plain lowercase fold |
+
+Word boundaries are detected from camelCase transitions, acronym runs
+(`HTTPServer` → `http_server`), digits (`utf8String` → `utf8_string`), and
+existing `_`/`-` separators; a run of leading underscores is preserved
+(`_maxSize` → `_max_size`).
+
+The transform sits **after** the member and **before** the default —
+`${value.type|pascal:Kind}` — so a `|` inside a `:default` is plain text, as
+before. Transforms re-case **data only**: the item or its member. A caller's
+`:default` renders verbatim, and with no collection the reference degrades to
+the usual tabstop. An unknown or chained transform name is an error listing
+the valid names. One transform per reference; snippet *bodies* can also
+transform declared parameters — see [custom snippets](snippets.md).
+
+> Like `${value}` itself, single-quote abbreviations that use `|transforms` on
+> a shell command line so `${…}` survives, and note `|` is a shell pipe
+> outside quotes.
+
 ### `^` — climb-up
 
 A caret ends the current nesting level and attaches what follows one level

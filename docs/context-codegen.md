@@ -63,8 +63,12 @@ snippet body references the current item:
 | --- | --- |
 | `${value}` | the item's primary value (an enum variant, a field name, a list element) |
 | `${value.type}` (or any `${value.key}`) | a named member of the item |
+| `${value\|snake}` (or `camel`, `pascal`, `upper`, `kebab`, `lower`) | the value, re-cased into that convention (see [Case transforms](#case-transforms)) |
 | `${value:default}` | the value, or `default` (as a tabstop) when there is no data |
-| `${outer}` (also `.key` / `:default`) | the **enclosing** repeat's item, for a nested repeat (see [Nesting](#nesting-a-cross-product)) |
+| `${outer}` (also `.key` / `\|transform` / `:default`) | the **enclosing** repeat's item, for a nested repeat (see [Nesting](#nesting-a-cross-product)) |
+
+The suffixes combine in a fixed order: `source → .member → |transform →
+:default`, as in `${value.type|pascal:Kind}`.
 
 ### Naming each copy from the item
 
@@ -113,6 +117,37 @@ of the box:
 | `arm` | `${value:pattern} => $0,` | a `match`/`switch` over a collection |
 | `field` | a field definition, with `${value.type}` | a `struct`/record/interface |
 | `variant` | an enum member | an `enum` definition |
+
+### Case transforms
+
+Collections carry the *source* spelling; the target position usually wants a
+different convention. A `|name` suffix re-cases the item (or member) it
+renders — in an argument or in a body:
+
+```sh
+codemmet expand --lang rust 'impl:Api>fn:${value|snake}*[maxSize,HTTPError]'
+```
+```rust
+impl Api {
+    fn max_size(&self) {  }
+    fn http_error(&self) {  }
+}
+```
+
+The six transforms are `snake`, `camel`, `pascal`, `upper` (SCREAMING_SNAKE),
+`kebab`, and `lower` (a plain lowercase fold); each maps *any* input spelling
+to its convention, splitting words at camelCase transitions, acronym runs
+(`HTTPServer`), digits (`utf8String`), and `_`/`-` separators, with leading
+underscores preserved. See the [syntax
+reference](syntax.md#case-transforms-valuesnake) for the full table.
+
+Transforms re-case **known data only** — a resolved item, its member, or a
+bound argument. Author-written `:default` text renders verbatim, and with no
+collection the reference degrades to the usual tabstop, exactly as without a
+transform. Snippet bodies can also transform declared parameters
+(`fn set_${field|snake}(…)` — see [custom snippets](snippets.md#body-syntax)),
+which is how a getter/setter pack re-cases a `maxSize` field into
+`set_max_size` per copy.
 
 ### Where the collection comes from
 

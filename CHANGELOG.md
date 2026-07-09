@@ -171,6 +171,23 @@ follows [Semantic Versioning](https://semver.org/).
   absent — so bodies join them without conditionals. See "Member vocabulary"
   in `docs/context-codegen.md`.
 
+- **Case transforms on values and parameters.** A `|name` suffix inside
+  `${value…}` / `${outer…}` references and `${param}` body references re-cases
+  the rendered text: `impl:Api>fn:${value|snake}*[maxSize,HTTPError]` writes
+  `fn max_size` / `fn http_error`, and a body of `fn set_${field|snake}(…)`
+  turns `setter:maxSize` into `set_max_size` — the getter/setter pattern.
+  Six transforms: `snake`, `camel`, `pascal`, `upper` (SCREAMING_SNAKE),
+  `kebab`, `lower` (plain fold), over a shared word tokenizer (camelCase
+  boundaries, acronym runs `HTTPServer`, digits `utf8String`, preserved
+  leading underscores; ASCII-only case mapping). Token order is
+  `source → .member → |transform → :default`, so a `|` inside a default or
+  placeholder stays literal text as before. Transforms apply to **known text
+  only** (a resolved item, member, or bound argument): defaults render
+  verbatim, and an unbound transformed parameter degrades to its usual
+  mirrored tabstop. Unknown or chained transform names are errors —
+  `codemmet check` catches them in packs; argument position reports them at
+  expansion (where such tokens previously rendered as silent literal text).
+  Design notes in `CASE_TRANSFORMS_PLAN.md`.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

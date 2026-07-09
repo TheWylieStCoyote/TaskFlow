@@ -129,8 +129,11 @@ can pin it:
 5. Empty tokens (doubled separators) are dropped.
 
 Case mapping is **ASCII-only** in v1; non-ASCII characters pass through
-unchanged and count as lowercase letters for boundary detection. Identifiers
-are overwhelmingly ASCII, and this keeps the module dependency-free.
+unchanged and are *caseless* for boundary detection — they never split a
+token (revised during implementation from "count as lowercase": treating them
+as lowercase breaks `upper`'s idempotence on text the ASCII fold cannot
+change). Identifiers are overwhelmingly ASCII, and this keeps the module
+dependency-free.
 
 ### 3. What can carry a transform: item values and named params
 
@@ -375,22 +378,33 @@ text, not in `params` declarations.
   caveat), cookbook getter/setter examples, playground wasm rebuild,
   `PLAN.md` note; optionally re-case-hardened builtin snippets (`mtest`).
 
-## Risks and open questions
+## Resolved decisions (implementation, CT0–CT3)
 
-- **Open (syntax):** transform-before-default (`${value|snake:fallback}`,
-  recommended for back-compat) vs after — and confirm defaults render
-  verbatim (never transformed). This is the one decision that is expensive to
-  reverse once packs exist.
-- **Open (vocabulary):** bless the six names, in particular `upper` =
-  SCREAMING_SNAKE and `lower` = plain fold — or rename SCREAMING to `scream`
-  and keep `upper`/`lower` as symmetric dumb folds.
-- **Open (unbound params):** accept the known-text-only degrade (4a) as the
-  permanent contract, or explicitly plan a later opt-in for editor-side
-  regex transforms (4b) — affects how loudly the docs promise "no case
-  linkage while typing".
-- **Tokenizer edge rules** (digits, acronym runs, leading underscores) are
-  defined above but deserve a skim at review — they are the part users will
-  memory-map, and changing them later silently changes rendered output.
+The open questions were decided at implementation approval; the shipped
+behavior is:
+
+- **Syntax:** transform-before-default — `${value|snake:fallback}`,
+  `${value.type|pascal:Kind}` — and defaults render **verbatim**, never
+  transformed. A `|` inside a `:default` or a tabstop placeholder stays
+  literal (back-compat pinned by tests).
+- **Vocabulary:** the recommended six ship as-is: `snake`, `camel`, `pascal`,
+  `upper` = SCREAMING_SNAKE, `kebab`, `lower` = plain lowercase fold.
+- **Unbound params:** known-text-only is the v1 contract, documented in
+  `docs/snippets.md` (an unbound transformed param renders its usual mirrored
+  tabstop; no case linkage while typing). An editor-side opt-in remains a
+  possible later addition; nothing was built for it.
+- **Tokenizer refinement found during implementation:** non-ASCII characters
+  are *caseless* for boundary detection (they never split a token), not
+  lowercase-like — otherwise `upper` is not idempotent on text the ASCII fold
+  cannot change (`двA_X` would re-split). One known lossy degenerate case is
+  pinned by a test: `pascal`/`camel` joining single-letter tokens erases the
+  boundary (`a b` → `AB`, which re-reads as an acronym).
+
+## Remaining risks
+
+- **Tokenizer edge rules** (digits, acronym runs, leading underscores) are the
+  part users will memory-map; changing them later silently changes rendered
+  output. They are pinned by a table-driven unit test.
 - **Argument-position meaning change**: `fn:${value|snake}` stops rendering
-  literal text. Judged safe (the old output was unusable), but it is
-  technically observable.
+  literal text (it errors on unknown names, transforms known ones). Judged
+  safe — the old output was unusable — but it is technically observable.

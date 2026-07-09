@@ -872,4 +872,55 @@ mod tests {
         );
         client.shutdown();
     }
+
+    #[test]
+    fn expand_command_returns_extra_edits_for_missing_imports() {
+        let mut client = MemoryClient::start(&requires_pack("command"));
+        let uri = "file:///command.rs";
+        client.open(uri, "use std::fs;\n\nfn main() {\n    zmap\n}\n");
+
+        let result = client.request(
+            "workspace/executeCommand",
+            json!({
+                "command": "codemmet.expand",
+                "arguments": [{
+                    "uri": uri,
+                    "position": { "line": 3, "character": 8 },
+                }],
+            }),
+        );
+        assert_eq!(result["isSnippet"], true);
+        assert!(
+            result["snippet"]
+                .as_str()
+                .expect("snippet present")
+                .contains("HashMap::new()"),
+            "result: {result}"
+        );
+        let edits = &result["extraEdits"];
+        assert_eq!(edits[0]["newText"], "use std::collections::HashMap;\n");
+        assert_eq!(
+            edits[0]["range"]["start"],
+            json!({ "line": 1, "character": 0 })
+        );
+
+        // With the import already present the field is omitted entirely.
+        let uri = "file:///command2.rs";
+        client.open(
+            uri,
+            "use std::collections::HashMap;\n\nfn main() {\n    zmap\n}\n",
+        );
+        let result = client.request(
+            "workspace/executeCommand",
+            json!({
+                "command": "codemmet.expand",
+                "arguments": [{
+                    "uri": uri,
+                    "position": { "line": 3, "character": 8 },
+                }],
+            }),
+        );
+        assert!(result.get("extraEdits").is_none(), "result: {result}");
+        client.shutdown();
+    }
 }

@@ -147,13 +147,38 @@ function M.line_end_character(bufnr, row, offset_encoding)
   return offset_encoding == "utf-16" and utf16 or utf32
 end
 
----Delete `range` from the buffer and expand `snippet` at the range start.
----Works from both insert and normal mode.
+---Apply the server's extra plain-text edits (missing-import insertions) after the main
+---snippet edit. Their positions were computed against the pre-apply document: an edit
+---above the replaced range is unaffected by the expansion below it, while one below the
+---range shifts by the line delta the snippet introduced.
+---@param bufnr integer
+---@param range lsp.Range the main edit's (pre-apply) range
+---@param snippet string the snippet text that replaced it
+---@param extra_edits lsp.TextEdit[]
+---@param offset_encoding string
+local function apply_extra_edits(bufnr, range, snippet, extra_edits, offset_encoding)
+  local _, snippet_newlines = snippet:gsub("\n", "")
+  local delta = snippet_newlines - (range["end"].line - range.start.line)
+  local adjusted = {}
+  for _, edit in ipairs(extra_edits) do
+    if edit.range.start.line > range["end"].line then
+      edit = vim.deepcopy(edit)
+      edit.range.start.line = edit.range.start.line + delta
+      edit.range["end"].line = edit.range["end"].line + delta
+    end
+    table.insert(adjusted, edit)
+  end
+  vim.lsp.util.apply_text_edits(adjusted, bufnr, offset_encoding)
+end
+
+---Delete `range` from the buffer and expand `snippet` at the range start, then apply
+---any `extra_edits` (missing-import insertions). Works from both insert and normal mode.
 ---@param bufnr integer
 ---@param range lsp.Range as returned by the server
 ---@param snippet string LSP snippet text
 ---@param offset_encoding string the owning client's offset encoding
-function M.apply_snippet(bufnr, range, snippet, offset_encoding)
+---@param extra_edits lsp.TextEdit[]|nil the server's `extraEdits`, if any
+function M.apply_snippet(bufnr, range, snippet, offset_encoding, extra_edits)
   local start_row, start_col, end_row, end_col = M.range_to_bytes(bufnr, range, offset_encoding)
   vim.api.nvim_buf_set_text(bufnr, start_row, start_col, end_row, end_col, {})
 
@@ -169,6 +194,10 @@ function M.apply_snippet(bufnr, range, snippet, offset_encoding)
   vim.wo.virtualedit = saved_virtualedit
   if not ok then
     vim.notify("codemmet: " .. tostring(err), vim.log.levels.ERROR)
+    return
+  end
+  if extra_edits and #extra_edits > 0 then
+    apply_extra_edits(bufnr, range, snippet, extra_edits, offset_encoding)
   end
 end
 
@@ -212,7 +241,7 @@ local function expand_at(bufnr, client, position)
         repeat_state.abbreviation = text
       end
     end
-    M.apply_snippet(bufnr, result.range, result.snippet, client.offset_encoding)
+    M.apply_snippet(bufnr, result.range, result.snippet, client.offset_encoding, result.extraEdits)
   end)
 end
 

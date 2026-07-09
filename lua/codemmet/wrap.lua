@@ -79,7 +79,13 @@ function M.wrap(opts)
       if vim.api.nvim_get_current_buf() ~= bufnr then
         return
       end
-      lsp.apply_snippet(bufnr, result.range, result.snippet, client.offset_encoding)
+      lsp.apply_snippet(
+        bufnr,
+        result.range,
+        result.snippet,
+        client.offset_encoding,
+        result.extraEdits
+      )
     end)
   end
 

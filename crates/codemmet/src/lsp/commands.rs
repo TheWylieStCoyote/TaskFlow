@@ -2,14 +2,17 @@
 //!
 //! Both commands *return* `{ range, snippet, isSnippet }` instead of sending
 //! `workspace/applyEdit`, because applied edits cannot carry tabstops; the
-//! client deletes the range and hands the snippet to its own expander.
+//! client deletes the range and hands the snippet to its own expander. When
+//! the expansion has missing required imports the result also carries
+//! `extraEdits`: plain text edits (computed against the pre-apply document)
+//! the client applies *after* the snippet — see `lua/codemmet/lsp.lua`.
 
 use codemmet_core::config::loader::scope_name;
 use codemmet_core::context::{
     ContextProvider, DocSnapshot, ExpansionContext, IndentUnit, Scope, WrapSelection,
 };
 use codemmet_core::snippet::render::{TabstopMode, active_variant};
-use lsp_types::{Position, Range, Uri};
+use lsp_types::{Position, Range, TextEdit, Uri};
 use serde::Deserialize;
 
 use super::line_index::LineIndex;
@@ -114,7 +117,8 @@ pub fn expand(server: &mut Server, args: &ExpandArgs) -> Result<serde_json::Valu
         start: index.position(&doc.text, start, server.encoding),
         end: index.position(&doc.text, offset, server.encoding),
     };
-    Ok(result(range, &expansion.body))
+    let extra_edits = import_edits(server, &doc, &index, &expansion.requires, range.start);
+    Ok(result(range, &expansion.body, &extra_edits))
 }
 
 /// Run `codemmet.preview`: the strip-mode expansion of the abbreviation left
@@ -217,7 +221,8 @@ pub fn wrap(server: &mut Server, args: &WrapArgs) -> Result<serde_json::Value, C
         start: index.position(&doc.text, content_start, server.encoding),
         end: index.position(&doc.text, snapped.end, server.encoding),
     };
-    Ok(result(range, &expansion.body))
+    let extra_edits = import_edits(server, &doc, &index, &expansion.requires, range.start);
+    Ok(result(range, &expansion.body, &extra_edits))
 }
 
 /// Run `codemmet.list`: every trigger registered for the document's language,
@@ -329,11 +334,47 @@ fn context_for(
     ctx
 }
 
-/// The command result shape both commands share.
-fn result(range: Range, snippet: &str) -> serde_json::Value {
-    serde_json::json!({
+/// The missing-import edits for an expansion's `requires` (empty when the
+/// provider has no scan, everything is satisfied, or the insertion would
+/// collide with the main edit's line).
+fn import_edits(
+    server: &mut Server,
+    doc: &DocSnapshot,
+    index: &LineIndex,
+    requires: &[String],
+    main_start: Position,
+) -> Vec<TextEdit> {
+    if requires.is_empty() {
+        return Vec::new();
+    }
+    let Some(scan) = server.provider.import_scan(doc) else {
+        return Vec::new();
+    };
+    super::requires::import_edit(
+        &doc.language,
+        requires,
+        &scan,
+        index,
+        &doc.text,
+        server.encoding,
+        main_start,
+    )
+    .into_iter()
+    .collect()
+}
+
+/// The command result shape both commands share. `extraEdits` appears only
+/// when non-empty, so clients unaware of it are untouched.
+fn result(range: Range, snippet: &str, extra_edits: &[TextEdit]) -> serde_json::Value {
+    let mut value = serde_json::json!({
         "range": range,
         "snippet": snippet,
         "isSnippet": true,
-    })
+    });
+    if !extra_edits.is_empty()
+        && let Ok(edits) = serde_json::to_value(extra_edits)
+    {
+        value["extraEdits"] = edits;
+    }
+    value
 }

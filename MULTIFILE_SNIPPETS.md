@@ -78,17 +78,17 @@ Exactly one of `path`/`target` and one of `body`/`expands` per section.
 | --- | --- | --- |
 | Rust | `mmod:name` | a `name.rs` module (primary) + `mod name;` appended to the current file |
 | Rust | `mbin:name` | a `src/bin/name.rs` binary target |
-| Rust | `mtest:name` | an integration test in `tests/name.rs` |
+| Rust | `itest:name` | an integration test in `tests/name.rs` |
 | Python | `mmod:name` | a `name.py` module (primary) + a `test_name.py` importing it |
 | Python | `mpkg:name` | a package: `name/__init__.py` + `name/name.py` (primary) |
-| Python | `mtest:name` | a `test_name.py` test file |
+| Python | `itest:name` | a `test_name.py` test file |
 | C | `munit:name` | a `name.h` header (guard + decl) + a `name.c` source (primary) |
 | C++ | `mcls:Name` | a `Name.hpp` class (primary) + a `Name.cpp` source |
 | C++ | `mmethod:name,Cls` | inject `void name();` into class `Cls` in the current header + append the definition to its `.cpp` |
 | C++ | `mns:ns,Name` | a class `Name` inside `namespace ns`, split across `.hpp`/`.cpp` |
-| C++ | `mtest:name` | a `name_test.cpp` test file |
-| Go | `mtest:Name` | a `Name_test.go` test file |
-| TS/JS | `mtest:name` | a `name.test.ts` / `.js` test file |
+| C++ | `itest:name` | a `name_test.cpp` test file |
+| Go | `itest:Name` | a `Name_test.go` test file |
+| TS/JS | `itest:name` | a `name.test.ts` / `.js` test file |
 
 `mmethod` is the one that leans on structural injection (`self` + `inject` +
 `into`); the rest use `path`/`self` targets with `create`/`append`.

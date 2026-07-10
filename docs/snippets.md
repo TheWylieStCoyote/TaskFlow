@@ -724,7 +724,7 @@ unlike a composite — they are not tabstops; only the single `primary` file kee
 tabstops, since these cannot cross files. `codemmet scaffold` prints a manifest
 (`--json`) or applies it (`--write`); in Neovim `:CodemmetScaffold` writes the
 supporting files and opens the primary as a live, interactive snippet. Every
-language ships builtins — module/package scaffolds, `mtest` test files, Rust
+language ships builtins — module/package scaffolds, `itest` test files, Rust
 `mbin`, and C++ `mmethod`/`mns` (the full list is in the design doc). Full
 details and the design are in
 [`MULTIFILE_SNIPPETS.md`](../MULTIFILE_SNIPPETS.md); the command reference is in

@@ -404,7 +404,7 @@ The **primary** file is the one you'll edit first (here `Point.hpp`); it's the
 only file that carries tabstops. Python's `mmod:parser` makes `parser.py` and a
 `test_parser.py`; Rust's `mmod:util` makes `util.rs` and appends `mod util;` to
 the file you ran it from; C's `munit` makes a `.h`/`.c` pair. Other builtins
-include `mtest` (a test file), Rust `mbin`, Python `mpkg`, and C++ `mns` — plus
+include `itest` (a test file), Rust `mbin`, Python `mpkg`, and C++ `mns` — plus
 `mmethod`, which *injects* a declaration into the class in the header you're
 editing and appends the definition to its `.cpp`.
 

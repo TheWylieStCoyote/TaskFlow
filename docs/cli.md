@@ -342,7 +342,7 @@ codemmet scaffold --lang python "djfeature:blog" --write    # apply it
 | `--json` | Print `[{path, action, content, primary}]` for an editor to apply. |
 | `--write` | Apply the manifest: **create** new files (with any `on_create` header), **append** to existing ones. |
 
-With neither `--json` nor `--write`, it prints a human-readable dry run. A section whose `on_exists = "inject"` (the default) places its content structurally — a new member inside an existing class/struct body (found via tree-sitter, at the end of a C/C++ `public:` section, into the class named by `into` when given) — and falls back to appending when the file has no such container. Builtin multi-file snippets ship for every language — module/package scaffolds, `mtest` test files, Rust `mbin`, and C++ `mmethod`/`mns` (see [multi-file snippets](snippets.md#multi-file-snippets)). Exit code 2 on an unrenderable invocation, 3 on a config/filesystem error.
+With neither `--json` nor `--write`, it prints a human-readable dry run. A section whose `on_exists = "inject"` (the default) places its content structurally — a new member inside an existing class/struct body (found via tree-sitter, at the end of a C/C++ `public:` section, into the class named by `into` when given) — and falls back to appending when the file has no such container. Builtin multi-file snippets ship for every language — module/package scaffolds, `itest` test files, Rust `mbin`, and C++ `mmethod`/`mns` (see [multi-file snippets](snippets.md#multi-file-snippets)). Exit code 2 on an unrenderable invocation, 3 on a config/filesystem error.
 
 ## list
 

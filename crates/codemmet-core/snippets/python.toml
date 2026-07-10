@@ -369,11 +369,11 @@ def ${name}():
     ${1:pass}
 '''
 
-[snippets.mtest]
+[snippets.itest]
 description = "a test file for a module (multi-file)"
 params = [{ name = "name", kind = "ident", default = "thing" }]
 
-[snippets.mtest.files.test]
+[snippets.itest.files.test]
 path = "test_${name}.py"
 on_exists = "create"
 primary = true

@@ -233,11 +233,11 @@ ${name}::${name}() {
 }  // namespace ${ns}
 '''
 
-[snippets.mtest]
+[snippets.itest]
 description = "a test file (multi-file)"
 params = [{ name = "name", kind = "ident", default = "widget" }]
 
-[snippets.mtest.files.test]
+[snippets.itest.files.test]
 path = "${name}_test.cpp"
 on_exists = "create"
 primary = true

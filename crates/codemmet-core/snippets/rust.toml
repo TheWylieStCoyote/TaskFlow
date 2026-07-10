@@ -463,11 +463,11 @@ fn main() {
 }
 '''
 
-[snippets.mtest]
+[snippets.itest]
 description = "an integration test in tests/ (multi-file)"
 params = [{ name = "name", kind = "ident", default = "feature" }]
 
-[snippets.mtest.files.test]
+[snippets.itest.files.test]
 path = "tests/${name}.rs"
 on_exists = "create"
 primary = true

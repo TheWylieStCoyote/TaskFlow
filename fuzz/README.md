@@ -15,16 +15,18 @@ in [`crates/codemmet-core/tests/fuzz.rs`](../crates/codemmet-core/tests/fuzz.rs)
 cargo install cargo-fuzz          # one-time
 cargo +nightly fuzz run parse     # fuzz the abbreviation parser
 cargo +nightly fuzz run expand    # fuzz the full expand pipeline
+cargo +nightly fuzz run filefmt   # fuzz the .codemmet line classifier
 ```
 
-Or a bounded smoke run of both via the justfile: `just fuzz` (default 100k
-iterations each), or `just fuzz 1000000` for longer. Both targets have been run
-for 200k iterations with no crashes.
+Or a bounded smoke run of all targets via the justfile: `just fuzz` (default
+100k iterations each), or `just fuzz 1000000` for longer.
 
 Targets:
 
 - **`parse`** — `codemmet_core::abbr::parse` on arbitrary UTF-8.
 - **`expand`** — `Engine::expand` (Rust pack) on arbitrary UTF-8, both tabstop
   modes.
+- **`filefmt`** — `codemmet_core::filefmt::lines` (the `.codemmet` file-mode
+  line classifier) on arbitrary UTF-8.
 
-The invariant for both is simply: never panic.
+The invariant for all of them is simply: never panic.

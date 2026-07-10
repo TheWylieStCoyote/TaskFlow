@@ -25,6 +25,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "filefmt"
+path = "fuzz_targets/filefmt.rs"
+test = false
+doc = false
+bench = false
+
 # Detach from the parent workspace: this crate builds only under cargo-fuzz (a
 # nightly toolchain with the sanitizer runtime), never in normal CI.
 [workspace]

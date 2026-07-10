@@ -7,6 +7,7 @@ The available subcommands are:
 | Command | Purpose |
 | --- | --- |
 | `expand` | Expand an abbreviation to code on standard output. |
+| `render` | Render a multi-line `.codemmet` source file to code on standard output. |
 | `wrap` | Wrap a selection (read from standard input) in an expanded abbreviation. |
 | `capture` | Generalize example code into a reusable snippet and write it to a pack. |
 | `list` | List every trigger registered for a language. |
@@ -106,6 +107,108 @@ Omit the abbreviation or pass `-` to read it from standard input, which lets you
 ```sh
 echo 'fori10>pr' | codemmet expand --lang go -
 ```
+
+## render (file mode)
+
+Render a **codemmet source file** — a multi-line file of abbreviations — to
+code on standard output. Where `expand` is one abbreviation per invocation,
+`render` is a whole file per invocation, designed for the append pipeline:
+
+```sh
+cat main.rs.codemmet | codemmet >> main.rs
+```
+
+Three spellings run the same thing:
+
+```sh
+codemmet render main.rs.codemmet     # explicit subcommand
+codemmet main.rs.codemmet            # shorthand: a .codemmet positional
+cat main.rs.codemmet | codemmet      # bare filter: piped stdin, no arguments
+```
+
+| Option | Description |
+| --- | --- |
+| `[FILE]` | The `.codemmet` source file. Omit it, or pass `-`, to read standard input. |
+| `--lang <ID>` | The language, as for `expand`. A `#lang` directive overrides it; the file name's inner extension (`NAME.EXT.codemmet`) is the fallback. An error when none of the three resolves. |
+| `--indent <STR>` | Same as for `expand`. |
+| `--repeat <NAME=v1,v2,…>` | Seed a collection for data-driven repeats, as for `expand`. A same-name `#repeat` directive overrides it. |
+| `--tabstops <keep\|strip>` | File-mode output is always plain code, so only `strip` is accepted; `keep` is an error (exit code 3). |
+
+There is no `--json` and no `--base-indent`: leading whitespace on an
+abbreviation line is that line's base indent (see below).
+
+### The `.codemmet` file format
+
+One abbreviation per line. Blank lines pass through as blank output lines
+(except before any output exists). Lines starting with `#` are directives or
+comments:
+
+- `#lang <id>` — the language, once per file, before the first abbreviation.
+- `#repeat NAME=v1,v2,…` — define a collection for data-driven repeats, with
+  exactly the `--repeat` flag's syntax (including `value:type` members). It
+  applies from its line down, and a re-declaration shadows the earlier one.
+- `# a comment` — `#` followed by whitespace (or alone) is a comment,
+  dropped from the output. `#word` with an unknown word is a hard error, so
+  a misspelled directive never silently disappears.
+
+Leading whitespace on an abbreviation line is used as that line's base
+indent — it indents the emitted block textually; it does **not** nest it
+inside the previous block (use `>` within one line for structural nesting).
+Input may be CRLF; output is always LF. Emitted lines are right-trimmed.
+
+```text
+#lang rust
+#repeat Msg=Quit,Move,Write
+
+use:std::fmt
+
+enum:Msg>variant*@Msg
+
+impl:Msg>fn:handle
+match:self>arm*@Msg
+```
+
+### Progressive context
+
+The output rendered so far is the context buffer for later lines, as if you
+were typing each abbreviation at the bottom of the file in an editor. On
+default builds (with tree-sitter), an enum or struct emitted by an earlier
+line feeds a later data-driven repeat — so this needs no `#repeat` header:
+
+```text
+#lang rust
+enum:Msg>variant*[Quit,Move]
+
+match:m>arm*@Msg
+```
+
+```rust
+enum Msg {
+    Quit,
+    Move,
+}
+
+match m {
+    Quit => ,
+    Move => ,
+}
+```
+
+Explicit data beats inferred data: a `#repeat` (or `--repeat`) collection
+shadows a same-name buffer collection. On minimal builds (no tree-sitter),
+`#repeat`/`--repeat` work unchanged and buffer-derived repeats degrade to the
+usual single-copy fallback.
+
+### Atomic output
+
+The whole file renders to memory first; standard output is written only when
+every line succeeded. A failure anywhere prints a diagnostic with the source
+name and line number to standard error — `error: main.rs.codemmet:7: …` —
+emits **zero bytes** on standard output, and exits non-zero, so a
+`>> main.rs` append never leaves a half-written file. Rendering stops at the
+first error; exit codes follow the usual conventions (see below), with
+`.codemmet` format errors (an unknown directive, a misplaced `#lang`)
+counted as parse errors (exit code 1).
 
 ## wrap
 
@@ -250,7 +353,7 @@ The CLI also auto-loads **project-local** packs: it collects every `.codemmet/sn
 | Code | Meaning |
 | --- | --- |
 | 0 | Success. |
-| 1 | Abbreviation parse error, such as malformed syntax like `>pr`. |
+| 1 | Abbreviation parse error, such as malformed syntax like `>pr` — or, in file mode, a `.codemmet` format error such as an unknown directive or a misplaced `#lang`. |
 | 2 | Resolution or render error: an unknown trigger, an argument binding failure, or an expansion that is too large. |
 | 3 | Configuration or environment error: an unknown language, an invalid `--indent`, or a bad snippet pack. |
 
@@ -266,7 +369,7 @@ error: cannot expand `forp`: unknown trigger `forp` (did you mean `fore`?)
 
 ## Standard input and piping
 
-Every command writes only the expansion text to standard output; all diagnostics go to standard error. The `expand` command reads its abbreviation from standard input when you omit it or pass `-`, and `wrap` always reads its selection from standard input. This makes codemmet easy to use in pipelines and from editors.
+Every command writes only the expansion text to standard output; all diagnostics go to standard error. The `expand` command reads its abbreviation from standard input when you omit it or pass `-`, `render` reads its source file the same way, and `wrap` always reads its selection from standard input. Bare `codemmet` with piped standard input and no arguments is the `render` filter (`cat main.rs.codemmet | codemmet >> main.rs`); run interactively with no arguments, it prints help. This makes codemmet easy to use in pipelines and from editors.
 
 ## See also
 

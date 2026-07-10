@@ -76,6 +76,21 @@ follows [Semantic Versioning](https://semver.org/).
   repeat that insertion instead — the standard snippet-plugin trade-off
   ([editor docs](docs/editors.md#wrap-as-an-operator-and-dot-repeat)).
 
+- **File mode: render `.codemmet` source files** (`FILE_MODE_PLAN.md`). A
+  codemmet source file is a multi-line program of abbreviations — one per
+  line, blank lines passing through, `#lang`/`#repeat` directives configuring
+  expansion, and `# `-prefixed comments — rendered to code by the new
+  `codemmet render [FILE]` subcommand, by bare `codemmet` with piped stdin
+  (`cat main.rs.codemmet | codemmet >> main.rs`), or by the shorthand
+  `codemmet main.rs.codemmet` (the inner extension picks the language when
+  `#lang`/`--lang` don't). The output generated so far is the context buffer
+  for later lines, so on default builds an enum emitted early fills a later
+  `match:m>arm*@Msg` with no `#repeat` needed; explicit `#repeat`/`--repeat`
+  data shadows buffer data. The whole file renders in memory and stdout is
+  written only on total success — a mid-file error prints a
+  `FILE:LINE`-numbered diagnostic and emits zero bytes, keeping `>>` appends
+  atomic. Tabstops are always stripped (`--tabstops keep` is an error), and
+  leading whitespace on an abbreviation line indents its block textually.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

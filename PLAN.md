@@ -235,6 +235,17 @@ never inferred from a variable's type. Engine-and-CLI logic lives in
 `codemmet-core`; all per-language node-kind knowledge is isolated in
 `codemmet-tsctx`'s `extract` module. See `docs/context-codegen.md` (user guide).
 
+File mode shipped (milestones FM0–FM2; see `FILE_MODE_PLAN.md`): a `.codemmet`
+source file — one abbreviation per line, `#lang`/`#repeat` directives, `# `
+comments — renders to code via `codemmet render`, bare `codemmet` with piped
+stdin, or `codemmet main.rs.codemmet` (inner-extension language inference).
+The output rendered so far is the context buffer for later lines (an emitted
+enum fills a later `arm*@Msg`), the whole file renders in memory so a failure
+writes zero bytes to stdout (`>>`-append safe, `FILE:LINE` diagnostics), and
+minimal builds degrade per the usual no-data rules. The pure line classifier
+is `codemmet-core::filefmt` (fuzzed); the driver is the CLI's `render` module.
+See `docs/cli.md` (user guide).
+
 Deferred features (not built): a packaged VS Code extension (codemmet works
 there via generic LSP today), and a cross-language `base.toml` pack
 (per-language packs read better; likely dropped rather than built).

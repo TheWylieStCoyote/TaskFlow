@@ -62,6 +62,20 @@ follows [Semantic Versioning](https://semver.org/).
   every listed trigger is pickable. Both are
   backed by new read-only LSP commands (`codemmet.list`, `codemmet.context`)
   any `workspace/executeCommand`-capable client can call.
+- **Neovim: wrap as an operator, and dot-repeat for wrap and expand.** The
+  `keymaps.wrap` binding now also works in normal mode as an operator taking
+  any motion or text object — `<leader>cw ip` wraps a paragraph, `<leader>cw j`
+  two lines — prompting for the abbreviation as usual. Both the wrap operator
+  and normal-mode expand are dot-repeatable, replaying the last operation's
+  *inputs*: `.` after a wrap re-applies the same abbreviation over the repeated
+  motion at the new cursor position (no prompt), and `.` after a normal-mode
+  `<A-e>` re-inserts and expands the last abbreviation at the cursor.
+  `require("codemmet").wrap_operator` / `.expand_operator` are exposed for
+  custom `expr` mappings. Visual-mode wrap and insert-mode expand are
+  unchanged. Caveat: typing into a resulting snippet's tabstops makes `.`
+  repeat that insertion instead — the standard snippet-plugin trade-off
+  ([editor docs](docs/editors.md#wrap-as-an-operator-and-dot-repeat)).
+
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

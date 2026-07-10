@@ -139,8 +139,8 @@ The key bindings are installed buffer-locally when the server attaches
 
 | Binding | Default | Modes | Action |
 | --- | --- | --- | --- |
-| `keymaps.expand` | `<A-e>` | insert and normal | Expand the abbreviation immediately before the cursor. |
-| `keymaps.wrap` | `<leader>cw` | visual | Wrap the selected lines in an abbreviation (prompts for it). |
+| `keymaps.expand` | `<A-e>` | insert and normal | Expand the abbreviation immediately before the cursor. In normal mode the expansion is dot-repeatable: `.` re-inserts and expands the last abbreviation at the cursor. |
+| `keymaps.wrap` | `<leader>cw` | visual and normal (operator) | Wrap lines in an abbreviation (prompts for it). In normal mode it takes a motion or text object (`<leader>cw ip`) and is dot-repeatable. |
 | `keymaps.snippets` | `<leader>cl` | normal | Browse the buffer's snippets in a picker and expand the picked one. |
 | `keymaps.context` | `<leader>cv` | normal | Show the codemmet context (scopes, collections) at the cursor. |
 
@@ -286,6 +286,34 @@ require("codemmet").wrap({ abbreviation = "fori10" })
 
 The selected lines become the content the abbreviation wraps around. This is
 useful for a fixed, frequently used wrapping abbreviation bound to its own key.
+
+### Wrap as an operator, and dot-repeat
+
+In **normal mode**, the same `wrap` binding is an operator: it waits for a
+motion or text object and wraps the lines it covers (always line-wise, like the
+visual mapping). `<leader>cw ip` wraps the paragraph under the cursor,
+`<leader>cw j` wraps the current and next line, `<leader>cw i{` wraps a brace
+block. The abbreviation is prompted for as usual.
+
+Both the wrap operator and normal-mode expand are **dot-repeatable**, and `.`
+replays the last operation's inputs rather than your keystrokes:
+
+- After `<leader>cw ip` with `fori10`, move to another block and press `.` —
+  the same abbreviation is re-applied over the repeated motion at the new
+  cursor position, with **no prompt**.
+- After a normal-mode `<A-e>` expansion, press `.` anywhere — the last
+  abbreviation is re-inserted at the cursor and expanded there.
+
+If you prefer your own mappings, `require("codemmet").wrap_operator` and
+`require("codemmet").expand_operator` are the expression-mapping entry points
+(bind them with `expr = true`); they arm `operatorfunc` and return `g@` /
+`g@l`.
+
+One standard-Vim caveat: if the applied snippet leaves tabstops and you type
+into them, that insertion becomes the latest change, so `.` repeats the typed
+text instead of the wrap or expansion (the same trade-off every snippet plugin
+makes). Leave the snippet without typing (`<Esc>`) and `.` keeps repeating the
+codemmet operation.
 
 ### Completion
 

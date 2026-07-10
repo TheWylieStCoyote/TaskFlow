@@ -7,7 +7,7 @@ public issue. Either:
 
 - use GitHub's [private vulnerability reporting](https://github.com/TheWylieStCoyote/codemmit/security/advisories/new)
   ("Report a vulnerability" under the Security tab), or
-- email **wstandagebeier@gmail.com** with the details.
+- email **TheWylieStCoyote@gmail.com** with the details.
 
 Please include what you did, what happened, and enough to reproduce it. You can
 expect an acknowledgement within a few days; as a small project, fixes are best

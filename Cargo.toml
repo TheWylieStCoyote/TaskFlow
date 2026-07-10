@@ -2,11 +2,11 @@
 resolver = "3"
 exclude = ["fuzz"]
 members = [
-    "crates/codemmet",
-    "crates/codemmet-core",
-    "crates/codemmet-train",
-    "crates/codemmet-tsctx",
-    "crates/codemmet-wasm",
+  "crates/codemmet",
+  "crates/codemmet-core",
+  "crates/codemmet-train",
+  "crates/codemmet-tsctx",
+  "crates/codemmet-wasm",
 ]
 
 [workspace.package]
@@ -14,7 +14,7 @@ version = "0.3.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
-authors = ["Wylie Standage-Beier <wstandagebeier@gmail.com>"]
+authors = ["Wylie Standage-Beier <thewyliestcoyote@gmail.com>"]
 description = "Emmet-style abbreviation expansion for programming languages"
 keywords = ["emmet", "snippets", "lsp", "tree-sitter", "cli"]
 categories = ["command-line-utilities", "development-tools"]

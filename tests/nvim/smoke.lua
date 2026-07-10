@@ -295,18 +295,18 @@ reset_state()
 -- precedence, and engine detection. Pure config assertions (no server, no buffers),
 -- so re-running setup() here cannot disturb the finished scenarios.
 require("codemmet").setup({ completion = { mode = "operators-only" } })
-if require("codemmet")._config.init_options.completion ~= "operators-only" then
+if require("codemmet").config.init_options.completion ~= "operators-only" then
   fail("completion config: completion.mode did not flow into init_options.completion")
 end
 require("codemmet").setup({
   completion = { mode = "operators-only" },
   init_options = { completion = "off" },
 })
-if require("codemmet")._config.init_options.completion ~= "off" then
+if require("codemmet").config.init_options.completion ~= "off" then
   fail("completion config: explicit init_options.completion must win over completion.mode")
 end
 require("codemmet").setup({ completion = false })
-local bool_config = require("codemmet")._config
+local bool_config = require("codemmet").config
 if bool_config.completion.enabled ~= false or bool_config.completion.autotrigger ~= true then
   fail("completion config: boolean shorthand did not normalize to { enabled = false, ... }")
 end

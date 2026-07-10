@@ -5,7 +5,9 @@ an editor, each written as a short symptom, cause, and fix. If your problem is
 not here, jump to [still stuck?](#still-stuck) at the bottom.
 
 For setup details this page refers back to, see [editor setup](editors.md) and
-[installation](installation.md).
+[installation](installation.md). In Neovim with the shipped plugin, start with
+`:checkhealth codemmet` — it checks the binary, its version and tree-sitter
+support, the snippet packs, and the server attach status in one report.
 
 ### The server does not start in `.jsx` or `.tsx` files
 

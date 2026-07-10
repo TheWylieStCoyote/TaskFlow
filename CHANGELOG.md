@@ -38,10 +38,17 @@ follows [Semantic Versioning](https://semver.org/).
   `{ enabled = true, autotrigger = true, mode = "always"|"operators-only"|"off" }`,
   where `mode` is the first-class spelling of the server's completion gate and
   flows into `initializationOptions.completion` (an explicit
-  `init_options.completion` wins). A minimal `:checkhealth codemmet` reports
-  the binary and version, built-in completion support, and whether the wiring
-  is active or skipped and why. See
+  `init_options.completion` wins). The wiring status is reported by
+  `:checkhealth codemmet` (below). See
   [editor setup → completion](docs/editors.md#completion).
+- **`:checkhealth codemmet` (Neovim).** The plugin gains a health check that
+  verifies the whole chain in one report: the binary is found and executable
+  (resolved the way the plugin resolves it — the running client's `cmd`, else
+  the configured `cmd`, else `PATH`), its version matches the plugin checkout,
+  tree-sitter context support is compiled in (a minimal build is a WARN, since
+  scope features degrade silently), the snippet packs pass `codemmet check`,
+  built-in completion support and the wiring status (active or skipped, and
+  why), and the language server is running with its attached buffers listed.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

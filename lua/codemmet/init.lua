@@ -24,6 +24,11 @@ local M = {}
 ---@field preview? boolean|codemmet.PreviewOpts live ghost-line preview while typing (default false); `true` ≡ `{ enabled = true, debounce_ms = 60 }`
 ---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
 
+---The resolved configuration from the last `setup()` call, `nil` before any.
+---Read-only introspection (used by `:checkhealth codemmet`).
+---@type codemmet.SetupOpts|nil
+M.config = nil
+
 local defaults = {
   cmd = { "codemmet", "lsp" },
   filetypes = {
@@ -101,10 +106,6 @@ local function normalize_preview(value)
   return { enabled = value.enabled ~= false, debounce_ms = ms }
 end
 
----Resolved setup() configuration; read by `:checkhealth codemmet`. Nil until setup runs.
----@type table|nil
-M._config = nil
-
 ---Configure codemmet: start the language server for the configured filetypes,
 ---install buffer-local keymaps when it attaches, and (by default) enable
 ---Neovim's built-in LSP completion for it.
@@ -122,7 +123,7 @@ function M.setup(opts)
   if config.init_options.completion == nil and config.completion.mode ~= nil then
     config.init_options.completion = config.completion.mode
   end
-  M._config = config
+  M.config = config
   config.preview = normalize_preview(config.preview)
   -- Always forward the debounce so `:CodemmetPreviewToggle` honors it even
   -- when the preview is not enabled at attach time.

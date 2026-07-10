@@ -153,6 +153,16 @@ Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled
 action through its user command or by calling the Lua function directly.
 
+### Health check
+
+`:checkhealth codemmet` verifies the whole chain in one go: the binary is found
+and executable, its version matches the plugin checkout, tree-sitter context
+support is compiled in (a minimal build degrades silently — see
+[troubleshooting](troubleshooting.md#a-minimal-build-has-no-context-awareness)),
+the snippet packs pass `codemmet check`, and the language server is running.
+Run it first whenever an expansion does not happen; for the individual
+symptoms it can surface, see [troubleshooting](troubleshooting.md).
+
 ### Live preview
 
 With the preview enabled, the plugin shows the expansion as **dimmed virtual

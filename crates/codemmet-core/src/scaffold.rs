@@ -342,6 +342,7 @@ mod tests {
             scope: None,
             variants: Vec::new(),
             composite: None,
+            requires: Vec::new(),
             multifile: Some(CompiledMultiFile { files }),
         }
     }

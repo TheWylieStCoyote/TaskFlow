@@ -595,29 +595,7 @@ fn compile_snippet(
         }
     }
 
-    // Every `${name}` reference (default body and variants) must be declared.
-    for referenced in std::iter::once(&template)
-        .chain(variants.iter().map(|v| &v.template))
-        .flat_map(referenced_params)
-    {
-        if !declared.contains(referenced) {
-            return Err(invalid(format!(
-                "body references undeclared parameter `{referenced}`"
-            )));
-        }
-    }
-
-    // Every declared param must appear in the default body; variants may
-    // omit params.
-    let default_refs: BTreeSet<&str> = referenced_params(&template).collect();
-    for param in &def.params {
-        if !default_refs.contains(param.name.as_str()) {
-            return Err(invalid(format!(
-                "parameter `{}` is never referenced in the body",
-                param.name
-            )));
-        }
-    }
+    check_param_references(&invalid, def, &template, &variants, &declared)?;
 
     Ok(CompiledSnippet {
         trigger: trigger.to_owned(),
@@ -630,6 +608,38 @@ fn compile_snippet(
         composite: None,
         multifile: None,
     })
+}
+
+/// Cross-check `${name}` references against declared params: every reference
+/// (default body and variants) must be declared, and every declared param
+/// must appear in the default body (variants may omit params).
+fn check_param_references(
+    invalid: &impl Fn(String) -> ConfigError,
+    def: &SnippetDef,
+    template: &Template,
+    variants: &[CompiledVariant],
+    declared: &BTreeSet<&str>,
+) -> Result<(), ConfigError> {
+    for referenced in std::iter::once(template)
+        .chain(variants.iter().map(|v| &v.template))
+        .flat_map(referenced_params)
+    {
+        if !declared.contains(referenced) {
+            return Err(invalid(format!(
+                "body references undeclared parameter `{referenced}`"
+            )));
+        }
+    }
+    let default_refs: BTreeSet<&str> = referenced_params(template).collect();
+    for param in &def.params {
+        if !default_refs.contains(param.name.as_str()) {
+            return Err(invalid(format!(
+                "parameter `{}` is never referenced in the body",
+                param.name
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Validate and compile a composite (`expands`) snippet definition.

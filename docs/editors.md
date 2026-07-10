@@ -139,9 +139,12 @@ The plugin also defines these user commands:
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
 | `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
+| `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
 
 `:CodemmetCapture` runs the `codemmet capture` CLI on the selection (feeding it on standard input), which generalizes it — identifiers that repeat become `${param}` mirrors — and writes it into the resolved `.codemmet/snippets/<lang>.toml` pack. The plugin then calls the server's read-only `codemmet.reloadSnippets` command so the new trigger expands immediately in the same session. The language server itself never writes files: the CLI is the only writer, and `reloadSnippets` just re-reads packs from disk. See the [`capture` CLI reference](cli.md#capture) for the generalization rules and where the pack lands.
+
+`:CodemmetTrain` opens [`codemmet train`](trainer.md) — the full-screen interactive trainer — in a `botright` terminal split and enters terminal mode, so keys go straight to the TUI. The buffer's filetype picks the trained language when the plugin supports it (Neovim's filetype doubles as the LSP language id, which `--lang` accepts directly); unknown filetypes fall back to the trainer's own default. Any arguments are appended verbatim, e.g. `:CodemmetTrain --mode drills --level 9`. The binary comes from the attached server's `cmd` (falling back to the configured `cmd`, then `codemmet` on `$PATH`), and a binary built without the `train` cargo feature produces a notification instead of a dead split. The trainer is a session you start deliberately rather than an editing motion, so it gets no default keymap — bind `require("codemmet").train` yourself if you want one.
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled

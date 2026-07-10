@@ -13,6 +13,10 @@ $ codemmet train
 With no arguments it starts a guided lesson for Rust in a full-screen terminal
 UI. Press `Esc` to quit at any time.
 
+Inside Neovim, the shipped plugin's
+[`:CodemmetTrain` command](editors.md#keymaps-and-commands) opens the trainer
+in a terminal split, training the current buffer's language.
+
 ## Two directions
 
 Exercises come in both directions, mixed:

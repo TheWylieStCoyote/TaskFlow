@@ -8,6 +8,14 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`:CodemmetTrain` — the trainer inside Neovim.** The plugin gains a user
+  command that opens the interactive syntax trainer (`codemmet train`) in a
+  `botright` terminal split and enters terminal mode. The buffer's filetype
+  picks the trained language when the plugin supports it (unknown filetypes use
+  the trainer's default), extra arguments pass through verbatim
+  (`:CodemmetTrain --level 9`), and the binary is resolved from the attached
+  server's command. A binary built without the `train` cargo feature produces a
+  notification instead of a dead split.
 - **Neovim: configurable preview debounce + in-flight request cancellation.**
   The `preview` setup option now also accepts a table,
   `preview = { enabled = true, debounce_ms = 100 }`, controlling the typing

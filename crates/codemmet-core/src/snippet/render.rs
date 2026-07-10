@@ -760,19 +760,6 @@ pub fn active_variant<'s>(
     })
 }
 
-/// Pick the template to instantiate for a node in `scope`.
-///
-/// No matching variant ([`active_variant`]) falls back to the default
-/// template. Selection changes only the template — params and description
-/// always come from the snippet itself.
-fn select_template<'s>(
-    snippet: &'s CompiledSnippet,
-    scope: Scope,
-    raw_node_kinds: &[String],
-) -> &'s Template {
-    active_variant(snippet, scope, raw_node_kinds).map_or(&snippet.template, |v| &v.template)
-}
-
 /// Insert composed child lines at the parent's `${child}` slot.
 ///
 /// Child depths shift by the slot line's depth. Spans before the slot prefix

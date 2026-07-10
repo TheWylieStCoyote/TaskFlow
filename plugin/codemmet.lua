@@ -3,6 +3,9 @@ if vim.g.loaded_codemmet then
 end
 vim.g.loaded_codemmet = true
 
+-- `.codemmet` source files (file mode) are a first-class authoring format.
+vim.filetype.add({ extension = { codemmet = "codemmet" } })
+
 vim.api.nvim_create_user_command("CodemmetExpand", function()
   require("codemmet").expand()
 end, { desc = "Expand the codemmet abbreviation before the cursor" })
@@ -37,6 +40,14 @@ end, { desc = "Browse codemmet snippets for this buffer and expand the picked on
 vim.api.nvim_create_user_command("CodemmetContext", function()
   require("codemmet").context()
 end, { desc = "Show the codemmet context (scopes, collections) at the cursor" })
+vim.api.nvim_create_user_command("CodemmetRenderTo", function(cmd)
+  local file = vim.trim(cmd.args)
+  require("codemmet").render_to({ file = file ~= "" and file or nil })
+end, {
+  nargs = "?",
+  complete = "file",
+  desc = "Render the .codemmet buffer to a file (default: the sidecar name)",
+})
 
 vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()

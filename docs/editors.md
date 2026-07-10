@@ -128,6 +128,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
 | `notes_file` | `string` | `<data>/codemmet/notes.md` | Where `:CodemmetNote` appends dogfooding notes. |
+| `render_on_save` | `boolean` | `false` | Render a saved `.codemmet` buffer to its sidecar file on `BufWritePost` (see [authoring `.codemmet` files](#authoring-codemmet-files-file-mode)). |
 
 On setup, a `FileType` autocommand starts the server with `vim.lsp.start` for each
 configured filetype. Completion works out of the box — see [completion](#completion).
@@ -155,6 +156,7 @@ The plugin also defines these user commands:
 | `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
 | `:CodemmetSnippets` | no | Browse the buffer's snippets in a picker and expand the picked one at the cursor. |
 | `:CodemmetContext` | no | Show the codemmet context (scope stack, in-scope collections) at the cursor. |
+| `:CodemmetRenderTo {file}` | no | Render the `.codemmet` buffer to `{file}` — by default the sidecar name, the buffer path minus `.codemmet`. Writes nothing on a failed render. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
@@ -258,6 +260,38 @@ would see before you type it. The float closes when the cursor moves.
 Both are read-only server commands (`codemmet.list`, `codemmet.context`), so
 any LSP client able to call `workspace/executeCommand` can build the same
 surfaces.
+### Authoring `.codemmet` files (file mode)
+
+The plugin makes `.codemmet` source files — the multi-line file-mode format
+rendered by [`codemmet render`](cli.md#render-file-mode) — a first-class
+authoring format:
+
+- **Filetype and highlighting.** `*.codemmet` files get the `codemmet`
+  filetype and a small line-oriented syntax: `#lang`/`#repeat` directive
+  lines, `# ` comments, the composition operators, and quoted arguments. An
+  unknown `#word` is highlighted as an error, because the renderer rejects
+  it (a misspelled directive must not pass as a comment).
+- **Completion in the inner language.** The buffer attaches to the codemmet
+  server with the languageId of the **inner** language, resolved the same
+  way the CLI infers it: a `#lang` directive in the header wins; otherwise
+  the inner extension of a `NAME.EXT.codemmet` name (`main.rs.codemmet` →
+  rust). Trigger completion, the expand keymap, and the live preview
+  therefore all work while you author the file. When neither rung resolves
+  (a bare `NAME.codemmet` with no `#lang`), the server is not started for
+  that buffer.
+- **`:CodemmetRenderTo [file]`** renders the buffer through
+  `codemmet render -` (feeding it on standard input) and writes the result
+  to `[file]` — by default the sidecar name, the buffer path minus
+  `.codemmet` (`main.rs.codemmet` → `main.rs`). Rendering is atomic: on any
+  failure nothing is written — an existing target stays untouched — and the
+  CLI's `<stdin>:LINE:` diagnostic is shown as a notification instead.
+- **Render on save.** Pass `render_on_save = true` to `setup()` to render
+  every saved `.codemmet` buffer to its sidecar on `BufWritePost`, with the
+  same atomicity. Off by default.
+
+```lua
+require("codemmet").setup({ render_on_save = true })
+```
 
 ### Code actions
 

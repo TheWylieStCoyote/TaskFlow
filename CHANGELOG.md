@@ -102,6 +102,18 @@ follows [Semantic Versioning](https://semver.org/).
   notifies with the `FILE:LINE` diagnostic; on success the cursor lands at
   the top of the output. New `keymaps.render` setup field (set it to `false`
   to disable).
+- **Neovim: `.codemmet` is a first-class filetype.** `*.codemmet` files get
+  the `codemmet` filetype and a small line-oriented syntax (directives,
+  comments, operators, quoted arguments; an unknown `#word` highlights as an
+  error). A `.codemmet` buffer attaches to the codemmet server with the
+  **inner** language's languageId — a header `#lang` directive wins,
+  otherwise the inner extension of `NAME.EXT.codemmet` — so trigger
+  completion and the expand keymap work while authoring. The new
+  `:CodemmetRenderTo [file]` command renders the buffer through
+  `codemmet render -` to a target file (default: the sidecar name, the path
+  minus `.codemmet`), writing nothing on a failed render and surfacing the
+  CLI's `<stdin>:LINE:` diagnostic; the opt-in `render_on_save = true` setup
+  option does the same on every save.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

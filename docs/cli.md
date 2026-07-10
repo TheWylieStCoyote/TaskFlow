@@ -210,6 +210,11 @@ first error; exit codes follow the usual conventions (see below), with
 `.codemmet` format errors (an unknown directive, a misplaced `#lang`)
 counted as parse errors (exit code 1).
 
+In Neovim, the shipped plugin makes `.codemmet` a first-class filetype:
+syntax highlighting, completion in the inner language while you author, and
+`:CodemmetRenderTo` / render-on-save driving this same `render` command — see
+[editor setup](editors.md#authoring-codemmet-files-file-mode).
+
 ## wrap
 
 Wrap a selection in an expanded abbreviation. codemmet reads the selection text from standard input, inserts it at the abbreviation's final-cursor position inside the expansion, and prints the result to standard output.

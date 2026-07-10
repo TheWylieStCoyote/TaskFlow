@@ -26,6 +26,7 @@ local M = {}
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
 ---@field preview? boolean|codemmet.PreviewOpts live ghost-line preview while typing (default false); `true` ≡ `{ enabled = true, debounce_ms = 60 }`
 ---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
+---@field render_on_save? boolean render a saved `.codemmet` buffer to its sidecar file (default false)
 
 ---The resolved configuration from the last `setup()` call, `nil` before any.
 ---Read-only introspection (used by `:checkhealth codemmet`).
@@ -55,6 +56,7 @@ local defaults = {
   completion = { enabled = true, autotrigger = true },
   init_options = {},
   preview = false,
+  render_on_save = false,
 }
 
 ---The active configuration: `defaults` merged with the last `setup()` opts.
@@ -176,21 +178,50 @@ function M.setup(opts)
   -- when the preview is not enabled at attach time.
   require("codemmet.preview").set_debounce(config.preview.debounce_ms)
   require("codemmet.notes").set_file(config.notes_file)
+  local filemode = require("codemmet.filemode")
+  filemode.set_cmd(config.cmd)
   local group = vim.api.nvim_create_augroup("codemmet", { clear = true })
+
+  -- `.codemmet` source buffers attach too, with the languageId of the INNER
+  -- language (`main.rs.codemmet` → rust), so completion works while authoring.
+  local filetypes = vim.deepcopy(config.filetypes)
+  if not vim.tbl_contains(filetypes, "codemmet") then
+    table.insert(filetypes, "codemmet")
+  end
 
   vim.api.nvim_create_autocmd("FileType", {
     group = group,
-    pattern = config.filetypes,
+    pattern = filetypes,
     desc = "Start the codemmet language server",
     callback = function(ev)
+      if vim.bo[ev.buf].filetype == "codemmet" and not filemode.language_for(ev.buf) then
+        return -- no inner language resolves: nothing for the server to expand
+      end
       vim.lsp.start({
         name = "codemmet",
         cmd = config.cmd,
         root_dir = vim.fs.root(ev.buf, { ".git" }) or vim.uv.cwd(),
         init_options = config.init_options,
+        get_language_id = function(bufnr, filetype)
+          if filetype == "codemmet" then
+            return filemode.language_for(bufnr) or filetype
+          end
+          return filetype
+        end,
       }, { bufnr = ev.buf })
     end,
   })
+
+  if config.render_on_save then
+    vim.api.nvim_create_autocmd("BufWritePost", {
+      group = group,
+      pattern = "*.codemmet",
+      desc = "Render the saved .codemmet buffer to its sidecar file",
+      callback = function(ev)
+        filemode.render_to({ bufnr = ev.buf })
+      end,
+    })
+  end
 
   vim.api.nvim_create_autocmd("LspAttach", {
     group = group,
@@ -258,6 +289,13 @@ function M.train(opts)
     cmd = config.cmd,
     filetypes = config.filetypes,
   }))
+end
+
+---Render a `.codemmet` buffer to a code file (default target: the sidecar
+---name, i.e. the buffer name minus `.codemmet`).
+---@param opts? codemmet.RenderToOpts
+function M.render_to(opts)
+  require("codemmet.filemode").render_to(opts)
 end
 
 ---Toggle the live ghost-line preview for the current buffer.

@@ -283,8 +283,8 @@ language resolvable). The first failing line determines the code.
 
 ### Q4 — tabstops
 
-**Recommendation: file mode always strips; `--tabstops keep` is rejected
-(exit 3) in v1.** Two independent reasons:
+**Decision (v1, superseded — see the revision below): file mode always
+strips; `--tabstops keep` is rejected (exit 3).** Two independent reasons:
 
 - The concatenation of per-line snippets is not one valid snippet: every line
   restarts numbering at `$1` and may carry its own `$0`, so "keep" output
@@ -304,6 +304,44 @@ right-trim each emitted line — the output is committed code, and
 `.editorconfig`-clean output matters for `>>` appends. If a keep-mode
 consumer materializes (an editor plugin ingesting whole files as snippets),
 revisit with a renumbering pass; the flag surface is reserved for it.
+
+#### Q4 revision — `--tabstops keep` is now supported (owner-approved)
+
+The keep-mode consumer materialized: the Neovim plugin's `<A-E>` buffer
+render re-enters `vim.snippet` navigation by expanding the whole render as
+one snippet. Both v1 objections are resolved by implemented machinery:
+
+- **Whole-file renumbering** lives in `codemmet-core::snippet::merge`
+  (`SnippetDocBuilder`). It applies the engine's own single-snippet
+  `renumber` rules across the concatenated per-line expansions, treating
+  each line exactly like a sibling group inside one abbreviation (`if+el`):
+  - Tabstop identities are **line-local**; fresh global numbers are assigned
+    by first occurrence in document order, so mirrors keep their linkage
+    within their line and lines never alias each other's stops.
+  - Every `$0` candidate except the **last in document order** demotes to a
+    plain numbered stop at its position. This follows the engine's sibling
+    precedent (`if+el` → `if $1 {…$2…} else {…$0…}`; `arm*3` → `$2`, `$4`,
+    `$0`) rather than the vanish rule, which applies only to a parent whose
+    children take over its cursor. Demotion is also the better UX: each
+    construct keeps a jump position (`use std::fmt;$1`, `}$2`), so
+    tab-tab-tab walks the whole render. Since the engine appends a `$0` to
+    any snippet lacking one, every line has a candidate and the survivor is
+    always the last abbreviation line's.
+  - Escaping survives concatenation byte-for-byte: only `$n` / `${n}` /
+    `${n:placeholder}` / `$0` tokens are rewritten; `\$`, `\\`, `\}` pass
+    through verbatim, and an unrecognizable `$` form stays literal text.
+  - Keep-mode lines are **not** right-trimmed (unlike strip mode): a `$0`
+    alone on an indented line is a real cursor position, not trailing
+    whitespace.
+- **Dual rendering per line** is exactly what the driver does: each
+  abbreviation expands twice from the same context — stripped for the
+  progressive-context buffer (which must stay real, parseable code) and
+  kept for the output document. Expansion is deterministic, so the two
+  bodies always agree; the cost (one extra expansion per line) is noise.
+
+`strip` remains the default; `keep` is opt-in via `--tabstops keep` on
+`render`. Failure atomicity is unchanged — a mid-file error still emits
+zero bytes in either mode.
 
 ### Q5 — CLI wiring
 
@@ -352,9 +390,11 @@ The positional spelling enables filename inference (decision: directive >
 - `--repeat` — CLI-level seed collections, below `#repeat` in precedence
   (Q1); useful for parameterizing one `.codemmet` template from a script:
   `codemmet render tmpl.rs.codemmet --repeat Msg=A,B`.
-- **Not carried:** `--tabstops` (Q4, rejected in v1), `--json` (no meaningful
-  single cursor; a JSON stream is out of scope), `--base-indent` (subsumed by
-  per-line leading indentation, Q6).
+- `--tabstops` — `strip` is the default; `keep` emits the whole file as one
+  renumbered snippet document (Q4 revision; originally rejected in v1).
+- **Not carried:** `--json` (no meaningful single cursor; a JSON stream is
+  out of scope), `--base-indent` (subsumed by per-line leading indentation,
+  Q6).
 
 ### Q6 — format details
 
@@ -472,9 +512,11 @@ byte-identically in FM0.
   reverse once files exist.
 - **Subcommand name** (Q5): `render` (recommended) vs `build` — pure
   naming, but it lands in scripts immediately.
-- **`--tabstops keep` rejection** (Q4): fine to hard-error in v1, or is
+- ~~**`--tabstops keep` rejection** (Q4): fine to hard-error in v1, or is
   there a near-term editor consumer that needs keep-mode whole-file
-  snippets now (which would pull renumbering work into FM0/FM1)?
+  snippets now (which would pull renumbering work into FM0/FM1)?~~
+  **Resolved:** the Neovim plugin's snippet re-entry is that consumer;
+  keep mode is now supported (see the Q4 revision).
 - **Comment policy** (Q1): confirm `#`+space comment / unknown-`#word`
   hard error split.
 - **Whitespace-only body lines** (Q4): confirm right-trimming emitted

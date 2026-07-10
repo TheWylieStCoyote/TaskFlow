@@ -6,6 +6,13 @@
 //! mid-file error emits zero bytes, so `codemmet … >> main.rs` never leaves
 //! a half-appended file. Diagnostics carry the source name and 1-based
 //! `.codemmet` line number.
+//!
+//! With `--tabstops keep` the output is one valid LSP snippet document:
+//! every line expands twice — stripped for the progressive-context buffer
+//! (which must be real, parseable code) and kept for the output — and the
+//! per-line snippets are renumbered across the file by
+//! [`SnippetDocBuilder`], so an editor can expand the whole render with
+//! live tabstop navigation.
 
 use std::collections::BTreeMap;
 use std::io::Read as _;
@@ -18,6 +25,7 @@ use codemmet_core::context::{Collection, ContextProvider, DocSnapshot, IndentUni
 use codemmet_core::engine::ExpandError;
 use codemmet_core::filefmt::{self, Line};
 use codemmet_core::lang::registry::Registry;
+use codemmet_core::snippet::merge::SnippetDocBuilder;
 use codemmet_core::snippet::render::TabstopMode;
 
 use super::{
@@ -39,8 +47,9 @@ pub struct RenderArgs {
     #[arg(long, value_name = "STR")]
     indent: Option<String>,
 
-    /// Tabstop handling. File-mode output is always plain code, so only
-    /// `strip` is accepted; `keep` is an error.
+    /// Tabstop handling. `strip` (default) emits plain code; `keep` emits
+    /// one LSP snippet document, with every line's tabstops renumbered
+    /// across the file and a single final `$0`.
     #[arg(long, value_enum)]
     tabstops: Option<Tabstops>,
 
@@ -82,12 +91,6 @@ type StepError = (String, u8);
 
 /// Run `codemmet render`.
 pub fn run(sources: &Sources, args: &RenderArgs) -> ExitCode {
-    if args.tabstops == Some(Tabstops::Keep) {
-        return config_failure(
-            &"--tabstops keep is not supported in file mode: the output is plain code \
-             (tabstops are always stripped)",
-        );
-    }
     let registry = match load_registry(sources) {
         Ok(registry) => registry,
         Err(err) => return config_failure(&err),
@@ -160,7 +163,7 @@ fn render_file(
             });
         }
     }
-    Ok(state.buffer)
+    Ok(state.into_output())
 }
 
 /// The language, indentation, and engine resolved at the first abbreviation.
@@ -187,8 +190,13 @@ struct FileState<'a> {
     directive_collections: BTreeMap<String, Collection>,
     /// Set at the first abbreviation line.
     lang_state: Option<LangState>,
-    /// Everything rendered so far — the progressive-context document.
+    /// Everything rendered so far, stripped — the progressive-context
+    /// document (later lines' collections and scopes come from it, so it
+    /// must be real code even in keep mode).
     buffer: String,
+    /// Under `--tabstops keep`: the output snippet document, renumbered
+    /// across lines at the end. `None` in strip mode.
+    keep_doc: Option<SnippetDocBuilder>,
     /// Whether any output line exists yet (leading blanks are dropped).
     emitted: bool,
 }
@@ -208,7 +216,17 @@ impl<'a> FileState<'a> {
             directive_collections: BTreeMap::new(),
             lang_state: None,
             buffer: String::new(),
+            keep_doc: (args.tabstops == Some(Tabstops::Keep)).then(SnippetDocBuilder::new),
             emitted: false,
+        }
+    }
+
+    /// The rendered output: the keep-mode snippet document when `--tabstops
+    /// keep` was requested, the stripped buffer otherwise.
+    fn into_output(self) -> String {
+        match self.keep_doc {
+            Some(doc) => doc.finish(),
+            None => self.buffer,
         }
     }
 
@@ -218,6 +236,9 @@ impl<'a> FileState<'a> {
     fn blank(&mut self) {
         if self.emitted {
             self.buffer.push('\n');
+            if let Some(doc) = &mut self.keep_doc {
+                doc.push_blank();
+            }
         }
     }
 
@@ -297,6 +318,16 @@ impl<'a> FileState<'a> {
             .engine
             .expand(abbr, &state.lang, &ctx, TabstopMode::Strip)
             .map_err(|err| (format!("cannot expand `{abbr}`: {err}"), exit_code(&err)))?;
+        if let Some(doc) = &mut self.keep_doc {
+            // Keep mode renders each line twice from the same context: the
+            // stripped body above feeds the progressive-context buffer, and
+            // this keep body joins the output snippet document.
+            let keep = state
+                .engine
+                .expand(abbr, &state.lang, &ctx, TabstopMode::Keep)
+                .map_err(|err| (format!("cannot expand `{abbr}`: {err}"), exit_code(&err)))?;
+            doc.push_block(indent, &keep.body);
+        }
         push_block(&mut self.buffer, indent, &expansion.body);
         self.emitted = true;
         Ok(())

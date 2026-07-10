@@ -1,6 +1,9 @@
 //! End-to-end tests for `codemmet render` (file mode): real process, piped
 //! stdin, real exit codes. See `FILE_MODE_PLAN.md`.
 
+// Keep-mode goldens like `${1:Name}` are snippet syntax, not format strings.
+#![allow(clippy::literal_string_with_formatting_args)]
+
 use std::io::Write as _;
 use std::process::{Command, Output, Stdio};
 
@@ -294,19 +297,12 @@ fn render_malformed_repeat_directive_exits_1() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Keep mode: the whole file as one renumbered LSP snippet document
+// ---------------------------------------------------------------------------
+
 #[test]
-fn render_tabstops_keep_is_rejected() {
-    let out = render(
-        "tabstops-keep",
-        &["--no-project", "--lang", "rust", "--tabstops", "keep"],
-        "pr\n",
-    );
-    assert_eq!(code(&out), 3);
-    assert!(
-        stderr(&out).contains("--tabstops keep is not supported in file mode"),
-        "stderr: {}",
-        stderr(&out)
-    );
+fn render_tabstops_strip_is_the_default_and_explicit() {
     let strip = render(
         "tabstops-strip",
         &["--no-project", "--lang", "rust", "--tabstops", "strip"],
@@ -314,6 +310,108 @@ fn render_tabstops_keep_is_rejected() {
     );
     assert_eq!(code(&strip), 0, "stderr: {}", stderr(&strip));
     assert_eq!(stdout(&strip), "println!(\"\");\n");
+}
+
+#[test]
+fn render_tabstops_keep_renumbers_across_lines_with_one_final_cursor() {
+    // Each line's snippet restarts at `$1` and carries its own `$0`; the
+    // merged document numbers them in document order, demotes line 1's `$0`
+    // to `$2` (the `if+el` sibling rule), and keeps only the last `$0`.
+    let out = render(
+        "keep-renumber",
+        &["--no-project", "--lang", "rust", "--tabstops", "keep"],
+        "fn:main\npr\n",
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "fn main($1) {\n    $2\n}\nprintln!(\"$0\");\n"
+    );
+}
+
+#[test]
+fn render_tabstops_keep_mirrors_stay_line_local() {
+    // `newtype` mirrors its unbound `name` across the struct and impl; two
+    // lines must keep two independent mirror pairs ($1/$1 and $5/$5), never
+    // aliasing each other's stops.
+    let out = render(
+        "keep-mirrors",
+        &["--no-project", "--lang", "rust", "--tabstops", "keep"],
+        "newtype\nnewtype\n",
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "struct ${1:Name} {\n    ${2:name}: ${3:Type},\n}\nimpl $1 {\n    $4\n}\n\
+         struct ${5:Name} {\n    ${6:name}: ${7:Type},\n}\nimpl $5 {\n    $0\n}\n"
+    );
+}
+
+#[test]
+fn render_tabstops_keep_flagship_is_one_valid_snippet() {
+    // Blank lines pass through; constructs without an authored `$0` end in
+    // a demoted jump stop (`use …;$1`, `}$2`); the last line's `$0` is the
+    // document's single final cursor. The `$0`-alone body line keeps its
+    // indent (strip mode would trim it) so the cursor lands indented.
+    let source = "#lang rust\n\
+                  #repeat Msg=Quit,Move,Write\n\
+                  \n\
+                  use:std::fmt\n\
+                  \n\
+                  enum:Msg>variant*@Msg\n\
+                  \n\
+                  impl:Msg>fn:handle\n\
+                  match:self>arm*@Msg\n";
+    let out = render(
+        "keep-flagship",
+        &["--no-project", "--tabstops", "keep"],
+        source,
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "use std::fmt;$1\n\
+         \n\
+         enum Msg {\n    Quit,\n    Move,\n    Write,\n}$2\n\
+         \n\
+         impl Msg {\n    fn handle(&self$3) {\n        $4\n    }\n}\n\
+         match self {\n    Quit => $5,\n    Move => $6,\n    Write => $0,\n}\n"
+    );
+}
+
+#[test]
+fn render_tabstops_keep_failure_still_emits_zero_bytes() {
+    let out = render(
+        "keep-atomicity",
+        &["--no-project", "--lang", "rust", "--tabstops", "keep"],
+        "pr\nzzznope\n",
+    );
+    assert_eq!(code(&out), 2);
+    assert_eq!(stdout(&out), "", "stdout must stay empty on failure");
+    assert!(
+        stderr(&out).contains("<stdin>:2:"),
+        "stderr: {}",
+        stderr(&out)
+    );
+}
+
+/// Progressive context in keep mode: the buffer stays stripped (real code),
+/// so an early enum still feeds a later match while the *output* keeps its
+/// renumbered tabstops.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn render_tabstops_keep_preserves_progressive_context() {
+    let source = "#lang rust\nenum:Msg>variant*[Quit,Move]\n\nmatch:m>arm*@Msg\n";
+    let out = render(
+        "keep-progressive",
+        &["--no-project", "--tabstops", "keep"],
+        source,
+    );
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "enum Msg {\n    Quit,\n    Move,\n}$1\n\nmatch m {\n    Quit => $2,\n    Move => $0,\n}\n"
+    );
 }
 
 // ---------------------------------------------------------------------------

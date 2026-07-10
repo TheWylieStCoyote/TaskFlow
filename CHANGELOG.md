@@ -76,6 +76,16 @@ follows [Semantic Versioning](https://semver.org/).
   repeat that insertion instead — the standard snippet-plugin trade-off
   ([editor docs](docs/editors.md#wrap-as-an-operator-and-dot-repeat)).
 
+- **File mode: `--tabstops keep` renders the whole file as one snippet.**
+  `codemmet render --tabstops keep` now emits a single valid LSP snippet
+  document instead of erroring: each line's tabstops are renumbered across
+  the file in document order (mirrors stay linked within their own line,
+  lines never alias each other's stops), every `$0` except the last line's
+  demotes to a plain numbered stop — so tabbing walks construct to
+  construct — and exactly one final `$0` survives. The progressive-context
+  buffer stays stripped real code, so an early enum still fills a later
+  `match`. `strip` remains the default, and failure atomicity is unchanged.
+  The renumbering pass is the new `codemmet-core::snippet::merge` module.
 - **File mode: render `.codemmet` source files** (`FILE_MODE_PLAN.md`). A
   codemmet source file is a multi-line program of abbreviations — one per
   line, blank lines passing through, `#lang`/`#repeat` directives configuring
@@ -89,8 +99,9 @@ follows [Semantic Versioning](https://semver.org/).
   data shadows buffer data. The whole file renders in memory and stdout is
   written only on total success — a mid-file error prints a
   `FILE:LINE`-numbered diagnostic and emits zero bytes, keeping `>>` appends
-  atomic. Tabstops are always stripped (`--tabstops keep` is an error), and
-  leading whitespace on an abbreviation line indents its block textually.
+  atomic. Tabstops are stripped by default (see the `--tabstops keep` entry
+  above), and leading whitespace on an abbreviation line indents its block
+  textually.
 - **Neovim: render the buffer as a `.codemmet` source.** `<A-E>` (Shift-Alt-E,
   next to `<A-e>` expand) or `:CodemmetRenderBuffer` runs file mode on the
   whole buffer — or, in visual mode / with a range, on just those lines —

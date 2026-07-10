@@ -132,10 +132,30 @@ cat main.rs.codemmet | codemmet      # bare filter: piped stdin, no arguments
 | `--lang <ID>` | The language, as for `expand`. A `#lang` directive overrides it; the file name's inner extension (`NAME.EXT.codemmet`) is the fallback. An error when none of the three resolves. |
 | `--indent <STR>` | Same as for `expand`. |
 | `--repeat <NAME=v1,v2,…>` | Seed a collection for data-driven repeats, as for `expand`. A same-name `#repeat` directive overrides it. |
-| `--tabstops <keep\|strip>` | File-mode output is always plain code, so only `strip` is accepted; `keep` is an error (exit code 3). |
+| `--tabstops <keep\|strip>` | Default `strip`: plain code. With `keep`, the whole file is emitted as **one valid LSP snippet document**: every line's tabstops are renumbered across the file in document order (mirrors stay linked within their own line), every `$0` except the last line's demotes to a plain numbered stop — so tabbing walks construct to construct — and exactly one final `$0` survives. |
 
 There is no `--json` and no `--base-indent`: leading whitespace on an
 abbreviation line is that line's base indent (see below).
+
+With `--tabstops keep`, two lines that each expand with their own `$1` and
+`$0` merge into one navigable snippet (the editor integration uses this to
+re-enter snippet mode after a buffer render):
+
+```sh
+printf 'fn:main\npr\n' | codemmet render --lang rust --tabstops keep -
+```
+
+```text
+fn main($1) {
+    $2
+}
+println!("$0");
+```
+
+Progressive context is unaffected: the context buffer is always the stripped
+(real-code) output, whatever `--tabstops` says. Keep-mode lines are not
+right-trimmed — a `$0` alone on an indented line is a cursor position, not
+trailing whitespace.
 
 ### The `.codemmet` file format
 
@@ -154,7 +174,8 @@ comments:
 Leading whitespace on an abbreviation line is used as that line's base
 indent — it indents the emitted block textually; it does **not** nest it
 inside the previous block (use `>` within one line for structural nesting).
-Input may be CRLF; output is always LF. Emitted lines are right-trimmed.
+Input may be CRLF; output is always LF. Emitted lines are right-trimmed
+(in the default strip mode; keep-mode snippet bodies stay verbatim).
 
 ```text
 #lang rust

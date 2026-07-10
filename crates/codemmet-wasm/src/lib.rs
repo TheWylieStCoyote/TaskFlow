@@ -71,6 +71,27 @@ pub extern "C" fn cm_last_ok() -> u32 {
     LAST_OK.load(Ordering::Relaxed)
 }
 
+/// The trainer's levels as JSON, for UIs to build a level picker from.
+///
+/// Emits `[{"number":1,"title":"single triggers"},…]` straight from
+/// [`Level::ALL`], so a picker built from it can never drift from the crate.
+/// Returns a pointer to a UTF-8 buffer whose length is [`cm_last_len`]; the
+/// caller must [`cm_free`] it.
+#[unsafe(no_mangle)]
+pub extern "C" fn cm_levels() -> *mut u8 {
+    LAST_OK.store(1, Ordering::Relaxed);
+    return_string(levels_json())
+}
+
+/// The JSON body behind [`cm_levels`].
+fn levels_json() -> String {
+    let entries: Vec<serde_json::Value> = Level::ALL
+        .iter()
+        .map(|level| serde_json::json!({ "number": level.number(), "title": level.title() }))
+        .collect();
+    serde_json::Value::Array(entries).to_string()
+}
+
 /// Expand `abbr` for `lang`, optionally with data-driven collections.
 ///
 /// `repeat` is a newline-separated list of `NAME=v1,v2,…` collection specs (the
@@ -452,5 +473,45 @@ mod tests {
         let feedback = snapshot(&trainer);
         assert_eq!(feedback.phase, "feedback");
         assert!(feedback.feedback.is_some_and(|f| f.revealed));
+    }
+}
+
+#[cfg(test)]
+mod level_picker_tests {
+    use super::*;
+
+    #[test]
+    fn levels_json_matches_level_all() {
+        let json: Vec<serde_json::Value> =
+            serde_json::from_str(&levels_json()).expect("cm_levels emits valid JSON");
+        assert_eq!(json.len(), Level::ALL.len());
+        for (entry, level) in json.iter().zip(Level::ALL) {
+            assert_eq!(entry["number"], u64::from(level.number()));
+            assert_eq!(entry["title"], level.title());
+        }
+    }
+
+    /// The web trainer's level picker must stay wasm-populated: a hardcoded
+    /// `<option value="N">` list in train.html is exactly the drift that let
+    /// the deployed UI stop at level 7 while the crate had nine levels.
+    #[test]
+    fn train_html_has_no_hardcoded_level_options() {
+        let html = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../playground/train.html"
+        ))
+        .expect("train.html is in the repo");
+        let numbered = html.matches("<option value=\"").count();
+        // The mode select's four options plus the level select's single
+        // static "All / mixed" (value="0") — nothing numbered.
+        for level in Level::ALL {
+            assert!(
+                !html.contains(&format!("<option value=\"{}\"", level.number())),
+                "train.html hardcodes level {} — populate via cm_levels instead",
+                level.number()
+            );
+        }
+        assert!(html.contains("cm_levels"), "train.html must call cm_levels");
+        let _ = numbered;
     }
 }

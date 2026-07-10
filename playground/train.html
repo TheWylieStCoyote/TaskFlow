@@ -97,12 +97,10 @@
             <option value="review">Review</option><option value="sandbox">Sandbox</option>
           </select></div>
         <div><label>Level</label>
+          <!-- Levels are populated from the wasm (cm_levels), so this list
+               can never drift from the trainer's Level::ALL. -->
           <select id="level">
             <option value="0">All / mixed</option>
-            <option value="1">1 · single triggers</option><option value="2">2 · arguments</option>
-            <option value="3">3 · nesting</option><option value="4">4 · siblings</option>
-            <option value="5">5 · repeat</option><option value="6">6 · climb-up</option>
-            <option value="7">7 · grouping</option>
           </select></div>
         <button id="restart" class="primary">Start ▸</button>
         <button id="reset" title="Clear saved spaced-repetition progress">Reset progress</button>
@@ -375,6 +373,14 @@
         } catch (err) {
           $("panel").innerHTML = "<div class='card message'>Failed to load the WebAssembly engine.<br>" + err + "</div>";
           return;
+        }
+        // Build the level picker from the trainer itself (cm_levels), so the
+        // UI always matches the crate's Level::ALL.
+        for (const { number, title } of JSON.parse(readStr(x.cm_levels()))) {
+          const opt = document.createElement("option");
+          opt.value = String(number);
+          opt.textContent = number + " \u00b7 " + title;
+          $("level").appendChild(opt);
         }
         startTrainer();
       }

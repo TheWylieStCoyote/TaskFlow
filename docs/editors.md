@@ -60,7 +60,7 @@ verified lazy.nvim specification:
   },
   opts = {
     cmd = { "codemmet", "lsp" },              -- or an absolute path to the release binary
-    keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+    keymaps = { expand = "<A-e>", wrap = "<leader>cw", render = "<A-E>" },
   },
 }
 ```
@@ -98,7 +98,7 @@ that clone, point `cmd` at the built binary by absolute path:
   },
   opts = {
     cmd = { "/home/you/src/codemmet/target/release/codemmet", "lsp" },
-    keymaps = { expand = "<A-e>", wrap = "<leader>cw" },
+    keymaps = { expand = "<A-e>", wrap = "<leader>cw", render = "<A-E>" },
   },
 }
 ```
@@ -123,7 +123,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | --- | --- | --- | --- |
 | `cmd` | `string[]` | `{ "codemmet", "lsp" }` | Command used to start the language server. Use an absolute path if `codemmet` is not on `PATH`. |
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
-| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw", snippets = "<leader>cl", context = "<leader>cv" }` | Key bindings to install. Set any field to `false` to disable that binding. |
+| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw", snippets = "<leader>cl", context = "<leader>cv", render = "<A-E>" }` | Key bindings to install. Set any field to `false` to disable that binding. |
 | `completion` | `boolean` or `table` | `{ enabled = true, autotrigger = true }` | Completion wiring; see [completion](#completion). A boolean is shorthand for `{ enabled = ... }`. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
@@ -143,12 +143,14 @@ The key bindings are installed buffer-locally when the server attaches
 | `keymaps.wrap` | `<leader>cw` | visual and normal (operator) | Wrap lines in an abbreviation (prompts for it). In normal mode it takes a motion or text object (`<leader>cw ip`) and is dot-repeatable. |
 | `keymaps.snippets` | `<leader>cl` | normal | Browse the buffer's snippets in a picker and expand the picked one. |
 | `keymaps.context` | `<leader>cv` | normal | Show the codemmet context (scopes, collections) at the cursor. |
+| `keymaps.render` | `<A-E>` (Shift-Alt-E) | normal and visual | Render the whole buffer (normal) or the selected lines (visual) as a `.codemmet` source into code, in place. |
 
 The plugin also defines these user commands:
 
 | Command | Range | Action |
 | --- | --- | --- |
 | `:CodemmetExpand` | no | Expand the abbreviation before the cursor. |
+| `:CodemmetRenderBuffer` | yes (defaults to the whole buffer) | Render the buffer or range as a `.codemmet` source into code. |
 | `:CodemmetWrap` | yes | Wrap the given line range in an abbreviation. |
 | `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
 | `:CodemmetSnippets` | no | Browse the buffer's snippets in a picker and expand the picked one at the cursor. |
@@ -170,6 +172,8 @@ cursor. Accepting an entry applies its pre-rendered body as a snippet; an
 entry without one falls back to inserting the trigger and expanding it through
 the ordinary flow, so a trigger with required params works too (its unfilled
 params become tabstops).
+
+`:CodemmetRenderBuffer` / `<A-E>` is [file mode](cli.md#render-file-mode) in the editor: the buffer (or the visual selection) is treated as a `.codemmet` source — one abbreviation per line, blank lines passing through, `#lang`/`#repeat` directives honored — and piped to the `codemmet render` CLI, with the language taken from the buffer's filetype and the indent from your `shiftwidth`/`expandtab`. On success the region is replaced by the rendered code and the cursor lands at the top of the output (re-entering snippet mode at the first construct is a possible later refinement). On any failure the buffer is left **untouched** — the CLI renders in memory and emits nothing on error — and the cursor jumps to the offending line with the diagnostic in a notification. The typical flow: open a fresh file, type a screenful of abbreviation lines, press Shift-Alt-E, and the buffer becomes code — with the output of earlier lines feeding later ones (an emitted `enum` fills a later `match:m>arm*@Msg`). In visual mode only the selected lines are rendered and replaced, with their leading whitespace as the base indent.
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled

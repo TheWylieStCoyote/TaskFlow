@@ -11,6 +11,13 @@ vim.api.nvim_create_user_command("CodemmetWrap", function(cmd)
   require("codemmet").wrap({ line1 = cmd.line1, line2 = cmd.line2 })
 end, { range = true, desc = "Wrap the given lines in a codemmet abbreviation" })
 
+vim.api.nvim_create_user_command("CodemmetRenderBuffer", function(cmd)
+  require("codemmet").render({ line1 = cmd.line1, line2 = cmd.line2 })
+end, {
+  range = "%",
+  desc = "Render the buffer (or the given range) as a .codemmet source into code",
+})
+
 vim.api.nvim_create_user_command("CodemmetCapture", function(cmd)
   require("codemmet").capture({
     name = vim.trim(cmd.args) ~= "" and vim.trim(cmd.args) or nil,

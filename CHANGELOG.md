@@ -91,6 +91,17 @@ follows [Semantic Versioning](https://semver.org/).
   `FILE:LINE`-numbered diagnostic and emits zero bytes, keeping `>>` appends
   atomic. Tabstops are always stripped (`--tabstops keep` is an error), and
   leading whitespace on an abbreviation line indents its block textually.
+- **Neovim: render the buffer as a `.codemmet` source.** `<A-E>` (Shift-Alt-E,
+  next to `<A-e>` expand) or `:CodemmetRenderBuffer` runs file mode on the
+  whole buffer — or, in visual mode / with a range, on just those lines —
+  replacing the abbreviations with the rendered code in place. The plugin
+  pipes the region to the `codemmet render` CLI (language from the buffer's
+  filetype, indent from `shiftwidth`/`expandtab`), so directives and
+  progressive context work exactly as on the command line. A failed render
+  leaves the buffer untouched, jumps the cursor to the offending line, and
+  notifies with the `FILE:LINE` diagnostic; on success the cursor lands at
+  the top of the output. New `keymaps.render` setup field (set it to `false`
+  to disable).
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

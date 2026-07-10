@@ -7,6 +7,7 @@ local M = {}
 ---@field wrap string|false visual-mode mapping for wrap(); false disables
 ---@field snippets string|false normal-mode mapping for snippets(); false disables
 ---@field context string|false normal-mode mapping for context(); false disables
+---@field render string|false normal-mode (whole buffer) and visual-mode (selection) mapping for render(); false disables
 
 ---@class codemmet.PreviewOpts
 ---@field enabled? boolean turn the preview on when the server attaches (default true for the table form)
@@ -49,6 +50,7 @@ local defaults = {
     wrap = "<leader>cw",
     snippets = "<leader>cl",
     context = "<leader>cv",
+    render = "<A-E>",
   },
   completion = { enabled = true, autotrigger = true },
   init_options = {},
@@ -86,6 +88,13 @@ end
 ---@return string
 function M.wrap_operator()
   return require("codemmet.wrap").operator()
+end
+
+---Render the buffer — or the visual selection / `opts.line1..opts.line2` —
+---as a `.codemmet` source (one abbreviation per line) into code, in place.
+---@param opts? codemmet.RenderOpts
+function M.render(opts)
+  require("codemmet.render").render(opts)
 end
 
 ---Capture the visual selection (or `opts.line1..opts.line2`) into the project
@@ -224,6 +233,14 @@ function M.setup(opts)
           buffer = ev.buf,
           desc = "codemmet: show context at cursor",
         })
+      end
+      if keymaps.render then
+        vim.keymap.set("n", keymaps.render, function()
+          M.render()
+        end, { buffer = ev.buf, desc = "codemmet: render buffer as .codemmet source" })
+        vim.keymap.set("x", keymaps.render, function()
+          M.render()
+        end, { buffer = ev.buf, desc = "codemmet: render selection as .codemmet source" })
       end
       if config.preview.enabled then
         require("codemmet.preview").attach(ev.buf)

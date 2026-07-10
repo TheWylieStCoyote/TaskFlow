@@ -63,10 +63,29 @@ function M.expand()
   require("codemmet.lsp").expand()
 end
 
+---Dot-repeatable normal-mode expand, for an expression mapping (`expr = true`):
+---arms `operatorfunc` and returns `"g@l"`. A fresh press expands the abbreviation
+---before the cursor; `.` re-inserts and expands the last abbreviation at the
+---current cursor position.
+---@return string
+function M.expand_operator()
+  return require("codemmet.lsp").expand_operator()
+end
+
 ---Wrap the visual selection (or `opts.line1..opts.line2`) in an abbreviation.
 ---@param opts? codemmet.WrapOpts
 function M.wrap(opts)
   require("codemmet.wrap").wrap(opts)
+end
+
+---Wrap-as-an-operator, for a normal-mode expression mapping (`expr = true`):
+---arms `operatorfunc` and returns `"g@"`, so the mapping takes any motion or
+---text object (`<leader>cw ip`, `<leader>cw j`, ...). Prompts for the
+---abbreviation; `.` repeats the wrap with the same abbreviation over the
+---repeated motion at the new cursor position, without prompting.
+---@return string
+function M.wrap_operator()
+  return require("codemmet.wrap").operator()
 end
 
 ---Capture the visual selection (or `opts.line1..opts.line2`) into the project
@@ -174,15 +193,25 @@ function M.setup(opts)
       end
       local keymaps = config.keymaps or {}
       if keymaps.expand then
-        vim.keymap.set({ "i", "n" }, keymaps.expand, M.expand, {
+        vim.keymap.set("i", keymaps.expand, M.expand, {
           buffer = ev.buf,
           desc = "codemmet: expand abbreviation",
+        })
+        vim.keymap.set("n", keymaps.expand, M.expand_operator, {
+          buffer = ev.buf,
+          expr = true,
+          desc = "codemmet: expand abbreviation (dot-repeatable)",
         })
       end
       if keymaps.wrap then
         vim.keymap.set("x", keymaps.wrap, function()
           M.wrap()
         end, { buffer = ev.buf, desc = "codemmet: wrap selection" })
+        vim.keymap.set("n", keymaps.wrap, M.wrap_operator, {
+          buffer = ev.buf,
+          expr = true,
+          desc = "codemmet: wrap {motion} (dot-repeatable)",
+        })
       end
       if keymaps.snippets then
         vim.keymap.set("n", keymaps.snippets, M.snippets, {

@@ -172,18 +172,19 @@ function M.apply_snippet(bufnr, range, snippet, offset_encoding)
   end
 end
 
----Expand the abbreviation immediately before the cursor.
----Notifies (rather than errors) when no codemmet client is attached or the server rejects
----the abbreviation.
-function M.expand()
-  local bufnr = vim.api.nvim_get_current_buf()
-  local client = M.get_client(bufnr)
-  if not client then
-    vim.notify("codemmet: no codemmet client attached to this buffer", vim.log.levels.WARN)
-    return
-  end
+---Dot-repeat state for normal-mode expand. `fresh` is set by the mapping entry
+---point (M.expand_operator) right before `g@l`, distinguishing a brand-new
+---invocation from a `.` repeat (which re-invokes the operatorfunc directly).
+---`abbreviation` is the text of the last successfully expanded abbreviation,
+---captured from the buffer before the expansion replaces it.
+local repeat_state = { fresh = false, abbreviation = nil }
 
-  local position = cursor_position(bufnr, client.offset_encoding)
+---Request `codemmet.expand` at an explicit LSP position and apply the result.
+---Remembers the expanded abbreviation's text for dot-repeat.
+---@param bufnr integer
+---@param client vim.lsp.Client
+---@param position lsp.Position
+local function expand_at(bufnr, client, position)
   M.exec(client, bufnr, "codemmet.expand", {
     {
       uri = vim.uri_from_bufnr(bufnr),
@@ -201,8 +202,76 @@ function M.expand()
     if vim.api.nvim_get_current_buf() ~= bufnr then
       return
     end
+    -- Capture the abbreviation text (always single-line) for `.` repeat before
+    -- apply_snippet deletes it from the buffer.
+    local start_row, start_col, end_row, end_col =
+      M.range_to_bytes(bufnr, result.range, client.offset_encoding)
+    if start_row == end_row then
+      local text = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})[1]
+      if text and text ~= "" then
+        repeat_state.abbreviation = text
+      end
+    end
     M.apply_snippet(bufnr, result.range, result.snippet, client.offset_encoding)
   end)
+end
+
+---Expand the abbreviation immediately before the cursor.
+---Notifies (rather than errors) when no codemmet client is attached or the server rejects
+---the abbreviation.
+function M.expand()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local client = M.get_client(bufnr)
+  if not client then
+    vim.notify("codemmet: no codemmet client attached to this buffer", vim.log.levels.WARN)
+    return
+  end
+  expand_at(bufnr, client, cursor_position(bufnr, client.offset_encoding))
+end
+
+---Normal-mode entry point for `keymaps.expand`. Use from an expression
+---mapping: it arms `operatorfunc` and returns `"g@l"` (an operator over a
+---one-character motion — the accepted trick for making an arbitrary action
+---dot-repeatable). A fresh invocation expands the abbreviation before the
+---cursor as usual; `.` then re-inserts the last expanded abbreviation at the
+---current cursor position and expands it there.
+---@return string keys for the expression mapping ("g@l")
+function M.expand_operator()
+  repeat_state.fresh = true
+  vim.go.operatorfunc = "v:lua.require'codemmet.lsp'.expand_opfunc"
+  return "g@l"
+end
+
+---`operatorfunc` callback for normal-mode expand. The motion range is
+---irrelevant (it is always the `l` pseudo-motion); only the cursor position
+---matters. Fresh invocations run the normal expand flow; `.` repeats insert
+---the stored abbreviation at the cursor and expand it in place.
+function M.expand_opfunc()
+  local fresh = repeat_state.fresh
+  repeat_state.fresh = false
+  if fresh then
+    M.expand()
+    return
+  end
+
+  local abbreviation = repeat_state.abbreviation
+  if not abbreviation then
+    return -- nothing expanded yet in this session
+  end
+  local bufnr = vim.api.nvim_get_current_buf()
+  local client = M.get_client(bufnr)
+  if not client then
+    vim.notify("codemmet: no codemmet client attached to this buffer", vim.log.levels.WARN)
+    return
+  end
+
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  vim.api.nvim_buf_set_text(bufnr, row - 1, col, row - 1, col, { abbreviation })
+  local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
+  expand_at(bufnr, client, {
+    line = row - 1,
+    character = byte_to_character(line, col + #abbreviation, client.offset_encoding),
+  })
 end
 
 return M

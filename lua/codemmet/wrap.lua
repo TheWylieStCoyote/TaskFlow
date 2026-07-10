@@ -4,6 +4,13 @@ local lsp = require("codemmet.lsp")
 
 local M = {}
 
+---Dot-repeat state for the wrap operator. `fresh` is set by the mapping entry
+---point (M.operator) right before `g@`, so the operatorfunc can tell a brand-new
+---invocation (prompt for the abbreviation) from a `.` repeat, which re-invokes
+---the operatorfunc directly without going through the mapping (use the stored
+---abbreviation, never prompt). This is the standard operatorfunc-repeat idiom.
+local state = { fresh = false, abbreviation = nil }
+
 ---@class codemmet.WrapOpts
 ---@field abbreviation? string wrap abbreviation; when given the vim.ui.input prompt is skipped
 ---@field line1? integer 1-based first line of the region (e.g. a user command's range)
@@ -86,6 +93,43 @@ function M.wrap(opts)
       return -- cancelled
     end
     send(input)
+  end)
+end
+
+---Normal-mode operator entry point for `keymaps.wrap`. Use from an
+---expression mapping: it arms `operatorfunc` and returns `"g@"`, so the
+---mapping composes with any motion or text object (`<leader>cw ip`,
+---`<leader>cw j`, ...). Prompts for the abbreviation on first use; `.`
+---then re-applies the same abbreviation over the repeated motion at the
+---new cursor position, without prompting.
+---@return string keys for the expression mapping ("g@")
+function M.operator()
+  state.fresh = true
+  vim.go.operatorfunc = "v:lua.require'codemmet.wrap'.opfunc"
+  return "g@"
+end
+
+---`operatorfunc` callback for the wrap operator. Receives the motion range
+---through the `'[`/`']` marks (always treated line-wise, like visual wrap).
+---Fresh invocations prompt via `vim.ui.input` and store the abbreviation;
+---`.` repeats reuse the stored one.
+function M.opfunc()
+  local line1 = vim.api.nvim_buf_get_mark(0, "[")[1]
+  local line2 = vim.api.nvim_buf_get_mark(0, "]")[1]
+  local fresh = state.fresh
+  state.fresh = false
+
+  if not fresh and state.abbreviation then
+    M.wrap({ abbreviation = state.abbreviation, line1 = line1, line2 = line2 })
+    return
+  end
+
+  vim.ui.input({ prompt = "codemmet wrap: " }, function(input)
+    if input == nil or input == "" then
+      return -- cancelled; a later `.` will prompt again
+    end
+    state.abbreviation = input
+    M.wrap({ abbreviation = input, line1 = line1, line2 = line2 })
   end)
 end
 

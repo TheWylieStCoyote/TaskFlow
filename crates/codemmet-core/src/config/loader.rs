@@ -7,6 +7,7 @@ use crate::config::schema::{FileDef, OnExists, ParamDef, SnippetDef, SnippetFile
 use crate::context::Scope;
 use crate::snippet::ir::{Span, Template};
 use crate::snippet::template::{TemplateError, parse_template};
+use crate::snippet::transform::CaseTransform;
 
 /// A snippet definition compiled and validated for rendering.
 #[derive(Debug, Clone)]
@@ -925,12 +926,24 @@ fn compile_file_piece(
     let path_refs = file.path.as_deref().map(param_markers).unwrap_or_default();
     let into_refs = file.into.as_deref().map(param_markers).unwrap_or_default();
     for name in path_refs.into_iter().chain(into_refs).chain(content_refs) {
-        if !declared.contains(name.as_str()) {
+        // `${param|transform}` markers: validate the base name and the
+        // transform (scaffold substitution applies it — see scaffold::subst).
+        let (base, transform) = name
+            .split_once('|')
+            .map_or((name.as_str(), None), |(b, t)| (b, Some(t)));
+        if let Some(transform) = transform
+            && CaseTransform::parse(transform).is_none()
+        {
             return Err(invalid(format!(
-                "file section `{label}` references undeclared parameter `{name}`"
+                "file section `{label}`: unknown case transform `{transform}` in `${{{name}}}`"
             )));
         }
-        referenced.insert(name);
+        if !declared.contains(base) {
+            return Err(invalid(format!(
+                "file section `{label}` references undeclared parameter `{base}`"
+            )));
+        }
+        referenced.insert(base.to_owned());
     }
 
     Ok(CompiledFilePiece {

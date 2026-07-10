@@ -9,6 +9,7 @@ use clap::Args;
 use codemmet_core::Engine;
 use codemmet_core::config::schema::OnExists;
 use codemmet_core::context::ExpansionContext;
+use codemmet_core::lang::imports;
 use codemmet_core::scaffold::{FileOutput, ScaffoldOptions, scaffold};
 
 use super::{
@@ -60,6 +61,10 @@ struct Planned {
     path: PathBuf,
     action: Action,
     content: String,
+    /// Import lines the plan could NOT weave into the content (Go appends/
+    /// injects, where imports are only legal at the top of the file) —
+    /// reported for manual insertion instead of writing invalid code.
+    manual_requires: Vec<String>,
     primary: bool,
 }
 
@@ -149,7 +154,8 @@ pub fn run(sources: &Sources, args: &ScaffoldArgs) -> ExitCode {
 /// action, and prepare the content (fold in `on_create` on create; compute the
 /// structural insertion on inject).
 fn plan(out: &FileOutput, lang: &str, indent: &str) -> Result<Planned, String> {
-    let (action, content) = if out.path.exists() {
+    let mut manual_requires = Vec::new();
+    let (action, mut content) = if out.path.exists() {
         match out.on_exists {
             OnExists::Create => {
                 return Err(format!(
@@ -169,12 +175,65 @@ fn plan(out: &FileOutput, lang: &str, indent: &str) -> Result<Planned, String> {
         );
         (Action::Create, content)
     };
+
+    // Weave the piece's import requirements in. Created files get the lines
+    // up top (after a leading `package` line, for Go); appends prefix their
+    // block (module-scope imports are legal everywhere but Go); injects land
+    // inside a container body, so their imports are always manual.
+    let missing = missing_requires(out, lang, action)?;
+    if !missing.is_empty() {
+        match action {
+            Action::Create => content = prepend_imports(&content, &missing),
+            Action::Append if lang != "go" => {
+                content = format!("{}\n{content}", missing.join("\n"));
+            }
+            _ => manual_requires = missing,
+        }
+    }
+
     Ok(Planned {
         path: out.path.clone(),
         action,
         content,
+        manual_requires,
         primary: out.primary,
     })
+}
+
+/// The formatted import lines of `out.requires` not already satisfied by the
+/// target file's existing statements (created files satisfy nothing yet).
+fn missing_requires(out: &FileOutput, lang: &str, action: Action) -> Result<Vec<String>, String> {
+    if out.requires.is_empty() {
+        return Ok(Vec::new());
+    }
+    let existing = match action {
+        Action::Create => String::new(),
+        _ => std::fs::read_to_string(&out.path)
+            .map_err(|err| format!("cannot read {}: {err}", out.path.display()))?,
+    };
+    let mut lines = Vec::new();
+    for spec in &out.requires {
+        let spec = imports::parse_spec(lang, spec)
+            .map_err(|err| format!("file section `{}`: {err}", out.label))?;
+        if !existing.lines().any(|line| spec.satisfied_by(line)) {
+            lines.push(spec.line());
+        }
+    }
+    Ok(lines)
+}
+
+/// Insert import `lines` at the top of a created file's text — after a
+/// leading `package …` statement when present (Go), else before everything —
+/// separated from the body by a blank line.
+fn prepend_imports(content: &str, lines: &[String]) -> String {
+    let block = lines.join("\n");
+    if let Some(first_end) = content.find('\n')
+        && content.starts_with("package ")
+    {
+        let (package_line, rest) = content.split_at(first_end + 1);
+        return format!("{package_line}\n{block}\n{}", rest.trim_start_matches('\n'));
+    }
+    format!("{block}\n\n{content}")
 }
 
 /// Plan an `inject` into an existing file: ask the tree-sitter injector for a
@@ -225,6 +284,11 @@ fn emit_json(planned: &[Planned]) -> ExitCode {
             if let Action::Inject { offset } = e.action {
                 obj["offset"] = serde_json::json!(offset);
             }
+            // Import lines the plan could not weave in (Go appends, injects):
+            // the caller inserts these at the file's import block itself.
+            if !e.manual_requires.is_empty() {
+                obj["manualRequires"] = serde_json::json!(e.manual_requires);
+            }
             obj
         })
         .collect();
@@ -243,6 +307,9 @@ fn emit_text(planned: &[Planned]) -> ExitCode {
             star
         );
         println!("{}", entry.content.trim_end_matches('\n'));
+        for line in &entry.manual_requires {
+            println!("# requires (add manually): {line}");
+        }
         println!();
     }
     ExitCode::SUCCESS
@@ -258,6 +325,13 @@ fn apply(planned: &[Planned]) -> ExitCode {
         // Mark the primary file so an editor wrapper knows which to open.
         let mark = if entry.primary { " (primary)" } else { "" };
         println!("{} {}{}", entry.action.as_str(), entry.path.display(), mark);
+        for line in &entry.manual_requires {
+            eprintln!(
+                "note: {} needs `{line}` — add it to the file's imports (not \
+                 written automatically at this position)",
+                entry.path.display()
+            );
+        }
     }
     ExitCode::SUCCESS
 }

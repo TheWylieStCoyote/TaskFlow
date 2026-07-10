@@ -29,6 +29,7 @@ use crate::engine::{Engine, ExpandError};
 use crate::snippet::ir::Template;
 use crate::snippet::render::{RenderError, TabstopMode, render};
 use crate::snippet::template::{TemplateError, parse_template};
+use crate::snippet::transform::CaseTransform;
 
 /// Inputs a multi-file expansion needs from its environment.
 #[derive(Debug, Clone, Copy)]
@@ -55,6 +56,11 @@ pub struct FileOutput {
     pub on_exists: OnExists,
     /// For `inject`: the container name to target (already param-substituted).
     pub into: Option<String>,
+    /// Import requirement specs collected from this piece's rendered content
+    /// (an `expands` piece aggregates its sub-triggers'; the primary piece
+    /// additionally carries the multi-file snippet's own `requires`).
+    /// Raw spec strings — see `lang::imports` for per-language formatting.
+    pub requires: Vec<String>,
     /// Whether this is the primary file (the one that keeps tabstops).
     pub primary: bool,
 }
@@ -151,13 +157,28 @@ pub fn scaffold(
     for (i, piece) in multifile.files.iter().enumerate() {
         let is_primary = i == primary;
         let piece_mode = if is_primary { mode } else { TabstopMode::Strip };
+        let (content, piece_requires) =
+            render_piece(engine, language, piece, &values, ctx, piece_mode)?;
+        // The snippet's own `requires` ride with the primary file; each
+        // piece adds what its rendered content pulled in (first-appearance
+        // dedup, matching `Expansion.requires`).
+        let mut requires: Vec<String> = Vec::new();
+        if is_primary {
+            requires.extend(snippet.requires.iter().cloned());
+        }
+        for spec in piece_requires {
+            if !requires.contains(&spec) {
+                requires.push(spec);
+            }
+        }
         out.push(FileOutput {
             label: piece.label.clone(),
             path: resolve_path(piece, &values, opts)?,
-            content: render_piece(engine, language, piece, &values, ctx, piece_mode)?,
+            content,
             on_create: piece.on_create.as_deref().map(|p| subst(p, &values)),
             on_exists: piece.on_exists,
             into: piece.into.as_deref().map(|p| subst(p, &values)),
+            requires,
             primary: is_primary,
         });
     }
@@ -208,9 +229,20 @@ fn bind_values(snippet: &CompiledSnippet, args: &[String], remainder: &str) -> V
 type Values = BTreeMap<String, String>;
 
 /// Substitute `${name}` markers with their values, leaving any other `${…}`
-/// (tabstops like `${1:x}`) untouched.
+/// (tabstops like `${1:x}`, data-driven `${value…}` spans) untouched.
+///
+/// A `${name|transform}` marker applies the case transform to the value
+/// (`${field|snake}` with `field = maxSize` → `max_size`), matching the
+/// template grammar. An unknown base name is left untouched either way, so
+/// engine-owned spans like `${value|snake}` pass through to the renderer.
 fn subst(text: &str, values: &Values) -> String {
     substitute_markers(text, |name| {
+        if let Some((base, transform)) = name.split_once('|')
+            && let Some(value) = values.get(base)
+            && let Some(transform) = CaseTransform::parse(transform)
+        {
+            return transform.apply(value);
+        }
         values
             .get(name)
             .cloned()
@@ -261,7 +293,7 @@ fn render_piece(
     values: &Values,
     ctx: &ExpansionContext,
     mode: TabstopMode,
-) -> Result<String, ScaffoldError> {
+) -> Result<(String, Vec<String>), ScaffoldError> {
     match &piece.content {
         PieceContent::Body(body) => {
             let resolved = subst(body, values);
@@ -269,16 +301,19 @@ fn render_piece(
                 label: piece.label.clone(),
                 source,
             })?;
-            render_template(template, ctx, mode).map_err(|source| ScaffoldError::Render {
-                label: piece.label.clone(),
-                source,
-            })
+            let content =
+                render_template(template, ctx, mode).map_err(|source| ScaffoldError::Render {
+                    label: piece.label.clone(),
+                    source,
+                })?;
+            // A literal body names no sub-triggers, so it carries no requires.
+            Ok((content, Vec::new()))
         }
         PieceContent::Expands(abbr) => {
             let resolved = subst(abbr, values);
             engine
                 .expand(&resolved, language, ctx, mode)
-                .map(|e| e.body)
+                .map(|e| (e.body, e.requires))
                 .map_err(|source| ScaffoldError::Expand {
                     label: piece.label.clone(),
                     abbr: resolved,

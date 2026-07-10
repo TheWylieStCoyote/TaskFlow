@@ -1125,3 +1125,118 @@ fn check_warns_on_requires_for_unsupported_language() {
     );
     assert!(stderr(&out).contains("zz"), "stderr: {}", stderr(&out));
 }
+
+#[test]
+fn scaffold_created_file_carries_required_imports() {
+    // Finding A regression: an `expands` piece pulling in a requires-bearing
+    // trigger (builtin `hmap`) must yield a created file WITH the import —
+    // un-qualified bodies assume it.
+    let dir = scratch_dir("scaffold-requires-create");
+    std::fs::write(
+        dir.join("rust.toml"),
+        concat!(
+            "[meta]\nlanguage = \"rust\"\n\n",
+            "[snippets.mcache]\n\n",
+            "[snippets.mcache.files.module]\npath = \"cache.rs\"\nprimary = true\n",
+            "expands = \"hmap\"\n",
+        ),
+    )
+    .expect("pack should be writable");
+    let root = dir.join("proj");
+    let out = bin()
+        .args(["scaffold", "--lang", "rust", "--no-project", "--write"])
+        .args(["--root", root.to_str().expect("path is UTF-8")])
+        .arg("mcache")
+        .args(["--config", dir.to_str().expect("path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let cache = std::fs::read_to_string(root.join("cache.rs")).expect("cache written");
+    assert!(
+        cache.starts_with("use std::collections::HashMap;\n"),
+        "created file should lead with the import:\n{cache}"
+    );
+    assert!(cache.contains("HashMap::new()"), "{cache}");
+}
+
+#[test]
+fn scaffold_append_dedups_required_imports() {
+    // Appending into a file that already imports the requirement must not
+    // duplicate it; appending into one that lacks it prefixes the block.
+    let dir = scratch_dir("scaffold-requires-append");
+    std::fs::write(
+        dir.join("rust.toml"),
+        concat!(
+            "[meta]\nlanguage = \"rust\"\n\n",
+            "[snippets.mcache]\n\n",
+            "[snippets.mcache.files.module]\npath = \"lib.rs\"\non_exists = \"append\"\n",
+            "expands = \"hmap\"\n",
+        ),
+    )
+    .expect("pack should be writable");
+    let root = dir.join("proj");
+    std::fs::create_dir_all(&root).expect("root");
+    std::fs::write(
+        root.join("lib.rs"),
+        "use std::collections::HashMap;\n\nfn seed() {}\n",
+    )
+    .expect("seed file");
+    let run_scaffold = || {
+        bin()
+            .args(["scaffold", "--lang", "rust", "--no-project", "--write"])
+            .args(["--root", root.to_str().expect("path is UTF-8")])
+            .arg("mcache")
+            .args(["--config", dir.to_str().expect("path is UTF-8")])
+            .output()
+            .expect("binary should run")
+    };
+    let out = run_scaffold();
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let lib = std::fs::read_to_string(root.join("lib.rs")).expect("lib read");
+    assert_eq!(
+        lib.matches("use std::collections::HashMap;").count(),
+        1,
+        "already-satisfied import must not duplicate:\n{lib}"
+    );
+    // Now a file lacking the import: the appended block is prefixed with it.
+    std::fs::write(root.join("lib.rs"), "fn seed() {}\n").expect("reset");
+    let out = run_scaffold();
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let lib = std::fs::read_to_string(root.join("lib.rs")).expect("lib read");
+    let import_pos = lib
+        .find("use std::collections::HashMap;")
+        .expect("import present");
+    let body_pos = lib.find("HashMap::new()").expect("body present");
+    assert!(
+        import_pos < body_pos,
+        "import precedes the appended body:\n{lib}"
+    );
+}
+
+#[test]
+fn scaffold_body_applies_case_transforms_to_params() {
+    // Finding B regression: `${param|transform}` in a `[files.*]` body (and
+    // path) renders the transformed value, not an empty string.
+    let dir = scratch_dir("scaffold-transform");
+    std::fs::write(
+        dir.join("rust.toml"),
+        concat!(
+            "[meta]\nlanguage = \"rust\"\n\n",
+            "[snippets.mget]\nparams = [{ name = \"field\", kind = \"ident\", default = \"x\" }]\n\n",
+            "[snippets.mget.files.g]\npath = \"${field|snake}.rs\"\nprimary = true\n",
+            "body = \"fn get_${field|snake}() {}\"\n",
+        ),
+    )
+    .expect("pack should be writable");
+    let root = dir.join("proj");
+    let out = bin()
+        .args(["scaffold", "--lang", "rust", "--no-project", "--write"])
+        .args(["--root", root.to_str().expect("path is UTF-8")])
+        .arg("mget:maxSize")
+        .args(["--config", dir.to_str().expect("path is UTF-8")])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    let g = std::fs::read_to_string(root.join("max_size.rs")).expect("transformed path written");
+    assert!(g.contains("fn get_max_size()"), "{g}");
+}

@@ -159,6 +159,7 @@ The plugin also defines these user commands:
 | `:CodemmetRenderTo {file}` | no | Render the `.codemmet` buffer to `{file}` — by default the sidecar name, the buffer path minus `.codemmet`. Writes nothing on a failed render. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
+| `:CodemmetRenderPreview` | no | Toggle a live split rendering this buffer as a `.codemmet` source file. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
 
 `:CodemmetCapture` runs the `codemmet capture` CLI on the selection (feeding it on standard input), which generalizes it — identifiers that repeat become `${param}` mirrors — and writes it into the resolved `.codemmet/snippets/<lang>.toml` pack. The plugin then calls the server's read-only `codemmet.reloadSnippets` command so the new trigger expands immediately in the same session. The language server itself never writes files: the CLI is the only writer, and `reloadSnippets` just re-reads packs from disk. See the [`capture` CLI reference](cli.md#capture) for the generalization rules and where the pack lands.
@@ -291,6 +292,33 @@ authoring format:
 
 ```lua
 require("codemmet").setup({ render_on_save = true })
+### Render preview (file mode)
+
+When you are writing a [`.codemmet` source file](cli.md#render-file-mode) —
+abbreviations one per line, rendered to code by `codemmet render` —
+`:CodemmetRenderPreview` opens a **live vertical split** with the rendered
+output of the current buffer:
+
+```vim
+:CodemmetRenderPreview   " toggle the split
+```
+
+The split is a read-only scratch buffer (`buftype=nofile`), syntax-highlighted
+as the target language (from the buffer's `#lang` directive, the
+`NAME.EXT.codemmet` inner extension, or the buffer's filetype), and it
+re-renders on every edit, debounced (150 ms by default). Renders are atomic:
+when a line fails to expand, the split shows the `<stdin>:LINE:` diagnostic
+highlighted as an error instead of stale output, and your source buffer is
+never modified. The split closes itself when you close it, wipe the source
+buffer, or toggle the command again.
+
+The renderer is the `codemmet render` CLI fed on standard input (the plugin
+resolves the binary from the attached LSP client's command, falling back to
+`codemmet` on `PATH`). To adjust the debounce or point at a specific binary:
+
+```lua
+require("codemmet.render_preview").config.debounce_ms = 300
+require("codemmet.render_preview").config.cmd = "/path/to/codemmet"
 ```
 
 ### Code actions

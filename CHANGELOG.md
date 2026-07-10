@@ -114,6 +114,15 @@ follows [Semantic Versioning](https://semver.org/).
   minus `.codemmet`), writing nothing on a failed render and surfacing the
   CLI's `<stdin>:LINE:` diagnostic; the opt-in `render_on_save = true` setup
   option does the same on every save.
+- **Neovim: live render-preview split for file mode.** `:CodemmetRenderPreview`
+  toggles a read-only vertical scratch split showing the current buffer
+  rendered as a `.codemmet` source file, re-rendered on a debounced
+  `TextChanged`/`TextChangedI` (150 ms) through `codemmet render` on stdin.
+  The split is syntax-highlighted as the target language (`#lang` directive >
+  `NAME.EXT.codemmet` inner extension > buffer filetype); on a failed render
+  it shows the `<stdin>:LINE:` diagnostic highlighted as an error instead of
+  stale output, and it never touches the source buffer. Closing the split,
+  wiping the source buffer, or toggling again tears everything down.
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

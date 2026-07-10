@@ -60,6 +60,12 @@ end, {
   desc = "Open the codemmet syntax trainer in a terminal split",
 })
 
+vim.api.nvim_create_user_command("CodemmetRenderPreview", function()
+  require("codemmet").toggle_render_preview()
+end, {
+  desc = "Toggle a live split rendering this buffer as a .codemmet source file",
+})
+
 vim.api.nvim_create_user_command("CodemmetNote", function(cmd)
   if vim.trim(cmd.args) ~= "" then
     require("codemmet").note(cmd.args)

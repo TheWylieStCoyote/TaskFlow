@@ -303,6 +303,12 @@ function M.toggle_preview()
   require("codemmet.preview").toggle()
 end
 
+---Toggle the live render-preview split: the current buffer rendered as a
+---`.codemmet` source file via `codemmet render`, re-rendered as you edit.
+function M.toggle_render_preview()
+  require("codemmet.render_preview").toggle()
+end
+
 ---Append a dogfooding note (with the current buffer's context) to the notes file.
 ---@param text string
 function M.note(text)

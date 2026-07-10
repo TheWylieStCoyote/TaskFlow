@@ -102,6 +102,16 @@ follows [Semantic Versioning](https://semver.org/).
   atomic. Tabstops are stripped by default (see the `--tabstops keep` entry
   above), and leading whitespace on an abbreviation line indents its block
   textually.
+- **Neovim: snippet-mode re-entry after a buffer render.** A whole-buffer
+  `<A-E>` render now drops you into `vim.snippet` tabstop navigation instead
+  of plain text: the plugin requests the CLI's keep-mode snippet document
+  and `vim.snippet.expand()`s it into the emptied buffer, so the cursor
+  starts at the first tabstop and jumping walks construct to construct
+  through the whole render to a single final `$0`. Atomicity is preserved
+  end to end — a failed CLI render still leaves the buffer untouched, and a
+  failed snippet expansion restores the original lines. Visual/range renders
+  keep the plain-text path (a range sits inside existing code). Opt out with
+  the new `render = { snippet_reentry = false }` setup field.
 - **Neovim: render the buffer as a `.codemmet` source.** `<A-E>` (Shift-Alt-E,
   next to `<A-e>` expand) or `:CodemmetRenderBuffer` runs file mode on the
   whole buffer — or, in visual mode / with a range, on just those lines —
@@ -134,6 +144,9 @@ follows [Semantic Versioning](https://semver.org/).
   it shows the `<stdin>:LINE:` diagnostic highlighted as an error instead of
   stale output, and it never touches the source buffer. Closing the split,
   wiping the source buffer, or toggling again tears everything down.
+  notifies with the `FILE:LINE` diagnostic; on success you land in snippet
+  navigation (see the re-entry entry above). New `keymaps.render` setup
+  field (set it to `false` to disable).
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

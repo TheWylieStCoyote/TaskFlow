@@ -62,7 +62,9 @@ vim.notify = function(msg, level, opts)
 end
 
 -- Scenario 1: whole-buffer render — abbreviations become code, interior
--- blank lines pass through, and the cursor lands at the top of the output.
+-- blank lines pass through, and snippet mode re-enters at the first
+-- construct: the buffer shows placeholder text, vim.snippet is active, and
+-- jumping walks across constructs to the single final `$0`.
 local whole_buf = rust_buf("whole", { "fori10>pr", "", "pr" })
 vim.api.nvim_win_set_cursor(0, { 3, 0 })
 require("codemmet").render()
@@ -80,10 +82,28 @@ end, 50)
 if not whole_ok then
   fail("whole-buffer render never produced the expected code", whole_buf)
 end
-if vim.api.nvim_win_get_cursor(0)[1] ~= 1 then
-  fail("whole-buffer render should leave the cursor at the top of the output", whole_buf)
+if not vim.snippet.active() then
+  fail("whole-buffer render should re-enter snippet mode", whole_buf)
 end
-io.write("smoke: whole-buffer render scenario passed\n")
+if vim.api.nvim_win_get_cursor(0)[1] ~= 1 then
+  fail("snippet re-entry should start at the first tabstop (line 1)", whole_buf)
+end
+-- `${1:i}` (line 1) → the demoted `$2` inside the first construct's
+-- println (line 2) → the last line's surviving `$0` (line 5).
+vim.snippet.jump(1)
+if vim.api.nvim_win_get_cursor(0)[1] ~= 2 then
+  fail("first jump should land inside the first construct (line 2)", whole_buf)
+end
+vim.snippet.jump(1)
+if vim.api.nvim_win_get_cursor(0)[1] ~= 5 then
+  fail("second jump should land at the final cursor (line 5)", whole_buf)
+end
+if not vim.deep_equal(vim.api.nvim_buf_get_lines(whole_buf, 0, -1, false), whole_expected) then
+  fail("jumping must not change the buffer text", whole_buf)
+end
+vim.snippet.stop()
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+io.write("smoke: whole-buffer render + snippet re-entry scenario passed\n")
 
 -- Scenario 2: a failing render leaves the buffer byte-identical (file mode
 -- emits nothing on error), moves the cursor to the offending line, and
@@ -136,6 +156,9 @@ end, 50)
 if not range_ok then
   fail("range render never produced the expected in-place code", range_buf)
 end
+if vim.snippet.active() then
+  fail("a range render must stay on the plain-text path (no snippet mode)", range_buf)
+end
 io.write("smoke: range render scenario passed\n")
 
 -- Scenario 4: directives and progressive context through the editor — a
@@ -167,7 +190,38 @@ end, 50)
 if not prog_ok then
   fail("directive + progressive render never produced the expected code", prog_buf)
 end
+if not vim.snippet.active() then
+  fail("progressive whole-buffer render should also re-enter snippet mode", prog_buf)
+end
+vim.snippet.stop()
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
 io.write("smoke: directive/progressive render scenario passed\n")
+
+-- Scenario 5: snippet re-entry opt-out — with `render.snippet_reentry =
+-- false` a whole-buffer render takes the plain-text path: same code, cursor
+-- at the top, no snippet session.
+require("codemmet").setup({
+  cmd = { binary, "lsp" },
+  init_options = { snippets_dir = "/tmp/codemmet-render-smoke-nonexistent" },
+  render = { snippet_reentry = false },
+})
+local plain_buf = rust_buf("plain", { "fori10>pr", "", "pr" })
+vim.api.nvim_win_set_cursor(0, { 3, 0 })
+require("codemmet").render()
+
+local plain_ok = vim.wait(5000, function()
+  return vim.deep_equal(vim.api.nvim_buf_get_lines(plain_buf, 0, -1, false), whole_expected)
+end, 50)
+if not plain_ok then
+  fail("opted-out whole-buffer render never produced the expected code", plain_buf)
+end
+if vim.snippet.active() then
+  fail("snippet_reentry = false must not enter snippet mode", plain_buf)
+end
+if vim.api.nvim_win_get_cursor(0)[1] ~= 1 then
+  fail("opted-out render should leave the cursor at the top of the output", plain_buf)
+end
+io.write("smoke: snippet re-entry opt-out scenario passed\n")
 
 io.write("SMOKE OK\n")
 os.exit(0)

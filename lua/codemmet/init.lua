@@ -25,6 +25,7 @@ local M = {}
 ---@field completion? boolean|codemmet.CompletionOpts built-in completion wiring; a boolean is shorthand for `{ enabled = ... }`
 ---@field init_options? table LSP initializationOptions ({ snippets_dir?, completion? })
 ---@field preview? boolean|codemmet.PreviewOpts live ghost-line preview while typing (default false); `true` ≡ `{ enabled = true, debounce_ms = 60 }`
+---@field render? codemmet.RenderConfig whole-buffer render behavior ({ snippet_reentry? })
 ---@field notes_file? string where `:CodemmetNote` appends (default `<data>/codemmet/notes.md`)
 ---@field render_on_save? boolean render a saved `.codemmet` buffer to its sidecar file (default false)
 
@@ -57,6 +58,7 @@ local defaults = {
   init_options = {},
   preview = false,
   render_on_save = false,
+  render = { snippet_reentry = true },
 }
 
 ---The active configuration: `defaults` merged with the last `setup()` opts.
@@ -180,6 +182,7 @@ function M.setup(opts)
   require("codemmet.notes").set_file(config.notes_file)
   local filemode = require("codemmet.filemode")
   filemode.set_cmd(config.cmd)
+  require("codemmet.render").configure(config.render)
   local group = vim.api.nvim_create_augroup("codemmet", { clear = true })
 
   -- `.codemmet` source buffers attach too, with the languageId of the INNER

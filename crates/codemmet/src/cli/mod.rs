@@ -8,12 +8,15 @@ mod capture;
 mod check;
 mod expand;
 mod list;
+mod render;
 mod wrap;
 
+use std::ffi::OsString;
+use std::io::IsTerminal as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory as _, Parser, Subcommand, ValueEnum};
 use codemmet_core::config::loader::{ConfigError, default_user_snippets_dir};
 use codemmet_core::config::paths::{PathMapping, default_paths_config};
 use codemmet_core::context::IndentUnit;
@@ -33,7 +36,9 @@ pub const EXIT_CONFIG: u8 = 3;
     name = "codemmet",
     version,
     long_version = env!("CODEMMET_LONG_VERSION"),
-    about
+    about,
+    args_conflicts_with_subcommands = true,
+    arg_required_else_help = true
 )]
 struct Cli {
     /// Snippet override directory (default: `<config>/codemmet/snippets`).
@@ -49,8 +54,13 @@ struct Cli {
     #[arg(long, global = true)]
     no_project: bool,
 
+    /// A `.codemmet` source file to render (shorthand for
+    /// `codemmet render <FILE>`); the inner extension picks the language.
+    #[arg(value_name = "FILE.codemmet")]
+    file: Option<PathBuf>,
+
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 /// The resolved snippet override tiers for one invocation, in increasing
@@ -103,6 +113,8 @@ impl Sources {
 enum Command {
     /// Expand an abbreviation to code on stdout.
     Expand(expand::ExpandArgs),
+    /// Render a `.codemmet` source file (stdin or FILE) to code on stdout.
+    Render(render::RenderArgs),
     /// Wrap a selection (stdin) in an expanded abbreviation.
     Wrap(wrap::WrapArgs),
     /// Capture example code into a reusable, parameterized snippet.
@@ -118,9 +130,20 @@ enum Command {
     Train(crate::train::TrainArgs),
 }
 
+/// Parse arguments, treating bare `codemmet` with piped stdin as the
+/// file-mode filter (`codemmet render`). Interactive bare invocations keep
+/// clap's help-and-exit-2 behavior.
+fn parse_cli() -> Cli {
+    let mut raw: Vec<OsString> = std::env::args_os().collect();
+    if raw.len() == 1 && !std::io::stdin().is_terminal() {
+        raw.push(OsString::from("render"));
+    }
+    Cli::parse_from(raw)
+}
+
 /// Parse arguments and run the selected subcommand.
 pub fn run() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = parse_cli();
     let user_dir = cli.config.or_else(default_user_snippets_dir);
     let paths_file = cli.paths.or_else(default_paths_config);
 
@@ -147,15 +170,40 @@ pub fn run() -> ExitCode {
     };
 
     match cli.command {
-        Command::Expand(args) => expand::run(&sources, &args),
-        Command::Wrap(args) => wrap::run(&sources, &args),
-        Command::Capture(args) => capture::run(&sources, &args),
-        Command::List(args) => list::run(&sources, &args),
-        Command::Check => check::run(&sources),
-        Command::Lsp(args) => crate::lsp::run(user_dir.as_deref(), paths_file.as_deref(), &args),
+        Some(Command::Expand(args)) => expand::run(&sources, &args),
+        Some(Command::Render(args)) => render::run(&sources, &args),
+        Some(Command::Wrap(args)) => wrap::run(&sources, &args),
+        Some(Command::Capture(args)) => capture::run(&sources, &args),
+        Some(Command::List(args)) => list::run(&sources, &args),
+        Some(Command::Check) => check::run(&sources),
+        Some(Command::Lsp(args)) => {
+            crate::lsp::run(user_dir.as_deref(), paths_file.as_deref(), &args)
+        }
         #[cfg(feature = "train")]
-        Command::Train(args) => crate::train::run(&sources, &args),
+        Some(Command::Train(args)) => crate::train::run(&sources, &args),
+        None => run_positional(&sources, cli.file),
     }
+}
+
+/// Handle the subcommand-less invocation: a `.codemmet` positional renders;
+/// anything else gets help (matching clap's bare-invocation behavior).
+fn run_positional(sources: &Sources, file: Option<PathBuf>) -> ExitCode {
+    /// clap's exit code for usage errors, which these are.
+    const EXIT_USAGE: u8 = 2;
+    let Some(file) = file else {
+        // Flags but no subcommand and no file (e.g. `codemmet --no-project`).
+        eprintln!("{}", Cli::command().render_help());
+        return ExitCode::from(EXIT_USAGE);
+    };
+    if file.extension().is_some_and(|ext| ext == "codemmet") {
+        return render::run(sources, &render::RenderArgs::for_file(file));
+    }
+    eprintln!(
+        "error: `{}` is neither a subcommand nor a `.codemmet` file \
+         (try `codemmet render <FILE>`, or --help)",
+        file.display()
+    );
+    ExitCode::from(EXIT_USAGE)
 }
 
 /// Load builtin packs merged with the resolved override tiers.

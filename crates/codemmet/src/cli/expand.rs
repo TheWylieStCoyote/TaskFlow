@@ -90,8 +90,8 @@ pub fn run(sources: &Sources, args: &ExpandArgs) -> ExitCode {
 }
 
 /// Parse `--repeat NAME=v1,v2,…` specs into named collections. Each value may
-/// carry a single member as `value:type`.
-fn parse_repeat(specs: &[String]) -> Result<BTreeMap<String, Collection>, String> {
+/// carry a single member as `value:type`. Shared with `codemmet render`.
+pub(super) fn parse_repeat(specs: &[String]) -> Result<BTreeMap<String, Collection>, String> {
     let mut collections = BTreeMap::new();
     for spec in specs {
         let (name, collection) =

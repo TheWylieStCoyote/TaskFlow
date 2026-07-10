@@ -123,7 +123,7 @@ the `opts` table above is passed to `setup()` for you.) All fields are optional:
 | --- | --- | --- | --- |
 | `cmd` | `string[]` | `{ "codemmet", "lsp" }` | Command used to start the language server. Use an absolute path if `codemmet` is not on `PATH`. |
 | `filetypes` | `string[]` | rust, python, c, cpp, javascript, javascriptreact, typescript, typescriptreact, go | Filetypes the server is started for. |
-| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw", snippets = "<leader>cl", context = "<leader>cv" }` | Key bindings to install. Set any field to `false` to disable that binding. |
+| `keymaps` | `table` | `{ expand = "<A-e>", wrap = "<leader>cw", snippets = "<leader>cl", context = "<leader>cv", list = "<leader>cs" }` | Key bindings to install. Set any field to `false` to disable that binding. |
 | `completion` | `boolean` or `table` | `{ enabled = true, autotrigger = true }` | Completion wiring; see [completion](#completion). A boolean is shorthand for `{ enabled = ... }`. |
 | `init_options` | `table` | `{}` | Forwarded verbatim as the LSP `initializationOptions`. See the [initializationOptions reference](#initializationoptions-reference). |
 | `preview` | `boolean` or `table` | `false` | Live ghost-line preview of the expansion while you type (see below). `true` is shorthand for `{ enabled = true, debounce_ms = 60 }`. |
@@ -143,6 +143,7 @@ The key bindings are installed buffer-locally when the server attaches
 | `keymaps.wrap` | `<leader>cw` | visual | Wrap the selected lines in an abbreviation (prompts for it). |
 | `keymaps.snippets` | `<leader>cl` | normal | Browse the buffer's snippets in a picker and expand the picked one. |
 | `keymaps.context` | `<leader>cv` | normal | Show the codemmet context (scopes, collections) at the cursor. |
+| `keymaps.list` | `<leader>cs` | normal | Browse the trigger vocabulary in a picker and expand the chosen trigger at the cursor. |
 
 The plugin also defines these user commands:
 
@@ -153,6 +154,7 @@ The plugin also defines these user commands:
 | `:CodemmetCapture {name}` | yes | Capture the selected lines into the project snippet pack as a reusable snippet. Prompts for `{name}` when omitted. |
 | `:CodemmetSnippets` | no | Browse the buffer's snippets in a picker and expand the picked one at the cursor. |
 | `:CodemmetContext` | no | Show the codemmet context (scope stack, in-scope collections) at the cursor. |
+| `:CodemmetList` | no | Browse every trigger for the buffer's language in a fuzzy picker and expand the chosen one at the cursor. |
 | `:CodemmetPreviewToggle` | no | Toggle the live ghost-line preview in this buffer. |
 | `:CodemmetTrain {args}` | no | Open the interactive [syntax trainer](trainer.md) in a terminal split, training the current buffer's language. Extra `{args}` go to `codemmet train` verbatim. |
 | `:CodemmetNote {text}` | no | Append a dogfooding note (with the current file/line as context) to the notes file. Prompts when `{text}` is omitted. |
@@ -160,6 +162,15 @@ The plugin also defines these user commands:
 `:CodemmetCapture` runs the `codemmet capture` CLI on the selection (feeding it on standard input), which generalizes it — identifiers that repeat become `${param}` mirrors — and writes it into the resolved `.codemmet/snippets/<lang>.toml` pack. The plugin then calls the server's read-only `codemmet.reloadSnippets` command so the new trigger expands immediately in the same session. The language server itself never writes files: the CLI is the only writer, and `reloadSnippets` just re-reads packs from disk. See the [`capture` CLI reference](cli.md#capture) for the generalization rules and where the pack lands.
 
 `:CodemmetTrain` opens [`codemmet train`](trainer.md) — the full-screen interactive trainer — in a `botright` terminal split and enters terminal mode, so keys go straight to the TUI. The buffer's filetype picks the trained language when the plugin supports it (Neovim's filetype doubles as the LSP language id, which `--lang` accepts directly); unknown filetypes fall back to the trainer's own default. Any arguments are appended verbatim, e.g. `:CodemmetTrain --mode drills --level 9`. The binary comes from the attached server's `cmd` (falling back to the configured `cmd`, then `codemmet` on `$PATH`), and a binary built without the `train` cargo feature produces a notification instead of a dead split. The trainer is a session you start deliberately rather than an editing motion, so it gets no default keymap — bind `require("codemmet").train` yourself if you want one.
+
+`:CodemmetList` (default keymap `<leader>cs`) is for the "I know it exists but
+forgot the trigger" moment: it runs `codemmet list --lang <language> --json`
+with the same binary the LSP client was started with and shows every registered
+trigger with its description through `vim.ui.select` — so Telescope, fzf-lua,
+or snacks.nvim provide fuzzy filtering automatically if you use one of them.
+Accepting an entry inserts the trigger at the cursor and immediately expands it
+through the ordinary expand flow, landing you in the snippet's tabstops; a
+trigger with required params works too (its unfilled params become tabstops).
 
 Set a keymap field to `false` to skip that binding, for example
 `keymaps = { expand = "<A-e>", wrap = false }`. You can still reach the disabled

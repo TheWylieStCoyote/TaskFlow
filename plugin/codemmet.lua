@@ -30,6 +30,9 @@ end, { desc = "Browse codemmet snippets for this buffer and expand the picked on
 vim.api.nvim_create_user_command("CodemmetContext", function()
   require("codemmet").context()
 end, { desc = "Show the codemmet context (scopes, collections) at the cursor" })
+vim.api.nvim_create_user_command("CodemmetList", function()
+  require("codemmet").list()
+end, { desc = "Browse the codemmet trigger vocabulary and expand the chosen trigger" })
 
 vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()

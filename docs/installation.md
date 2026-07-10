@@ -4,7 +4,7 @@ This page shows you how to install codemmet — from a prebuilt binary or from s
 
 ## Prebuilt binaries
 
-The quickest path: every [tagged release](https://github.com/TheWylieStCoyote/codemmit/releases) ships a `codemmet` binary for Linux (`x86_64`), macOS (`x86_64` and `aarch64`), and Windows (`x86_64`), built by the [release workflow](../.github/workflows/release.yml). Download the archive for your platform, extract it, and move `codemmet` somewhere on your `PATH` (e.g. `/usr/local/bin` or `~/.local/bin`). These binaries include the tree-sitter grammars, so they need no toolchain to run. Then skip to [Verify the install](#verify-the-install).
+The quickest path: every [tagged release](https://github.com/TheWylieStCoyote/codemmet/releases) ships a `codemmet` binary for Linux (`x86_64`), macOS (`x86_64` and `aarch64`), and Windows (`x86_64`), built by the [release workflow](../.github/workflows/release.yml). Download the archive for your platform, extract it, and move `codemmet` somewhere on your `PATH` (e.g. `/usr/local/bin` or `~/.local/bin`). These binaries include the tree-sitter grammars, so they need no toolchain to run. Then skip to [Verify the install](#verify-the-install).
 
 To build it yourself instead, read on.
 
@@ -19,15 +19,15 @@ The default build compiles the tree-sitter grammars for every supported language
 Clone the repository and build the release binary:
 
 ```sh
-git clone https://github.com/TheWylieStCoyote/codemmit
-cd codemmit
+git clone https://github.com/TheWylieStCoyote/codemmet
+cd codemmet
 cargo build --release
 ```
 
 Or install straight from the repository without cloning:
 
 ```sh
-cargo install --git https://github.com/TheWylieStCoyote/codemmit codemmet
+cargo install --git https://github.com/TheWylieStCoyote/codemmet codemmet
 ```
 
 This produces the binary at `target/release/codemmet`. You can run it directly from that path, or install it onto your `PATH` as shown next.

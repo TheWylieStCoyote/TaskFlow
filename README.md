@@ -29,9 +29,9 @@ block gains `&self`) and wrap-with-abbreviation.
 
 Two pages run the real engine compiled to WebAssembly, no install needed:
 
-- The [**playground**](https://thewyliestcoyote.github.io/codemmit/) — pick a
+- The [**playground**](https://thewyliestcoyote.github.io/codemmet/) — pick a
   language, type an abbreviation, watch it expand.
-- The [**trainer**](https://thewyliestcoyote.github.io/codemmit/train.html) —
+- The [**trainer**](https://thewyliestcoyote.github.io/codemmet/train.html) —
   `codemmet train` in the browser: guided lessons, drills, and spaced
   repetition (progress saved in `localStorage`).
 
@@ -41,7 +41,7 @@ Two pages run the real engine compiled to WebAssembly, no install needed:
 
 ## Install
 
-**Prebuilt binaries.** Each [tagged release](https://github.com/TheWylieStCoyote/codemmit/releases)
+**Prebuilt binaries.** Each [tagged release](https://github.com/TheWylieStCoyote/codemmet/releases)
 ships a `codemmet` binary for Linux, macOS (Intel and Apple Silicon), and
 Windows. Download the archive for your platform, extract it, and put `codemmet`
 on your `PATH`.
@@ -50,7 +50,7 @@ on your `PATH`.
 tree-sitter grammars):
 
 ```sh
-cargo install --git https://github.com/TheWylieStCoyote/codemmit codemmet
+cargo install --git https://github.com/TheWylieStCoyote/codemmet codemmet
 ```
 
 Or clone and `cargo install --path crates/codemmet`. For a smaller build with
@@ -84,7 +84,7 @@ Install with lazy.nvim (builds the binary on install):
 
 ```lua
 {
-  "TheWylieStCoyote/codemmit",
+  "TheWylieStCoyote/codemmet",
   build = "cargo build --release",
   ft = {
     "rust", "python", "c", "cpp",

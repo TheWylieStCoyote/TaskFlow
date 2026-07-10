@@ -1,8 +1,8 @@
 name: playground
 
-# Pages must be enabled (Settings → Pages → Source: GitHub Actions) for this to
-# succeed. Runs on demand, and automatically when the playground or the code it
-# builds from changes.
+# Runs on demand, and automatically when the playground or the code it builds
+# from changes. `enablement: true` lets configure-pages switch Pages on for a
+# fresh repository (the codemmit → codemmet migration hit the 404 this avoids).
 on:
   workflow_dispatch:
   push:
@@ -38,6 +38,8 @@ jobs:
       - name: Build the wasm module
         run: bash playground/build.sh
       - uses: actions/configure-pages@v6
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v5
         with:
           path: playground

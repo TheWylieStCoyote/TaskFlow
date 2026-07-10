@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
 authors.workspace = true
 description.workspace = true
 keywords.workspace = true
@@ -17,7 +19,7 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 codemmet-core = { workspace = true }
-codemmet-train = { path = "../codemmet-train", optional = true }
+codemmet-train = { path = "../codemmet-train", version = "0.4.0", optional = true }
 codemmet-tsctx = { workspace = true, optional = true }
 dirs = { workspace = true, optional = true }
 lsp-server = { workspace = true }

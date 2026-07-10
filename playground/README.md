@@ -42,4 +42,4 @@ fails CI before Pages is set up:
 1. Repo → Settings → Pages → Build and deployment → Source: **GitHub Actions**.
 2. Actions → **playground** → **Run workflow**.
 
-It then publishes to `https://thewyliestcoyote.github.io/codemmit/`.
+It then publishes to `https://thewyliestcoyote.github.io/codemmet/`.

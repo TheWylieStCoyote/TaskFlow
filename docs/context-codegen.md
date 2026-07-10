@@ -254,7 +254,7 @@ member is absent. The rules:
   keys), and the named collection must come from a `--repeat` flag in the same
   invocation; flag order doesn't matter.
 
-The [browser playground](https://thewyliestcoyote.github.io/codemmit/) has a
+The [browser playground](https://thewyliestcoyote.github.io/codemmet/) has a
 **Data-driven collections** box that takes the same `name=values` lines, so you
 can try all of this without an editor.
 

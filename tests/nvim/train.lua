@@ -88,7 +88,12 @@ io.write("train: --lang from filetype scenario passed\n")
 -- Scenario 2: extra arguments are appended verbatim after the --lang flag.
 vim.api.nvim_set_current_buf(rust_buf)
 argv = run_train("--level 9 --mode drills")
-if not vim.deep_equal(argv, { binary, "train", "--lang", "rust", "--level", "9", "--mode", "drills" }) then
+if
+  not vim.deep_equal(
+    argv,
+    { binary, "train", "--lang", "rust", "--level", "9", "--mode", "drills" }
+  )
+then
   fail("passthrough: unexpected argv: " .. vim.inspect(argv))
 end
 io.write("train: passthrough args scenario passed\n")

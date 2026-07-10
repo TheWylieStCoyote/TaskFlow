@@ -412,6 +412,104 @@ fn render_diagnostics_name_the_source_file() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Progressive context: the output so far is the buffer for later lines
+// ---------------------------------------------------------------------------
+
+/// An enum emitted on an early line feeds a later `arm*@Msg` — no `#repeat`.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn progressive_enum_feeds_a_later_match() {
+    let source = "#lang rust\nenum:Msg>variant*[Quit,Move]\n\nmatch:m>arm*@Msg\n";
+    let out = render("prog-enum", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "enum Msg {\n    Quit,\n    Move,\n}\n\nmatch m {\n    Quit => ,\n    Move => ,\n}\n"
+    );
+}
+
+/// A bare `*` under `match:Msg` repeats over the buffer-extracted subject.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn progressive_bare_star_uses_the_buffer_subject() {
+    let source = "#lang rust\nenum:Msg>variant*[Quit,Move]\nmatch:Msg>arm*\n";
+    let out = render("prog-bare-star", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "enum Msg {\n    Quit,\n    Move,\n}\nmatch Msg {\n    Quit => ,\n    Move => ,\n}\n"
+    );
+}
+
+/// Struct fields extracted from the buffer carry their `:type` members.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn progressive_struct_fields_carry_types() {
+    let source = "#lang rust\nstruct:P>field*[x:f64,y:f64]\n\nstruct:Q>field*@P\n";
+    let out = render("prog-struct", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "struct P {\n    x: f64,\n    y: f64,\n}\n\nstruct Q {\n    x: f64,\n    y: f64,\n}\n"
+    );
+}
+
+/// Explicit data beats inferred data: `#repeat` shadows a buffer collection.
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn progressive_repeat_directive_shadows_buffer_collection() {
+    let source = "#lang rust\nenum:Msg>variant*[Quit,Move]\n#repeat Msg=X\nmatch:m>arm*@Msg\n";
+    let out = render("prog-shadow", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "enum Msg {\n    Quit,\n    Move,\n}\nmatch m {\n    X => ,\n}\n"
+    );
+}
+
+/// The flagship, without its `#repeat` header: progressive context makes
+/// the header optional (the enum line names its variants inline).
+#[cfg(feature = "tree-sitter")]
+#[test]
+fn progressive_flagship_needs_no_repeat_header() {
+    let source = "#lang rust\n\
+                  \n\
+                  use:std::fmt\n\
+                  \n\
+                  enum:Msg>variant*[Quit,Move,Write]\n\
+                  \n\
+                  impl:Msg>fn:handle\n\
+                  match:self>arm*@Msg\n";
+    let out = render("prog-flagship", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "use std::fmt;\n\
+         \n\
+         enum Msg {\n    Quit,\n    Move,\n    Write,\n}\n\
+         \n\
+         impl Msg {\n    fn handle(&self) {\n\n    }\n}\n\
+         match self {\n    Quit => ,\n    Move => ,\n    Write => ,\n}\n"
+    );
+}
+
+/// Without tree-sitter, buffer-derived collections are absent, so the same
+/// input degrades to the documented single-copy fallback — still exit 0.
+/// (`#repeat`/`--repeat` collections are engine-level and unaffected; the
+/// directive tests above run identically on minimal builds.)
+#[cfg(not(feature = "tree-sitter"))]
+#[test]
+fn minimal_build_degrades_buffer_repeats_to_the_fallback() {
+    let source = "#lang rust\nenum:Msg>variant*[Quit,Move]\n\nmatch:m>arm*@Msg\n";
+    let out = render("degraded-enum", &["--no-project"], source);
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert_eq!(
+        stdout(&out),
+        "enum Msg {\n    Quit,\n    Move,\n}\n\nmatch m {\n    pattern => ,\n}\n"
+    );
+}
+
 #[test]
 fn render_missing_file_exits_3() {
     let out = run_stdin(

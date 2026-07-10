@@ -14,9 +14,7 @@ use std::process::ExitCode;
 
 use clap::Args;
 use codemmet_core::Engine;
-use codemmet_core::context::{
-    Collection, ContextProvider, DocSnapshot, IndentUnit, NullContextProvider,
-};
+use codemmet_core::context::{Collection, ContextProvider, DocSnapshot, IndentUnit};
 use codemmet_core::engine::ExpandError;
 use codemmet_core::filefmt::{self, Line};
 use codemmet_core::lang::registry::Registry;
@@ -205,7 +203,7 @@ impl<'a> FileState<'a> {
             args,
             seeds,
             registry: Some(registry),
-            provider: Box::new(NullContextProvider),
+            provider: default_provider(),
             lang_directive: None,
             directive_collections: BTreeMap::new(),
             lang_state: None,
@@ -351,6 +349,22 @@ fn push_block(buffer: &mut String, indent: &str, body: &str) {
             buffer.push_str(raw.trim_end());
         }
         buffer.push('\n');
+    }
+}
+
+/// The best context provider this build carries (the LSP's split):
+/// tree-sitter under the default `tree-sitter` feature — which makes the
+/// accumulated output feed later lines' collections and scopes — and the
+/// scope-blind null provider otherwise, where only `#repeat`/`--repeat`
+/// collections apply.
+fn default_provider() -> Box<dyn ContextProvider> {
+    #[cfg(feature = "tree-sitter")]
+    {
+        Box::new(codemmet_tsctx::TreeSitterProvider::new())
+    }
+    #[cfg(not(feature = "tree-sitter"))]
+    {
+        Box::new(codemmet_core::context::NullContextProvider)
     }
 }
 

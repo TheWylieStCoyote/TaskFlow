@@ -11,7 +11,7 @@ description = "The codemmet syntax trainer's pure state machine, content, and gr
 # codemmet-core without its native `dirs` feature, so this crate (and thus the
 # trainer core) compiles for wasm32-unknown-unknown as well as native.
 [dependencies]
-codemmet-core = { path = "../codemmet-core", version = "0.4.0", default-features = false }
+codemmet-core = { path = "../codemmet-core", version = "0.4.1", default-features = false }
 serde = { workspace = true }
 
 [dev-dependencies]

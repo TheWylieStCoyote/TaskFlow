@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-07-10
+
+### Fixed
+
+- **Web trainer level picker.** The deployed trainer's level dropdown was a
+  hardcoded list that stopped at level 7 while the engine had nine levels. A
+  new `cm_levels()` wasm export enumerates the levels from `Level::ALL`, and
+  `train.html` builds the picker from it — pinned by anti-drift tests, so the
+  web UI can no longer fall behind the crate.
+
+### Changed
+
+- **Repository moved to
+  [TheWylieStCoyote/codemmet](https://github.com/TheWylieStCoyote/codemmet)**
+  (name typo fixed). All documentation and playground links updated; the
+  Pages deploy self-enables on a fresh repository. Crate manifests carry
+  `repository` metadata, internal dependency version pins, and a bin-crate
+  readme — the workspace publishes to crates.io cleanly
+  (`cargo publish --workspace`).
+- **Release binaries** no longer include Intel macOS (`x86_64-apple-darwin`);
+  Intel Mac users build from source (`cargo install codemmet`).
+
 ## [0.4.0] - 2026-07-10
 
 ### Changed

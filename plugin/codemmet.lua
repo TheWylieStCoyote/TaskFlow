@@ -27,6 +27,13 @@ vim.api.nvim_create_user_command("CodemmetPreviewToggle", function()
   require("codemmet").toggle_preview()
 end, { desc = "Toggle the codemmet live ghost-line preview in this buffer" })
 
+vim.api.nvim_create_user_command("CodemmetTrain", function(cmd)
+  require("codemmet").train({ args = cmd.fargs })
+end, {
+  nargs = "*",
+  desc = "Open the codemmet syntax trainer in a terminal split",
+})
+
 vim.api.nvim_create_user_command("CodemmetNote", function(cmd)
   if vim.trim(cmd.args) ~= "" then
     require("codemmet").note(cmd.args)

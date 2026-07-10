@@ -36,6 +36,9 @@ local defaults = {
   preview = false,
 }
 
+---The active configuration: `defaults` merged with the last `setup()` opts.
+local config = vim.deepcopy(defaults)
+
 ---Expand the abbreviation immediately before the cursor.
 function M.expand()
   require("codemmet.lsp").expand()
@@ -95,7 +98,7 @@ end
 ---install buffer-local keymaps when it attaches.
 ---@param opts? codemmet.SetupOpts
 function M.setup(opts)
-  local config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
   config.preview = normalize_preview(config.preview)
   -- Always forward the debounce so `:CodemmetPreviewToggle` honors it even
   -- when the preview is not enabled at attach time.
@@ -142,6 +145,16 @@ function M.setup(opts)
       end
     end,
   })
+end
+
+---Open the interactive syntax trainer (`codemmet train`) in a terminal split,
+---training the current buffer's language when the plugin supports it.
+---@param opts? codemmet.TrainOpts
+function M.train(opts)
+  require("codemmet.train").train(vim.tbl_extend("keep", opts or {}, {
+    cmd = config.cmd,
+    filetypes = config.filetypes,
+  }))
 end
 
 ---Toggle the live ghost-line preview for the current buffer.

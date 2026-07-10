@@ -37,7 +37,12 @@ pub const EXIT_CONFIG: u8 = 3;
     version,
     long_version = env!("CODEMMET_LONG_VERSION"),
     about,
-    args_conflicts_with_subcommands = true,
+    // A token that names a subcommand is that subcommand, even after global
+    // flags (`codemmet --config X lsp`); only non-subcommand tokens fall
+    // through to the `.codemmet` FILE positional. The stricter
+    // `args_conflicts_with_subcommands` broke every flag-before-subcommand
+    // invocation by routing the subcommand name into the positional.
+    subcommand_precedence_over_arg = true,
     arg_required_else_help = true
 )]
 struct Cli {

@@ -820,3 +820,20 @@ fn capture_unknown_language_is_config_error() {
         stderr(&out)
     );
 }
+
+#[test]
+fn global_flag_before_subcommand_still_selects_the_subcommand() {
+    // Regression: with the file-mode `.codemmet` positional at the top level,
+    // `codemmet --<global-flag> <subcommand>` must still parse the subcommand
+    // (`args_conflicts_with_subcommands` routed it into the positional and
+    // rejected it). `run()` appends --config, so pass a flag-first invocation
+    // explicitly.
+    let dir = scratch_dir("flag-first-subcommand");
+    let out = bin()
+        .args(["--config", dir.to_str().expect("scratch path is UTF-8")])
+        .args(["--no-project", "list", "--lang", "rust"])
+        .output()
+        .expect("binary should run");
+    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
+    assert!(stdout(&out).contains("fori"), "stdout: {}", stdout(&out));
+}

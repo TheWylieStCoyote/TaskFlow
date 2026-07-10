@@ -6,6 +6,15 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Version flags.** `-v` (new) and `--version` print the one-line version
+  with the short commit hash — what `--version` printed before. `-V` now
+  prints a **detailed build report** instead of the bare version: full commit
+  hash and dirty state, the branch compiled on, build profile, target triple,
+  rustc version, and enabled features (`--version-full` is its long form).
+  Fields unavailable at build time (no git checkout) read `unknown`.
+
 ### Added
 
 - **`:CodemmetTrain` — the trainer inside Neovim.** The plugin gains a user

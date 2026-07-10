@@ -35,8 +35,9 @@ pub const EXIT_CONFIG: u8 = 3;
 #[derive(Debug, Parser)]
 #[command(
     name = "codemmet",
-    version,
-    long_version = env!("CODEMMET_LONG_VERSION"),
+    // Version flags are hand-rolled: `-v`/`--version` prints the one-liner,
+    // `-V`/`--version-full` the detailed build report (see `print_version`).
+    disable_version_flag = true,
     about,
     // A token that names a subcommand is that subcommand, even after global
     // flags (`codemmet --config X lsp`); only non-subcommand tokens fall
@@ -47,6 +48,15 @@ pub const EXIT_CONFIG: u8 = 3;
     arg_required_else_help = true
 )]
 struct Cli {
+    /// Print the version (with the build's commit hash) and exit.
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::SetTrue)]
+    version: bool,
+
+    /// Print detailed version and build information (commit, branch, dirty
+    /// state, profile, target, rustc, features) and exit.
+    #[arg(short = 'V', long = "version-full", action = clap::ArgAction::SetTrue)]
+    version_full: bool,
+
     /// Snippet override directory (default: `<config>/codemmet/snippets`).
     #[arg(long, global = true, value_name = "DIR")]
     config: Option<PathBuf>,
@@ -152,6 +162,14 @@ fn parse_cli() -> Cli {
 /// Parse arguments and run the selected subcommand.
 pub fn run() -> ExitCode {
     let cli = parse_cli();
+    if cli.version_full {
+        print_version(true);
+        return ExitCode::SUCCESS;
+    }
+    if cli.version {
+        print_version(false);
+        return ExitCode::SUCCESS;
+    }
     let user_dir = cli.config.or_else(default_user_snippets_dir);
     let paths_file = cli.paths.or_else(default_paths_config);
 
@@ -213,6 +231,28 @@ fn run_positional(sources: &Sources, file: Option<PathBuf>) -> ExitCode {
         file.display()
     );
     ExitCode::from(EXIT_USAGE)
+}
+
+/// Print the version: the one-liner (`-v`), or the detailed build report
+/// (`-V`) — commit, branch, dirty state, and the toolchain that produced the
+/// binary. Fields unavailable at build time (no git, e.g. a crates.io build)
+/// read `unknown`.
+fn print_version(full: bool) {
+    println!("codemmet {}", env!("CODEMMET_LONG_VERSION"));
+    if !full {
+        return;
+    }
+    let dirty = env!("CODEMMET_GIT_DIRTY");
+    let commit = env!("CODEMMET_GIT_COMMIT");
+    match dirty {
+        "dirty" => println!("commit:   {commit} (dirty: uncommitted changes)"),
+        _ => println!("commit:   {commit}"),
+    }
+    println!("branch:   {}", env!("CODEMMET_GIT_BRANCH"));
+    println!("profile:  {}", env!("CODEMMET_BUILD_PROFILE"));
+    println!("target:   {}", env!("CODEMMET_BUILD_TARGET"));
+    println!("rustc:    {}", env!("CODEMMET_RUSTC"));
+    println!("features: {}", env!("CODEMMET_FEATURES"));
 }
 
 /// Load builtin packs merged with the resolved override tiers.

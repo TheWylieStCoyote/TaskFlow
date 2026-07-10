@@ -1240,3 +1240,34 @@ fn scaffold_body_applies_case_transforms_to_params() {
     let g = std::fs::read_to_string(root.join("max_size.rs")).expect("transformed path written");
     assert!(g.contains("fn get_max_size()"), "{g}");
 }
+
+#[test]
+fn version_flags_basic_and_full() {
+    // `-v` / `--version`: exactly one line, the version (+ hash when built in
+    // a checkout).
+    for flag in ["-v", "--version"] {
+        let out = bin().arg(flag).output().expect("binary should run");
+        assert_eq!(code(&out), 0, "{flag} stderr: {}", stderr(&out));
+        let text = stdout(&out);
+        assert_eq!(text.lines().count(), 1, "{flag} output:\n{text}");
+        assert!(text.starts_with("codemmet "), "{flag} output:\n{text}");
+    }
+    // `-V` / `--version-full`: the detailed report. Values may be `unknown`
+    // outside a checkout, but the fields are always present.
+    for flag in ["-V", "--version-full"] {
+        let out = bin().arg(flag).output().expect("binary should run");
+        assert_eq!(code(&out), 0, "{flag} stderr: {}", stderr(&out));
+        let text = stdout(&out);
+        assert!(text.starts_with("codemmet "), "{flag} output:\n{text}");
+        for field in [
+            "commit:",
+            "branch:",
+            "profile:",
+            "target:",
+            "rustc:",
+            "features:",
+        ] {
+            assert!(text.contains(field), "{flag} missing `{field}`:\n{text}");
+        }
+    }
+}

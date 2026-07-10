@@ -1,9 +1,14 @@
-//! Bakes the current git short hash into the long version string.
+//! Bakes git and toolchain metadata into the binary's version strings.
 //!
-//! Sets `CODEMMET_LONG_VERSION` to `"<pkg-version> (<short-hash>)"`, or just
-//! the package version when the hash is unavailable (no git, not a checkout,
-//! e.g. a crates.io build). Packagers can pin the hash via the
-//! `CODEMMET_GIT_HASH` environment variable.
+//! Sets `CODEMMET_LONG_VERSION` to `"<pkg-version> (<short-hash>)"` (just the
+//! package version when the hash is unavailable — no git, not a checkout,
+//! e.g. a crates.io build), plus the detailed `-V` fields:
+//! `CODEMMET_GIT_COMMIT` (full hash), `CODEMMET_GIT_BRANCH`,
+//! `CODEMMET_GIT_DIRTY` (`clean`/`dirty`/`unknown`), `CODEMMET_BUILD_PROFILE`,
+//! `CODEMMET_BUILD_TARGET`, `CODEMMET_RUSTC`, and `CODEMMET_FEATURES`.
+//! Packagers can pin the hash via the `CODEMMET_GIT_HASH` environment
+//! variable and the branch via `CODEMMET_GIT_BRANCH`; unknowns degrade to
+//! `"unknown"` rather than failing the build.
 
 use std::env;
 use std::fs;
@@ -20,7 +25,113 @@ fn main() {
         None => pkg,
     };
     println!("cargo:rustc-env=CODEMMET_LONG_VERSION={long}");
+
+    // Detailed `-V` fields. Every value degrades to "unknown" so builds
+    // outside a checkout (crates.io, tarballs) stay reproducible and quiet.
+    let unknown = || "unknown".to_owned();
+    println!(
+        "cargo:rustc-env=CODEMMET_GIT_COMMIT={}",
+        git_full_hash().unwrap_or_else(unknown)
+    );
+    println!(
+        "cargo:rustc-env=CODEMMET_GIT_BRANCH={}",
+        git_branch().unwrap_or_else(unknown)
+    );
+    let dirty = if git_full_hash().is_none() {
+        "unknown"
+    } else if is_dirty() {
+        "dirty"
+    } else {
+        "clean"
+    };
+    println!("cargo:rustc-env=CODEMMET_GIT_DIRTY={dirty}");
+    println!(
+        "cargo:rustc-env=CODEMMET_BUILD_PROFILE={}",
+        env::var("PROFILE").unwrap_or_else(|_| unknown())
+    );
+    println!(
+        "cargo:rustc-env=CODEMMET_BUILD_TARGET={}",
+        env::var("TARGET").unwrap_or_else(|_| unknown())
+    );
+    println!(
+        "cargo:rustc-env=CODEMMET_RUSTC={}",
+        rustc_version().unwrap_or_else(unknown)
+    );
+    println!("cargo:rustc-env=CODEMMET_FEATURES={}", features());
     emit_rerun();
+}
+
+/// The full commit hash, or `None` outside a checkout. The
+/// `CODEMMET_GIT_HASH` override wins here too (it may be short — packagers
+/// pin what they have).
+fn git_full_hash() -> Option<String> {
+    if let Ok(hash) = env::var("CODEMMET_GIT_HASH") {
+        let hash = hash.trim().to_owned();
+        if !hash.is_empty() {
+            return Some(hash);
+        }
+    }
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let hash = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    if hash.is_empty() { None } else { Some(hash) }
+}
+
+/// The checked-out branch name; `"detached"` for a detached HEAD; `None`
+/// outside a checkout. The `CODEMMET_GIT_BRANCH` override wins.
+fn git_branch() -> Option<String> {
+    if let Ok(branch) = env::var("CODEMMET_GIT_BRANCH") {
+        let branch = branch.trim().to_owned();
+        if !branch.is_empty() {
+            return Some(branch);
+        }
+    }
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    match branch.as_str() {
+        "" => None,
+        "HEAD" => Some("detached".to_owned()),
+        _ => Some(branch),
+    }
+}
+
+/// The compiling rustc's version line (`rustc 1.xx.x (…)`).
+fn rustc_version() -> Option<String> {
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
+    let output = Command::new(rustc).arg("-V").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let line = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    if line.is_empty() { None } else { Some(line) }
+}
+
+/// The crate features enabled for this build, comma-separated (`none` when
+/// empty), from Cargo's `CARGO_FEATURE_*` environment.
+fn features() -> String {
+    let mut names: Vec<String> = env::vars()
+        .filter_map(|(k, _)| {
+            k.strip_prefix("CARGO_FEATURE_")
+                .map(|f| f.to_lowercase().replace('_', "-"))
+        })
+        .collect();
+    names.sort();
+    if names.is_empty() {
+        "none".to_owned()
+    } else {
+        names.join(", ")
+    }
 }
 
 /// Whether the working tree has uncommitted changes to tracked files.
@@ -59,6 +170,7 @@ fn git_short_hash() -> Option<String> {
 /// Re-run the build script when the checked-out commit (or override) changes.
 fn emit_rerun() {
     println!("cargo:rerun-if-env-changed=CODEMMET_GIT_HASH");
+    println!("cargo:rerun-if-env-changed=CODEMMET_GIT_BRANCH");
     let Some(git_dir) = git_dir() else {
         return;
     };

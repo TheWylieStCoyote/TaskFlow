@@ -56,18 +56,12 @@ follows [Semantic Versioning](https://semver.org/).
   description, the scope variant that would fire at the cursor, and a one-line
   expansion hint; picking one expands it at the cursor. `:CodemmetContext`
   (`<leader>cv`) shows the context at the cursor in a float: the scope stack
-  and the in-scope collections data-driven repeats can expand over. Both are
+  and the in-scope collections data-driven repeats can expand over. An entry
+  without a pre-rendered body falls back to inserting the trigger and
+  expanding it through the ordinary flow (unfilled params become tabstops), so
+  every listed trigger is pickable. Both are
   backed by new read-only LSP commands (`codemmet.list`, `codemmet.context`)
   any `workspace/executeCommand`-capable client can call.
-- **Neovim trigger picker (`:CodemmetList`).** Browse every trigger registered
-  for the buffer's language — trigger plus description, fuzzy-filterable — and
-  expand the accepted one at the cursor, landing directly in its tabstops. The
-  picker shells out to `codemmet list --lang <language> --json` with the same
-  binary the LSP client was started with and presents the entries through
-  `vim.ui.select`, so Telescope, fzf-lua, and snacks.nvim take the UI over
-  automatically. Bound to `<leader>cs` by default (`keymaps.list`; set it to
-  `false` to disable). See [editor setup](docs/editors.md#keymaps-and-commands).
-
 - **Inline collection literals for data-driven repeats.** `*[a,b,c]` defines the
   collection right in the abbreviation — no `--repeat` flag or buffer source
   needed: `impl:Point>fn*[new,len,area]` writes those three methods. Each value

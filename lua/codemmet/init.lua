@@ -7,7 +7,6 @@ local M = {}
 ---@field wrap string|false visual-mode mapping for wrap(); false disables
 ---@field snippets string|false normal-mode mapping for snippets(); false disables
 ---@field context string|false normal-mode mapping for context(); false disables
----@field list string|false normal-mode mapping for list(); false disables
 
 ---@class codemmet.PreviewOpts
 ---@field enabled? boolean turn the preview on when the server attaches (default true for the table form)
@@ -50,7 +49,6 @@ local defaults = {
     wrap = "<leader>cw",
     snippets = "<leader>cl",
     context = "<leader>cv",
-    list = "<leader>cs",
   },
   completion = { enabled = true, autotrigger = true },
   init_options = {},
@@ -82,12 +80,6 @@ end
 ---and expand the picked one at the cursor.
 function M.snippets()
   require("codemmet.browse").pick()
-end
-
----Browse the trigger vocabulary for the buffer's language in a `vim.ui.select`
----picker and expand the accepted trigger at the cursor.
-function M.list()
-  require("codemmet.picker").list()
 end
 
 ---Show the codemmet context at the cursor: the scope stack and the in-scope
@@ -202,12 +194,6 @@ function M.setup(opts)
         vim.keymap.set("n", keymaps.context, M.context, {
           buffer = ev.buf,
           desc = "codemmet: show context at cursor",
-        })
-      end
-      if keymaps.list then
-        vim.keymap.set("n", keymaps.list, M.list, {
-          buffer = ev.buf,
-          desc = "codemmet: browse triggers",
         })
       end
       if config.preview.enabled then

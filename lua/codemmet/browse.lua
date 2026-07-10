@@ -93,10 +93,19 @@ function M.pick()
       end
       local body = str(choice.body)
       if not body then
-        vim.notify(
-          "codemmet: `" .. choice.trigger .. "` needs arguments; type it and expand instead",
-          vim.log.levels.WARN
-        )
+        -- No pre-rendered body (e.g. the server withheld one): insert the
+        -- trigger and run the ordinary expand flow — a bare trigger always
+        -- expands, with its unfilled params becoming tabstops.
+        local row = args.position.line
+        local col = args.position.character
+        local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+        col = math.min(col, #line)
+        vim.api.nvim_buf_set_text(bufnr, row, col, row, col, { choice.trigger })
+        -- Place the normal-mode cursor ON the trigger's last character —
+        -- exactly where it would sit after typing it, which is the position
+        -- the expand flow expects.
+        vim.api.nvim_win_set_cursor(0, { row + 1, col + #choice.trigger - 1 })
+        lsp.expand()
         return
       end
       -- A zero-width range at the cursor: nothing to delete, just expand.

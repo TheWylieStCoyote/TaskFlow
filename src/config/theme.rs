@@ -38,11 +38,32 @@ pub enum ColorSpec {
     Rgb { r: u8, g: u8, b: u8 },
 }
 
+/// Parse a `#rrggbb` (or `rrggbb`) hex string into a color.
+///
+/// Returns `Color::Reset` when the string is not exactly six hex digits.
+fn parse_hex_color(hex: &str) -> Color {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() != 6 || !hex.is_ascii() {
+        return Color::Reset;
+    }
+    match (
+        u8::from_str_radix(&hex[0..2], 16),
+        u8::from_str_radix(&hex[2..4], 16),
+        u8::from_str_radix(&hex[4..6], 16),
+    ) {
+        (Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
+        _ => Color::Reset,
+    }
+}
+
 impl ColorSpec {
     /// Convert to ratatui Color
     #[must_use]
     pub fn to_color(&self) -> Color {
         match self {
+            // Untagged serde deserialization always picks `Named` for any string,
+            // so hex values like "#ff0000" arrive here and must be handled too.
+            Self::Named(name) if name.starts_with('#') => parse_hex_color(name),
             Self::Named(name) => match name.to_lowercase().as_str() {
                 "black" => Color::Black,
                 "red" => Color::Red,
@@ -63,17 +84,7 @@ impl ColorSpec {
                 "reset" => Color::Reset,
                 _ => Color::Reset,
             },
-            Self::Hex(hex) => {
-                let hex = hex.trim_start_matches('#');
-                if hex.len() == 6 {
-                    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
-                    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
-                    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
-                    Color::Rgb(r, g, b)
-                } else {
-                    Color::Reset
-                }
-            }
+            Self::Hex(hex) => parse_hex_color(hex),
             Self::Rgb { r, g, b } => Color::Rgb(*r, *g, *b),
         }
     }
@@ -303,6 +314,27 @@ mod tests {
     }
 
     #[test]
+    fn test_hex_color_via_named_variant() {
+        // serde(untagged) always yields `Named` for strings, so this is the real path.
+        assert_eq!(
+            ColorSpec::Named("#ff0000".into()).to_color(),
+            Color::Rgb(255, 0, 0)
+        );
+        assert_eq!(
+            ColorSpec::Named("#00FF7f".into()).to_color(),
+            Color::Rgb(0, 255, 127)
+        );
+        assert_eq!(
+            ColorSpec::Hex("#0000ff".into()).to_color(),
+            Color::Rgb(0, 0, 255)
+        );
+        // Malformed hex degrades to Reset instead of panicking.
+        assert_eq!(ColorSpec::Named("#fff".into()).to_color(), Color::Reset);
+        assert_eq!(ColorSpec::Named("#zzzzzz".into()).to_color(), Color::Reset);
+        assert_eq!(ColorSpec::Named("#ééé".into()).to_color(), Color::Reset);
+    }
+
+    #[test]
     fn test_theme_load_default_name() {
         let theme = Theme::load("default");
         assert_eq!(theme.name, "default");
@@ -338,6 +370,8 @@ done = { r = 0, g = 255, b = 0 }
 
         assert_eq!(theme.name, "custom");
         assert_eq!(theme.colors.accent.to_color(), Color::Magenta);
+        // Hex colors must round-trip through the untagged enum (regression test).
+        assert_eq!(theme.priority.urgent.to_color(), Color::Rgb(255, 0, 0));
     }
 
     #[test]

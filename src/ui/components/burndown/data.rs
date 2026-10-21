@@ -1,11 +1,12 @@
 //! Burndown data structures and queries.
 
-use chrono::{Duration, Local, NaiveDate};
+use chrono::{Duration, NaiveDate};
 
 use crate::app::BurndownMode;
 use crate::domain::ProjectId;
 
 use super::Burndown;
+use crate::domain::{today, LocalDate};
 
 /// Daily data point for burndown chart
 #[derive(Debug, Clone)]
@@ -52,7 +53,7 @@ impl Burndown<'_> {
 
         let mode = self.model.burndown_state.mode;
         let window_days = self.model.burndown_state.time_window.days();
-        let today = Local::now().date_naive();
+        let today = today();
         let period_start = today - Duration::days(window_days - 1);
 
         // Calculate totals based on mode
@@ -90,7 +91,7 @@ impl Burndown<'_> {
                         .iter()
                         .filter(|t| {
                             t.status.is_complete()
-                                && t.completed_at.is_some_and(|c| c.date_naive() <= date)
+                                && t.completed_at.is_some_and(|c| c.local_date() <= date)
                         })
                         .count();
                     (tasks.len() - completed_by_date) as f64
@@ -100,7 +101,7 @@ impl Burndown<'_> {
                         .iter()
                         .filter(|t| {
                             t.status.is_complete()
-                                && t.completed_at.is_some_and(|c| c.date_naive() <= date)
+                                && t.completed_at.is_some_and(|c| c.local_date() <= date)
                         })
                         .map(|t| t.estimated_minutes.unwrap_or(0))
                         .sum();
@@ -114,12 +115,12 @@ impl Burndown<'_> {
             let added_on_date = match mode {
                 BurndownMode::TaskCount => tasks
                     .iter()
-                    .filter(|t| t.created_at.date_naive() == date && date >= period_start)
+                    .filter(|t| t.created_at.local_date() == date && date >= period_start)
                     .count() as f64,
                 BurndownMode::TimeHours => {
                     let added_minutes: u32 = tasks
                         .iter()
-                        .filter(|t| t.created_at.date_naive() == date && date >= period_start)
+                        .filter(|t| t.created_at.local_date() == date && date >= period_start)
                         .map(|t| t.estimated_minutes.unwrap_or(0))
                         .sum();
                     f64::from(added_minutes) / 60.0
@@ -138,7 +139,7 @@ impl Burndown<'_> {
         // Find earliest task and latest due date for scope
         let start_date = tasks
             .iter()
-            .map(|t| t.created_at.date_naive())
+            .map(|t| t.created_at.local_date())
             .min()
             .unwrap_or(period_start);
 

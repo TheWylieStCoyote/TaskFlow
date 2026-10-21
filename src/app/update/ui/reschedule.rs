@@ -11,6 +11,7 @@ use chrono::{Datelike, Duration};
 use crate::app::{Model, UiMessage};
 
 use super::input::start_input;
+use crate::domain::today;
 use crate::ui::InputTarget;
 
 /// Handle task rescheduling and snooze messages.
@@ -33,7 +34,7 @@ pub fn handle_ui_reschedule(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::RescheduleTomorrow => {
             if let Some(task_id) = model.selected_task_id() {
-                let tomorrow = chrono::Local::now().date_naive() + Duration::days(1);
+                let tomorrow = today() + Duration::days(1);
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(tomorrow);
                 });
@@ -44,7 +45,7 @@ pub fn handle_ui_reschedule(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::RescheduleNextWeek => {
             if let Some(task_id) = model.selected_task_id() {
-                let next_week = chrono::Local::now().date_naive() + Duration::days(7);
+                let next_week = today() + Duration::days(7);
                 model.modify_task_with_undo(&task_id, |task| {
                     task.due_date = Some(next_week);
                 });
@@ -55,7 +56,7 @@ pub fn handle_ui_reschedule(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::RescheduleNextMonday => {
             if let Some(task_id) = model.selected_task_id() {
-                let today = chrono::Local::now().date_naive();
+                let today = today();
                 // num_days_from_monday: Mon=0, Tue=1, ..., Sun=6
                 // To get next Monday: (7 - current_weekday) % 7, but if 0 use 7
                 let days_from_monday = today.weekday().num_days_from_monday();

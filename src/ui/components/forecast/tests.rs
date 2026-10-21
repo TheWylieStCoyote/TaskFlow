@@ -3,6 +3,7 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Task;
 use chrono::Weekday;
 
@@ -104,7 +105,7 @@ fn test_daily_workload_empty_model() {
 #[test]
 fn test_weekly_workload_with_tasks() {
     let mut model = Model::new();
-    let today = Local::now().date_naive();
+    let today = today();
 
     // Add task due today
     let mut task = Task::new("Task due today");
@@ -124,7 +125,7 @@ fn test_weekly_workload_with_tasks() {
 #[test]
 fn test_daily_workload_with_tasks() {
     let mut model = Model::new();
-    let today = Local::now().date_naive();
+    let today = today();
 
     // Add task due today
     let mut task = Task::new("Task due today");
@@ -144,7 +145,7 @@ fn test_daily_workload_with_tasks() {
 #[test]
 fn test_default_estimate_for_tasks_without_estimate() {
     let mut model = Model::new();
-    let today = Local::now().date_naive();
+    let today = today();
 
     // Add task without estimate
     let mut task = Task::new("Task without estimate");

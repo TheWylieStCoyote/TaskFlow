@@ -5,6 +5,7 @@ use std::time::Duration;
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::ui::test_utils::{buffer_content, render_widget};
 
 #[test]
@@ -132,13 +133,13 @@ fn test_focus_view_with_high_priority_task() {
 #[test]
 fn test_focus_view_with_due_date() {
     use crate::domain::Task;
-    use chrono::{Duration as ChronoDuration, Utc};
+    use chrono::Duration as ChronoDuration;
 
     let mut model = Model::new();
     let theme = Theme::default();
 
     let mut task = Task::new("Task with due date");
-    task.due_date = Some(Utc::now().date_naive() + ChronoDuration::days(5));
+    task.due_date = Some(today() + ChronoDuration::days(5));
     let task_id = task.id;
     model.tasks.insert(task.id, task);
     model.visible_tasks = vec![task_id];
@@ -154,13 +155,12 @@ fn test_focus_view_with_due_date() {
 #[test]
 fn test_focus_view_with_scheduled_date() {
     use crate::domain::Task;
-    use chrono::Utc;
 
     let mut model = Model::new();
     let theme = Theme::default();
 
     let mut task = Task::new("Task with scheduled date");
-    task.scheduled_date = Some(Utc::now().date_naive());
+    task.scheduled_date = Some(today());
     let task_id = task.id;
     model.tasks.insert(task.id, task);
     model.visible_tasks = vec![task_id];

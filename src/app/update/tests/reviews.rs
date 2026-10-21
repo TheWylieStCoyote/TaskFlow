@@ -1,6 +1,6 @@
 //! Daily and weekly review tests.
 
-use chrono::{Duration, Utc};
+use chrono::Duration;
 
 use crate::app::{update::update, Message, Model, UiMessage};
 use crate::domain::Task;
@@ -8,7 +8,7 @@ use crate::ui::{DailyReviewPhase, WeeklyReviewPhase};
 
 fn create_model_with_tasks_for_review() -> Model {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
     let yesterday = today - Duration::days(1);
     let tomorrow = today + Duration::days(1);
 
@@ -252,6 +252,7 @@ fn test_weekly_review_down_upcoming_phase() {
 }
 
 // Evening review tests
+use crate::domain::today;
 use crate::ui::EveningReviewPhase;
 
 #[test]

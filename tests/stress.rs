@@ -18,8 +18,9 @@
 
 use std::time::Instant;
 
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use taskflow::app::Model;
+use taskflow::domain::today;
 use taskflow::domain::{Priority, SortField, SortOrder, SortSpec, Task, TaskStatus};
 
 // Task counts for each level
@@ -59,7 +60,7 @@ fn threshold_for_count(base_ms: u128, count: usize) -> u128 {
 /// Create a model with n tasks having varied properties.
 fn create_model_with_n_tasks(n: usize) -> Model {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     for i in 0..n {
         let priority = match i % 5 {

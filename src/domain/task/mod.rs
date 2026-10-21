@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::ProjectId;
+use crate::domain::today;
 
 /// A task represents a unit of work to be done.
 ///
@@ -33,14 +34,13 @@ use super::ProjectId;
 /// ## Creating Tasks
 ///
 /// ```
-/// use taskflow::domain::{Task, Priority, TaskStatus};
-/// use chrono::Utc;
+/// use taskflow::domain::{today, Task, Priority, TaskStatus};
 ///
 /// // Simple task
 /// let task = Task::new("Buy groceries");
 ///
 /// // Task with builder pattern
-/// let today = Utc::now().date_naive();
+/// let today = today();
 /// let task = Task::new("Fix login bug")
 ///     .with_priority(Priority::Urgent)
 ///     .with_due_date(today)
@@ -303,7 +303,7 @@ impl Task {
     #[must_use]
     pub fn is_overdue(&self) -> bool {
         if let Some(due) = self.due_date {
-            return due < Utc::now().date_naive() && !self.status.is_complete();
+            return due < today() && !self.status.is_complete();
         }
         false
     }
@@ -311,7 +311,7 @@ impl Task {
     #[must_use]
     pub fn is_due_today(&self) -> bool {
         if let Some(due) = self.due_date {
-            return due == Utc::now().date_naive();
+            return due == today();
         }
         false
     }
@@ -319,8 +319,7 @@ impl Task {
     /// Returns true if the task is currently snoozed (hidden until a future date).
     #[must_use]
     pub fn is_snoozed(&self) -> bool {
-        self.snooze_until
-            .is_some_and(|date| date > Utc::now().date_naive())
+        self.snooze_until.is_some_and(|date| date > today())
     }
 
     /// Snooze the task until a specific date.

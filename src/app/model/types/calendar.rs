@@ -1,6 +1,7 @@
 //! Calendar state types.
 
-use chrono::{Datelike, Duration, NaiveDate, Utc};
+use crate::domain::today;
+use chrono::{Datelike, Duration, NaiveDate};
 
 /// State for the calendar view.
 ///
@@ -29,7 +30,7 @@ pub struct CalendarState {
 
 impl Default for CalendarState {
     fn default() -> Self {
-        let today = Utc::now().date_naive();
+        let today = today();
         Self {
             year: today.year(),
             month: today.month(),

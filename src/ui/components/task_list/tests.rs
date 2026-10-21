@@ -132,7 +132,7 @@ fn test_task_list_renders_tags() {
 #[test]
 fn test_task_list_renders_due_date() {
     let mut model = Model::new();
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let task = Task::new("Due Task").with_due_date(today);
     let task_id = task.id;
     model.tasks.insert(task_id, task);
@@ -204,6 +204,7 @@ fn test_task_list_description_indicator() {
 // =====================================================================
 
 use super::item::{project_header_to_list_item, task_to_list_item, TaskItemContext};
+use crate::domain::today;
 
 /// Helper to extract text from a ListItem by rendering to buffer
 fn list_item_text(item: ratatui::widgets::ListItem<'_>) -> String {
@@ -360,10 +361,10 @@ fn test_item_status_cancelled() {
 
 #[test]
 fn test_item_overdue_task() {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let theme = Theme::default();
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Overdue Task").with_due_date(yesterday);
     let ctx = default_context(&task, &theme);
     let item = task_to_list_item(&ctx);
@@ -379,7 +380,7 @@ fn test_item_overdue_task() {
 #[test]
 fn test_item_due_today() {
     let theme = Theme::default();
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let task = Task::new("Due Today").with_due_date(today);
     let ctx = default_context(&task, &theme);
     let item = task_to_list_item(&ctx);
@@ -394,10 +395,10 @@ fn test_item_due_today() {
 
 #[test]
 fn test_item_future_due_date() {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let theme = Theme::default();
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let tomorrow = today() + Duration::days(1);
     let task = Task::new("Future Task").with_due_date(tomorrow);
     let ctx = default_context(&task, &theme);
     let item = task_to_list_item(&ctx);

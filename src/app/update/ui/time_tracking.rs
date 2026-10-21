@@ -3,6 +3,7 @@
 use chrono::{NaiveTime, Utc};
 
 use crate::app::{Model, UiMessage, UndoAction};
+use crate::domain::LocalDate;
 use crate::ui::TimeLogMode;
 
 /// Handle time log editor messages
@@ -85,7 +86,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                             match model.time_log.mode {
                                 TimeLogMode::EditStart => {
                                     // Update start time, keeping the same date
-                                    let date = entry.started_at.date_naive();
+                                    let date = entry.started_at.local_date();
                                     if let Some(new_dt) =
                                         date.and_time(time).and_local_timezone(Utc).single()
                                     {
@@ -101,7 +102,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                                 }
                                 TimeLogMode::EditEnd => {
                                     // Update end time, keeping the same date
-                                    let date = entry.started_at.date_naive();
+                                    let date = entry.started_at.local_date();
                                     if let Some(new_dt) =
                                         date.and_time(time).and_local_timezone(Utc).single()
                                     {

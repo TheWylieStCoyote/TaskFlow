@@ -1,10 +1,9 @@
 //! Basic quick add parsing tests.
 
-use chrono::Utc;
-
 use crate::domain::Priority;
 
 use super::super::parse_quick_add;
+use crate::domain::today;
 
 #[test]
 fn test_parse_quick_add_simple_title() {
@@ -131,6 +130,6 @@ fn test_parse_unrecognized_priority() {
 #[test]
 fn test_parse_quick_add_scheduled() {
     let parsed = parse_quick_add("Task sched:tomorrow");
-    let expected = Utc::now().date_naive() + chrono::Duration::days(1);
+    let expected = today() + chrono::Duration::days(1);
     assert_eq!(parsed.scheduled_date, Some(expected));
 }

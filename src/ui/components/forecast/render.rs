@@ -1,6 +1,6 @@
 //! Forecast rendering methods.
 
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -10,6 +10,7 @@ use ratatui::{
 };
 
 use super::{Forecast, DAILY_CAPACITY_HOURS};
+use crate::domain::today;
 
 impl Forecast<'_> {
     /// Render daily capacity breakdown for the week
@@ -231,7 +232,7 @@ impl Forecast<'_> {
 
     /// Render upcoming deadlines
     pub(crate) fn render_deadlines(&self, area: Rect, buf: &mut Buffer) {
-        let today = Local::now().date_naive();
+        let today = today();
         let mut upcoming: Vec<_> = self
             .model
             .tasks

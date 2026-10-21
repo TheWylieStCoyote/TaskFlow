@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use chrono::Utc;
 use tracing::error;
 
 use taskflow::domain::filter_dsl::{evaluate_with_cache, parse, EvalContext, TaskLowerCache};
@@ -10,6 +9,7 @@ use taskflow::domain::{Priority, Task, TaskStatus};
 
 use crate::cli::{Cli, ListFilters};
 use crate::load_model_for_cli;
+use taskflow::domain::today;
 
 /// List tasks from the command line
 pub fn list_tasks(
@@ -22,7 +22,7 @@ pub fn list_tasks(
     // Load model with storage (fail fast on error)
     let model = load_model_for_cli(cli)?;
 
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Parse DSL filter if provided
     let dsl_expr = if let Some(ref dsl_str) = filters.dsl_filter {

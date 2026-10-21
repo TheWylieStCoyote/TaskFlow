@@ -8,6 +8,7 @@ use ratatui::{
 };
 
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::{Priority, Task, TaskStatus};
 
 /// Context for rendering a task item
@@ -157,7 +158,7 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
     // Add due date if present
     let due_span = if let Some(due) = task.due_date {
         use std::cmp::Ordering;
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let style = match due.cmp(&today) {
             Ordering::Less => Style::default().fg(theme.colors.danger.to_color()), // Overdue
             Ordering::Equal => Style::default().fg(theme.colors.warning.to_color()), // Due today

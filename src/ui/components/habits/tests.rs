@@ -5,7 +5,7 @@ use ratatui::{buffer::Buffer, layout::Rect};
 
 use crate::app::Model;
 use crate::config::Theme;
-use chrono::Utc;
+use crate::domain::today;
 
 #[test]
 fn test_habits_view_renders_without_panic() {
@@ -80,7 +80,7 @@ fn test_habits_view_with_streak() {
     let mut model = Model::new();
     let mut habit = crate::domain::Habit::new("Daily Reading".to_string());
     // Add check-ins for last 7 days to build a streak
-    let today = Utc::now().date_naive();
+    let today = today();
     for i in 0..7 {
         let date = today - chrono::TimeDelta::days(i);
         habit.check_in(date, true, None);
@@ -177,7 +177,7 @@ fn test_habit_analytics_popup_with_trend_data() {
     let mut model = Model::new();
     let mut habit = crate::domain::Habit::new("Exercise".to_string());
     // Add enough check-ins to generate trend data
-    let today = Utc::now().date_naive();
+    let today = today();
     for i in 0..30 {
         let date = today - chrono::TimeDelta::days(i);
         // Check in more frequently in recent days to create improving trend

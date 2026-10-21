@@ -32,13 +32,12 @@
 //! ## Tracking Check-ins
 //!
 //! ```
-//! use taskflow::domain::Habit;
-//! use chrono::Utc;
+//! use taskflow::domain::{today, Habit};
 //!
 //! let mut habit = Habit::new("Read");
 //! habit.check_in_today(true, None);
 //!
-//! let today = Utc::now().date_naive();
+//! let today = today();
 //! assert!(habit.is_completed_on(today));
 //! ```
 

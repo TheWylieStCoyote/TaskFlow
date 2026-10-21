@@ -6,6 +6,7 @@ use chrono::NaiveDate;
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::Shell;
 
+use taskflow::domain::today;
 use taskflow::domain::{Priority, TaskStatus};
 use taskflow::storage::BackendType;
 
@@ -274,10 +275,10 @@ pub fn parse_statuses(strings: &[String]) -> Vec<TaskStatus> {
 /// - `+Nd` or `+N` - N days from today (e.g., `+7d`, `+7`)
 /// - `-Nd` or `-N` - N days ago (e.g., `-3d`, `-3`)
 pub fn parse_date(s: &str) -> Option<NaiveDate> {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let s = s.trim().to_lowercase();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     match s.as_str() {
         "today" => Some(today),
@@ -305,7 +306,7 @@ pub fn parse_date(s: &str) -> Option<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     // ========================================================================
     // parse_priorities tests
@@ -436,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_parse_date_today() {
-        let today = Utc::now().date_naive();
+        let today = today();
         assert_eq!(parse_date("today"), Some(today));
         assert_eq!(parse_date("TODAY"), Some(today));
         assert_eq!(parse_date("  today  "), Some(today));
@@ -444,20 +445,20 @@ mod tests {
 
     #[test]
     fn test_parse_date_tomorrow() {
-        let tomorrow = Utc::now().date_naive() + Duration::days(1);
+        let tomorrow = today() + Duration::days(1);
         assert_eq!(parse_date("tomorrow"), Some(tomorrow));
         assert_eq!(parse_date("TOMORROW"), Some(tomorrow));
     }
 
     #[test]
     fn test_parse_date_yesterday() {
-        let yesterday = Utc::now().date_naive() - Duration::days(1);
+        let yesterday = today() - Duration::days(1);
         assert_eq!(parse_date("yesterday"), Some(yesterday));
     }
 
     #[test]
     fn test_parse_date_plus_days() {
-        let today = Utc::now().date_naive();
+        let today = today();
         assert_eq!(parse_date("+7d"), Some(today + Duration::days(7)));
         assert_eq!(parse_date("+7"), Some(today + Duration::days(7)));
         assert_eq!(parse_date("+30d"), Some(today + Duration::days(30)));
@@ -465,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_parse_date_minus_days() {
-        let today = Utc::now().date_naive();
+        let today = today();
         assert_eq!(parse_date("-3d"), Some(today - Duration::days(3)));
         assert_eq!(parse_date("-3"), Some(today - Duration::days(3)));
         assert_eq!(parse_date("-14d"), Some(today - Duration::days(14)));
@@ -493,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_parse_date_edge_cases() {
-        let today = Utc::now().date_naive();
+        let today = today();
         assert_eq!(parse_date("+0"), Some(today));
         assert_eq!(parse_date("-0"), Some(today));
         assert_eq!(parse_date("+1"), Some(today + Duration::days(1)));

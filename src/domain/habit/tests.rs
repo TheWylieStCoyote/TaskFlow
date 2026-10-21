@@ -1,7 +1,8 @@
 //! Tests for habit tracking.
 
 use super::*;
-use chrono::{TimeDelta, Utc, Weekday};
+use crate::domain::today;
+use chrono::{TimeDelta, Weekday};
 
 #[test]
 fn test_new_habit() {
@@ -27,7 +28,7 @@ fn test_habit_builder() {
 #[test]
 fn test_check_in() {
     let mut habit = Habit::new("Test");
-    let today = Utc::now().date_naive();
+    let today = today();
 
     habit.check_in_today(true, Some("Done!".to_string()));
 
@@ -38,7 +39,7 @@ fn test_check_in() {
 
 #[test]
 fn test_current_streak() {
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut habit = Habit::new("Test").with_start_date(today - TimeDelta::days(10));
 
     // No check-ins = 0 streak
@@ -59,7 +60,7 @@ fn test_current_streak() {
 
 #[test]
 fn test_streak_broken_by_miss() {
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut habit = Habit::new("Test").with_start_date(today - TimeDelta::days(10));
 
     // Check in today and 2 days ago but not yesterday
@@ -72,7 +73,7 @@ fn test_streak_broken_by_miss() {
 
 #[test]
 fn test_longest_streak() {
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut habit = Habit::new("Test").with_start_date(today - TimeDelta::days(20));
 
     // Build a 5-day streak in the past
@@ -91,7 +92,7 @@ fn test_longest_streak() {
 #[test]
 fn test_frequency_daily() {
     let freq = HabitFrequency::Daily;
-    let today = Utc::now().date_naive();
+    let today = today();
     let start = today - TimeDelta::days(10);
 
     assert!(freq.is_due_on(today, start));
@@ -164,7 +165,7 @@ fn test_completion_rate_by_weekday() {
 #[test]
 fn test_overall_completion_rate() {
     let mut habit = Habit::new("Test");
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // 3 completions, 1 miss = 75%
     habit.check_in(today, true, None);

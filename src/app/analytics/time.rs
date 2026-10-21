@@ -11,6 +11,7 @@ use crate::domain::analytics::{BurnChart, TimeAnalytics, TimeSeriesPoint};
 use crate::domain::{ProjectId, Task};
 
 use super::AnalyticsEngine;
+use crate::domain::LocalDate;
 
 impl AnalyticsEngine<'_> {
     /// Compute time tracking analytics.
@@ -27,7 +28,7 @@ impl AnalyticsEngine<'_> {
             // Use actual_minutes from task if available
             if task.actual_minutes > 0 {
                 // Attribute to completion date or created date
-                let date = task.completed_at.unwrap_or(task.created_at).date_naive();
+                let date = task.completed_at.unwrap_or(task.created_at).local_date();
 
                 if date >= start && date <= end {
                     let minutes = task.actual_minutes;
@@ -49,7 +50,7 @@ impl AnalyticsEngine<'_> {
 
         // Also count from time entries if available
         for entry in self.model.time_entries.values() {
-            let entry_date = entry.started_at.date_naive();
+            let entry_date = entry.started_at.local_date();
             if entry_date >= start && entry_date <= end {
                 let minutes = entry.calculated_duration_minutes();
                 analytics.total_minutes += minutes;
@@ -123,10 +124,10 @@ impl AnalyticsEngine<'_> {
         let mut initial_completed = 0i32;
 
         for task in &tasks {
-            let created_date = task.created_at.date_naive();
+            let created_date = task.created_at.local_date();
             if created_date < start {
                 initial_scope += 1;
-                if task.completed_at.is_some_and(|c| c.date_naive() < start) {
+                if task.completed_at.is_some_and(|c| c.local_date() < start) {
                     initial_completed += 1;
                 }
             }
@@ -134,13 +135,13 @@ impl AnalyticsEngine<'_> {
 
         // Track changes over time
         for task in &tasks {
-            let created_date = task.created_at.date_naive();
+            let created_date = task.created_at.local_date();
             if created_date >= start && created_date <= end {
                 *scope_by_day.entry(created_date).or_insert(0) += 1;
             }
 
             if let Some(completed_at) = task.completed_at {
-                let completed_date = completed_at.date_naive();
+                let completed_date = completed_at.local_date();
                 if completed_date >= start && completed_date <= end {
                     *completed_by_day.entry(completed_date).or_insert(0) += 1;
                 }

@@ -3,6 +3,7 @@
 use chrono::Duration;
 
 use crate::app::{Model, UiMessage};
+use crate::domain::{today, LocalDate};
 use crate::ui::{DailyReviewPhase, EveningReviewPhase, WeeklyReviewPhase};
 
 /// Handle daily review UI messages
@@ -31,7 +32,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::DailyReviewDown => {
             // Get the task count for current phase
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             let count = match model.daily_review.phase {
                 DailyReviewPhase::OverdueTasks => model
                     .tasks
@@ -60,7 +61,7 @@ pub fn handle_ui_daily_review(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::DailyReviewComplete => {
             // Get the task at the current selection and toggle its completion
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             let task_ids: Vec<_> = match model.daily_review.phase {
                 DailyReviewPhase::OverdueTasks => model
                     .tasks
@@ -130,7 +131,7 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::WeeklyReviewDown => {
             // Get the count for current phase
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             let week_ago = today - chrono::Duration::days(7);
             let week_ahead = today + chrono::Duration::days(7);
 
@@ -140,7 +141,7 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
                     .values()
                     .filter(|t| {
                         t.status.is_complete()
-                            && t.completed_at.is_some_and(|d| d.date_naive() >= week_ago)
+                            && t.completed_at.is_some_and(|d| d.local_date() >= week_ago)
                     })
                     .count(),
                 WeeklyReviewPhase::OverdueTasks => model
@@ -171,7 +172,7 @@ pub fn handle_ui_weekly_review(model: &mut Model, msg: UiMessage) {
                                 .count();
                             let has_recent = model.tasks.values().any(|t| {
                                 t.project_id.as_ref() == Some(*id)
-                                    && t.updated_at.date_naive() >= week_ago
+                                    && t.updated_at.local_date() >= week_ago
                             });
                             task_count > 0 && !has_recent
                         })
@@ -203,11 +204,11 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
             let next_phase = model.evening_review.phase.next();
 
             // Auto-skip TimeReview if no time entries today
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             let has_time_entries = model
                 .time_entries
                 .values()
-                .any(|e| e.started_at.date_naive() == today);
+                .any(|e| e.started_at.local_date() == today);
 
             if next_phase == EveningReviewPhase::TimeReview && !has_time_entries {
                 // Skip to Summary
@@ -221,11 +222,11 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
             let prev_phase = model.evening_review.phase.prev();
 
             // Auto-skip TimeReview when going back if no time entries today
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             let has_time_entries = model
                 .time_entries
                 .values()
-                .any(|e| e.started_at.date_naive() == today);
+                .any(|e| e.started_at.local_date() == today);
 
             if prev_phase == EveningReviewPhase::TimeReview && !has_time_entries {
                 // Skip back to TomorrowPreview
@@ -243,7 +244,7 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
         UiMessage::EveningReviewDown => {
             // Get the task count for incomplete tasks phase
             if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
-                let today = chrono::Utc::now().date_naive();
+                let today = today();
                 let count = model
                     .tasks
                     .values()
@@ -260,7 +261,7 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
         UiMessage::EveningReviewReschedule => {
             // Reschedule selected task to tomorrow
             if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
-                let today = chrono::Utc::now().date_naive();
+                let today = today();
                 let tomorrow = today + Duration::days(1);
 
                 let task_ids: Vec<_> = model
@@ -291,7 +292,7 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
         UiMessage::EveningReviewSnooze => {
             // Snooze selected task until tomorrow
             if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
-                let today = chrono::Utc::now().date_naive();
+                let today = today();
                 let tomorrow = today + Duration::days(1);
 
                 let task_ids: Vec<_> = model
@@ -321,7 +322,7 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
         UiMessage::EveningReviewComplete
             // Mark selected task as complete
             if model.evening_review.phase == EveningReviewPhase::IncompleteTasks => {
-                let today = chrono::Utc::now().date_naive();
+                let today = today();
 
                 let task_ids: Vec<_> = model
                     .tasks

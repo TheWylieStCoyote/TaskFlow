@@ -13,7 +13,8 @@
 
 use std::sync::LazyLock;
 
-use chrono::{Datelike, NaiveDate, Utc, Weekday};
+use crate::domain::today;
+use chrono::{Datelike, NaiveDate, Weekday};
 use regex::Regex;
 
 // Pre-compiled regex patterns for date parsing
@@ -45,7 +46,7 @@ static COMPACT_RELATIVE_RE: LazyLock<Regex> =
 /// - `MM-DD` - Month-Day (current year)
 #[must_use]
 pub fn parse_date(s: &str) -> Option<NaiveDate> {
-    let today = Utc::now().date_naive();
+    let today = today();
     parse_date_with_reference(s, today)
 }
 

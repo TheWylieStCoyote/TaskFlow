@@ -14,6 +14,7 @@
 //!
 //! Custom templates can be added via configuration.
 
+use crate::domain::today;
 use crate::domain::{Priority, Task};
 
 /// A task template for quickly creating common task types
@@ -73,7 +74,7 @@ impl TaskTemplate {
     /// Create a task from this template
     #[must_use]
     pub fn create_task(&self) -> Task {
-        use chrono::{Duration, Utc};
+        use chrono::Duration;
 
         let mut task = Task::new(&self.title);
         task.priority = self.priority;
@@ -81,7 +82,7 @@ impl TaskTemplate {
         task.description.clone_from(&self.description);
 
         if let Some(days) = self.due_days {
-            let due = (Utc::now() + Duration::days(days)).date_naive();
+            let due = today() + Duration::days(days);
             task.due_date = Some(due);
         }
 
@@ -224,12 +225,12 @@ mod tests {
 
     #[test]
     fn test_template_create_task_with_due_date() {
-        use chrono::{Duration, Utc};
+        use chrono::Duration;
 
         let template = TaskTemplate::new("Test", "Task").with_due_days(3);
         let task = template.create_task();
 
-        let expected_date = (Utc::now() + Duration::days(3)).date_naive();
+        let expected_date = today() + Duration::days(3);
         assert_eq!(task.due_date, Some(expected_date));
     }
 

@@ -78,7 +78,7 @@
 
 use std::collections::HashMap;
 
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate};
 
 use crate::domain::{Project, ProjectId, Task};
 
@@ -86,6 +86,7 @@ use super::ast::{
     Condition, CreatedFilter, DueFilter, FilterExpr, FilterValue, HasField, NumericFilter,
     ScheduledFilter,
 };
+use crate::domain::{today, LocalDate};
 
 /// Pre-computed lowercase task data for efficient filtering.
 ///
@@ -148,7 +149,7 @@ impl<'a> EvalContext<'a> {
     pub fn new(projects: &'a HashMap<ProjectId, Project>) -> Self {
         Self {
             projects,
-            today: Utc::now().date_naive(),
+            today: today(),
         }
     }
 
@@ -401,7 +402,7 @@ fn evaluate_due(filter: &DueFilter, task: &Task, today: NaiveDate) -> bool {
 
 /// Evaluate a creation date filter against a task.
 fn evaluate_created(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> bool {
-    let created_date = task.created_at.date_naive();
+    let created_date = task.created_at.local_date();
 
     match filter {
         CreatedFilter::Today => created_date == today,
@@ -507,7 +508,7 @@ fn evaluate_completed(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> 
     let Some(completed_at) = task.completed_at else {
         return false;
     };
-    let completed_date = completed_at.date_naive();
+    let completed_date = completed_at.local_date();
 
     match filter {
         CreatedFilter::Today => completed_date == today,
@@ -548,7 +549,7 @@ fn evaluate_completed(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> 
 
 /// Evaluate a modification date filter against a task.
 fn evaluate_modified(filter: &CreatedFilter, task: &Task, today: NaiveDate) -> bool {
-    let modified_date = task.updated_at.date_naive();
+    let modified_date = task.updated_at.local_date();
 
     match filter {
         CreatedFilter::Today => modified_date == today,
@@ -604,6 +605,7 @@ fn evaluate_numeric(filter: &NumericFilter, value: Option<u32>) -> bool {
 mod tests {
     use super::*;
     use crate::domain::{Priority, TaskStatus};
+    use chrono::Utc;
 
     fn empty_ctx() -> EvalContext<'static> {
         static EMPTY: std::sync::LazyLock<HashMap<ProjectId, Project>> =

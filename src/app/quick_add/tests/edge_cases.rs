@@ -4,6 +4,7 @@ use chrono::NaiveDate;
 
 use super::super::date::{days_in_month, is_leap_year, parse_date_with_reference};
 use super::super::parse_quick_add;
+use crate::domain::today;
 
 #[test]
 fn test_parse_multiple_priorities_uses_first() {
@@ -25,7 +26,7 @@ fn test_parse_multiple_projects_uses_first() {
 fn test_parse_multiple_due_dates_uses_first() {
     // When multiple due dates are given, regex captures the first match
     let parsed = parse_quick_add("Task due:today due:tomorrow");
-    assert_eq!(parsed.due_date, Some(chrono::Utc::now().date_naive()));
+    assert_eq!(parsed.due_date, Some(today()));
 }
 
 #[test]

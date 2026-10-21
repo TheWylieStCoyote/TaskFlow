@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use crate::domain::analytics::{CompletionTrend, TimeSeriesPoint, VelocityMetrics};
 
 use super::AnalyticsEngine;
+use crate::domain::LocalDate;
 
 impl AnalyticsEngine<'_> {
     /// Compute completion trends over a date range.
@@ -23,14 +24,14 @@ impl AnalyticsEngine<'_> {
 
         for task in self.model.tasks.values() {
             // Count creations
-            let created_date = task.created_at.date_naive();
+            let created_date = task.created_at.local_date();
             if created_date >= start && created_date <= end {
                 *creations_by_day.entry(created_date).or_insert(0) += 1;
             }
 
             // Count completions
             if let Some(completed_at) = task.completed_at {
-                let completed_date = completed_at.date_naive();
+                let completed_date = completed_at.local_date();
                 if completed_date >= start && completed_date <= end {
                     *completions_by_day.entry(completed_date).or_insert(0) += 1;
                 }
@@ -99,7 +100,7 @@ impl AnalyticsEngine<'_> {
 
         for task in self.model.tasks.values() {
             if let Some(completed_at) = task.completed_at {
-                let completed_date = completed_at.date_naive();
+                let completed_date = completed_at.local_date();
                 if completed_date >= start && completed_date <= end {
                     // Get start of week (Monday)
                     let week_start = completed_date

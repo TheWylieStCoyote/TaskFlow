@@ -1,6 +1,7 @@
 //! UI tests (input, toggles, help).
 
 use crate::app::{update::update, Message, Model, UiMessage};
+use crate::domain::today;
 use crate::domain::Priority;
 use crate::ui::{InputMode, InputTarget};
 
@@ -1073,7 +1074,7 @@ fn test_habit_toggle_today() {
     model.refresh_visible_habits();
     model.habit_view.selected = 0;
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let before = model.habits.get(&habit_id).unwrap().is_completed_on(today);
 
     update(&mut model, Message::Ui(UiMessage::HabitToggleToday));

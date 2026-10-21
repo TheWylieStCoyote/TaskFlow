@@ -13,7 +13,7 @@
 mod cli_command_tests {
     use std::path::PathBuf;
     use taskflow::app::Model;
-    use taskflow::domain::{Priority, Task, TaskStatus};
+    use taskflow::domain::{today, Priority, Task, TaskStatus};
     use taskflow::storage::BackendType;
 
     use crate::cli::Cli;
@@ -311,9 +311,8 @@ mod cli_command_tests {
 
     #[test]
     fn test_today_filter() {
-        use chrono::Utc;
         let mut model = Model::new();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Add task due today
         let task1 = Task::new("Due today").with_due_date(today);

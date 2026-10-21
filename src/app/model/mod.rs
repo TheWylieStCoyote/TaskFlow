@@ -72,7 +72,7 @@ pub use view_queries::extract_git_location;
 
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 
 use crate::domain::{
     CalendarEvent, CalendarEventId, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Priority,
@@ -585,7 +585,7 @@ impl Model {
     /// Returns true if any incomplete task on the given day is overdue.
     #[must_use]
     pub fn has_overdue_on_day(&self, date: NaiveDate) -> bool {
-        let today = Utc::now().date_naive();
+        let today = today();
         date < today
             && self
                 .tasks
@@ -871,6 +871,7 @@ impl Model {
 
 // Re-export UndoAction for use in submodules
 pub(crate) use super::UndoAction;
+use crate::domain::today;
 
 #[cfg(test)]
 mod tests;

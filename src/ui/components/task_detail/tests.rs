@@ -3,6 +3,7 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Task;
 use ratatui::{buffer::Buffer, layout::Rect};
 
@@ -148,11 +149,9 @@ fn test_task_detail_with_project() {
 
 #[test]
 fn test_task_detail_with_due_date() {
-    use chrono::Utc;
-
     let mut model = Model::new();
     let mut task = Task::new("Due task");
-    task.due_date = Some(Utc::now().date_naive());
+    task.due_date = Some(today());
     let id = task.id;
     model.tasks.insert(id, task);
     model.refresh_visible_tasks();

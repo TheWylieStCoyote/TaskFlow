@@ -262,6 +262,7 @@ impl Kanban<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::today;
 
     #[test]
     fn test_kanban_renders_without_panic() {
@@ -404,19 +405,19 @@ mod tests {
 
     #[test]
     fn test_kanban_overdue_styling() {
-        use chrono::{Duration, Utc};
+        use chrono::Duration;
 
         let mut model = Model::new();
 
         // Create an overdue task
         let overdue = crate::domain::Task::new("Overdue task")
             .with_status(TaskStatus::Todo)
-            .with_due_date(Utc::now().date_naive() - Duration::days(2));
+            .with_due_date(today() - Duration::days(2));
 
         // Create a task due today
         let due_today = crate::domain::Task::new("Due today task")
             .with_status(TaskStatus::Todo)
-            .with_due_date(Utc::now().date_naive());
+            .with_due_date(today());
 
         let ids = vec![overdue.id, due_today.id];
         model.tasks.insert(overdue.id, overdue);

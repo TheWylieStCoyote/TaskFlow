@@ -3,9 +3,10 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Priority;
 use crate::ui::test_utils::{buffer_content, render_widget};
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use ratatui::{buffer::Buffer, layout::Rect};
 
 #[test]
@@ -88,7 +89,7 @@ fn test_daily_review_overdue_phase_with_tasks() {
     let theme = Theme::default();
 
     // Create an overdue task
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut task = Task::new("Overdue task");
     task.due_date = Some(today - Duration::days(3));
     task.priority = Priority::High;
@@ -121,7 +122,7 @@ fn test_daily_review_today_phase_with_tasks() {
     let mut model = Model::new();
     let theme = Theme::default();
 
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut task = Task::new("Today task");
     task.due_date = Some(today);
     model.tasks.insert(task.id, task);
@@ -152,7 +153,7 @@ fn test_daily_review_scheduled_phase_with_tasks() {
     let mut model = Model::new();
     let theme = Theme::default();
 
-    let today = Utc::now().date_naive();
+    let today = today();
     let mut task = Task::new("Scheduled task");
     task.scheduled_date = Some(today);
     // Don't set due_date to today so it shows in scheduled
@@ -173,7 +174,7 @@ fn test_daily_review_welcome_shows_counts() {
     let mut model = Model::new();
     let theme = Theme::default();
 
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Add an overdue task
     let mut overdue = Task::new("Overdue");
@@ -200,7 +201,7 @@ fn test_daily_review_priority_colors() {
     let mut model = Model::new();
     let theme = Theme::default();
 
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Add tasks with different priorities
     for priority in [

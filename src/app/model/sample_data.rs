@@ -5,6 +5,7 @@ use chrono::{Duration, NaiveDate, Utc, Weekday};
 use crate::domain::{Habit, HabitFrequency, Priority, Project, Task, TaskStatus, TimeEntry};
 
 use super::Model;
+use crate::domain::today;
 
 impl Model {
     /// Adds sample tasks and projects for testing.
@@ -34,7 +35,7 @@ impl Model {
         self.storage.sample_data_mode = true;
 
         let now = Utc::now();
-        let today = now.date_naive();
+        let today = today();
 
         // ========== PROJECTS ==========
         let backend_project = Project::new("Backend API");

@@ -44,6 +44,7 @@ fn test_weekly_review_renders() {
 // Query method tests
 // =====================================================================
 
+use crate::domain::today;
 use crate::domain::{Project, Task, TaskStatus};
 use chrono::{Duration, Utc};
 
@@ -99,7 +100,7 @@ fn test_completed_this_week_excludes_incomplete() {
 fn test_overdue_tasks_finds_past_due() {
     let mut model = Model::new();
 
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Overdue").with_due_date(yesterday);
     model.tasks.insert(task.id, task);
 
@@ -115,7 +116,7 @@ fn test_overdue_tasks_finds_past_due() {
 fn test_overdue_tasks_excludes_future() {
     let mut model = Model::new();
 
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let tomorrow = today() + Duration::days(1);
     let task = Task::new("Future").with_due_date(tomorrow);
     model.tasks.insert(task.id, task);
 
@@ -131,7 +132,7 @@ fn test_overdue_tasks_excludes_completed() {
     let mut model = Model::new();
 
     // Overdue but completed
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Done Overdue")
         .with_due_date(yesterday)
         .with_status(TaskStatus::Done);
@@ -148,7 +149,7 @@ fn test_overdue_tasks_excludes_completed() {
 fn test_upcoming_week_tasks_finds_due_soon() {
     let mut model = Model::new();
 
-    let in_3_days = Utc::now().date_naive() + Duration::days(3);
+    let in_3_days = today() + Duration::days(3);
     let task = Task::new("Due Soon").with_due_date(in_3_days);
     model.tasks.insert(task.id, task);
 
@@ -164,7 +165,7 @@ fn test_upcoming_week_tasks_finds_due_soon() {
 fn test_upcoming_week_tasks_excludes_far_future() {
     let mut model = Model::new();
 
-    let in_2_weeks = Utc::now().date_naive() + Duration::days(14);
+    let in_2_weeks = today() + Duration::days(14);
     let task = Task::new("Far Future").with_due_date(in_2_weeks);
     model.tasks.insert(task.id, task);
 
@@ -179,7 +180,7 @@ fn test_upcoming_week_tasks_excludes_far_future() {
 fn test_upcoming_week_tasks_excludes_past() {
     let mut model = Model::new();
 
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Past Due").with_due_date(yesterday);
     model.tasks.insert(task.id, task);
 
@@ -380,7 +381,7 @@ fn test_render_task_list_with_tasks() {
     let mut model = Model::new();
 
     // Add overdue task
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Overdue Task").with_due_date(yesterday);
     model.tasks.insert(task.id, task);
 
@@ -400,7 +401,7 @@ fn test_render_task_list_with_due_today() {
     let mut model = Model::new();
 
     // Add task due today (but in the future range for upcoming)
-    let today = Utc::now().date_naive();
+    let today = today();
     let task = Task::new("Today Task").with_due_date(today);
     model.tasks.insert(task.id, task);
 
@@ -443,11 +444,11 @@ fn test_render_welcome_with_counts() {
     let mut model = Model::new();
 
     // Add various tasks to show counts
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let overdue = Task::new("Overdue").with_due_date(yesterday);
     model.tasks.insert(overdue.id, overdue);
 
-    let in_3_days = Utc::now().date_naive() + Duration::days(3);
+    let in_3_days = today() + Duration::days(3);
     let upcoming = Task::new("Upcoming").with_due_date(in_3_days);
     model.tasks.insert(upcoming.id, upcoming);
 
@@ -475,7 +476,7 @@ fn test_render_summary_with_tasks() {
     let mut model = Model::new();
 
     // Add tasks to show non-zero summary
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let tomorrow = today() + Duration::days(1);
     let task = Task::new("Task 1").with_due_date(tomorrow);
     model.tasks.insert(task.id, task);
 
@@ -556,7 +557,7 @@ fn test_render_with_selection() {
     let mut model = Model::new();
 
     // Add multiple overdue tasks
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     for i in 0..3 {
         let task = Task::new(format!("Task {i}")).with_due_date(yesterday);
         model.tasks.insert(task.id, task);
@@ -590,7 +591,7 @@ fn test_phase_title() {
 #[test]
 fn test_today_returns_current_date() {
     let today = WeeklyReview::today();
-    let expected = Utc::now().date_naive();
+    let expected = crate::domain::today();
     assert_eq!(today, expected);
 }
 
@@ -646,14 +647,14 @@ fn test_summary_phase_renders_stats() {
     }
 
     // Add overdue tasks
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     for i in 0..2 {
         let task = Task::new(format!("Overdue {i}")).with_due_date(yesterday);
         model.tasks.insert(task.id, task);
     }
 
     // Add upcoming tasks
-    let next_week = Utc::now().date_naive() + Duration::days(3);
+    let next_week = today() + Duration::days(3);
     for i in 0..4 {
         let task = Task::new(format!("Upcoming {i}")).with_due_date(next_week);
         model.tasks.insert(task.id, task);
@@ -691,7 +692,7 @@ fn test_task_list_with_due_dates() {
     let mut model = Model::new();
 
     // Add task with due date
-    let due_date = Utc::now().date_naive() + Duration::days(2);
+    let due_date = today() + Duration::days(2);
     let task = Task::new("Task with due date").with_due_date(due_date);
     model.tasks.insert(task.id, task);
 
@@ -768,7 +769,7 @@ fn test_summary_with_overdue_shows_warning() {
     let mut model = Model::new();
 
     // Add overdue tasks
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task = Task::new("Overdue task").with_due_date(yesterday);
     model.tasks.insert(task.id, task);
 
@@ -830,7 +831,7 @@ fn test_task_list_render_with_due_date_formatting() {
     let mut model = Model::new();
 
     // Add tasks with different due dates for better coverage
-    let today = Utc::now().date_naive();
+    let today = today();
     let tomorrow = today + Duration::days(1);
     let next_week = today + Duration::days(5);
 

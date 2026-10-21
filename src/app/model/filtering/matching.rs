@@ -8,6 +8,7 @@ use crate::domain::{TagFilterMode, Task};
 
 use super::super::{Model, ViewId};
 use super::FilterCache;
+use crate::domain::today;
 
 impl Model {
     /// Check if a task matches the current filter using pre-computed cache.
@@ -94,7 +95,7 @@ impl Model {
     /// - Date-based views (Today, Upcoming, etc.): filter by dates
     /// - Property views (Projects, Untagged, etc.): filter by task properties
     pub(super) fn task_matches_view(&self, task: &Task) -> bool {
-        let today = Utc::now().date_naive();
+        let today = today();
 
         match self.current_view {
             // Aggregate views - show all tasks (UI groups/filters them)

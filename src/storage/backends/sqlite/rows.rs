@@ -7,6 +7,7 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use tracing::warn;
 
+use crate::domain::today;
 use crate::domain::{
     Goal, GoalId, GoalStatus, Habit, HabitFrequency, HabitId, KeyResult, KeyResultId,
     KeyResultStatus, Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus,
@@ -217,7 +218,7 @@ pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit>
         name: row.get("name")?,
         description: row.get("description")?,
         frequency: serde_json::from_str(&frequency_json).unwrap_or(HabitFrequency::Daily),
-        start_date: parse_date(&start_date).unwrap_or_else(|| Utc::now().date_naive()),
+        start_date: parse_date(&start_date).unwrap_or_else(today),
         end_date: parse_optional_date(end_date),
         check_ins: std::collections::HashMap::new(), // Populated separately
         color: row.get("color")?,

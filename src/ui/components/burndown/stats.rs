@@ -1,6 +1,6 @@
 //! Burndown statistics rendering.
 
-use chrono::{Datelike, Duration, Local};
+use chrono::{Datelike, Duration};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -12,6 +12,7 @@ use ratatui::{
 use crate::app::BurndownMode;
 
 use super::{Burndown, BurndownData};
+use crate::domain::today;
 
 impl Burndown<'_> {
     /// Render progress stats
@@ -34,7 +35,7 @@ impl Burndown<'_> {
             progress_pct
         );
 
-        let today = Local::now().date_naive();
+        let today = today();
         let days_elapsed = data.window_days;
 
         let velocity = if days_elapsed > 0 {

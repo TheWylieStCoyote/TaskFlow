@@ -13,6 +13,7 @@ use crate::storage::{
 };
 
 use super::SqliteBackend;
+use crate::domain::today;
 
 fn create_test_backend() -> (tempfile::TempDir, SqliteBackend) {
     let dir = tempdir().unwrap();
@@ -594,8 +595,6 @@ fn test_sqlite_habit_list_active() {
 
 #[test]
 fn test_sqlite_habit_with_check_ins() {
-    use chrono::Utc;
-
     let (_dir, mut backend) = create_test_backend();
 
     let mut habit = Habit::new("Exercise");
@@ -607,7 +606,7 @@ fn test_sqlite_habit_with_check_ins() {
     let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
     assert_eq!(retrieved.check_ins.len(), 1);
 
-    let today = Utc::now().date_naive();
+    let today = today();
     let check_in = retrieved.check_ins.get(&today).unwrap();
     assert!(check_in.completed);
     assert_eq!(check_in.note, Some("30 minutes".to_string()));
@@ -615,8 +614,6 @@ fn test_sqlite_habit_with_check_ins() {
 
 #[test]
 fn test_sqlite_habit_update_check_ins() {
-    use chrono::Utc;
-
     let (_dir, mut backend) = create_test_backend();
 
     let mut habit = Habit::new("Exercise");
@@ -629,7 +626,7 @@ fn test_sqlite_habit_update_check_ins() {
 
     // Verify update
     let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
-    let today = Utc::now().date_naive();
+    let today = today();
     let check_in = retrieved.check_ins.get(&today).unwrap();
     assert!(!check_in.completed);
 }

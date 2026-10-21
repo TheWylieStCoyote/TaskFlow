@@ -10,11 +10,12 @@
 
 use std::collections::HashSet;
 
-use chrono::{Datelike, Utc};
+use chrono::Datelike;
 
 use crate::domain::{Priority, ProjectId, Task, TaskId, TaskStatus};
 
 use super::Model;
+use crate::domain::today;
 
 impl Model {
     /// Returns task IDs for a specific Kanban column (by status).
@@ -50,7 +51,7 @@ impl Model {
     /// Importance is determined by priority (High or Urgent).
     #[must_use]
     pub fn eisenhower_quadrant_tasks(&self, quadrant: usize) -> Vec<TaskId> {
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Helper to check if task is urgent (due within 2 days or overdue)
         let is_urgent = |task: &Task| {
@@ -93,7 +94,7 @@ impl Model {
         }
 
         // Get the start of the current week (Monday)
-        let today = Utc::now().date_naive();
+        let today = today();
         let week_start =
             today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
         let target_date = week_start + chrono::Duration::days(day as i64);
@@ -355,7 +356,7 @@ mod tests {
         // Urgent priority + due today → "Do First" (0)
         let mut task = Task::new("Urgent and important");
         task.priority = Priority::Urgent;
-        task.due_date = Some(chrono::Utc::now().date_naive());
+        task.due_date = Some(today());
         let id = task.id;
         model.tasks.insert(id, task);
         model.refresh_visible_tasks();
@@ -369,7 +370,7 @@ mod tests {
         // Low priority + due today → "Delegate" (2)
         let mut task = Task::new("Urgent but not important");
         task.priority = Priority::Low;
-        task.due_date = Some(chrono::Utc::now().date_naive());
+        task.due_date = Some(today());
         let id = task.id;
         model.tasks.insert(id, task);
         model.refresh_visible_tasks();
@@ -411,7 +412,7 @@ mod tests {
     #[test]
     fn test_weekly_planner_task_on_monday() {
         let mut model = make_model();
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let week_start =
             today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
 
@@ -428,7 +429,7 @@ mod tests {
     #[test]
     fn test_weekly_planner_scheduled_date() {
         let mut model = make_model();
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let week_start =
             today - chrono::Duration::days(today.weekday().num_days_from_monday().into());
         let wednesday = week_start + chrono::Duration::days(2);

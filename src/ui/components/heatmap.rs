@@ -3,7 +3,7 @@
 //! Displays task completion activity over time as a color-coded grid,
 //! similar to GitHub's contribution graph.
 
-use chrono::{Datelike, Duration, Local, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -14,6 +14,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::{today, LocalDate};
 
 /// Number of weeks to display in the heatmap
 const WEEKS_TO_DISPLAY: usize = 52;
@@ -34,13 +35,13 @@ impl<'a> Heatmap<'a> {
     /// Calculate completion counts per day for the past year
     fn get_completion_data(&self) -> std::collections::HashMap<NaiveDate, usize> {
         let mut counts = std::collections::HashMap::new();
-        let today = Local::now().date_naive();
+        let today = today();
         let start_date = today - Duration::days(365);
 
         for task in self.model.tasks.values() {
             if task.status.is_complete() {
                 if let Some(completed_at) = task.completed_at {
-                    let date = completed_at.date_naive();
+                    let date = completed_at.local_date();
                     if date >= start_date && date <= today {
                         *counts.entry(date).or_insert(0) += 1;
                     }
@@ -64,7 +65,7 @@ impl<'a> Heatmap<'a> {
 
     /// Render the month labels
     fn render_month_labels(&self, area: Rect, buf: &mut Buffer) {
-        let today = Local::now().date_naive();
+        let today = today();
         let mut months = Vec::new();
         let mut current_month = None;
 
@@ -120,7 +121,7 @@ impl<'a> Heatmap<'a> {
 
     /// Render the heatmap grid
     fn render_grid(&self, area: Rect, buf: &mut Buffer) {
-        let today = Local::now().date_naive();
+        let today = today();
         let data = self.get_completion_data();
 
         // Each cell is 1 character wide, 1 row tall
@@ -172,7 +173,7 @@ impl<'a> Heatmap<'a> {
     fn render_stats(&self, area: Rect, buf: &mut Buffer) {
         let data = self.get_completion_data();
         let total: usize = data.values().sum();
-        let today = Local::now().date_naive();
+        let today = today();
 
         // Calculate current streak
         let mut streak = 0;

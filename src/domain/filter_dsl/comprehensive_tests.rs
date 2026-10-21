@@ -16,6 +16,7 @@ use super::error::ParseError;
 use super::eval::{evaluate, evaluate_with_cache, EvalContext, TaskLowerCache};
 use super::lexer::{tokenize, Token};
 use super::parser::parse;
+use crate::domain::today;
 
 // ============================================================================
 // LEXER EDGE CASE TESTS
@@ -2213,7 +2214,7 @@ mod advanced_integration_tests {
     fn test_combined_has_and_value_filters() {
         let expr = parse("has:due AND due:overdue").unwrap();
 
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let past_date = today - Duration::days(5);
         let projects = HashMap::new();
         let ctx = EvalContext::with_date(&projects, today);
@@ -2251,7 +2252,7 @@ mod advanced_integration_tests {
         )
         .unwrap();
 
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let projects = HashMap::new();
         let ctx = EvalContext::with_date(&projects, today);
 

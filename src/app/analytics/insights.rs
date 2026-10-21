@@ -14,6 +14,7 @@ use crate::domain::analytics::ProductivityInsights;
 use crate::domain::TaskStatus;
 
 use super::{AnalyticsEngine, WEEKDAYS};
+use crate::domain::{today, LocalDate};
 
 impl AnalyticsEngine<'_> {
     /// Compute productivity insights.
@@ -38,7 +39,7 @@ impl AnalyticsEngine<'_> {
                 insights.total_completed += 1;
 
                 if let Some(completed_at) = task.completed_at {
-                    let date = completed_at.date_naive();
+                    let date = completed_at.local_date();
                     completion_dates.push(date);
 
                     let dow = date.weekday().num_days_from_monday() as usize;
@@ -88,7 +89,7 @@ impl AnalyticsEngine<'_> {
             let mut sorted_unique: Vec<NaiveDate> = unique_dates;
             sorted_unique.sort();
 
-            let today = chrono::Local::now().date_naive();
+            let today = today();
             let mut current_streak = 0u32;
             let mut longest_streak = 0u32;
             let mut streak = 0u32;

@@ -102,6 +102,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::TaskId;
+use crate::domain::today;
 
 /// Configuration for Pomodoro timer durations.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -338,7 +339,7 @@ impl PomodoroStats {
         self.total_work_mins += work_duration_mins;
         self.total_cycles += 1;
 
-        let today = Utc::now().date_naive();
+        let today = today();
         *self.cycles_by_date.entry(today).or_insert(0) += 1;
 
         self.update_streak();
@@ -346,7 +347,7 @@ impl PomodoroStats {
 
     /// Updates the longest streak calculation.
     fn update_streak(&mut self) {
-        let today = Utc::now().date_naive();
+        let today = today();
         let mut current_streak = 0;
         let mut date = today;
 
@@ -364,14 +365,14 @@ impl PomodoroStats {
     /// Returns the number of cycles completed today.
     #[must_use]
     pub fn cycles_today(&self) -> u32 {
-        let today = Utc::now().date_naive();
+        let today = today();
         self.cycles_by_date.get(&today).copied().unwrap_or(0)
     }
 
     /// Returns the current streak (consecutive days with cycles).
     #[must_use]
     pub fn current_streak(&self) -> u32 {
-        let today = Utc::now().date_naive();
+        let today = today();
         let mut streak = 0;
         let mut date = today;
 

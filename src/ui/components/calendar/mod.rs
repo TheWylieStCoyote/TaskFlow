@@ -16,7 +16,7 @@ mod tasks;
 #[cfg(test)]
 mod tests;
 
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -25,6 +25,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 
 /// Calendar view widget showing a month grid with tasks
 pub struct Calendar<'a> {
@@ -45,7 +46,7 @@ impl<'a> Calendar<'a> {
             self.model.calendar_state.month,
             1,
         )
-        .unwrap_or_else(|| Utc::now().date_naive())
+        .unwrap_or_else(today)
     }
 
     /// Get the number of days in the current month
@@ -91,7 +92,7 @@ impl<'a> Calendar<'a> {
 impl Widget for Calendar<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Split into calendar grid and task list
         let chunks = Layout::default()

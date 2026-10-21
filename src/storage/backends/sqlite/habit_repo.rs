@@ -10,6 +10,7 @@ use crate::storage::{HabitRepository, StorageError, StorageResult};
 
 use super::rows::habit_from_row;
 use super::SqliteBackend;
+use crate::domain::today;
 
 impl SqliteBackend {
     /// Load check-ins for a habit from the database.
@@ -29,8 +30,8 @@ impl SqliteBackend {
                 let note: Option<String> = row.get(2)?;
                 let checked_at_str: String = row.get(3)?;
 
-                let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
-                    .unwrap_or_else(|_| Utc::now().date_naive());
+                let date =
+                    NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").unwrap_or_else(|_| today());
                 let checked_at = chrono::DateTime::parse_from_rfc3339(&checked_at_str)
                     .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc));
 

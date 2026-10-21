@@ -16,14 +16,15 @@
 //!
 //! ```rust,ignore
 //! use taskflow::app::{Model, analytics::AnalyticsEngine};
-//! use chrono::{Duration, Utc};
+//! use taskflow::domain::today;
+//! use chrono::Duration;
 //!
 //! let model = Model::new().with_sample_data();
 //! let engine = AnalyticsEngine::new(&model);
 //!
 //! // Compute analytics for the last 90 days
-//! let start = Utc::now().date_naive() - Duration::days(90);
-//! let end = Utc::now().date_naive();
+//! let start = today() - Duration::days(90);
+//! let end = today();
 //! let analytics = engine.compute_estimation_analytics(start, end);
 //!
 //! // Get a suggestion for a new task
@@ -41,6 +42,7 @@ use crate::domain::analytics::{EstimationAnalytics, TimeSeriesPoint};
 use crate::domain::{ProjectId, Task};
 
 use super::AnalyticsEngine;
+use crate::domain::{today, LocalDate};
 
 /// Information about a suggested estimate based on historical data.
 ///
@@ -101,7 +103,7 @@ impl AnalyticsEngine<'_> {
                     && t.actual_minutes > 0
                     && t.status.is_complete()
                     && t.completed_at
-                        .is_some_and(|c| c.date_naive() >= start && c.date_naive() <= end)
+                        .is_some_and(|c| c.local_date() >= start && c.local_date() <= end)
             })
             .collect();
 
@@ -146,7 +148,7 @@ impl AnalyticsEngine<'_> {
 
             // Group by completion date
             if let Some(completed_at) = task.completed_at {
-                let date = completed_at.date_naive();
+                let date = completed_at.local_date();
                 by_date.entry(date).or_default().push(accuracy);
             }
 
@@ -219,10 +221,8 @@ impl AnalyticsEngine<'_> {
         tags: &[String],
     ) -> Option<EstimationSuggestion> {
         // Need at least some historical data
-        let analytics = self.compute_estimation_analytics(
-            chrono::Local::now().date_naive() - chrono::Duration::days(90),
-            chrono::Local::now().date_naive(),
-        );
+        let analytics =
+            self.compute_estimation_analytics(today() - chrono::Duration::days(90), today());
 
         if analytics.tasks_with_estimates < 3 {
             return None; // Not enough data
@@ -370,10 +370,7 @@ mod tests {
     fn test_estimation_analytics_empty() {
         let model = Model::new();
         let engine = AnalyticsEngine::new(&model);
-        let analytics = engine.compute_estimation_analytics(
-            Utc::now().date_naive() - Duration::days(30),
-            Utc::now().date_naive(),
-        );
+        let analytics = engine.compute_estimation_analytics(today() - Duration::days(30), today());
 
         assert_eq!(analytics.tasks_with_estimates, 0);
         assert!((analytics.suggested_multiplier - 0.0).abs() < f64::EPSILON);
@@ -391,10 +388,7 @@ mod tests {
         }
 
         let engine = AnalyticsEngine::new(&model);
-        let analytics = engine.compute_estimation_analytics(
-            Utc::now().date_naive() - Duration::days(30),
-            Utc::now().date_naive(),
-        );
+        let analytics = engine.compute_estimation_analytics(today() - Duration::days(30), today());
 
         assert_eq!(analytics.tasks_with_estimates, 5);
         assert_eq!(analytics.on_target_count, 5);
@@ -415,10 +409,7 @@ mod tests {
         }
 
         let engine = AnalyticsEngine::new(&model);
-        let analytics = engine.compute_estimation_analytics(
-            Utc::now().date_naive() - Duration::days(30),
-            Utc::now().date_naive(),
-        );
+        let analytics = engine.compute_estimation_analytics(today() - Duration::days(30), today());
 
         assert_eq!(analytics.tasks_with_estimates, 5);
         assert_eq!(analytics.over_count, 5);
@@ -455,10 +446,7 @@ mod tests {
         }
 
         let engine = AnalyticsEngine::new(&model);
-        let analytics = engine.compute_estimation_analytics(
-            Utc::now().date_naive() - Duration::days(30),
-            Utc::now().date_naive(),
-        );
+        let analytics = engine.compute_estimation_analytics(today() - Duration::days(30), today());
 
         assert_eq!(analytics.tasks_with_estimates, 6);
         // Should have 2 entries in by_project

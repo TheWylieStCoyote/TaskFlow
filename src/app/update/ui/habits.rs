@@ -10,6 +10,7 @@
 use crate::app::{Model, UiMessage};
 
 use super::input::start_input;
+use crate::domain::today;
 use crate::ui::InputTarget;
 
 /// Handle habit-related UI messages.
@@ -36,7 +37,7 @@ pub fn handle_ui_habits(model: &mut Model, msg: UiMessage) {
         }
         UiMessage::HabitToggleToday => {
             if let Some(&habit_id) = model.visible_habits.get(model.habit_view.selected) {
-                let today = chrono::Utc::now().date_naive();
+                let today = today();
                 if let Some(habit) = model.habits.get_mut(&habit_id) {
                     let currently_completed = habit.is_completed_on(today);
                     habit.check_in(today, !currently_completed, None);

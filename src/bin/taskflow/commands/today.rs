@@ -1,16 +1,15 @@
 //! Today command - list today's tasks.
 
-use chrono::Utc;
-
 use taskflow::domain::{Priority, TaskStatus};
 
 use crate::cli::Cli;
 use crate::load_model_for_cli;
+use taskflow::domain::today;
 
 /// List tasks due today (shortcut for `list --view today`)
 pub fn today_tasks(cli: &Cli, show_completed: bool) -> anyhow::Result<()> {
     let model = load_model_for_cli(cli)?;
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Filter tasks due today
     let mut tasks: Vec<_> = model

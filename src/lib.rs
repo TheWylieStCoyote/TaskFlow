@@ -40,14 +40,13 @@
 //! ### Creating Tasks
 //!
 //! ```
-//! use taskflow::domain::{Task, Priority, TaskStatus};
-//! use chrono::Utc;
+//! use taskflow::domain::{today, Task, Priority, TaskStatus};
 //!
 //! // Create a simple task
 //! let task = Task::new("Write documentation");
 //!
 //! // Create a task with priority and due date
-//! let today = Utc::now().date_naive();
+//! let today = today();
 //! let urgent_task = Task::new("Fix critical bug")
 //!     .with_priority(Priority::Urgent)
 //!     .with_due_date(today)

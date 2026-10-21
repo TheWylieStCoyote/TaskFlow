@@ -7,7 +7,6 @@
 //! - Not Urgent + Not Important: Eliminate
 
 use crate::domain::text::truncate_chars;
-use chrono::Utc;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -21,6 +20,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::{Priority, Task};
 
 /// Eisenhower matrix widget showing tasks in urgency/importance quadrants.
@@ -39,7 +39,7 @@ impl<'a> Eisenhower<'a> {
     /// Urgent = due within 2 days or overdue.
     fn is_urgent(task: &Task) -> bool {
         task.due_date.is_some_and(|due| {
-            let today = Utc::now().date_naive();
+            let today = today();
             let days_until = (due - today).num_days();
             days_until <= 2
         })
@@ -373,17 +373,17 @@ mod tests {
         assert!(!Eisenhower::is_urgent(&task));
 
         // Due in 5 days = not urgent
-        let future = Utc::now().date_naive() + chrono::Duration::days(5);
+        let future = today() + chrono::Duration::days(5);
         task.due_date = Some(future);
         assert!(!Eisenhower::is_urgent(&task));
 
         // Due tomorrow = urgent
-        let tomorrow = Utc::now().date_naive() + chrono::Duration::days(1);
+        let tomorrow = today() + chrono::Duration::days(1);
         task.due_date = Some(tomorrow);
         assert!(Eisenhower::is_urgent(&task));
 
         // Overdue = urgent
-        let yesterday = Utc::now().date_naive() - chrono::Duration::days(1);
+        let yesterday = today() - chrono::Duration::days(1);
         task.due_date = Some(yesterday);
         assert!(Eisenhower::is_urgent(&task));
     }

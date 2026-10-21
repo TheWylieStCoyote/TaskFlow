@@ -1,15 +1,16 @@
 //! Query methods for evening review data.
 
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate};
 
 use crate::domain::{Task, TimeEntry};
 
 use super::EveningReview;
+use crate::domain::LocalDate;
 
 impl EveningReview<'_> {
     /// Get today's date.
     pub(crate) fn today() -> NaiveDate {
-        Utc::now().date_naive()
+        crate::domain::today()
     }
 
     /// Get tomorrow's date.
@@ -25,7 +26,7 @@ impl EveningReview<'_> {
         self.model
             .tasks
             .values()
-            .filter(|t| t.completed_at.is_some_and(|c| c.date_naive() == today))
+            .filter(|t| t.completed_at.is_some_and(|c| c.local_date() == today))
             .collect()
     }
 
@@ -98,7 +99,7 @@ impl EveningReview<'_> {
         self.model
             .time_entries
             .values()
-            .filter(|e| e.started_at.date_naive() == today)
+            .filter(|e| e.started_at.local_date() == today)
             .collect()
     }
 
@@ -119,7 +120,7 @@ impl EveningReview<'_> {
         self.model
             .time_entries
             .values()
-            .any(|e| e.started_at.date_naive() == today)
+            .any(|e| e.started_at.local_date() == today)
     }
 
     /// Get the currently selected task ID for the incomplete tasks phase.

@@ -11,6 +11,7 @@ use ratatui::{
 use crate::ui::components::charts::{BarChart, StatBox};
 
 use super::super::ReportsView;
+use crate::domain::today;
 
 impl ReportsView<'_> {
     pub(crate) fn render_focus(&self, area: Rect, buf: &mut Buffer) {
@@ -106,7 +107,7 @@ impl ReportsView<'_> {
         streak_info.render(chunks[1], buf);
 
         // Weekly activity chart (last 7 days)
-        let today = chrono::Utc::now().date_naive();
+        let today = today();
         let weekly_data: Vec<(String, u32)> = (0..7)
             .rev()
             .map(|i| {

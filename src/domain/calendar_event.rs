@@ -68,6 +68,7 @@
 //! assert_eq!(event.status, CalendarEventStatus::Confirmed);
 //! ```
 
+use crate::domain::LocalDate;
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -239,7 +240,7 @@ impl CalendarEvent {
     /// Returns the date of this event.
     #[must_use]
     pub fn date(&self) -> NaiveDate {
-        self.start.date_naive()
+        self.start.local_date()
     }
 
     /// Returns the start time (if not an all-day event).
@@ -266,15 +267,15 @@ impl CalendarEvent {
     #[must_use]
     pub fn is_multi_day(&self) -> bool {
         self.end
-            .is_some_and(|end| end.date_naive() > self.start.date_naive())
+            .is_some_and(|end| end.local_date() > self.start.local_date())
     }
 
     /// Returns true if this event occurs on the given date.
     #[must_use]
     pub fn occurs_on(&self, date: NaiveDate) -> bool {
-        let start_date = self.start.date_naive();
+        let start_date = self.start.local_date();
         if let Some(end) = self.end {
-            let end_date = end.date_naive();
+            let end_date = end.local_date();
             date >= start_date && date <= end_date
         } else {
             date == start_date

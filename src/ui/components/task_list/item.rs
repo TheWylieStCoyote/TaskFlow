@@ -1,5 +1,6 @@
 //! Task and project header list item rendering.
 
+use crate::domain::text::truncate_chars;
 use ratatui::{
     style::{Modifier, Style},
     text::{Line, Span},
@@ -280,11 +281,7 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
     // Git branch indicator - shows linked branch name
     let git_span = if let Some(branch) = ctx.git_branch {
         // Truncate long branch names for display
-        let display_branch = if branch.len() > 20 {
-            format!("{}...", &branch[..17])
-        } else {
-            branch.to_string()
-        };
+        let display_branch = truncate_chars(branch, 20, "...");
         Span::styled(
             format!(" ⎇ {display_branch}"),
             Style::default().fg(theme.colors.accent.to_color()),

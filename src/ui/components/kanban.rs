@@ -2,6 +2,7 @@
 //!
 //! Displays tasks in columns organized by status.
 
+use crate::domain::text::truncate_chars;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -180,11 +181,7 @@ impl Kanban<'_> {
 
                 // Truncate title if needed
                 let max_len = inner.width.saturating_sub(8) as usize; // Extra space for icons
-                let title = if task.title.len() > max_len {
-                    format!("{}…", &task.title[..max_len.saturating_sub(1)])
-                } else {
-                    task.title.clone()
-                };
+                let title = truncate_chars(&task.title, max_len, "…");
 
                 // Dim blocked tasks
                 let title_color = if is_blocked {

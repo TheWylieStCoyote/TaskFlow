@@ -7,6 +7,7 @@ mod render;
 #[cfg(test)]
 mod tests;
 
+use crate::domain::text::truncate_chars;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -94,9 +95,5 @@ impl Widget for WorkLogEditor<'_> {
 
 /// Truncate a string to a maximum length, adding ellipsis if needed.
 pub(crate) fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len - 3])
-    }
+    truncate_chars(s, max_len, "...")
 }

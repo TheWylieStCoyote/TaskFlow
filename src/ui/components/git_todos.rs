@@ -3,6 +3,7 @@
 //! Displays tasks extracted from git repositories, grouped by source file.
 //! Shows file headers with line numbers for easy navigation.
 
+use crate::domain::text::{truncate_chars, truncate_chars_start};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -82,11 +83,7 @@ impl Widget for GitTodos<'_> {
 
         for (file, tasks) in &grouped {
             // File header
-            let file_display = if file.len() > 60 {
-                format!("...{}", &file[file.len() - 57..])
-            } else {
-                file.clone()
-            };
+            let file_display = truncate_chars_start(file, 60, "...");
 
             items.push(ListItem::new(Line::from(vec![Span::styled(
                 format!("📁 {file_display}"),
@@ -108,11 +105,7 @@ impl Widget for GitTodos<'_> {
                     let is_completed = task.completed_at.is_some();
 
                     // Truncate title if needed
-                    let title = if task.title.len() > 50 {
-                        format!("{}...", &task.title[..47])
-                    } else {
-                        task.title.clone()
-                    };
+                    let title = truncate_chars(&task.title, 50, "...");
 
                     // Style based on completion and selection
                     let (title_style, line_style) = if is_completed {

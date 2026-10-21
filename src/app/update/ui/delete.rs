@@ -1,6 +1,7 @@
 //! Delete confirmation handlers.
 
 use crate::app::{Model, UndoAction};
+use crate::domain::text::truncate_chars;
 
 /// Show delete confirmation if task has no subtasks.
 pub fn show_delete_confirm(model: &mut Model) {
@@ -52,11 +53,7 @@ pub fn confirm_delete(model: &mut Model) {
             });
 
             // Truncate long titles for display
-            let display_title = if task_title.len() > 40 {
-                format!("{}...", &task_title[..37])
-            } else {
-                task_title
-            };
+            let display_title = truncate_chars(&task_title, 40, "...");
             model.alerts.status_message = Some(format!("Deleted: {display_title}"));
         }
         model.refresh_visible_tasks();

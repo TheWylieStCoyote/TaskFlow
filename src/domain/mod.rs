@@ -130,6 +130,7 @@ mod pomodoro;
 mod project;
 mod tag;
 mod task;
+pub mod text;
 mod time_entry;
 mod work_log;
 

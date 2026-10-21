@@ -1,5 +1,6 @@
 //! Weekly planner rendering methods.
 
+use crate::domain::text::truncate_chars;
 use chrono::Datelike;
 use ratatui::{
     buffer::Buffer,
@@ -108,11 +109,7 @@ impl WeeklyPlanner<'_> {
 
                 // Truncate title to fit
                 let max_len = inner.width.saturating_sub(4) as usize;
-                let title = if task.title.len() > max_len {
-                    format!("{}…", &task.title[..max_len.saturating_sub(1)])
-                } else {
-                    task.title.clone()
-                };
+                let title = truncate_chars(&task.title, max_len, "…");
 
                 // Indicator for scheduled vs due
                 let type_indicator =

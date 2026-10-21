@@ -2,6 +2,7 @@
 //!
 //! Displays tasks and calendar events for the selected day.
 
+use crate::domain::text::truncate_chars;
 use chrono::{Datelike, NaiveDate};
 use ratatui::{
     buffer::Buffer,
@@ -126,11 +127,7 @@ impl Calendar<'_> {
 
                 // Truncate title to fit
                 let max_title_len = inner.width.saturating_sub(8) as usize;
-                let title_display = if task.title.len() > max_title_len {
-                    format!("{}…", &task.title[..max_title_len.saturating_sub(1)])
-                } else {
-                    task.title.clone()
-                };
+                let title_display = truncate_chars(&task.title, max_title_len, "…");
 
                 ListItem::new(Line::from(vec![
                     Span::styled(format!("{priority_symbol} "), priority_style),
@@ -154,11 +151,7 @@ impl Calendar<'_> {
         for event in events.iter().take(remaining_slots) {
             // Truncate title to fit
             let max_title_len = inner.width.saturating_sub(12) as usize;
-            let title_display = if event.title.len() > max_title_len {
-                format!("{}…", &event.title[..max_title_len.saturating_sub(1)])
-            } else {
-                event.title.clone()
-            };
+            let title_display = truncate_chars(&event.title, max_title_len, "…");
 
             // Format time range
             let time_range = event.formatted_time_range();

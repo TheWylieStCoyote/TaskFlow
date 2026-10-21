@@ -6,6 +6,7 @@
 //! - Urgent + Not Important: Delegate
 //! - Not Urgent + Not Important: Eliminate
 
+use crate::domain::text::truncate_chars;
 use chrono::Utc;
 use ratatui::{
     buffer::Buffer,
@@ -275,11 +276,7 @@ impl Eisenhower<'_> {
 
                 // Truncate title if needed
                 let max_len = tasks_area.width.saturating_sub(6) as usize;
-                let title = if task.title.len() > max_len {
-                    format!("{}…", &task.title[..max_len.saturating_sub(1)])
-                } else {
-                    task.title.clone()
-                };
+                let title = truncate_chars(&task.title, max_len, "…");
 
                 // Dim blocked tasks
                 let title_color = if is_blocked {

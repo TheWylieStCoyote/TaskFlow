@@ -2,6 +2,12 @@
 //!
 //! This module provides a trait for multi-line text editing with common
 //! operations like cursor movement, character insertion, and line manipulation.
+//!
+//! The cursor column is a *character* index, not a byte index. All buffer
+//! mutations convert it to a byte offset first so multi-byte characters
+//! (accents, CJK, emoji) never cause a slice panic.
+
+use crate::domain::text::{byte_offset, char_len};
 
 /// Trait for multi-line text editors.
 ///
@@ -37,9 +43,11 @@ pub trait MultilineEditor {
         let line_idx = self
             .cursor_line()
             .min(self.buffer().len().saturating_sub(1));
-        let col = self.cursor_col().min(self.buffer()[line_idx].len());
+        let line = &self.buffer()[line_idx];
+        let col = self.cursor_col().min(char_len(line));
+        let byte = byte_offset(line, col);
 
-        self.buffer_mut()[line_idx].insert(col, c);
+        self.buffer_mut()[line_idx].insert(byte, c);
         self.set_cursor(line_idx, col + 1);
     }
 
@@ -51,15 +59,17 @@ pub trait MultilineEditor {
         if line_idx < buffer_len {
             if self.cursor_col() > 0 {
                 // Delete character before cursor
-                let col = self.cursor_col().min(self.buffer()[line_idx].len());
+                let line = &self.buffer()[line_idx];
+                let col = self.cursor_col().min(char_len(line));
                 if col > 0 {
-                    self.buffer_mut()[line_idx].remove(col - 1);
+                    let byte = byte_offset(line, col - 1);
+                    self.buffer_mut()[line_idx].remove(byte);
                     self.set_cursor(line_idx, col - 1);
                 }
             } else if line_idx > 0 {
                 // At beginning of line - join with previous line
                 let current_line = self.buffer_mut().remove(line_idx);
-                let prev_line_len = self.buffer()[line_idx - 1].len();
+                let prev_line_len = char_len(&self.buffer()[line_idx - 1]);
                 self.buffer_mut()[line_idx - 1].push_str(&current_line);
                 self.set_cursor(line_idx - 1, prev_line_len);
             }
@@ -73,11 +83,12 @@ pub trait MultilineEditor {
 
         if line_idx < buffer_len {
             let col = self.cursor_col();
-            let line_len = self.buffer()[line_idx].len();
+            let line_len = char_len(&self.buffer()[line_idx]);
 
             if col < line_len {
                 // Delete character at cursor
-                self.buffer_mut()[line_idx].remove(col);
+                let byte = byte_offset(&self.buffer()[line_idx], col);
+                self.buffer_mut()[line_idx].remove(byte);
             } else if line_idx + 1 < buffer_len {
                 // At end of line - join with next line
                 let next_line = self.buffer_mut().remove(line_idx + 1);
@@ -93,7 +104,7 @@ pub trait MultilineEditor {
         } else if self.cursor_line() > 0 {
             // Move to end of previous line
             let prev_line = self.cursor_line() - 1;
-            let prev_line_len = self.buffer()[prev_line].len();
+            let prev_line_len = char_len(&self.buffer()[prev_line]);
             self.set_cursor(prev_line, prev_line_len);
         }
     }
@@ -104,7 +115,7 @@ pub trait MultilineEditor {
         let buffer_len = self.buffer().len();
 
         if line_idx < buffer_len {
-            let line_len = self.buffer()[line_idx].len();
+            let line_len = char_len(&self.buffer()[line_idx]);
             if self.cursor_col() < line_len {
                 self.set_cursor(line_idx, self.cursor_col() + 1);
             } else if line_idx + 1 < buffer_len {
@@ -118,7 +129,7 @@ pub trait MultilineEditor {
     fn cursor_up(&mut self) {
         if self.cursor_line() > 0 {
             let new_line = self.cursor_line() - 1;
-            let new_line_len = self.buffer()[new_line].len();
+            let new_line_len = char_len(&self.buffer()[new_line]);
             let new_col = self.cursor_col().min(new_line_len);
             self.set_cursor(new_line, new_col);
         }
@@ -129,7 +140,7 @@ pub trait MultilineEditor {
         let buffer_len = self.buffer().len();
         if self.cursor_line() + 1 < buffer_len {
             let new_line = self.cursor_line() + 1;
-            let new_line_len = self.buffer()[new_line].len();
+            let new_line_len = char_len(&self.buffer()[new_line]);
             let new_col = self.cursor_col().min(new_line_len);
             self.set_cursor(new_line, new_col);
         }
@@ -144,7 +155,7 @@ pub trait MultilineEditor {
     fn cursor_end(&mut self) {
         let line_idx = self.cursor_line();
         if line_idx < self.buffer().len() {
-            let line_len = self.buffer()[line_idx].len();
+            let line_len = char_len(&self.buffer()[line_idx]);
             self.set_cursor(line_idx, line_len);
         }
     }
@@ -153,8 +164,10 @@ pub trait MultilineEditor {
     fn newline(&mut self) {
         let line_idx = self.cursor_line();
         if line_idx < self.buffer().len() {
-            let col = self.cursor_col().min(self.buffer()[line_idx].len());
-            let remainder = self.buffer_mut()[line_idx].split_off(col);
+            let line = &self.buffer()[line_idx];
+            let col = self.cursor_col().min(char_len(line));
+            let byte = byte_offset(line, col);
+            let remainder = self.buffer_mut()[line_idx].split_off(byte);
             self.buffer_mut().insert(line_idx + 1, remainder);
             self.set_cursor(line_idx + 1, 0);
         }
@@ -457,5 +470,56 @@ mod tests {
         editor.cursor_down();
         assert_eq!(editor.cursor_line(), 1);
         assert_eq!(editor.cursor_col(), 2); // Clamped to shorter line
+    }
+
+    #[test]
+    fn multibyte_insert_and_backspace_do_not_panic() {
+        let mut ed = TestEditor::new();
+        for c in "héllo".chars() {
+            ed.insert_char(c);
+        }
+        assert_eq!(ed.content(), "héllo");
+        assert_eq!(ed.cursor_col(), 5);
+        ed.insert_char('!');
+        assert_eq!(ed.content(), "héllo!");
+        ed.backspace();
+        ed.backspace();
+        assert_eq!(ed.content(), "héll");
+        assert_eq!(ed.cursor_col(), 4);
+    }
+
+    #[test]
+    fn multibyte_insert_in_middle_uses_char_index() {
+        let mut ed = TestEditor::new();
+        ed.set_content("日本語");
+        ed.set_cursor(0, 1);
+        ed.insert_char('X');
+        assert_eq!(ed.content(), "日X本語");
+        assert_eq!(ed.cursor_col(), 2);
+        ed.delete_char(); // deletes 本
+        assert_eq!(ed.content(), "日X語");
+    }
+
+    #[test]
+    fn multibyte_newline_splits_at_char_boundary() {
+        let mut ed = TestEditor::new();
+        ed.set_content("ab🎉cd");
+        ed.set_cursor(0, 3); // after the emoji
+        ed.newline();
+        assert_eq!(ed.buffer(), &["ab🎉".to_string(), "cd".to_string()]);
+        assert_eq!((ed.cursor_line(), ed.cursor_col()), (1, 0));
+        ed.backspace(); // join lines again
+        assert_eq!(ed.content(), "ab🎉cd");
+        assert_eq!(ed.cursor_col(), 3);
+    }
+
+    #[test]
+    fn multibyte_cursor_end_is_char_count() {
+        let mut ed = TestEditor::new();
+        ed.set_content("ünïcödé");
+        ed.cursor_end();
+        assert_eq!(ed.cursor_col(), 7);
+        ed.cursor_left();
+        assert_eq!(ed.cursor_col(), 6);
     }
 }

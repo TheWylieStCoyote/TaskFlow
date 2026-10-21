@@ -95,6 +95,7 @@
 //! - **Cons**: Slower for large datasets
 //! - **Use when**: You want tasks in version control
 
+pub mod atomic_write;
 pub mod backends;
 mod error;
 pub mod export;
@@ -104,6 +105,7 @@ mod repository;
 #[cfg(test)]
 mod export_import_comprehensive_tests;
 
+pub use atomic_write::atomic_write;
 pub use error::*;
 pub use export::{
     export_chains_to_string, export_report_to_html, export_report_to_html_string,

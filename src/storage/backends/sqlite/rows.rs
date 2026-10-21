@@ -98,7 +98,13 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         scheduled_date: parse_optional_date(scheduled_date),
         completed_at: parse_optional_datetime(completed_at),
         recurrence: recurrence_json.and_then(|s| serde_json::from_str(&s).ok()),
-        recurrence_options: crate::domain::RecurrenceOptions::default(),
+        recurrence_options: row
+            .get::<_, Option<String>>("recurrence_options")
+            .ok()
+            .flatten()
+            .map_or_else(Default::default, |s| {
+                parse_json(&s, "task.recurrence_options")
+            }),
         estimated_minutes: row.get("estimated_minutes")?,
         actual_minutes: row.get::<_, i32>("actual_minutes")? as u32,
         sort_order: row.get("sort_order").ok().flatten(),

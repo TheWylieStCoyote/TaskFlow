@@ -29,14 +29,16 @@ impl TaskRepository for SqliteBackend {
         )?;
         let custom_fields_json = json_serialize(&task.custom_fields)?;
         let recurrence_json = task.recurrence.as_ref().map(json_serialize).transpose()?;
+        let recurrence_options_json = json_serialize(&task.recurrence_options)?;
 
         conn.execute(
             r"INSERT INTO tasks (
                 id, title, description, status, priority, project_id, parent_task_id,
                 tags, dependencies, created_at, updated_at, due_date, scheduled_date,
                 completed_at, recurrence, estimated_minutes, actual_minutes, sort_order,
-                next_task_id, custom_fields, scheduled_start_time, scheduled_end_time
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                next_task_id, custom_fields, scheduled_start_time, scheduled_end_time,
+                snooze_until, recurrence_options
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
             params![
                 task.id.0.to_string(),
                 task.title,
@@ -60,6 +62,8 @@ impl TaskRepository for SqliteBackend {
                 custom_fields_json,
                 task.scheduled_start_time.map(|t| t.format("%H:%M:%S").to_string()),
                 task.scheduled_end_time.map(|t| t.format("%H:%M:%S").to_string()),
+                task.snooze_until.map(|d| d.format("%Y-%m-%d").to_string()),
+                recurrence_options_json,
             ],
         )?;
         // Sync tags to junction table
@@ -90,6 +94,7 @@ impl TaskRepository for SqliteBackend {
         )?;
         let custom_fields_json = json_serialize(&task.custom_fields)?;
         let recurrence_json = task.recurrence.as_ref().map(json_serialize).transpose()?;
+        let recurrence_options_json = json_serialize(&task.recurrence_options)?;
 
         let rows = conn.execute(
             r"UPDATE tasks SET
@@ -98,7 +103,8 @@ impl TaskRepository for SqliteBackend {
                 updated_at = ?10, due_date = ?11, scheduled_date = ?12, completed_at = ?13,
                 recurrence = ?14, estimated_minutes = ?15, actual_minutes = ?16, sort_order = ?17,
                 next_task_id = ?18, custom_fields = ?19,
-                scheduled_start_time = ?20, scheduled_end_time = ?21
+                scheduled_start_time = ?20, scheduled_end_time = ?21,
+                snooze_until = ?22, recurrence_options = ?23
             WHERE id = ?1",
             params![
                 task.id.0.to_string(),
@@ -125,6 +131,8 @@ impl TaskRepository for SqliteBackend {
                     .map(|t| t.format("%H:%M:%S").to_string()),
                 task.scheduled_end_time
                     .map(|t| t.format("%H:%M:%S").to_string()),
+                task.snooze_until.map(|d| d.format("%Y-%m-%d").to_string()),
+                recurrence_options_json,
             ],
         )?;
         if rows == 0 {

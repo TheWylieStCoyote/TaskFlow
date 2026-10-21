@@ -162,6 +162,7 @@ Each task shows:
 | Key | Action |
 |-----|--------|
 | `a` | Add new task |
+| `Alt+a` | Quick capture (quick-add syntax with inline hints) |
 | `A` | Add subtask under selected task |
 | `e` | Edit task title |
 | `i` | View task details |
@@ -176,6 +177,7 @@ Each task shows:
 | `m` | Move task to project |
 | `t` | Toggle time tracking |
 | `L` | Open time log editor |
+| `Alt+t` | Edit time estimate |
 
 #### Project Actions
 
@@ -194,7 +196,7 @@ Each task shows:
 | `#` | Filter by tag (comma-separated) |
 | `Ctrl+t` | Clear tag filter |
 | `s` | Cycle sort field (Created → Priority → Due Date → Title → Status) |
-| `S` | Toggle sort order (Ascending/Descending) |
+| `Ctrl+o` | Toggle sort order (Ascending/Descending) |
 
 #### View Controls
 
@@ -309,6 +311,7 @@ After selecting a template, the task is created and you can edit the title.
 | `u` or `Ctrl+z` | Undo last action |
 | `U` or `Ctrl+r` | Redo last action |
 | `Ctrl+s` | Save |
+| `Alt+r` | Reload tasks from storage |
 | `q` or `Esc` | Quit TaskFlow |
 
 ### Task Priorities

@@ -31,6 +31,8 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
     ("Habits", "n new, Space check-in, e edit"),
     ("Network", "h/l/j/k navigate nodes"),
     ("Focus", "[/] chain nav, t timer, f exit"),
+    ("Duplicats", "D dismiss, M merge, r refresh"),
+    ("Macros", "ctrl+q N record/stop, @N play"),
 ];
 
 /// Help popup widget that displays keybindings dynamically
@@ -107,9 +109,12 @@ impl Widget for HelpPopup<'_> {
             ]));
         }
 
-        // Slice lines manually — Paragraph::scroll() does not work reliably with Wrap
-        let visible_lines: Vec<Line<'_>> =
-            help_lines.into_iter().skip(self.scroll as usize).collect();
+        // Slice lines manually — Paragraph::scroll() does not work reliably with Wrap.
+        // Clamp so the user can never scroll past the last line into a blank popup.
+        let content_height = area.height.saturating_sub(2) as usize; // minus borders
+        let max_scroll = help_lines.len().saturating_sub(content_height);
+        let scroll = (self.scroll as usize).min(max_scroll);
+        let visible_lines: Vec<Line<'_>> = help_lines.into_iter().skip(scroll).collect();
 
         let paragraph = Paragraph::new(visible_lines)
             .block(
@@ -167,8 +172,10 @@ fn format_key_part(key: &str) -> String {
 /// Calculate centered rect for popup using percentages
 #[must_use]
 pub const fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_width = r.width * percent_x / 100;
-    let popup_height = r.height * percent_y / 100;
+    // Widen before multiplying: u16 * u16 overflows for terminals wider than ~819
+    // columns at 80%.
+    let popup_width = (r.width as u32 * percent_x as u32 / 100) as u16;
+    let popup_height = (r.height as u32 * percent_y as u32 / 100) as u16;
     let popup_x = (r.width - popup_width) / 2;
     let popup_y = (r.height - popup_height) / 2;
 
@@ -178,7 +185,7 @@ pub const fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 /// Calculate centered rect with fixed height (for input dialogs)
 #[must_use]
 pub fn centered_rect_fixed_height(percent_x: u16, height: u16, r: Rect) -> Rect {
-    let popup_width = r.width * percent_x / 100;
+    let popup_width = (u32::from(r.width) * u32::from(percent_x) / 100) as u16;
     let popup_height = height.min(r.height); // Don't exceed screen height
     let popup_x = (r.width - popup_width) / 2;
     let popup_y = (r.height.saturating_sub(popup_height)) / 2;

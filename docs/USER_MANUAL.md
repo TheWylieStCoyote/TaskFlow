@@ -591,7 +591,7 @@ Link tasks in sequence for workflows:
 
 #### Create a Chain
 1. Select a task
-2. Press `Ctrl+l` to link to next task
+2. Press `Alt+l` to link to next task
 3. Select the task that should follow
 4. Press `Enter`
 
@@ -599,7 +599,7 @@ Chains visualize work sequences and can be exported as diagrams.
 
 #### Unlink from Chain
 1. Select a chained task
-2. Press `Ctrl+u` to unlink
+2. Press `Alt+u` to unlink
 
 ### Recurring Tasks
 

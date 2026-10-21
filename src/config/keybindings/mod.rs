@@ -68,6 +68,29 @@ impl Keybindings {
         self.bindings.get(key)
     }
 
+    /// Whether `key` is the first key of a multi-key chord such as `@0`.
+    ///
+    /// A chord prefix is a single non-alphanumeric character that is not bound
+    /// on its own but starts at least one longer binding (`@` for the
+    /// `@0`..`@9` macro playback keys). Named keys (`space`, `f5`, `ctrl+s`)
+    /// never qualify because they start with a letter.
+    #[must_use]
+    pub fn is_chord_prefix(&self, key: &str) -> bool {
+        let mut chars = key.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        if chars.next().is_some() || first.is_alphanumeric() {
+            return false;
+        }
+        if self.bindings.contains_key(key) {
+            return false;
+        }
+        self.bindings
+            .keys()
+            .any(|k| k.len() > key.len() && k.starts_with(key))
+    }
+
     /// Returns a sorted list of (key, action) pairs for display
     #[must_use]
     pub fn sorted_bindings(&self) -> Vec<(String, Action)> {

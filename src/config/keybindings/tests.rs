@@ -190,3 +190,112 @@ fn test_remove_binding_nonexistent() {
     let removed = kb.remove_binding("nonexistent");
     assert!(removed.is_none());
 }
+
+// ---------------------------------------------------------------------------
+// Default-table invariants
+// ---------------------------------------------------------------------------
+
+/// Named keys the input layer can produce (see `key_event_to_string` in the
+/// binary). Anything else must be a single character or a `ctrl+`/`alt+`
+/// prefixed one.
+const NAMED_KEYS: &[&str] = &[
+    "space",
+    "enter",
+    "esc",
+    "backspace",
+    "delete",
+    "up",
+    "down",
+    "left",
+    "right",
+    "home",
+    "end",
+    "pageup",
+    "pagedown",
+    "tab",
+];
+
+fn is_named_key(base: &str) -> bool {
+    NAMED_KEYS.contains(&base)
+        || (base.len() > 1 && base.starts_with('f') && base[1..].parse::<u8>().is_ok())
+}
+
+#[test]
+fn default_bindings_have_unique_keys() {
+    let mut seen = std::collections::HashMap::new();
+    for (key, action) in super::defaults::DEFAULT_BINDINGS {
+        if let Some(previous) = seen.insert(*key, action) {
+            panic!("default key {key:?} is bound to both {previous:?} and {action:?}");
+        }
+    }
+    // And the map really does contain every entry.
+    assert_eq!(Keybindings::default().bindings.len(), seen.len());
+}
+
+#[test]
+fn default_bindings_are_reachable_from_key_events() {
+    for (key, action) in super::defaults::DEFAULT_BINDINGS {
+        // "+" on its own is a key, not a separator.
+        let (mods, base): (Vec<&str>, &str) = if *key == "+" {
+            (Vec::new(), "+")
+        } else {
+            key.rsplit_once('+')
+                .map_or((Vec::new(), *key), |(m, b)| (m.split('+').collect(), b))
+        };
+
+        for m in &mods {
+            assert!(
+                matches!(*m, "ctrl" | "alt" | "shift"),
+                "{key:?} ({action:?}): unknown modifier {m:?}"
+            );
+        }
+
+        let is_single_char = base.chars().count() == 1;
+        let is_chord = mods.is_empty()
+            && base.chars().count() == 2
+            && !base.chars().next().unwrap().is_alphanumeric();
+        assert!(
+            is_single_char || is_named_key(base) || is_chord,
+            "{key:?} ({action:?}) can never be produced by a key event"
+        );
+        if mods.contains(&"shift") {
+            assert!(
+                !is_single_char,
+                "{key:?} ({action:?}): shift is never emitted for characters; use the uppercase char"
+            );
+        }
+    }
+}
+
+#[test]
+fn chord_prefix_detection() {
+    let kb = Keybindings::default();
+    assert!(kb.is_chord_prefix("@"), "@ starts the @0..@9 macro chords");
+    // Bound on its own, so not a prefix even though "ctrl+..." etc. exist.
+    assert!(!kb.is_chord_prefix("c"));
+    assert!(!kb.is_chord_prefix("s")); // "space" starts with s but s is a letter
+    assert!(!kb.is_chord_prefix("+")); // bound directly
+    assert!(!kb.is_chord_prefix("?"));
+    assert!(!kb.is_chord_prefix(""));
+    assert!(!kb.is_chord_prefix("ctrl"));
+    assert_eq!(kb.get_action("@3"), Some(&Action::PlayMacro3));
+}
+
+#[test]
+fn documented_keys_resolve_to_documented_actions() {
+    // Regression guard for the collisions fixed in the default table.
+    let kb = Keybindings::default();
+    assert_eq!(kb.get_action("E"), Some(&Action::EditProject));
+    assert_eq!(kb.get_action("D"), Some(&Action::EditDueDate));
+    assert_eq!(kb.get_action("M"), Some(&Action::RescheduleNextMonday));
+    assert_eq!(kb.get_action("Q"), Some(&Action::AddToFocusQueue));
+    assert_eq!(kb.get_action("ctrl+l"), Some(&Action::ClearSearch));
+    assert_eq!(kb.get_action("ctrl+s"), Some(&Action::Save));
+    assert_eq!(kb.get_action("f5"), Some(&Action::PomodoroStart));
+    assert!(kb.key_for_action(&Action::EditEstimate).is_some());
+    assert!(kb.key_for_action(&Action::LinkTask).is_some());
+    assert!(kb.key_for_action(&Action::UnlinkTask).is_some());
+    assert!(kb.key_for_action(&Action::RefreshStorage).is_some());
+    assert!(kb.key_for_action(&Action::ToggleSortOrder).is_some());
+    assert!(kb.key_for_action(&Action::QuickCapture).is_some());
+}

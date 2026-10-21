@@ -19,6 +19,8 @@ expression: output
 │                                                                              │
 │Tasks                                                                         │
 │A         Create subtask                                                      │
+│D         Edit due date                                                       │
+│M         Reschedule to next Monday                                           │
 │N         Edit description (multi-line)                                       │
 │S         Edit scheduled date                                                 │
 │T         Edit tags                                                           │
@@ -27,8 +29,6 @@ expression: output
 │[         Reschedule to next week                                             │
 │]         Reschedule to tomorrow                                              │
 │a         Create task                                                         │
+│Alt+a     Quick capture with hints                                            │
 │Alt+s     Edit scheduled time block                                           │
-│Ctrl+↓    Move task down                                                      │
-│Ctrl+↑    Move task up                                                        │
-│d         Delete task                                                         │
 └──────────────────────────────────────────────────────────────────────────────┘

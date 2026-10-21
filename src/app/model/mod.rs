@@ -259,6 +259,9 @@ pub struct Model {
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
     pub macro_state: MacroState,
+    /// First key of a multi-key chord awaiting its second key (e.g. `@` before
+    /// a macro slot digit). See `Keybindings::is_chord_prefix`.
+    pub pending_chord: Option<String>,
 
     // Task templates
     /// Task template manager
@@ -440,6 +443,7 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             macro_state: MacroState::new(),
+            pending_chord: None,
             template_manager: TemplateManager::new(),
             template_picker: TemplatePickerState::default(),
             pomodoro: PomodoroState::default(),

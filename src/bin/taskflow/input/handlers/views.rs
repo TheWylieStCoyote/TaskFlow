@@ -59,6 +59,19 @@ pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<M
 }
 
 /// Handle habits view input
+/// Handle Duplicates view keys.
+///
+/// These are view-scoped so that `D` and `M` keep their global meanings
+/// (edit due date / reschedule to next Monday) in every other view.
+pub fn handle_duplicates_view(key: event::KeyEvent) -> Option<Message> {
+    match key.code {
+        KeyCode::Char('D') => Some(Message::Ui(UiMessage::DismissDuplicate)),
+        KeyCode::Char('M') => Some(Message::Ui(UiMessage::MergeDuplicates)),
+        KeyCode::Char('r') => Some(Message::Ui(UiMessage::RefreshDuplicates)),
+        _ => None,
+    }
+}
+
 pub fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
     match key.code {
         // Return focus to sidebar

@@ -254,7 +254,7 @@ mod tests {
 
         let timestamp = entry.formatted_timestamp();
         // Should be in YYYY-MM-DD HH:MM format
-        assert!(timestamp.len() == 16);
+        assert_eq!(timestamp.len(), 16);
         assert!(timestamp.contains('-'));
         assert!(timestamp.contains(':'));
     }

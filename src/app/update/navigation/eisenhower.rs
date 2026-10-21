@@ -70,13 +70,11 @@ pub fn handle_eisenhower_navigation(model: &mut Model, msg: NavigationMessage) {
                     [model.view_selection.eisenhower_quadrant] = 0;
             }
         }
-        NavigationMessage::EisenhowerSelectQuadrant(quadrant) => {
-            if quadrant < 4 {
-                model.view_selection.eisenhower_quadrant = quadrant;
-                model.view_selection.eisenhower_task_index = 0; // Reset task selection
-                model.view_selection.eisenhower_scroll_offsets[quadrant] = 0; // Reset scroll
-                model.selected_index = 0;
-            }
+        NavigationMessage::EisenhowerSelectQuadrant(quadrant) if quadrant < 4 => {
+            model.view_selection.eisenhower_quadrant = quadrant;
+            model.view_selection.eisenhower_task_index = 0; // Reset task selection
+            model.view_selection.eisenhower_scroll_offsets[quadrant] = 0; // Reset scroll
+            model.selected_index = 0;
         }
         _ => {}
     }

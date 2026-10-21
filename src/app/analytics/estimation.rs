@@ -189,7 +189,7 @@ impl AnalyticsEngine<'_> {
             .into_iter()
             .map(|(project_id, (sum, count))| (project_id, sum / f64::from(count), count))
             .collect();
-        project_data.sort_by(|a, b| b.2.cmp(&a.2)); // Sort by count descending
+        project_data.sort_by_key(|a| std::cmp::Reverse(a.2)); // Sort by count descending
         analytics.by_project = project_data;
 
         // Build per-tag accuracy
@@ -197,7 +197,7 @@ impl AnalyticsEngine<'_> {
             .into_iter()
             .map(|(tag, (sum, count))| (tag, sum / f64::from(count), count))
             .collect();
-        tag_data.sort_by(|a, b| b.2.cmp(&a.2)); // Sort by count descending
+        tag_data.sort_by_key(|a| std::cmp::Reverse(a.2)); // Sort by count descending
         analytics.by_tag = tag_data;
 
         analytics

@@ -348,10 +348,8 @@ pub fn handle_ui_description_editor(model: &mut Model, msg: UiMessage) {
                 model.description_editor.cursor_home();
             }
         }
-        UiMessage::DescriptionCursorEnd => {
-            if model.description_editor.visible {
-                model.description_editor.cursor_end();
-            }
+        UiMessage::DescriptionCursorEnd if model.description_editor.visible => {
+            model.description_editor.cursor_end();
         }
         _ => {}
     }

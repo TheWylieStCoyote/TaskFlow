@@ -64,7 +64,7 @@ fn list_habits(model: &Model, filters: &Option<FilterParams>) -> HandlerResult {
         }
 
         // Sort by name
-        habits.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        habits.sort_by_key(|a| a.name.to_lowercase());
     }
 
     let total = habits.len();

@@ -667,7 +667,7 @@ impl Model {
             .values()
             .filter(|e| &e.task_id == task_id)
             .collect();
-        entries.sort_by(|a, b| b.changed_at.cmp(&a.changed_at));
+        entries.sort_by_key(|a| std::cmp::Reverse(a.changed_at));
         entries
     }
 }

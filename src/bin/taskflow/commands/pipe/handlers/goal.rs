@@ -78,7 +78,7 @@ fn list_goals(model: &Model, filters: &Option<FilterParams>) -> HandlerResult {
         }
 
         // Sort by name
-        goals.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        goals.sort_by_key(|a| a.name.to_lowercase());
     }
 
     let total = goals.len();
@@ -293,7 +293,7 @@ fn list_key_results(model: &Model, filters: &Option<FilterParams>) -> HandlerRes
         }
 
         // Sort by name
-        key_results.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        key_results.sort_by_key(|a| a.name.to_lowercase());
     }
 
     let total = key_results.len();

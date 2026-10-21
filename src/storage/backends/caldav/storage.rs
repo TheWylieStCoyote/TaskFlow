@@ -267,7 +267,7 @@ impl WorkLogRepository for CalDavBackend {
             .filter(|e| &e.task_id == task_id)
             .cloned()
             .collect();
-        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         Ok(logs)
     }
 

@@ -318,9 +318,9 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
-        UiMessage::EveningReviewComplete => {
+        UiMessage::EveningReviewComplete
             // Mark selected task as complete
-            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks {
+            if model.evening_review.phase == EveningReviewPhase::IncompleteTasks => {
                 let today = chrono::Utc::now().date_naive();
 
                 let task_ids: Vec<_> = model
@@ -346,7 +346,6 @@ pub fn handle_ui_evening_review(model: &mut Model, msg: UiMessage) {
                     }
                 }
             }
-        }
         _ => {}
     }
 }

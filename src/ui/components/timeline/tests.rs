@@ -559,7 +559,7 @@ fn test_task_color_priority_high() {
     let color = timeline.task_color(&task);
 
     // High priority should have a color
-    assert!(color != Color::Reset);
+    assert_ne!(color, Color::Reset);
 }
 
 #[test]
@@ -572,5 +572,5 @@ fn test_task_color_completed() {
     let color = timeline.task_color(&task);
 
     // Completed task should have a color
-    assert!(color != Color::Reset);
+    assert_ne!(color, Color::Reset);
 }

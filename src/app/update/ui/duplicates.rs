@@ -61,17 +61,14 @@ pub fn handle_ui_duplicates(model: &mut Model, msg: UiMessage) {
                 }
             }
         }
-        UiMessage::RefreshDuplicates => {
-            if model.current_view == ViewId::Duplicates {
-                model.duplicates_view.pairs =
-                    crate::domain::duplicate_detector::find_all_duplicates(
-                        &model.tasks,
-                        model.duplicates_view.threshold,
-                    );
-                model.duplicates_view.selected = 0;
-                let count = model.duplicates_view.pairs.len();
-                model.alerts.status_message = Some(format!("Found {count} duplicate pairs"));
-            }
+        UiMessage::RefreshDuplicates if model.current_view == ViewId::Duplicates => {
+            model.duplicates_view.pairs = crate::domain::duplicate_detector::find_all_duplicates(
+                &model.tasks,
+                model.duplicates_view.threshold,
+            );
+            model.duplicates_view.selected = 0;
+            let count = model.duplicates_view.pairs.len();
+            model.alerts.status_message = Some(format!("Found {count} duplicate pairs"));
         }
         _ => {}
     }

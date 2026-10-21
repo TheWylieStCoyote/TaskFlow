@@ -44,7 +44,7 @@ fn list_work_logs(model: &Model, filters: &Option<FilterParams>) -> HandlerResul
     }
 
     // Sort by created_at (newest first)
-    logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    logs.sort_by_key(|a| std::cmp::Reverse(a.created_at));
 
     let total = logs.len();
     let offset = filters.as_ref().and_then(|f| f.offset).unwrap_or(0);

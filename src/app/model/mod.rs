@@ -604,7 +604,7 @@ impl Model {
             .get(task_id)
             .map(|ids| ids.iter().filter_map(|id| self.work_logs.get(id)).collect())
             .unwrap_or_default();
-        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         logs
     }
 
@@ -798,8 +798,8 @@ impl Model {
                 .filter(|id| self.tasks.get(id).is_some_and(|t| t.status.is_complete()))
                 .count();
             let total = kr.linked_task_ids.len();
-            if total > 0 {
-                return (completed * 100 / total) as u8;
+            if let Some(pct) = (completed * 100).checked_div(total) {
+                return pct as u8;
             }
         }
         0

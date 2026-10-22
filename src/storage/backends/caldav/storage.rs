@@ -359,6 +359,8 @@ impl GoalRepository for CalDavBackend {
         if self.mem.goals.len() == before {
             return Err(StorageError::not_found("Goal", id.to_string()));
         }
+        // Cascade to the goal's key results, like every other backend.
+        self.mem.key_results.retain(|kr| &kr.goal_id != id);
         self.mem_dirty = true;
         Ok(())
     }

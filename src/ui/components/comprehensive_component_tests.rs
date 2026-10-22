@@ -1038,6 +1038,7 @@ mod tests {
     // ========================================================================
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_command_palette_performance_all_actions() {
         let keybindings = Keybindings::default();
         let theme = Theme::default();
@@ -1057,6 +1058,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_saved_filter_picker_performance_many_filters() {
         let theme = Theme::default();
         // Create 50 filters
@@ -1079,6 +1081,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_description_editor_performance_large_buffer() {
         let theme = Theme::default();
         // Create 500 lines
@@ -1100,6 +1103,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_help_popup_performance() {
         let keybindings = Keybindings::default();
         let theme = Theme::default();

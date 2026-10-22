@@ -54,7 +54,10 @@ fn threshold_for_count(base_ms: u128, count: usize) -> u128 {
         1.0
     };
     let computed = (base_ms as f64 * ratio * log_factor).ceil() as u128;
-    computed.max(MIN_THRESHOLD_MS)
+    // Coverage instrumentation slows everything down several-fold; these are
+    // regression guards against algorithmic blowups, not micro-benchmarks.
+    let slowdown: u128 = if cfg!(tarpaulin) { 5 } else { 1 };
+    computed.max(MIN_THRESHOLD_MS) * slowdown
 }
 
 /// Create a model with n tasks having varied properties.

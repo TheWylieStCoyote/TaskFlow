@@ -38,7 +38,17 @@ use types::{OutputFormat, PipeError, PipeRequest, PipeResponse, ResponseMetadata
 /// Reads JSON commands from stdin line by line, processes them, and writes
 /// responses to stdout in the specified format.
 pub fn run_pipe(cli: &Cli, format_str: &str) -> anyhow::Result<()> {
-    let format = match format_str.to_lowercase().as_str() {
+    let format = parse_output_format(format_str);
+    let mut model = load_model_for_cli(cli)?;
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    run_pipe_loop(&mut model, stdin.lock(), &mut stdout, format)
+}
+
+/// Parse the `--format` argument, falling back to JSON for unknown values.
+fn parse_output_format(format_str: &str) -> OutputFormat {
+    match format_str.to_lowercase().as_str() {
         "json" => OutputFormat::Json,
         "yaml" | "yml" => OutputFormat::Yaml,
         "csv" => OutputFormat::Csv,
@@ -46,20 +56,24 @@ pub fn run_pipe(cli: &Cli, format_str: &str) -> anyhow::Result<()> {
             warn!(format = %format_str, "Unknown output format, using JSON");
             OutputFormat::Json
         }
-    };
+    }
+}
 
-    let mut model = load_model_for_cli(cli)?;
-    let stdin = std::io::stdin();
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-
-    for line in stdin.lock().lines() {
+/// Process every line from `reader`, writing one response per request to
+/// `writer`, then save the model.
+fn run_pipe_loop<R: BufRead, W: Write>(
+    model: &mut taskflow::app::Model,
+    reader: R,
+    writer: &mut W,
+    format: OutputFormat,
+) -> anyhow::Result<()> {
+    for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
             Err(e) => {
                 let response =
                     create_error_response("IO_ERROR", format!("Failed to read stdin: {e}"));
-                write_response(&mut stdout, &response, format)?;
+                write_response(writer, &response, format)?;
                 continue;
             }
         };
@@ -76,14 +90,14 @@ pub fn run_pipe(cli: &Cli, format_str: &str) -> anyhow::Result<()> {
             Err(e) => {
                 let response =
                     create_error_response("PARSE_ERROR", format!("Failed to parse request: {e}"));
-                write_response(&mut stdout, &response, format)?;
+                write_response(writer, &response, format)?;
                 continue;
             }
         };
 
         // Process the request
-        let response = process_request(&mut model, request);
-        write_response(&mut stdout, &response, format)?;
+        let response = process_request(model, request);
+        write_response(writer, &response, format)?;
     }
 
     // Save any changes

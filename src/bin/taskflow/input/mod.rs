@@ -97,14 +97,14 @@ pub fn handle_key_event(
         return match key.code {
             KeyCode::Char('j') | KeyCode::Down => Message::Ui(UiMessage::HelpScrollDown),
             KeyCode::Char('k') | KeyCode::Up => Message::Ui(UiMessage::HelpScrollUp),
-            KeyCode::PageDown | KeyCode::Char('d')
-                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
-            {
+            // A match guard applies to the whole or-pattern, so the ctrl check
+            // must not be shared with the plain PageDown/PageUp keys.
+            KeyCode::PageDown => Message::Ui(UiMessage::HelpPageDown),
+            KeyCode::PageUp => Message::Ui(UiMessage::HelpPageUp),
+            KeyCode::Char('d') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
                 Message::Ui(UiMessage::HelpPageDown)
             }
-            KeyCode::PageUp | KeyCode::Char('u')
-                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
-            {
+            KeyCode::Char('u') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
                 Message::Ui(UiMessage::HelpPageUp)
             }
             _ => Message::Ui(UiMessage::HideHelp),

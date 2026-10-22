@@ -320,6 +320,15 @@ fn help_scrolls_and_closes() {
         ),
         Message::Ui(UiMessage::HelpPageUp)
     ));
+    // Plain PageDown/PageUp must page too, not close the popup.
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::PageDown)),
+        Message::Ui(UiMessage::HelpPageDown)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::PageUp)),
+        Message::Ui(UiMessage::HelpPageUp)
+    ));
     for k in [ch('?'), ch('q'), key(KeyCode::Esc)] {
         assert!(matches!(
             dispatch(&mut model, k),

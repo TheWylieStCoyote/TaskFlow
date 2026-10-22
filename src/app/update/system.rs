@@ -215,7 +215,8 @@ fn apply_undo_action(model: &mut Model, action: UndoAction, dir: UndoDirection) 
             },
             Redo,
         ) => {
-            model.active_time_entry = None;
+            // Restoring the stopped copy clears the active timer if it pointed
+            // at that entry; the started entry then becomes active again.
             model.restore_time_entry(*stopped_entry_after);
             model.restore_time_entry(*started_entry);
         }

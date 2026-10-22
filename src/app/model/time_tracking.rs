@@ -186,23 +186,30 @@ impl Model {
         }
     }
 
-    /// Restores a time entry (used for undo).
+    /// Restores a time entry (used for undo and redo).
     ///
     /// If the entry is still running (no ended_at), it becomes the active entry,
     /// but only if:
     /// - The associated task still exists
     /// - There's no current active entry (to avoid stealing the timer)
+    ///
+    /// If the entry is stopped and the active timer points at this very entry
+    /// (redo of a stop, or an edit that ended the running entry), the active
+    /// timer is cleared so the model never reports a finished entry as running.
     pub fn restore_time_entry(&mut self, entry: TimeEntry) {
         let is_running = entry.ended_at.is_none();
         let task_exists = self.tasks.contains_key(&entry.task_id);
-        let no_active_entry = self.active_time_entry.is_none();
         let entry_id = entry.id;
 
         self.time_entries.insert(entry_id, entry.clone());
 
-        // Only make active if: running, task exists, AND no current active entry
-        if is_running && task_exists && no_active_entry {
-            self.active_time_entry = Some(entry_id);
+        if is_running {
+            // Only make active if the task exists and no other timer is running.
+            if task_exists && self.active_time_entry.is_none() {
+                self.active_time_entry = Some(entry_id);
+            }
+        } else if self.active_time_entry == Some(entry_id) {
+            self.active_time_entry = None;
         }
 
         self.sync_time_entry(&entry);
@@ -405,6 +412,50 @@ mod tests {
 
         // entry2 should NOT become active (active entry already exists)
         assert_ne!(model.active_time_entry, Some(entry2_id));
+    }
+
+    #[test]
+    fn restore_stopped_copy_of_active_entry_clears_active_timer() {
+        let mut model = make_model();
+        let task = Task::new("Track me");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let (entry, _) = model.start_time_tracking(task_id);
+        model.time_entries.get_mut(&entry.id).unwrap().started_at -= chrono::Duration::minutes(25);
+        let (before, after) = model.stop_time_tracking().expect("timer was running");
+        assert!(model.active_time_entry.is_none());
+
+        // Undo the stop: the running copy comes back and is active again.
+        model.restore_time_entry(before);
+        assert_eq!(model.active_time_entry, Some(entry.id));
+        assert!(model.is_tracking_task(&task_id));
+
+        // Redo the stop: restoring the stopped copy must clear the active timer.
+        model.restore_time_entry(after);
+        assert_eq!(model.active_time_entry, None, "stopped entry is not active");
+        assert!(!model.is_tracking_task(&task_id));
+        assert_eq!(model.tasks[&task_id].actual_minutes, 25);
+        assert_eq!(model.task_cache.time_sums.get(&task_id), Some(&25));
+    }
+
+    #[test]
+    fn restore_stopped_entry_leaves_another_active_timer_alone() {
+        let mut model = make_model();
+        let a = Task::new("A");
+        let b = Task::new("B");
+        let (a_id, b_id) = (a.id, b.id);
+        model.tasks.insert(a_id, a);
+        model.tasks.insert(b_id, b);
+
+        let mut finished = TimeEntry::start(a_id);
+        finished.ended_at = Some(finished.started_at);
+        finished.duration_minutes = Some(10);
+
+        let (running_b, _) = model.start_time_tracking(b_id);
+        model.restore_time_entry(finished);
+
+        assert_eq!(model.active_time_entry, Some(running_b.id));
     }
 
     #[test]

@@ -504,6 +504,62 @@ mod tests {
     }
 
     #[test]
+    fn redo_of_a_timer_stop_leaves_no_active_entry() {
+        use crate::app::update::update;
+        use crate::app::{Message, SystemMessage};
+
+        let mut model = setup_model_with_task();
+        let task_id = selected_task(&model);
+
+        handle_time(&mut model, TimeMessage::StartTracking);
+        let entry_id = model.active_time_entry.expect("timer running");
+        model.time_entries.get_mut(&entry_id).unwrap().started_at -= chrono::Duration::minutes(30);
+        handle_time(&mut model, TimeMessage::StopTracking);
+        assert!(model.active_time_entry.is_none());
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.active_time_entry, Some(entry_id), "undo restarts it");
+        assert!(model.is_tracking_task(&task_id));
+
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.active_time_entry, None, "redo stops it again");
+        assert!(!model.is_tracking_task(&task_id));
+        assert_eq!(model.time_entries.len(), 1);
+        assert!(model.time_entries[&entry_id].ended_at.is_some());
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+        model.recompute_task_time(&task_id);
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+    }
+
+    #[test]
+    fn redo_of_a_timer_switch_leaves_only_the_new_entry_active() {
+        use crate::app::update::update;
+        use crate::app::{Message, SystemMessage};
+
+        let mut model = setup_model_with_task();
+        let first = selected_task(&model);
+        let other = Task::new("Other");
+        let other_id = other.id;
+        model.tasks.insert(other_id, other);
+
+        start_tracking_with_undo(&mut model, first);
+        let first_entry = model.active_time_entry.unwrap();
+        start_tracking_with_undo(&mut model, other_id);
+        let second_entry = model.active_time_entry.unwrap();
+        assert_ne!(first_entry, second_entry);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.active_time_entry, Some(first_entry));
+        assert_eq!(model.time_entries.len(), 1);
+
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.active_time_entry, Some(second_entry));
+        assert!(model.time_entries[&first_entry].ended_at.is_some());
+        assert!(model.time_entries[&second_entry].ended_at.is_none());
+    }
+
+    #[test]
     fn pomodoro_work_phase_runs_the_task_timer() {
         let mut model = setup_model_with_task();
         let task_id = selected_task(&model);

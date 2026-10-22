@@ -1767,7 +1767,7 @@ fn test_sqlite_pomodoro_state_roundtrip() {
 // ============================================================================
 
 mod unparsable_rows {
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
     use tracing_subscriber::fmt::MakeWriter;
 
@@ -1776,6 +1776,17 @@ mod unparsable_rows {
     use crate::domain::TimeEntryId;
 
     const TS: &str = "2025-03-01T09:30:15Z";
+
+    /// Every test here reaches the `warn!` in `collect_rows`. `tracing`
+    /// caches a call site's interest the first time any thread hits it, using
+    /// that thread's subscriber; a sibling test with no subscriber installed
+    /// would cache "never" and silence the capturing test below. Running the
+    /// module's tests one at a time removes the race.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn serial() -> MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 
     /// Collects everything a `tracing` fmt subscriber writes.
     #[derive(Clone, Default)]
@@ -1820,6 +1831,7 @@ mod unparsable_rows {
 
     #[test]
     fn list_tasks_skips_unparsable_rows_and_keeps_good_ones() {
+        let _serial = serial();
         let (_dir, mut backend) = create_test_backend();
         let good = Task::new("good");
         backend.create_task(&good).unwrap();
@@ -1914,6 +1926,7 @@ mod unparsable_rows {
 
     #[test]
     fn time_entries_skip_unparsable_rows() {
+        let _serial = serial();
         let (_dir, mut backend) = create_test_backend();
         let task = Task::new("tracked");
         backend.create_task(&task).unwrap();
@@ -1952,6 +1965,7 @@ mod unparsable_rows {
 
     #[test]
     fn habit_check_ins_skip_unparsable_rows() {
+        let _serial = serial();
         let (_dir, mut backend) = create_test_backend();
         let habit = Habit::new("Stretch");
         backend.create_habit(&habit).unwrap();
@@ -1981,6 +1995,7 @@ mod unparsable_rows {
 
     #[test]
     fn skipped_row_is_reported_with_table_id_and_cause() {
+        let _serial = serial();
         let (_dir, backend) = create_test_backend();
         let id = GoalId::new().to_string();
         backend
@@ -1999,7 +2014,14 @@ mod unparsable_rows {
             .with_writer(capture.clone())
             .with_ansi(false)
             .finish();
-        let goals = tracing::subscriber::with_default(subscriber, || backend.list_goals().unwrap());
+        let goals = tracing::subscriber::with_default(subscriber, || {
+            // Sibling tests hit the same `warn!` call site with no subscriber
+            // installed, which can leave its cached interest at "never" if the
+            // call site registers while this dispatcher is being added.
+            // Recompute so the event reaches our capturing subscriber.
+            tracing::callsite::rebuild_interest_cache();
+            backend.list_goals().unwrap()
+        });
         assert!(goals.is_empty());
 
         let log = capture.text();

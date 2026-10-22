@@ -617,9 +617,10 @@ fn reports_view_dispatch() {
         dispatch(&mut model, key(KeyCode::Tab)),
         Message::Navigation(NavigationMessage::ReportsNextPanel)
     ));
+    // j moves the Reports → Tasks table selection rather than the task list.
     assert!(matches!(
         dispatch(&mut model, ch('j')),
-        Message::Navigation(NavigationMessage::Down)
+        Message::Ui(UiMessage::ReportsTasksMove(1))
     ));
 }
 

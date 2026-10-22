@@ -7,5 +7,6 @@ mod focus;
 mod insights;
 mod overview;
 mod tags;
+mod tasks;
 mod time;
 mod velocity;

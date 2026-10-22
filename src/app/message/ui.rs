@@ -48,6 +48,9 @@ pub enum UiMessage {
     // Reports view
     /// Cycle the Reports → Time panel window (7 → 30 → 90 days)
     ReportsCycleTimeWindow,
+    /// Move the selection in the Reports → Tasks table by `delta` rows
+    /// (clamped; `i32::MIN`/`i32::MAX` jump to the first/last row)
+    ReportsTasksMove(i32),
 
     // Input mode - starting various edit operations
     /// Enter input mode to create a new task

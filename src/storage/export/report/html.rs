@@ -5,7 +5,7 @@ use std::io::Write;
 use crate::domain::analytics::AnalyticsReport;
 use crate::domain::format_minutes;
 
-use super::time_section::{day_rows, project_rows, share};
+use super::time_section::{day_rows, project_rows, share, task_rows, MAX_TASK_ROWS};
 
 /// Exports an analytics report to HTML format.
 ///
@@ -340,6 +340,37 @@ fn write_time_card<W: Write>(writer: &mut W, report: &AnalyticsReport) -> std::i
         )?;
     }
     writeln!(writer, "  </table>")?;
+
+    let tasks = task_rows(report);
+    if !tasks.is_empty() {
+        let total_tasks = report
+            .time_analytics
+            .by_task
+            .values()
+            .filter(|&&m| m > 0)
+            .count();
+        if total_tasks > MAX_TASK_ROWS {
+            writeln!(
+                writer,
+                "  <p>Top {MAX_TASK_ROWS} of {total_tasks} tasks</p>"
+            )?;
+        }
+        writeln!(writer, "  <table>")?;
+        writeln!(
+            writer,
+            "    <tr><th>Task</th><th>Project</th><th>Entries</th><th>Time</th><th>Share</th></tr>"
+        )?;
+        for (title, project, entries, minutes, pct) in &tasks {
+            writeln!(
+                writer,
+                "    <tr><td>{}</td><td>{}</td><td>{entries}</td><td>{}</td><td>{pct:.1}%</td></tr>",
+                escape_html(title),
+                escape_html(project),
+                format_minutes(*minutes)
+            )?;
+        }
+        writeln!(writer, "  </table>")?;
+    }
 
     let days = day_rows(report);
     let max = days.iter().map(|(_, m)| *m).max().unwrap_or(0);

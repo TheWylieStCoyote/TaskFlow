@@ -185,6 +185,29 @@ impl BurnChart {
     }
 }
 
+/// What is known about a task that has tracked time in the window.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TaskTimeInfo {
+    /// Task title at report time (`(deleted task)` when the task is gone)
+    pub title: String,
+    /// Project the task belongs to
+    pub project_id: Option<ProjectId>,
+    /// Number of time entries inside the window
+    pub entries: usize,
+}
+
+/// One row of a per-task time table, most time first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskTimeRow {
+    pub task_id: TaskId,
+    pub title: String,
+    pub project_id: Option<ProjectId>,
+    pub minutes: u32,
+    pub entries: usize,
+    /// Share of the window total, in percent
+    pub share: f64,
+}
+
 /// Time tracked within a reporting window, broken down several ways.
 ///
 /// Every bucket is derived from time entries (bucketed by the entry's local
@@ -197,6 +220,8 @@ pub struct TimeAnalytics {
     pub by_project: HashMap<Option<ProjectId>, u32>,
     /// Minutes tracked per task
     pub by_task: HashMap<TaskId, u32>,
+    /// Title, project and entry count for every task in `by_task`
+    pub task_info: HashMap<TaskId, TaskTimeInfo>,
     /// Minutes tracked per tag (a multi-tagged entry counts toward each tag)
     pub by_tag: HashMap<String, u32>,
     /// Minutes tracked per calendar day, ordered oldest first
@@ -285,6 +310,40 @@ impl TimeAnalytics {
         let mut v: Vec<_> = self.by_tag.iter().map(|(k, &m)| (k.clone(), m)).collect();
         v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         v
+    }
+
+    /// Per-task rows (title, project, entries, minutes, share), most time
+    /// first; ties break on title then id so the order is stable.
+    #[must_use]
+    pub fn task_rows(&self) -> Vec<TaskTimeRow> {
+        let total = self.total_minutes;
+        let mut rows: Vec<TaskTimeRow> = self
+            .by_task
+            .iter()
+            .filter(|(_, &m)| m > 0)
+            .map(|(&task_id, &minutes)| {
+                let info = self.task_info.get(&task_id);
+                TaskTimeRow {
+                    task_id,
+                    title: info.map_or_else(|| "(deleted task)".to_string(), |i| i.title.clone()),
+                    project_id: info.and_then(|i| i.project_id),
+                    minutes,
+                    entries: info.map_or(0, |i| i.entries),
+                    share: if total == 0 {
+                        0.0
+                    } else {
+                        f64::from(minutes) / f64::from(total) * 100.0
+                    },
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| {
+            b.minutes
+                .cmp(&a.minutes)
+                .then_with(|| a.title.cmp(&b.title))
+                .then_with(|| a.task_id.0.cmp(&b.task_id.0))
+        });
+        rows
     }
 
     /// Tasks sorted by minutes descending.

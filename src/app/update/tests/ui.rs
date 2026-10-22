@@ -2251,3 +2251,68 @@ mod submit_input_arms {
         assert!(model.key_results.is_empty());
     }
 }
+
+mod reports_tasks_table {
+    use super::*;
+    use crate::domain::{Task, TimeEntry};
+    use crate::ui::ReportPanel;
+
+    fn model_with_tracked_tasks(n: usize) -> Model {
+        let mut model = Model::new();
+        for i in 0..n {
+            let task = Task::new(format!("T{i}"));
+            let id = task.id;
+            model.tasks.insert(id, task);
+            let mut e = TimeEntry::start(id);
+            e.started_at = chrono::Utc::now() - chrono::Duration::hours(3);
+            e.ended_at = Some(e.started_at + chrono::Duration::minutes(10));
+            e.duration_minutes = Some(10);
+            model.add_time_entry(e);
+        }
+        model.report_panel = ReportPanel::Tasks;
+        model
+    }
+
+    #[test]
+    fn move_clamps_within_the_table() {
+        let mut model = model_with_tracked_tasks(5);
+        update(&mut model, Message::Ui(UiMessage::ReportsTasksMove(1)));
+        assert_eq!(model.reports_tasks_selected, 1);
+        update(&mut model, Message::Ui(UiMessage::ReportsTasksMove(10)));
+        assert_eq!(model.reports_tasks_selected, 4, "clamped to the last row");
+        update(&mut model, Message::Ui(UiMessage::ReportsTasksMove(-100)));
+        assert_eq!(model.reports_tasks_selected, 0);
+        update(
+            &mut model,
+            Message::Ui(UiMessage::ReportsTasksMove(i32::MAX)),
+        );
+        assert_eq!(model.reports_tasks_selected, 4);
+        update(
+            &mut model,
+            Message::Ui(UiMessage::ReportsTasksMove(i32::MIN)),
+        );
+        assert_eq!(model.reports_tasks_selected, 0);
+    }
+
+    #[test]
+    fn move_is_ignored_on_other_panels_and_empty_tables() {
+        let mut model = model_with_tracked_tasks(5);
+        model.report_panel = ReportPanel::Time;
+        update(&mut model, Message::Ui(UiMessage::ReportsTasksMove(1)));
+        assert_eq!(model.reports_tasks_selected, 0);
+
+        let mut empty = Model::new();
+        empty.report_panel = ReportPanel::Tasks;
+        update(&mut empty, Message::Ui(UiMessage::ReportsTasksMove(1)));
+        assert_eq!(empty.reports_tasks_selected, 0);
+    }
+
+    #[test]
+    fn cycling_the_window_resets_the_selection() {
+        let mut model = model_with_tracked_tasks(5);
+        update(&mut model, Message::Ui(UiMessage::ReportsTasksMove(3)));
+        assert_eq!(model.reports_tasks_selected, 3);
+        update(&mut model, Message::Ui(UiMessage::ReportsCycleTimeWindow));
+        assert_eq!(model.reports_tasks_selected, 0);
+    }
+}

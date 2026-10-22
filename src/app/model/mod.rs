@@ -284,6 +284,8 @@ pub struct Model {
     pub report_panel: crate::ui::ReportPanel,
     /// Window (7/30/90 days) shown by the Reports → Time panel
     pub reports_time_window: TimeWindow,
+    /// Selected row in the Reports → Tasks table
+    pub reports_tasks_selected: usize,
 
     // Import state
     /// Import state (pending, show_preview)
@@ -453,6 +455,7 @@ impl Model {
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
             reports_time_window: TimeWindow::default(),
+            reports_tasks_selected: 0,
             import: ImportState::default(),
             alerts: AlertState::default(),
             time_log: TimeLogEditorState::default(),
@@ -837,6 +840,20 @@ impl Model {
     /// This should be called before rendering the Reports view to avoid
     /// regenerating reports on every frame. Reports are only generated
     /// if the cache is empty.
+    /// Number of rows in the Reports → Tasks table for the current window.
+    pub fn reports_task_row_count(&mut self) -> usize {
+        self.ensure_report_cache_populated();
+        self.report_cache
+            .report_for_window(self.reports_time_window)
+            .map_or(0, |r| {
+                r.time_analytics
+                    .by_task
+                    .values()
+                    .filter(|&&m| m > 0)
+                    .count()
+            })
+    }
+
     pub fn ensure_report_cache_populated(&mut self) {
         use crate::app::analytics::AnalyticsEngine;
         use crate::domain::analytics::ReportConfig;

@@ -305,3 +305,66 @@ fn time_analytics_daily_series_is_zero_filled_and_sorted() {
     let tags = analytics.tags_by_minutes();
     assert_eq!(tags.first(), Some(&("work".to_string(), 90)));
 }
+
+#[test]
+fn time_analytics_task_rows_carry_title_project_entries_and_share() {
+    use crate::domain::TimeEntry;
+
+    let mut model = Model::new();
+    let project = Project::new("Alpha");
+    let project_id = project.id;
+    model.projects.insert(project_id, project);
+    let mut big = Task::new("Big task");
+    big.project_id = Some(project_id);
+    let big_id = big.id;
+    let small = Task::new("Small task");
+    let small_id = small.id;
+    model.tasks.insert(big_id, big);
+    model.tasks.insert(small_id, small);
+
+    let base = chrono::Utc::now() - chrono::Duration::hours(5);
+    for (task_id, minutes, offset_h) in [(big_id, 60, 0), (big_id, 30, 1), (small_id, 10, 2)] {
+        let mut e = TimeEntry::start(task_id);
+        e.started_at = base + chrono::Duration::hours(offset_h);
+        e.ended_at = Some(e.started_at + chrono::Duration::minutes(minutes));
+        e.duration_minutes = Some(minutes as u32);
+        model.time_entries.insert(e.id, e);
+    }
+    // An orphaned entry whose task no longer exists.
+    let ghost_id = crate::domain::TaskId::new();
+    let mut ghost = TimeEntry::start(ghost_id);
+    ghost.started_at = base;
+    ghost.ended_at = Some(base + chrono::Duration::minutes(5));
+    ghost.duration_minutes = Some(5);
+    model.time_entries.insert(ghost.id, ghost);
+
+    let engine = AnalyticsEngine::new(&model);
+    let analytics = engine.compute_time_analytics(today() - chrono::Duration::days(7), today());
+    let rows = analytics.task_rows();
+
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0].task_id, big_id);
+    assert_eq!(rows[0].title, "Big task");
+    assert_eq!(rows[0].project_id, Some(project_id));
+    assert_eq!(rows[0].entries, 2);
+    assert_eq!(rows[0].minutes, 90);
+    assert!((rows[0].share - 90.0 / 105.0 * 100.0).abs() < 0.01);
+    assert_eq!(rows[1].title, "Small task");
+    assert_eq!(rows[1].entries, 1);
+    assert_eq!(rows[2].title, "(deleted task)");
+    assert_eq!(rows[2].project_id, None);
+    assert_eq!(rows[2].minutes, 5);
+    assert_eq!(analytics.task_info[&big_id].entries, 2);
+}
+
+#[test]
+fn time_analytics_legacy_task_rows_have_no_entries() {
+    let model = create_test_model();
+    let engine = AnalyticsEngine::new(&model);
+    let analytics = engine.compute_time_analytics(today() - chrono::Duration::days(7), today());
+    let rows = analytics.task_rows();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.entries == 0));
+    assert_eq!(rows[0].minutes, 60);
+    assert_eq!(rows[0].title, "Task 1");
+}

@@ -240,13 +240,14 @@ fn handle_reports_click(x: u16, y: u16, model: &Model) -> Message {
 
             // Cumulative end positions including dividers
             // Overview(8)+|(3)=11, Velocity(8)+|(3)=22, Tags(4)+|(3)=29,
-            // Time(4)+|(3)=36, Focus(5)+|(3)=44, Insights(8)+|(3)=55, Estimation(10)=65
-            const TAB_ENDS: [u16; 7] = [11, 22, 29, 36, 44, 55, 65];
+            // Time(4)+|(3)=36, Tasks(5)+|(3)=44, Focus(5)+|(3)=52,
+            // Insights(8)+|(3)=63, Estimation(10)=73
+            const TAB_ENDS: [u16; 8] = [11, 22, 29, 36, 44, 52, 63, 73];
 
             let panel_idx = TAB_ENDS
                 .iter()
                 .position(|&end| relative_x < end)
-                .unwrap_or(6);
+                .unwrap_or(TAB_ENDS.len() - 1);
 
             return Message::Navigation(NavigationMessage::ReportsSelectPanel(panel_idx));
         }
@@ -890,7 +891,7 @@ mod tests {
             .set_reports_tabs_area(Rect::new(20, 0, 80, 1));
 
         // (relative x, expected panel): boundaries from the tab widths
-        let cases: [(u16, usize); 15] = [
+        let cases: [(u16, usize); 17] = [
             (0, 0),
             (10, 0),
             (11, 1),
@@ -902,10 +903,12 @@ mod tests {
             (36, 4),
             (43, 4),
             (44, 5),
-            (54, 5),
-            (55, 6),
-            (64, 6),
-            (70, 6),
+            (51, 5),
+            (52, 6),
+            (62, 6),
+            (63, 7),
+            (72, 7),
+            (79, 7),
         ];
         for (rel_x, expected) in cases {
             assert!(

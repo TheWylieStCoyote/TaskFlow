@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)
 - **Reports → Time panel**: selectable 7/30/90-day window (`w`), Today / This Week / Avg per active day / live Tracking stats, time by project with hours and share, daily series (bars or sparkline), local hour-of-day chart, top tasks
+- **Reports → Tasks panel**: every task with tracked time in the selected window as a scrollable table (task, project, entries, time, share; `j`/`k`, `g`/`G`, PgUp/PgDn); the exported Markdown/HTML reports list the top 25 tasks the same way
 - **Dashboard Time Tracking tile**: Today, This Week, Last 30 days, average per active day and the running timer; **footer** shows a live `⏱ HH:MM:SS` readout for the running task
 - **Time log editor**: entries grouped by local day with day and grand totals; `a` opens a real add prompt (`[date] START[-END | +DURATION] [note]`); `n` edits the note, `t` moves an entry to another date, `+`/`-` nudge its length by 5 minutes
 - **`taskflow time` (`tt`)**: time report for today, this week, the last N days or a date range, by project, day, task or tag, with ASCII bars or `--json`

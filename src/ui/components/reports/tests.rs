@@ -15,7 +15,7 @@ fn test_report_panel_navigation() {
 #[test]
 fn test_report_panel_cycle() {
     let mut panel = ReportPanel::Overview;
-    for _ in 0..7 {
+    for _ in 0..ReportPanel::COUNT {
         panel = panel.next();
     }
     assert_eq!(panel, ReportPanel::Overview);
@@ -27,18 +27,27 @@ fn test_report_panel_index() {
     assert_eq!(ReportPanel::Velocity.index(), 1);
     assert_eq!(ReportPanel::Tags.index(), 2);
     assert_eq!(ReportPanel::Time.index(), 3);
-    assert_eq!(ReportPanel::Focus.index(), 4);
-    assert_eq!(ReportPanel::Insights.index(), 5);
-    assert_eq!(ReportPanel::Estimation.index(), 6);
+    assert_eq!(ReportPanel::Tasks.index(), 4);
+    assert_eq!(ReportPanel::Focus.index(), 5);
+    assert_eq!(ReportPanel::Insights.index(), 6);
+    assert_eq!(ReportPanel::Estimation.index(), 7);
+    for idx in 0..ReportPanel::COUNT {
+        assert_eq!(
+            ReportPanel::from_index(idx).map(ReportPanel::index),
+            Some(idx)
+        );
+    }
+    assert_eq!(ReportPanel::from_index(ReportPanel::COUNT), None);
 }
 
 #[test]
 fn test_report_panel_names() {
     let names = ReportPanel::names();
-    assert_eq!(names.len(), 7);
+    assert_eq!(names.len(), 8);
     assert_eq!(names[0], "Overview");
-    assert_eq!(names[4], "Focus");
-    assert_eq!(names[6], "Estimation");
+    assert_eq!(names[4], "Tasks");
+    assert_eq!(names[5], "Focus");
+    assert_eq!(names[7], "Estimation");
 }
 
 #[test]
@@ -459,5 +468,133 @@ mod time_panel {
                 let _ = render_time(&model, w, h);
             }
         }
+    }
+}
+
+mod tasks_panel {
+    use super::*;
+    use crate::app::TimeWindow;
+    use crate::domain::{today, Project, Task, TaskId, TimeEntry};
+    use chrono::{Duration, Local, NaiveDate, TimeZone};
+
+    fn entry_on(task_id: TaskId, date: NaiveDate, hour: u32, minutes: u32) -> TimeEntry {
+        let local = date.and_hms_opt(hour, 0, 0).unwrap();
+        let start = Local
+            .from_local_datetime(&local)
+            .single()
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = start;
+        entry.ended_at = Some(start + Duration::minutes(i64::from(minutes)));
+        entry.duration_minutes = Some(minutes);
+        entry
+    }
+
+    fn tasks_model(n_tasks: usize) -> Model {
+        let mut model = Model::new();
+        let project = Project::new("Alpha Project");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        let today = today();
+        for i in 0..n_tasks {
+            let mut task = Task::new(format!("Task number {i:02}"));
+            if i % 2 == 0 {
+                task.project_id = Some(project_id);
+            }
+            let id = task.id;
+            model.tasks.insert(id, task);
+            // Distinct minutes so the order is unambiguous: task 0 has the most.
+            model.add_time_entry(entry_on(id, today, 9, 10 * (n_tasks - i) as u32));
+            if i == 0 {
+                model.add_time_entry(entry_on(id, today - Duration::days(1), 10, 5));
+            }
+        }
+        model.report_panel = ReportPanel::Tasks;
+        model
+    }
+
+    fn render(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        let view = ReportsView::new(model, ReportPanel::Tasks, &theme);
+        buffer_content(&render_widget(view, width, height))
+    }
+
+    #[test]
+    fn header_and_columns_render_with_the_window_label() {
+        let mut model = tasks_model(3);
+        model.reports_time_window = TimeWindow::Days7;
+        let content = render(&model, 100, 30);
+        assert!(content.contains("Tasks (last 7 days)"), "{content}");
+        assert!(content.contains("[w] window"), "{content}");
+        assert!(content.contains("3 tasks"), "{content}");
+        assert!(content.contains("Task"), "{content}");
+        assert!(content.contains("Project"), "{content}");
+        assert!(content.contains("Entries"), "{content}");
+        assert!(content.contains("Share"), "{content}");
+    }
+
+    #[test]
+    fn rows_are_sorted_by_time_with_project_entries_and_share() {
+        let model = tasks_model(3);
+        let content = render(&model, 100, 30);
+        let first = content.find("Task number 00").expect("row 0");
+        let second = content.find("Task number 01").expect("row 1");
+        let third = content.find("Task number 02").expect("row 2");
+        assert!(first < second && second < third, "{content}");
+        // Task 0: 30m + 5m over two entries, in Alpha Project. Total 65m.
+        let row0 = content
+            .lines()
+            .find(|l| l.contains("Task number 00"))
+            .unwrap();
+        assert!(row0.contains("Alpha Project"), "{row0}");
+        assert!(row0.contains("35m"), "{row0}");
+        assert!(
+            row0.contains(" 2 ") || row0.ends_with('2') || row0.contains("2 "),
+            "{row0}"
+        );
+        assert!(row0.contains("54%"), "{row0}");
+        let row1 = content
+            .lines()
+            .find(|l| l.contains("Task number 01"))
+            .unwrap();
+        assert!(row1.contains("(no project)"), "{row1}");
+        assert!(content.contains("Total 1h 5m"), "{content}");
+        assert!(content.contains("showing 1–3 of 3"), "{content}");
+    }
+
+    #[test]
+    fn selection_scrolls_to_keep_the_selected_row_visible() {
+        let mut model = tasks_model(40);
+        model.reports_tasks_selected = 39;
+        let content = render(&model, 100, 20);
+        assert!(content.contains("Task number 39"), "{content}");
+        assert!(!content.contains("Task number 00"), "{content}");
+        assert!(content.contains("of 40"), "{content}");
+
+        model.reports_tasks_selected = 0;
+        let content = render(&model, 100, 20);
+        assert!(content.contains("Task number 00"), "{content}");
+        assert!(content.contains("showing 1–"), "{content}");
+    }
+
+    #[test]
+    fn narrow_tables_drop_the_project_column_and_never_panic() {
+        let model = tasks_model(5);
+        let content = render(&model, 55, 20);
+        assert!(!content.contains("Project"), "{content}");
+        assert!(content.contains("Task number 00"), "{content}");
+        for (w, h) in [(30, 8), (22, 12), (10, 5), (3, 3), (120, 60)] {
+            let _ = render(&model, w, h);
+        }
+    }
+
+    #[test]
+    fn empty_window_shows_a_note() {
+        let mut model = Model::new();
+        model.report_panel = ReportPanel::Tasks;
+        let content = render(&model, 80, 20);
+        assert!(content.contains("0 tasks"), "{content}");
+        assert!(content.contains("No time tracked"), "{content}");
     }
 }

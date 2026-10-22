@@ -31,7 +31,7 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
     ("Habits", "n new, Space check-in, e edit"),
     ("Network", "h/l/j/k navigate nodes"),
     ("Focus", "[/] chain nav, t timer, f exit"),
-    ("Reports", "Tab/S-Tab panels, w time window"),
+    ("Reports", "Tab/S-Tab panels, w window, j/k tasks"),
     ("Duplicats", "D dismiss, M merge, r refresh"),
     ("Macros", "ctrl+q N record/stop, @N play"),
 ];

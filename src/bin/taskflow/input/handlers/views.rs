@@ -247,6 +247,19 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
         KeyCode::Char('w') => Some(Message::Ui(UiMessage::ReportsCycleTimeWindow)),
+        // Tasks panel table (no-ops on the other panels)
+        KeyCode::Char('j') | KeyCode::Down => Some(Message::Ui(UiMessage::ReportsTasksMove(1))),
+        KeyCode::Char('k') | KeyCode::Up => Some(Message::Ui(UiMessage::ReportsTasksMove(-1))),
+        KeyCode::PageDown => Some(Message::Ui(UiMessage::ReportsTasksMove(10))),
+        KeyCode::PageUp => Some(Message::Ui(UiMessage::ReportsTasksMove(-10))),
+        KeyCode::Char('d') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Some(Message::Ui(UiMessage::ReportsTasksMove(10)))
+        }
+        KeyCode::Char('u') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Some(Message::Ui(UiMessage::ReportsTasksMove(-10)))
+        }
+        KeyCode::Char('g') => Some(Message::Ui(UiMessage::ReportsTasksMove(i32::MIN))),
+        KeyCode::Char('G') => Some(Message::Ui(UiMessage::ReportsTasksMove(i32::MAX))),
         _ => None,
     }
 }
@@ -772,7 +785,12 @@ mod tests {
             handle_reports_view(ch('w')),
             Some(Message::Ui(UiMessage::ReportsCycleTimeWindow))
         ));
-        assert!(handle_reports_view(ch('j')).is_none());
+        // j/k now drive the Tasks table; unbound keys still fall through.
+        assert!(matches!(
+            handle_reports_view(ch('j')),
+            Some(Message::Ui(UiMessage::ReportsTasksMove(1)))
+        ));
+        assert!(handle_reports_view(ch('z')).is_none());
     }
 
     #[test]
@@ -798,5 +816,41 @@ mod tests {
             Some(Message::Ui(UiMessage::NetworkViewSelected))
         ));
         assert!(handle_network_view(ch('x')).is_none());
+    }
+
+    #[test]
+    fn reports_view_task_table_keys() {
+        use taskflow::app::UiMessage;
+        let cases: [(KeyEvent, i32); 8] = [
+            (ch('j'), 1),
+            (key(KeyCode::Down), 1),
+            (ch('k'), -1),
+            (key(KeyCode::Up), -1),
+            (key(KeyCode::PageDown), 10),
+            (key(KeyCode::PageUp), -10),
+            (KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL), 10),
+            (
+                KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL),
+                -10,
+            ),
+        ];
+        for (k, delta) in cases {
+            assert!(
+                matches!(
+                    handle_reports_view(k),
+                    Some(Message::Ui(UiMessage::ReportsTasksMove(d))) if d == delta
+                ),
+                "{k:?} should move by {delta}"
+            );
+        }
+        assert!(matches!(
+            handle_reports_view(ch('g')),
+            Some(Message::Ui(UiMessage::ReportsTasksMove(i32::MIN)))
+        ));
+        assert!(matches!(
+            handle_reports_view(ch('G')),
+            Some(Message::Ui(UiMessage::ReportsTasksMove(i32::MAX)))
+        ));
+        assert!(handle_reports_view(ch('x')).is_none());
     }
 }

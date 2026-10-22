@@ -973,6 +973,17 @@ window, e.g. `Time (last 30 days)  [w] window`; press `w` to cycle
 On short terminals the lower sections are dropped first; the stat boxes and
 By Project / Daily rows are kept as long as there is room.
 
+#### Tasks Panel
+Every task with tracked time in the selected window, as a table sorted by
+time: `#`, Task, Project, Entries, Time and Share of the window total. The
+window is the same 7/30/90-day choice as the Time panel (`w` cycles it).
+
+- `j`/`k` or the arrow keys move the selection; `PgUp`/`PgDn` (or `Ctrl+u`/
+  `Ctrl+d`) jump ten rows; `g`/`G` go to the first/last task.
+- The footer shows the window total and which rows are visible, e.g.
+  `Total 12h 30m · showing 1–18 of 42`.
+- Deleted tasks still count and appear as `(deleted task)`.
+
 #### Insights Panel
 Productivity patterns:
 - Current streak (consecutive days completing tasks)

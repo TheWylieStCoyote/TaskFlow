@@ -50,6 +50,30 @@ pub(super) fn project_rows(report: &AnalyticsReport) -> Vec<(String, u32, f64)> 
         .collect()
 }
 
+/// How many tasks the exported per-task table lists.
+pub(super) const MAX_TASK_ROWS: usize = 25;
+
+/// Per-task rows, most time first, capped at [`MAX_TASK_ROWS`]:
+/// `(title, project name, entries, minutes, share of total %)`.
+pub(super) fn task_rows(report: &AnalyticsReport) -> Vec<(String, String, usize, u32, f64)> {
+    let names = project_names(report);
+    report
+        .time_analytics
+        .task_rows()
+        .into_iter()
+        .take(MAX_TASK_ROWS)
+        .map(|row| {
+            let project = match row.project_id {
+                None => "(no project)".to_string(),
+                Some(id) => names
+                    .get(&id)
+                    .map_or_else(|| "(unknown project)".to_string(), |n| (*n).to_string()),
+            };
+            (row.title, project, row.entries, row.minutes, row.share)
+        })
+        .collect()
+}
+
 /// Minutes for every day of the report window, zero-filled.
 pub(super) fn day_rows(report: &AnalyticsReport) -> Vec<(NaiveDate, u32)> {
     report

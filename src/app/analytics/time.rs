@@ -7,7 +7,7 @@
 use chrono::{Datelike, Local, NaiveDate, Timelike};
 use std::collections::{HashMap, HashSet};
 
-use crate::domain::analytics::{BurnChart, TimeAnalytics, TimeSeriesPoint};
+use crate::domain::analytics::{BurnChart, TaskTimeInfo, TimeAnalytics, TimeSeriesPoint};
 use crate::domain::{ProjectId, Task, TaskId};
 
 use super::AnalyticsEngine;
@@ -43,6 +43,7 @@ impl AnalyticsEngine<'_> {
                 entry_date,
                 local_start.hour() as usize,
                 minutes,
+                true,
             );
         }
 
@@ -66,12 +67,14 @@ impl AnalyticsEngine<'_> {
                 date,
                 hour,
                 task.actual_minutes,
+                false,
             );
         }
 
         analytics
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn add_time_bucket(
         analytics: &mut TimeAnalytics,
         task: Option<&Task>,
@@ -79,9 +82,21 @@ impl AnalyticsEngine<'_> {
         date: NaiveDate,
         hour: usize,
         minutes: u32,
+        from_entry: bool,
     ) {
         analytics.total_minutes += minutes;
         *analytics.by_task.entry(task_id).or_insert(0) += minutes;
+        let info = analytics
+            .task_info
+            .entry(task_id)
+            .or_insert_with(|| TaskTimeInfo {
+                title: task.map_or_else(|| "(deleted task)".to_string(), |t| t.title.clone()),
+                project_id: task.and_then(|t| t.project_id),
+                entries: 0,
+            });
+        if from_entry {
+            info.entries += 1;
+        }
         *analytics.by_day.entry(date).or_insert(0) += minutes;
         let dow = date.weekday().num_days_from_monday() as usize;
         analytics.by_day_of_week[dow] += minutes;

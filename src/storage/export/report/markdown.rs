@@ -5,7 +5,7 @@ use std::io::Write;
 use crate::domain::analytics::AnalyticsReport;
 use crate::domain::format_minutes;
 
-use super::time_section::{day_rows, project_rows, text_bar};
+use super::time_section::{day_rows, project_rows, task_rows, text_bar, MAX_TASK_ROWS};
 
 /// Exports an analytics report to Markdown format.
 ///
@@ -230,6 +230,31 @@ fn write_time_tracking<W: Write>(writer: &mut W, report: &AnalyticsReport) -> st
         )?;
     }
     writeln!(writer)?;
+
+    let tasks = task_rows(report);
+    if !tasks.is_empty() {
+        let total_tasks = report
+            .time_analytics
+            .by_task
+            .values()
+            .filter(|&&m| m > 0)
+            .count();
+        if total_tasks > MAX_TASK_ROWS {
+            writeln!(writer, "Top {MAX_TASK_ROWS} of {total_tasks} tasks:")?;
+            writeln!(writer)?;
+        }
+        writeln!(writer, "| Task | Project | Entries | Time | Share |")?;
+        writeln!(writer, "|------|---------|---------|------|-------|")?;
+        for (title, project, entries, minutes, share) in &tasks {
+            writeln!(
+                writer,
+                "| {} | {project} | {entries} | {} | {share:.1}% |",
+                title.replace('|', "\\|"),
+                format_minutes(*minutes)
+            )?;
+        }
+        writeln!(writer)?;
+    }
 
     let days = day_rows(report);
     let max = days.iter().map(|(_, m)| *m).max().unwrap_or(0);

@@ -253,6 +253,15 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         // Reports view: the 7/30/90-day reports are all cached, nothing to invalidate
         UiMessage::ReportsCycleTimeWindow => {
             model.reports_time_window = model.reports_time_window.next();
+            model.reports_tasks_selected = 0;
+        }
+        UiMessage::ReportsTasksMove(delta) => {
+            if model.report_panel == crate::ui::ReportPanel::Tasks {
+                let rows = model.reports_task_row_count();
+                let max = rows.saturating_sub(1) as i64;
+                let target = (model.reports_tasks_selected as i64 + i64::from(delta)).clamp(0, max);
+                model.reports_tasks_selected = target as usize;
+            }
         }
         // Input mode handling
         UiMessage::StartCreateTask => {

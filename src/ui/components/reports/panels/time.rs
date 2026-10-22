@@ -49,10 +49,12 @@ const PREF_DOW: u16 = 9; // 7 weekday rows + borders
 const MIN_STAT_BOX_WIDTH: u16 = 45;
 
 /// Time analytics for the selected window plus the dates it covers.
-struct WindowData<'a> {
-    analytics: Cow<'a, TimeAnalytics>,
-    start: NaiveDate,
-    end: NaiveDate,
+pub(super) struct WindowData<'a> {
+    pub(super) analytics: Cow<'a, TimeAnalytics>,
+    #[allow(dead_code)]
+    pub(super) start: NaiveDate,
+    #[allow(dead_code)]
+    pub(super) end: NaiveDate,
 }
 
 /// One row of a horizontal bar chart: label, bar value, right-aligned text.
@@ -117,7 +119,7 @@ impl ReportsView<'_> {
 
     /// Analytics for `window`: the cached report when present, otherwise just
     /// the time breakdown computed now (cheaper than a whole report).
-    fn time_window_data(&self, window: TimeWindow) -> WindowData<'_> {
+    pub(super) fn time_window_data(&self, window: TimeWindow) -> WindowData<'_> {
         if let Some(report) = self.model.report_cache.report_for_window(window) {
             return WindowData {
                 analytics: Cow::Borrowed(&report.time_analytics),
@@ -455,7 +457,7 @@ fn split_halves(area: Rect) -> std::rc::Rc<[Rect]> {
 
 /// Draw a dark-grey bordered block with `title`; returns the inner area, or
 /// `None` when the area is too small to hold anything.
-fn titled_block(area: Rect, buf: &mut Buffer, title: &str) -> Option<Rect> {
+pub(super) fn titled_block(area: Rect, buf: &mut Buffer, title: &str) -> Option<Rect> {
     if area.width < 10 || area.height < 3 {
         return None;
     }
@@ -469,7 +471,7 @@ fn titled_block(area: Rect, buf: &mut Buffer, title: &str) -> Option<Rect> {
 }
 
 /// "No time tracked in this window" placeholder for an empty section.
-fn render_empty_note(inner: Rect, buf: &mut Buffer, theme: &crate::config::Theme) {
+pub(super) fn render_empty_note(inner: Rect, buf: &mut Buffer, theme: &crate::config::Theme) {
     if inner.height == 0 || inner.width == 0 {
         return;
     }

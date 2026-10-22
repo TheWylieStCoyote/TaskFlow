@@ -997,3 +997,81 @@ fn test_markdown_export_to_writer_matches_string_export() {
         export_report_to_markdown_string(&report).unwrap()
     );
 }
+
+fn report_with_tasks(n: usize) -> AnalyticsReport {
+    use crate::domain::analytics::TaskTimeInfo;
+    use crate::domain::TaskId;
+    let mut report = sample_report();
+    let project_id = report.burn_charts.iter().find_map(|c| c.project_id);
+    let mut total = 0;
+    for i in 0..n {
+        let id = TaskId::new();
+        let minutes = 10 * (n - i) as u32;
+        total += minutes;
+        report.time_analytics.by_task.insert(id, minutes);
+        report.time_analytics.task_info.insert(
+            id,
+            TaskTimeInfo {
+                title: format!("Task <{i}> | pipe"),
+                project_id: if i == 0 { project_id } else { None },
+                entries: i + 1,
+            },
+        );
+    }
+    report.time_analytics.total_minutes = total;
+    report
+}
+
+#[test]
+fn test_markdown_time_tracking_lists_tasks() {
+    let report = report_with_tasks(3);
+    let output = export_report_to_markdown_string(&report).unwrap();
+    assert!(output.contains("| Task | Project | Entries | Time | Share |\n|------|---------|---------|------|-------|\n"), "{output}");
+    // Most time first; pipes in titles are escaped; 30/60 = 50%.
+    let first = output.find("| Task <0> \\| pipe |").expect("task 0 row");
+    let third = output.find("| Task <2> \\| pipe |").expect("task 2 row");
+    assert!(first < third, "{output}");
+    assert!(output.contains("| 1 | 30m | 50.0% |"), "{output}");
+    assert!(output.contains("| 3 | 10m | 16.7% |"), "{output}");
+    assert!(
+        output.contains("| (no project) | 2 | 20m | 33.3% |"),
+        "{output}"
+    );
+    assert!(!output.contains("Top 25 of"), "{output}");
+}
+
+#[test]
+fn test_markdown_time_tracking_caps_task_table() {
+    let report = report_with_tasks(30);
+    let output = export_report_to_markdown_string(&report).unwrap();
+    assert!(output.contains("Top 25 of 30 tasks:"), "{output}");
+    assert!(output.contains("| Task <24> \\| pipe |"), "{output}");
+    assert!(!output.contains("| Task <25> \\| pipe |"), "{output}");
+}
+
+#[test]
+fn test_html_time_card_lists_tasks_escaped() {
+    let report = report_with_tasks(2);
+    let output = export_report_to_html_string(&report).unwrap();
+    assert!(
+        output.contains(
+            "<tr><th>Task</th><th>Project</th><th>Entries</th><th>Time</th><th>Share</th></tr>"
+        ),
+        "{output}"
+    );
+    assert!(
+        output.contains("<td>Task &lt;0&gt; | pipe</td>"),
+        "{output}"
+    );
+    assert!(
+        output.contains("<td>1</td><td>20m</td><td>66.7%</td>"),
+        "{output}"
+    );
+    assert!(
+        output.contains("<td>(no project)</td><td>2</td><td>10m</td><td>33.3%</td>"),
+        "{output}"
+    );
+    assert!(!output.contains("Top 25 of"), "{output}");
+    let big = export_report_to_html_string(&report_with_tasks(26)).unwrap();
+    assert!(big.contains("<p>Top 25 of 26 tasks</p>"), "{big}");
+}

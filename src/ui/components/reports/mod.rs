@@ -32,6 +32,7 @@ pub enum ReportPanel {
     Velocity,
     Tags,
     Time,
+    Tasks,
     Focus,
     Insights,
     Estimation,
@@ -45,7 +46,8 @@ impl ReportPanel {
             Self::Overview => Self::Velocity,
             Self::Velocity => Self::Tags,
             Self::Tags => Self::Time,
-            Self::Time => Self::Focus,
+            Self::Time => Self::Tasks,
+            Self::Tasks => Self::Focus,
             Self::Focus => Self::Insights,
             Self::Insights => Self::Estimation,
             Self::Estimation => Self::Overview,
@@ -60,7 +62,8 @@ impl ReportPanel {
             Self::Velocity => Self::Overview,
             Self::Tags => Self::Velocity,
             Self::Time => Self::Tags,
-            Self::Focus => Self::Time,
+            Self::Tasks => Self::Time,
+            Self::Focus => Self::Tasks,
             Self::Insights => Self::Focus,
             Self::Estimation => Self::Insights,
         }
@@ -74,20 +77,41 @@ impl ReportPanel {
             Self::Velocity => 1,
             Self::Tags => 2,
             Self::Time => 3,
-            Self::Focus => 4,
-            Self::Insights => 5,
-            Self::Estimation => 6,
+            Self::Tasks => 4,
+            Self::Focus => 5,
+            Self::Insights => 6,
+            Self::Estimation => 7,
         }
+    }
+
+    /// Number of panels.
+    pub const COUNT: usize = 8;
+
+    /// Panel for a tab index (`None` when out of range).
+    #[must_use]
+    pub const fn from_index(idx: usize) -> Option<Self> {
+        Some(match idx {
+            0 => Self::Overview,
+            1 => Self::Velocity,
+            2 => Self::Tags,
+            3 => Self::Time,
+            4 => Self::Tasks,
+            5 => Self::Focus,
+            6 => Self::Insights,
+            7 => Self::Estimation,
+            _ => return None,
+        })
     }
 
     /// Get panel names for tabs.
     #[must_use]
-    pub const fn names() -> [&'static str; 7] {
+    pub const fn names() -> [&'static str; Self::COUNT] {
         [
             "Overview",
             "Velocity",
             "Tags",
             "Time",
+            "Tasks",
             "Focus",
             "Insights",
             "Estimation",
@@ -162,6 +186,7 @@ impl Widget for ReportsView<'_> {
             ReportPanel::Velocity => self.render_velocity(chunks[1], buf),
             ReportPanel::Tags => self.render_tags(chunks[1], buf),
             ReportPanel::Time => self.render_time(chunks[1], buf),
+            ReportPanel::Tasks => self.render_tasks(chunks[1], buf),
             ReportPanel::Focus => self.render_focus(chunks[1], buf),
             ReportPanel::Insights => self.render_insights(chunks[1], buf),
             ReportPanel::Estimation => self.render_estimation(chunks[1], buf),

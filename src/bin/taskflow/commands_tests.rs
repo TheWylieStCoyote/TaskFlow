@@ -611,3 +611,243 @@ mod cli_command_tests {
         assert_eq!(cli.log_level, "debug");
     }
 }
+
+/// Shared helpers for the behavioural command tests that live next to each
+/// command (`commands/*.rs`).
+///
+/// Every helper keeps the tests away from the developer's real configuration
+/// and data: the CLI always uses an explicit non-JSON backend (so the backend
+/// stored in `Settings` is never consulted) and a data file under a fresh
+/// temporary directory.
+#[cfg(test)]
+pub(crate) mod support {
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Output};
+
+    use chrono::{DateTime, Local, NaiveDate, TimeZone, Utc};
+    use tempfile::TempDir;
+
+    use taskflow::app::Model;
+    use taskflow::domain::{Project, ProjectId, Task, TaskId};
+    use taskflow::storage::BackendType;
+
+    use crate::cli::Cli;
+
+    /// Environment variable naming the exit-path case a child process runs.
+    const CASE_ENV: &str = "TASKFLOW_TEST_EXIT_CASE";
+    /// Environment variable carrying the data file for a child process.
+    const DATA_ENV: &str = "TASKFLOW_TEST_EXIT_DATA";
+    /// Environment variable carrying the repository path for a child process.
+    const REPO_ENV: &str = "TASKFLOW_TEST_EXIT_REPO";
+
+    /// A fresh temporary directory; removed when dropped.
+    pub(crate) fn temp_dir() -> TempDir {
+        TempDir::new().expect("create temp dir")
+    }
+
+    /// Path of the YAML data file used inside `dir`.
+    pub(crate) fn data_file(dir: &Path) -> PathBuf {
+        dir.join("tasks.yaml")
+    }
+
+    /// A CLI that reads and writes only `data` through the YAML backend.
+    pub(crate) fn yaml_cli(data: &Path) -> Cli {
+        Cli {
+            data: Some(data.to_path_buf()),
+            backend: BackendType::Yaml,
+            demo: false,
+            debug: false,
+            log_level: "info".to_string(),
+            command: None,
+        }
+    }
+
+    /// Open (or create) the YAML store at `data`.
+    pub(crate) fn open_model(data: &Path) -> Model {
+        Model::new()
+            .with_storage(BackendType::Yaml, data.to_path_buf())
+            .expect("open yaml storage")
+    }
+
+    /// Populate the YAML store at `data` with `seed` and save it.
+    pub(crate) fn seed_model(data: &Path, seed: impl FnOnce(&mut Model)) -> Model {
+        let mut model = open_model(data);
+        seed(&mut model);
+        model.save().expect("save seeded model");
+        model
+    }
+
+    /// Insert `task` into the model and its storage.
+    pub(crate) fn add_task(model: &mut Model, task: Task) -> TaskId {
+        let id = task.id;
+        model.tasks.insert(id, task.clone());
+        model.sync_task(&task);
+        id
+    }
+
+    /// Insert `project` into the model and its storage.
+    pub(crate) fn add_project(model: &mut Model, project: Project) -> ProjectId {
+        let id = project.id;
+        model.projects.insert(id, project.clone());
+        model.sync_project(&project);
+        id
+    }
+
+    /// Local noon on `date`, as a UTC instant.
+    ///
+    /// Noon is never ambiguous across DST transitions, so the instant's local
+    /// date is always `date`.
+    pub(crate) fn local_noon(date: NaiveDate) -> DateTime<Utc> {
+        let naive = date.and_hms_opt(12, 0, 0).expect("valid time");
+        Local
+            .from_local_datetime(&naive)
+            .single()
+            .expect("noon is unambiguous")
+            .with_timezone(&Utc)
+    }
+
+    /// Whether a `git` binary can be executed.
+    pub(crate) fn git_available() -> bool {
+        Command::new("git")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// Run `git <args>` in `repo`, failing the test if git reports an error.
+    pub(crate) fn git(repo: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    /// Initialise a repository in `dir` with one commit on `main`.
+    pub(crate) fn init_repo(dir: &Path) {
+        git(dir, &["init", "-q"]);
+        git(dir, &["config", "user.email", "test@test.com"]);
+        git(dir, &["config", "user.name", "Test User"]);
+        git(dir, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(dir.join("README.md"), "# Test Repository\n").expect("write README");
+        git(dir, &["add", "."]);
+        git(dir, &["commit", "-q", "-m", "Initial commit"]);
+        git(dir, &["branch", "-M", "main"]);
+    }
+
+    /// Create `file` with `content` in `dir` and commit it on the current branch.
+    pub(crate) fn commit_file(dir: &Path, file: &str, content: &str, message: &str) {
+        let path = dir.join(file);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dir");
+        }
+        std::fs::write(path, content).expect("write file");
+        git(dir, &["add", "."]);
+        git(dir, &["commit", "-q", "-m", message]);
+    }
+
+    /// Re-run this test binary so that a command which calls
+    /// `std::process::exit` can be observed from the outside.
+    ///
+    /// The child runs [`exit_case_child`] with `case` selected through the
+    /// environment; the returned [`Output`] carries its exit status and the
+    /// text it printed.
+    pub(crate) fn run_exit_case(case: &str, data: &Path, repo: Option<&Path>) -> Output {
+        let exe = std::env::current_exe().expect("current test executable");
+        let mut cmd = Command::new(exe);
+        cmd.args([
+            "--exact",
+            "commands_tests::support::exit_case_child",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CASE_ENV, case)
+        .env(DATA_ENV, data);
+        match repo {
+            Some(repo) => cmd.env(REPO_ENV, repo),
+            None => cmd.env_remove(REPO_ENV),
+        };
+        cmd.output().expect("spawn child test process")
+    }
+
+    /// Assert that an exit-path child terminated with status 1 and return
+    /// its combined stdout and stderr.
+    pub(crate) fn assert_exit_one(output: &Output) -> String {
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.status.code(), Some(1), "child output:\n{text}");
+        text
+    }
+
+    /// Entry point for [`run_exit_case`]; a no-op in a normal test run.
+    #[test]
+    fn exit_case_child() {
+        let Ok(case) = std::env::var(CASE_ENV) else {
+            return;
+        };
+        let data = PathBuf::from(std::env::var(DATA_ENV).expect("data path"));
+        let repo = std::env::var(REPO_ENV).ok().map(PathBuf::from);
+        let cli = yaml_cli(&data);
+        let words =
+            |items: &[&str]| -> Vec<String> { items.iter().map(ToString::to_string).collect() };
+        let repo = || repo.clone().expect("repo path");
+
+        let result = match case.as_str() {
+            "done_empty_query" => crate::commands::mark_task_done(&cli, &[], None, None),
+            "done_no_match" => crate::commands::mark_task_done(
+                &cli,
+                &words(&["nonexistent"]),
+                Some("missing-project"),
+                None,
+            ),
+            "done_multiple" => {
+                crate::commands::mark_task_done(&cli, &words(&["fix", "bug"]), None, None)
+            }
+            "add_empty" => crate::commands::quick_add_task(&cli, &words(&["  "])),
+            "git_link_empty_query" => crate::commands::git::git_link_in(&cli, &repo(), " ", None),
+            "git_link_not_repo" => crate::commands::git::git_link_in(&cli, &repo(), "login", None),
+            "git_link_missing_branch" => {
+                crate::commands::git::git_link_in(&cli, &repo(), "login", Some("no-such-branch"))
+            }
+            "git_link_no_match" => {
+                crate::commands::git::git_link_in(&cli, &repo(), "nonexistent", None)
+            }
+            "git_link_multiple" => crate::commands::git::git_link_in(&cli, &repo(), "bug", None),
+            "git_unlink_empty_query" => crate::commands::git_unlink(&cli, ""),
+            "git_unlink_no_match" => crate::commands::git_unlink(&cli, "nonexistent"),
+            "git_unlink_multiple" => crate::commands::git_unlink(&cli, "bug"),
+            "git_unlink_not_linked" => crate::commands::git_unlink(&cli, "login"),
+            "git_commits_empty_query" => {
+                crate::commands::git::git_commits_in(&cli, &repo(), "", 10)
+            }
+            "git_commits_not_repo" => {
+                crate::commands::git::git_commits_in(&cli, &repo(), "login", 10)
+            }
+            "git_commits_no_match" => {
+                crate::commands::git::git_commits_in(&cli, &repo(), "nonexistent", 10)
+            }
+            "git_commits_multiple" => {
+                crate::commands::git::git_commits_in(&cli, &repo(), "bug", 10)
+            }
+            "git_commits_not_linked" => {
+                crate::commands::git::git_commits_in(&cli, &repo(), "login", 10)
+            }
+            "git_sync_not_repo" => crate::commands::git::git_sync_in(&cli, &repo(), false),
+            "git_check_merged_not_repo" => {
+                crate::commands::git::git_check_merged_in(&cli, &repo(), false)
+            }
+            other => panic!("unknown exit case {other}"),
+        };
+        // Every case above is expected to exit the process before returning.
+        panic!("exit case {case} returned {result:?} instead of exiting");
+    }
+}

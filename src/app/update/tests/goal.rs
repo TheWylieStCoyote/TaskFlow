@@ -535,3 +535,440 @@ fn test_goal_progress_for_nonexistent_goal() {
     let progress = model.goal_progress(fake_id);
     assert_eq!(progress, 0);
 }
+
+// ============================================================================
+// Remaining goal / key result message arms
+// ============================================================================
+
+mod remaining_arms {
+    use crate::app::{update::update, GoalMessage, Message, Model};
+    use crate::domain::{
+        Goal, GoalId, GoalStatus, KeyResult, KeyResultId, KeyResultStatus, Project, Quarter, Task,
+        TaskStatus,
+    };
+    use chrono::NaiveDate;
+
+    fn model_with_goal_and_kr() -> (Model, GoalId, KeyResultId) {
+        let mut model = Model::new();
+        let goal = Goal::new("Objective");
+        let goal_id = goal.id;
+        model.goals.insert(goal_id, goal);
+        let kr = KeyResult::new(goal_id, "Result");
+        let kr_id = kr.id;
+        model.key_results.insert(kr_id, kr);
+        model.refresh_visible_goals();
+        (model, goal_id, kr_id)
+    }
+
+    fn goal(model: &mut Model, msg: GoalMessage) {
+        update(model, Message::Goal(msg));
+    }
+
+    #[test]
+    fn test_update_description_set_and_clear() {
+        let (mut model, id, _) = model_with_goal_and_kr();
+        let before = model.goals[&id].updated_at;
+
+        goal(
+            &mut model,
+            GoalMessage::UpdateDescription {
+                id,
+                description: Some("Why it matters".to_string()),
+            },
+        );
+        assert_eq!(
+            model.goals[&id].description.as_deref(),
+            Some("Why it matters")
+        );
+        assert!(model.goals[&id].updated_at >= before);
+
+        goal(
+            &mut model,
+            GoalMessage::UpdateDescription {
+                id,
+                description: None,
+            },
+        );
+        assert!(model.goals[&id].description.is_none());
+    }
+
+    #[test]
+    fn test_set_dates_and_clear() {
+        let (mut model, id, _) = model_with_goal_and_kr();
+        let start = NaiveDate::from_ymd_opt(2030, 1, 1);
+        let end = NaiveDate::from_ymd_opt(2030, 3, 31);
+
+        goal(&mut model, GoalMessage::SetDates { id, start, end });
+        assert_eq!(model.goals[&id].start_date, start);
+        assert_eq!(model.goals[&id].due_date, end);
+
+        goal(
+            &mut model,
+            GoalMessage::SetDates {
+                id,
+                start: None,
+                end: None,
+            },
+        );
+        assert!(model.goals[&id].start_date.is_none());
+        assert!(model.goals[&id].due_date.is_none());
+    }
+
+    #[test]
+    fn test_set_manual_progress_clear_resets_to_auto() {
+        let (mut model, id, kr_id) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::SetKeyResultManualProgress {
+                id: kr_id,
+                progress: Some(40),
+            },
+        );
+        goal(
+            &mut model,
+            GoalMessage::SetManualProgress {
+                id,
+                progress: Some(90),
+            },
+        );
+        assert_eq!(model.goal_progress(id), 90);
+
+        goal(
+            &mut model,
+            GoalMessage::SetManualProgress { id, progress: None },
+        );
+        assert!(model.goals[&id].manual_progress.is_none());
+        assert_eq!(model.goal_progress(id), 40, "falls back to key results");
+    }
+
+    #[test]
+    fn test_set_quarter_clear() {
+        let (mut model, id, _) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::SetQuarter {
+                id,
+                quarter: Some((2030, Quarter::Q2)),
+            },
+        );
+        assert_eq!(model.goals[&id].quarter, Some((2030, Quarter::Q2)));
+        goal(&mut model, GoalMessage::SetQuarter { id, quarter: None });
+        assert!(model.goals[&id].quarter.is_none());
+    }
+
+    #[test]
+    fn test_update_key_result_name() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::UpdateKeyResultName {
+                id: kr_id,
+                name: "Renamed KR".to_string(),
+            },
+        );
+        assert_eq!(model.key_results[&kr_id].name, "Renamed KR");
+    }
+
+    #[test]
+    fn test_set_key_result_status() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        assert_eq!(
+            model.key_results[&kr_id].status,
+            KeyResultStatus::NotStarted
+        );
+        goal(
+            &mut model,
+            GoalMessage::SetKeyResultStatus {
+                id: kr_id,
+                status: KeyResultStatus::AtRisk,
+            },
+        );
+        assert_eq!(model.key_results[&kr_id].status, KeyResultStatus::AtRisk);
+    }
+
+    #[test]
+    fn test_set_key_result_manual_progress_capped_and_cleared() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::SetKeyResultManualProgress {
+                id: kr_id,
+                progress: Some(250),
+            },
+        );
+        assert_eq!(model.key_results[&kr_id].manual_progress, Some(100));
+        assert_eq!(model.key_result_progress(kr_id), 100);
+
+        goal(
+            &mut model,
+            GoalMessage::SetKeyResultManualProgress {
+                id: kr_id,
+                progress: None,
+            },
+        );
+        assert!(model.key_results[&kr_id].manual_progress.is_none());
+        assert_eq!(model.key_result_progress(kr_id), 0);
+    }
+
+    #[test]
+    fn test_set_key_result_target_with_unit() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::SetKeyResultTarget {
+                id: kr_id,
+                target: 200.0,
+                unit: Some("users".to_string()),
+            },
+        );
+        let kr = &model.key_results[&kr_id];
+        assert!((kr.target_value - 200.0).abs() < f64::EPSILON);
+        assert_eq!(kr.unit.as_deref(), Some("users"));
+    }
+
+    #[test]
+    fn test_link_and_unlink_project() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        let project = Project::new("Linked");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+
+        goal(&mut model, GoalMessage::LinkProject { kr_id, project_id });
+        goal(&mut model, GoalMessage::LinkProject { kr_id, project_id });
+        assert_eq!(
+            model.key_results[&kr_id].linked_project_ids,
+            vec![project_id]
+        );
+
+        goal(&mut model, GoalMessage::UnlinkProject { kr_id, project_id });
+        assert!(model.key_results[&kr_id].linked_project_ids.is_empty());
+    }
+
+    #[test]
+    fn test_link_and_unlink_task_drives_progress() {
+        let (mut model, _, kr_id) = model_with_goal_and_kr();
+        let done = Task::new("Done").with_status(TaskStatus::Done);
+        let open = Task::new("Open");
+        let done_id = done.id;
+        let open_id = open.id;
+        model.tasks.insert(done_id, done);
+        model.tasks.insert(open_id, open);
+
+        goal(
+            &mut model,
+            GoalMessage::LinkTask {
+                kr_id,
+                task_id: done_id,
+            },
+        );
+        goal(
+            &mut model,
+            GoalMessage::LinkTask {
+                kr_id,
+                task_id: open_id,
+            },
+        );
+        assert_eq!(model.key_results[&kr_id].linked_task_ids.len(), 2);
+        assert_eq!(model.key_result_progress(kr_id), 50);
+
+        goal(
+            &mut model,
+            GoalMessage::UnlinkTask {
+                kr_id,
+                task_id: open_id,
+            },
+        );
+        assert_eq!(model.key_results[&kr_id].linked_task_ids, vec![done_id]);
+        assert_eq!(model.key_result_progress(kr_id), 100);
+    }
+
+    #[test]
+    fn test_delete_key_result_only_removes_that_one() {
+        let (mut model, goal_id, kr_id) = model_with_goal_and_kr();
+        let other = KeyResult::new(goal_id, "Other");
+        let other_id = other.id;
+        model.key_results.insert(other_id, other);
+
+        goal(&mut model, GoalMessage::DeleteKeyResult(kr_id));
+
+        assert!(!model.key_results.contains_key(&kr_id));
+        assert!(model.key_results.contains_key(&other_id));
+        assert!(model.goals.contains_key(&goal_id));
+
+        // Deleting again is harmless
+        goal(&mut model, GoalMessage::DeleteKeyResult(kr_id));
+        assert_eq!(model.key_results.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_by_quarter_limits_visible_goals() {
+        let (mut model, id, _) = model_with_goal_and_kr();
+        let mut other = Goal::new("Other quarter");
+        other.quarter = Some((2031, Quarter::Q4));
+        let other_id = other.id;
+        model.goals.insert(other_id, other);
+        goal(
+            &mut model,
+            GoalMessage::SetQuarter {
+                id,
+                quarter: Some((2030, Quarter::Q1)),
+            },
+        );
+        assert_eq!(model.visible_goals.len(), 2);
+
+        goal(
+            &mut model,
+            GoalMessage::FilterByQuarter(Some((2030, Quarter::Q1))),
+        );
+        assert_eq!(model.goal_view.filter_quarter, Some((2030, Quarter::Q1)));
+        assert_eq!(model.visible_goals, vec![id]);
+
+        goal(&mut model, GoalMessage::FilterByQuarter(None));
+        assert_eq!(model.visible_goals.len(), 2);
+    }
+
+    #[test]
+    fn test_navigate_within_key_results() {
+        let (mut model, goal_id, _) = model_with_goal_and_kr();
+        let second = KeyResult::new(goal_id, "Second");
+        model.key_results.insert(second.id, second);
+        goal(&mut model, GoalMessage::ExpandGoal(goal_id));
+        assert_eq!(model.goal_view.selected_kr, 0);
+
+        goal(&mut model, GoalMessage::NavigateDown);
+        assert_eq!(model.goal_view.selected_kr, 1);
+        goal(&mut model, GoalMessage::NavigateDown);
+        assert_eq!(model.goal_view.selected_kr, 1, "stops at last key result");
+
+        goal(&mut model, GoalMessage::NavigateUp);
+        assert_eq!(model.goal_view.selected_kr, 0);
+        goal(&mut model, GoalMessage::NavigateUp);
+        assert_eq!(model.goal_view.selected_kr, 0, "stops at first key result");
+
+        goal(&mut model, GoalMessage::CollapseGoal);
+        assert!(model.goal_view.expanded_goal.is_none());
+    }
+
+    #[test]
+    fn test_navigate_goals_clamps_at_bounds() {
+        let (mut model, _, _) = model_with_goal_and_kr();
+        goal(&mut model, GoalMessage::NavigateDown);
+        assert_eq!(model.goal_view.selected_goal, 0, "single goal: cannot move");
+        goal(&mut model, GoalMessage::NavigateUp);
+        assert_eq!(model.goal_view.selected_goal, 0);
+    }
+
+    #[test]
+    fn test_navigate_into_is_noop_when_already_expanded() {
+        let (mut model, goal_id, _) = model_with_goal_and_kr();
+        let other = Goal::new("Other");
+        let other_id = other.id;
+        model.goals.insert(other_id, other);
+        model.refresh_visible_goals();
+        model.goal_view.expanded_goal = Some(other_id);
+        model.goal_view.selected_goal = model
+            .visible_goals
+            .iter()
+            .position(|id| *id == goal_id)
+            .unwrap();
+
+        goal(&mut model, GoalMessage::NavigateInto);
+
+        assert_eq!(model.goal_view.expanded_goal, Some(other_id));
+    }
+
+    #[test]
+    fn test_navigate_into_without_goals_is_noop() {
+        let mut model = Model::new();
+        goal(&mut model, GoalMessage::NavigateInto);
+        assert!(model.goal_view.expanded_goal.is_none());
+    }
+
+    #[test]
+    fn test_set_status_hides_archived_until_toggled() {
+        let (mut model, id, _) = model_with_goal_and_kr();
+        goal(
+            &mut model,
+            GoalMessage::SetStatus {
+                id,
+                status: GoalStatus::Archived,
+            },
+        );
+        assert!(model.visible_goals.is_empty());
+        goal(&mut model, GoalMessage::ToggleArchived);
+        assert_eq!(model.visible_goals, vec![id]);
+    }
+
+    #[test]
+    fn test_key_result_messages_on_missing_ids_do_not_panic() {
+        let mut model = Model::new();
+        let kr_id = KeyResultId::new();
+        let goal_id = GoalId::new();
+        for msg in [
+            GoalMessage::UpdateKeyResultName {
+                id: kr_id,
+                name: "x".to_string(),
+            },
+            GoalMessage::SetKeyResultStatus {
+                id: kr_id,
+                status: KeyResultStatus::Completed,
+            },
+            GoalMessage::SetKeyResultTarget {
+                id: kr_id,
+                target: 1.0,
+                unit: None,
+            },
+            GoalMessage::SetKeyResultValue {
+                id: kr_id,
+                value: 1.0,
+            },
+            GoalMessage::SetKeyResultManualProgress {
+                id: kr_id,
+                progress: Some(1),
+            },
+            GoalMessage::LinkProject {
+                kr_id,
+                project_id: crate::domain::ProjectId::new(),
+            },
+            GoalMessage::UnlinkProject {
+                kr_id,
+                project_id: crate::domain::ProjectId::new(),
+            },
+            GoalMessage::LinkTask {
+                kr_id,
+                task_id: crate::domain::TaskId::new(),
+            },
+            GoalMessage::UnlinkTask {
+                kr_id,
+                task_id: crate::domain::TaskId::new(),
+            },
+            GoalMessage::DeleteKeyResult(kr_id),
+            GoalMessage::UpdateDescription {
+                id: goal_id,
+                description: None,
+            },
+            GoalMessage::SetDates {
+                id: goal_id,
+                start: None,
+                end: None,
+            },
+            GoalMessage::SetStatus {
+                id: goal_id,
+                status: GoalStatus::Completed,
+            },
+            GoalMessage::SetQuarter {
+                id: goal_id,
+                quarter: None,
+            },
+            GoalMessage::SetManualProgress {
+                id: goal_id,
+                progress: None,
+            },
+        ] {
+            goal(&mut model, msg);
+        }
+        assert!(model.goals.is_empty());
+        assert!(model.key_results.is_empty());
+        assert!(!model.storage.dirty);
+    }
+}

@@ -369,3 +369,188 @@ impl GoalsView<'_> {
         paragraph.render(inner, buf);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::{Goal, GoalStatus, KeyResult, KeyResultStatus, Quarter};
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    fn render(model: &Model) -> String {
+        let theme = Theme::default();
+        buffer_content(&render_widget(GoalsView::new(model, &theme), 140, 30))
+    }
+
+    fn model_with_goal() -> (Model, crate::domain::GoalId) {
+        let mut model = Model::new();
+        let mut goal = Goal::new("Grow the user base");
+        goal.quarter = Some((2030, Quarter::Q2));
+        let goal_id = goal.id;
+        model.goals.insert(goal_id, goal);
+        model.refresh_visible_goals();
+        (model, goal_id)
+    }
+
+    #[test]
+    fn test_empty_goal_list_and_detail_messages() {
+        let model = Model::new();
+        let content = render(&model);
+        assert!(content.contains(" Goals "));
+        assert!(content.contains("No goals yet. Press 'n' to create one."));
+        assert!(content.contains("Select a goal to view details"));
+    }
+
+    #[test]
+    fn test_show_archived_changes_title() {
+        let (mut model, _) = model_with_goal();
+        model.goal_view.show_archived = true;
+        let content = render(&model);
+        assert!(content.contains("Goals (showing completed)"));
+    }
+
+    #[test]
+    fn test_goal_list_shows_progress_and_timeframe() {
+        let (mut model, goal_id) = model_with_goal();
+        model.goals.get_mut(&goal_id).unwrap().manual_progress = Some(60);
+
+        let content = render(&model);
+
+        assert!(content.contains("▸ "));
+        assert!(content.contains("Grow the user base"));
+        assert!(content.contains(" 60%"));
+        assert!(content.contains(&model.goals[&goal_id].formatted_timeframe()));
+        assert!(content.contains("Status: "));
+        assert!(content.contains("Timeframe: "));
+        assert!(content.contains("Progress: "));
+        assert!(content.contains("n: new goal | N: new KR | Enter: expand | d: delete"));
+    }
+
+    #[test]
+    fn test_completed_goal_renders_with_status_symbol() {
+        let (mut model, goal_id) = model_with_goal();
+        model.goals.get_mut(&goal_id).unwrap().status = GoalStatus::Completed;
+        model.goal_view.show_archived = true;
+        model.refresh_visible_goals();
+
+        let content = render(&model);
+        assert!(content.contains("Grow the user base"));
+        assert!(content.contains(&format!("Status: {}", GoalStatus::Completed)));
+    }
+
+    #[test]
+    fn test_expanded_goal_injects_key_results() {
+        let (mut model, goal_id) = model_with_goal();
+        let mut active = KeyResult::new(goal_id, "Active KR").with_target(100.0, Some("users"));
+        active.set_value(45.0);
+        active.status = KeyResultStatus::InProgress;
+        let mut done = KeyResult::new(goal_id, "Done KR");
+        done.status = KeyResultStatus::Completed;
+        done.manual_progress = Some(100);
+        let pending = KeyResult::new(goal_id, "Pending KR");
+        model.key_results.insert(active.id, active);
+        model.key_results.insert(done.id, done);
+        model.key_results.insert(pending.id, pending);
+        model.goal_view.expanded_goal = Some(goal_id);
+        model.goal_view.selected_kr = 1;
+
+        let content = render(&model);
+
+        assert!(content.contains("▼ "), "expanded indicator");
+        assert!(content.contains("    "), "key results are indented");
+        assert!(content.contains("Active KR"));
+        assert!(content.contains("Done KR"));
+        assert!(content.contains("Pending KR"));
+        assert!(content.contains(" 45%"));
+        assert!(content.contains("45/100 users"));
+        assert!(content.contains("Key Results (3):"));
+        assert!(content.contains("Active KR (45%)"));
+        assert!(content.contains("Done KR (100%)"));
+        assert!(content.contains("Pending KR (0%)"));
+    }
+
+    #[test]
+    fn test_expanded_goal_with_many_key_results_appends_overflow() {
+        let (mut model, goal_id) = model_with_goal();
+        for i in 0..7 {
+            let kr = KeyResult::new(goal_id, format!("KR number {i}"));
+            model.key_results.insert(kr.id, kr);
+        }
+        model.goal_view.expanded_goal = Some(goal_id);
+
+        let content = render(&model);
+
+        // All seven appear in the list on the left...
+        for i in 0..7 {
+            assert!(content.contains(&format!("KR number {i}")), "KR {i} listed");
+        }
+        // ...while the detail panel caps at five and reports the rest
+        assert!(content.contains("Key Results (7):"));
+        assert!(content.contains("... and 2 more"));
+    }
+
+    #[test]
+    fn test_expanded_goal_not_visible_does_not_inject() {
+        let (mut model, goal_id) = model_with_goal();
+        let kr = KeyResult::new(goal_id, "Hidden KR");
+        model.key_results.insert(kr.id, kr);
+        model.goal_view.expanded_goal = Some(crate::domain::GoalId::new());
+
+        let content = render(&model);
+
+        // The detail panel still lists the selected goal's key results, but no
+        // goal row is expanded in the list on the left.
+        assert!(content.contains("Key Results (1):"));
+        assert!(!content.contains("▼ "), "no expanded indicator");
+        assert!(content.contains("▸ "));
+    }
+
+    #[test]
+    fn test_second_goal_expanded_inserts_after_it() {
+        let (mut model, first_id) = model_with_goal();
+        let second = Goal::new("Zebra goal");
+        let second_id = second.id;
+        model.goals.insert(second_id, second);
+        model.refresh_visible_goals();
+        let kr = KeyResult::new(second_id, "Zebra KR");
+        model.key_results.insert(kr.id, kr);
+        model.goal_view.expanded_goal = Some(second_id);
+        model.goal_view.selected_goal = model
+            .visible_goals
+            .iter()
+            .position(|id| *id == second_id)
+            .unwrap();
+
+        let content = render(&model);
+
+        let zebra_pos = content.find("Zebra goal").expect("goal rendered");
+        let kr_pos = content.find("Zebra KR").expect("key result rendered");
+        assert!(kr_pos > zebra_pos, "key result follows its goal");
+        assert!(content.contains("Grow the user base"));
+        let _ = first_id;
+    }
+
+    #[test]
+    fn test_detail_panel_shows_description() {
+        let (mut model, goal_id) = model_with_goal();
+        model.goals.get_mut(&goal_id).unwrap().description =
+            Some("Reach ten thousand weekly actives".to_string());
+
+        let content = render(&model);
+
+        assert!(content.contains("Description:"));
+        assert!(content.contains("Reach ten thousand weekly actives"));
+    }
+
+    #[test]
+    fn test_progress_colors_by_band() {
+        let model = Model::new();
+        let theme = Theme::default();
+        let view = GoalsView::new(&model, &theme);
+        assert_eq!(view.progress_color(90), theme.colors.success.to_color());
+        assert_eq!(view.progress_color(50), theme.colors.accent.to_color());
+        assert_eq!(view.progress_color(30), theme.colors.warning.to_color());
+        assert_eq!(view.progress_color(5), theme.colors.danger.to_color());
+    }
+}

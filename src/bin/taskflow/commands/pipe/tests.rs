@@ -10,10 +10,15 @@
 #[cfg(test)]
 mod pipe_interface_tests {
     use super::super::*;
+    use chrono::{Duration, TimeZone, Utc};
     use serde_json::json;
     use taskflow::app::Model;
-    use taskflow::domain::{Priority, Task, TaskStatus};
+    use taskflow::domain::{
+        today, Filter, GoalStatus, HabitFrequency, Priority, ProjectId, Quarter, SavedFilter,
+        SortSpec, Task, TaskStatus,
+    };
     use types::*;
+    use uuid::Uuid;
 
     // ========================================================================
     // Helper Functions
@@ -2378,5 +2383,1869 @@ mod pipe_interface_tests {
         let resp = super::super::process_request(&mut model, req);
         assert!(resp.success);
         assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    // ========================================================================
+    // Task List Filter Tests
+    // ========================================================================
+
+    const NIL_UUID: &str = "00000000-0000-0000-0000-000000000000";
+
+    fn process(model: &mut Model, req: PipeRequest) -> PipeResponse<serde_json::Value> {
+        super::super::process_request(model, req)
+    }
+
+    fn list_tasks_with(model: &mut Model, filters: FilterParams) -> serde_json::Value {
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Task,
+            id: None,
+            data: None,
+            filters: Some(filters),
+        };
+        let resp = process(model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()
+    }
+
+    fn titles(data: &serde_json::Value) -> Vec<String> {
+        data["tasks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["title"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn sorted_titles(data: &serde_json::Value) -> Vec<String> {
+        let mut t = titles(data);
+        t.sort();
+        t
+    }
+
+    fn at(year: i32, month: u32, day: u32) -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(year, month, day, 12, 0, 0).unwrap()
+    }
+
+    /// Five tasks with distinct statuses, priorities, tags, dates and projects.
+    ///
+    /// | title           | status      | priority | tags              | due        | project |
+    /// |-----------------|-------------|----------|-------------------|------------|---------|
+    /// | Alpha report    | in_progress | high     | Work, quarterly   | today - 1  | yes     |
+    /// | Bravo chores    | todo        | low      | home              | today      | no      |
+    /// | Charlie blocked | blocked     | urgent   | work, home        | today + 1  | yes     |
+    /// | Delta done      | done        | medium   |                   | none       | no      |
+    /// | Echo cancelled  | cancelled   | none     |                   | none       | no      |
+    fn create_filter_model() -> (Model, ProjectId) {
+        let mut model = Model::new();
+        let project_id = ProjectId(Uuid::new_v4());
+        let today = today();
+
+        let mut alpha = Task::new("Alpha report")
+            .with_priority(Priority::High)
+            .with_tags(vec!["Work".to_string(), "quarterly".to_string()]);
+        alpha.status = TaskStatus::InProgress;
+        alpha.project_id = Some(project_id);
+        alpha.due_date = Some(today - Duration::days(1));
+        alpha.created_at = at(2030, 1, 5);
+        alpha.updated_at = at(2030, 2, 1);
+
+        let mut bravo = Task::new("Bravo chores")
+            .with_priority(Priority::Low)
+            .with_tags(vec!["home".to_string()])
+            .with_description("Clean the kitchen");
+        bravo.due_date = Some(today);
+        bravo.created_at = at(2030, 1, 1);
+        bravo.updated_at = at(2030, 2, 3);
+
+        let mut charlie = Task::new("Charlie blocked")
+            .with_priority(Priority::Urgent)
+            .with_tags(vec!["work".to_string(), "home".to_string()]);
+        charlie.status = TaskStatus::Blocked;
+        charlie.project_id = Some(project_id);
+        charlie.due_date = Some(today + Duration::days(1));
+        charlie.created_at = at(2030, 1, 3);
+        charlie.updated_at = at(2030, 2, 2);
+
+        let mut delta = Task::new("Delta done").with_priority(Priority::Medium);
+        delta.status = TaskStatus::Done;
+        delta.created_at = at(2030, 1, 2);
+        delta.updated_at = at(2030, 2, 4);
+
+        let mut echo = Task::new("Echo cancelled");
+        echo.status = TaskStatus::Cancelled;
+        echo.created_at = at(2030, 1, 4);
+        echo.updated_at = at(2030, 2, 5);
+
+        for task in [alpha, bravo, charlie, delta, echo] {
+            model.tasks.insert(task.id, task);
+        }
+        model.refresh_visible_tasks();
+        (model, project_id)
+    }
+
+    fn strings(items: &[&str]) -> Option<Vec<String>> {
+        Some(items.iter().map(|s| (*s).to_string()).collect())
+    }
+
+    #[test]
+    fn test_task_list_without_filters_includes_completed() {
+        let (mut model, _) = create_filter_model();
+        let resp = process(&mut model, make_request(Operation::List, EntityType::Task));
+        assert!(resp.success);
+        let data = resp.data.unwrap();
+        assert_eq!(data["total"], 5);
+        assert_eq!(data["offset"], 0);
+        assert_eq!(data["limit"], 100);
+        assert_eq!(data["tasks"].as_array().unwrap().len(), 5);
+        let meta = resp.metadata.unwrap();
+        assert_eq!(meta.total, Some(5));
+        assert_eq!(meta.offset, Some(0));
+        assert_eq!(meta.limit, Some(100));
+    }
+
+    #[test]
+    fn test_task_list_default_filters_exclude_completed() {
+        let (mut model, _) = create_filter_model();
+        let data = list_tasks_with(&mut model, FilterParams::default());
+        assert_eq!(
+            sorted_titles(&data),
+            ["Alpha report", "Bravo chores", "Charlie blocked"]
+        );
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 5);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_project() {
+        let (mut model, project_id) = create_filter_model();
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                project_id: Some(project_id.0.to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Alpha report", "Charlie blocked"]);
+
+        // A project id that is not a UUID is ignored rather than matching nothing.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                project_id: Some("not-a-uuid".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 3);
+
+        // A valid but unknown project matches nothing.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                project_id: Some(NIL_UUID.to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 0);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_tags_all_and_any() {
+        let (mut model, _) = create_filter_model();
+
+        // Default mode is "all".
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                tags: strings(&["work", "home"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(titles(&data), ["Charlie blocked"]);
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                tags: strings(&["work", "home"]),
+                tags_mode: Some("any".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            sorted_titles(&data),
+            ["Alpha report", "Bravo chores", "Charlie blocked"]
+        );
+
+        // Matching is case-insensitive on both sides.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                tags: strings(&["WORK"]),
+                tags_mode: Some("all".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Alpha report", "Charlie blocked"]);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_status() {
+        let (mut model, _) = create_filter_model();
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                status: strings(&["in_progress", "blocked"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Alpha report", "Charlie blocked"]);
+
+        // Status filter runs before the completion filter, so "done" alone
+        // yields nothing unless completed tasks are included.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                status: strings(&["done"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 0);
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                status: strings(&["done"]),
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(titles(&data), ["Delta done"]);
+
+        // Spelling variants accepted by parse_status.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                status: strings(&["In-Progress", "COMPLETED", "canceled"]),
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            sorted_titles(&data),
+            ["Alpha report", "Delta done", "Echo cancelled"]
+        );
+
+        // Only unknown statuses: filter is skipped entirely.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                status: strings(&["bogus"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 3);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_priority() {
+        let (mut model, _) = create_filter_model();
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                priority: strings(&["high", "URGENT"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Alpha report", "Charlie blocked"]);
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                priority: strings(&["med"]),
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(titles(&data), ["Delta done"]);
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                priority: strings(&["none", "low"]),
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Bravo chores", "Echo cancelled"]);
+
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                priority: strings(&["bogus"]),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 3);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_search() {
+        let (mut model, _) = create_filter_model();
+        let search = |model: &mut Model, text: &str| {
+            list_tasks_with(
+                model,
+                FilterParams {
+                    search: Some(text.to_string()),
+                    ..Default::default()
+                },
+            )
+        };
+
+        // Title match, case-insensitive.
+        assert_eq!(titles(&search(&mut model, "ALPHA")), ["Alpha report"]);
+        // Description match.
+        assert_eq!(titles(&search(&mut model, "kitchen")), ["Bravo chores"]);
+        // Tag match.
+        assert_eq!(titles(&search(&mut model, "quarterly")), ["Alpha report"]);
+        // No match.
+        assert_eq!(search(&mut model, "zzz")["total"], 0);
+    }
+
+    #[test]
+    fn test_task_list_filter_by_due_dates() {
+        let (mut model, _) = create_filter_model();
+        let today = today().format("%Y-%m-%d").to_string();
+
+        // due_before is inclusive.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                due_before: Some(today.clone()),
+                include_completed: Some(true),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Alpha report", "Bravo chores"]);
+
+        // due_after is inclusive.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                due_after: Some(today.clone()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(sorted_titles(&data), ["Bravo chores", "Charlie blocked"]);
+
+        // Both bounds on the same day.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                due_before: Some(today.clone()),
+                due_after: Some(today),
+                ..Default::default()
+            },
+        );
+        assert_eq!(titles(&data), ["Bravo chores"]);
+
+        // Unparseable dates are ignored.
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                due_before: Some("31/12/2030".to_string()),
+                due_after: Some("soon".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 3);
+    }
+
+    fn sort_tasks(
+        model: &mut Model,
+        sort_by: &str,
+        sort_order: Option<&str>,
+        include_completed: bool,
+    ) -> Vec<String> {
+        titles(&list_tasks_with(
+            model,
+            FilterParams {
+                sort_by: Some(sort_by.to_string()),
+                sort_order: sort_order.map(str::to_string),
+                include_completed: Some(include_completed),
+                ..Default::default()
+            },
+        ))
+    }
+
+    #[test]
+    fn test_task_list_sort_by_due_date() {
+        let (mut model, _) = create_filter_model();
+        assert_eq!(
+            sort_tasks(&mut model, "due_date", None, false),
+            ["Alpha report", "Bravo chores", "Charlie blocked"]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "due_date", Some("desc"), false),
+            ["Charlie blocked", "Bravo chores", "Alpha report"]
+        );
+    }
+
+    #[test]
+    fn test_task_list_sort_by_priority() {
+        let (mut model, _) = create_filter_model();
+        // Default order puts the highest priority first.
+        assert_eq!(
+            sort_tasks(&mut model, "priority", Some("asc"), false),
+            ["Charlie blocked", "Alpha report", "Bravo chores"]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "priority", Some("desc"), false),
+            ["Bravo chores", "Alpha report", "Charlie blocked"]
+        );
+        // All five priority levels participate in the ordering.
+        assert_eq!(
+            sort_tasks(&mut model, "priority", None, true),
+            [
+                "Charlie blocked",
+                "Alpha report",
+                "Delta done",
+                "Bravo chores",
+                "Echo cancelled"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_task_list_sort_by_title() {
+        let (mut model, _) = create_filter_model();
+        assert_eq!(
+            sort_tasks(&mut model, "title", None, true),
+            [
+                "Alpha report",
+                "Bravo chores",
+                "Charlie blocked",
+                "Delta done",
+                "Echo cancelled"
+            ]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "title", Some("desc"), false),
+            ["Charlie blocked", "Bravo chores", "Alpha report"]
+        );
+    }
+
+    #[test]
+    fn test_task_list_sort_by_created_and_updated() {
+        let (mut model, _) = create_filter_model();
+        assert_eq!(
+            sort_tasks(&mut model, "created", None, false),
+            ["Bravo chores", "Charlie blocked", "Alpha report"]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "created_at", Some("desc"), false),
+            ["Alpha report", "Charlie blocked", "Bravo chores"]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "updated", None, false),
+            ["Alpha report", "Charlie blocked", "Bravo chores"]
+        );
+        assert_eq!(
+            sort_tasks(&mut model, "updated_at", Some("desc"), false),
+            ["Bravo chores", "Charlie blocked", "Alpha report"]
+        );
+    }
+
+    #[test]
+    fn test_task_list_unknown_sort_key_is_ignored() {
+        let (mut model, _) = create_filter_model();
+        let data = list_tasks_with(
+            &mut model,
+            FilterParams {
+                sort_by: Some("bogus".to_string()),
+                ..Default::default()
+            },
+        );
+        assert_eq!(data["total"], 3);
+        assert_eq!(data["tasks"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_task_list_pagination() {
+        let (mut model, _) = create_filter_model();
+        let page = |model: &mut Model, offset: usize, limit: usize| {
+            let req = PipeRequest {
+                operation: Operation::List,
+                entity: EntityType::Task,
+                id: None,
+                data: None,
+                filters: Some(FilterParams {
+                    sort_by: Some("title".to_string()),
+                    include_completed: Some(true),
+                    offset: Some(offset),
+                    limit: Some(limit),
+                    ..Default::default()
+                }),
+            };
+            process(model, req)
+        };
+
+        let resp = page(&mut model, 0, 2);
+        let data = resp.data.as_ref().unwrap();
+        assert_eq!(titles(data), ["Alpha report", "Bravo chores"]);
+        assert_eq!(data["total"], 5);
+        assert_eq!(data["offset"], 0);
+        assert_eq!(data["limit"], 2);
+
+        let resp = page(&mut model, 2, 2);
+        let data = resp.data.as_ref().unwrap();
+        assert_eq!(titles(data), ["Charlie blocked", "Delta done"]);
+        let meta = resp.metadata.unwrap();
+        assert_eq!(
+            (meta.total, meta.offset, meta.limit),
+            (Some(5), Some(2), Some(2))
+        );
+
+        let resp = page(&mut model, 10, 2);
+        let data = resp.data.unwrap();
+        assert!(titles(&data).is_empty());
+        assert_eq!(data["total"], 5);
+    }
+
+    // ========================================================================
+    // Task Create Tests
+    // ========================================================================
+
+    fn create_task_resp(
+        model: &mut Model,
+        data: serde_json::Value,
+    ) -> PipeResponse<serde_json::Value> {
+        process(
+            model,
+            make_request_with_data(Operation::Create, EntityType::Task, data),
+        )
+    }
+
+    fn task_by_id(model: &Model, id: &str) -> Task {
+        let uuid = Uuid::parse_str(id).unwrap();
+        model.tasks[&taskflow::domain::TaskId(uuid)].clone()
+    }
+
+    #[test]
+    fn test_task_create_with_all_fields() {
+        let mut model = Model::new();
+        let project = Uuid::new_v4();
+        let dep = Uuid::new_v4();
+        let resp = create_task_resp(
+            &mut model,
+            json!({
+                "title": "Full task",
+                "description": "Details",
+                "status": "in_progress",
+                "priority": "urgent",
+                "project_id": project.to_string(),
+                "tags": ["a", "b"],
+                "due_date": "2030-03-04",
+                "scheduled_date": "2030-03-01",
+                "estimated_minutes": 90,
+                "dependencies": [dep.to_string(), "not-a-uuid"]
+            }),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["title"], "Full task");
+        assert_eq!(data["status"], "inprogress");
+
+        let task = task_by_id(&model, data["id"].as_str().unwrap());
+        assert_eq!(task.description.as_deref(), Some("Details"));
+        assert_eq!(task.status, TaskStatus::InProgress);
+        assert!(task.completed_at.is_none());
+        assert_eq!(task.priority, Priority::Urgent);
+        assert_eq!(task.project_id, Some(ProjectId(project)));
+        assert_eq!(task.tags, ["a", "b"]);
+        assert_eq!(task.due_date.unwrap().to_string(), "2030-03-04");
+        assert_eq!(task.scheduled_date.unwrap().to_string(), "2030-03-01");
+        assert_eq!(task.estimated_minutes, Some(90));
+        assert_eq!(task.dependencies, [taskflow::domain::TaskId(dep)]);
+    }
+
+    #[test]
+    fn test_task_create_complete_status_sets_completed_at() {
+        let mut model = Model::new();
+        for status in ["done", "cancelled"] {
+            let resp = create_task_resp(&mut model, json!({"title": status, "status": status}));
+            let data = resp.data.unwrap();
+            let task = task_by_id(&model, data["id"].as_str().unwrap());
+            assert!(task.status.is_complete(), "{status}");
+            assert!(task.completed_at.is_some(), "{status}");
+        }
+    }
+
+    #[test]
+    fn test_task_create_ignores_unparseable_values() {
+        let mut model = Model::new();
+        let resp = create_task_resp(
+            &mut model,
+            json!({
+                "title": "Loose task",
+                "status": "someday",
+                "priority": "whenever",
+                "project_id": "not-a-uuid",
+                "due_date": "31/12/2030",
+                "scheduled_date": "tomorrow",
+                "dependencies": ["nope"]
+            }),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let task = task_by_id(&model, resp.data.unwrap()["id"].as_str().unwrap());
+        assert_eq!(task.status, TaskStatus::Todo);
+        assert_eq!(task.priority, Priority::None);
+        assert!(task.project_id.is_none());
+        assert!(task.due_date.is_none());
+        assert!(task.scheduled_date.is_none());
+        assert!(task.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_task_create_rejects_bad_input() {
+        let mut model = Model::new();
+
+        let resp = process(
+            &mut model,
+            make_request(Operation::Create, EntityType::Task),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+
+        let resp = create_task_resp(&mut model, json!({"description": "no title"}));
+        assert!(!resp.success);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "MISSING_DATA");
+        assert_eq!(err.message, "Task title is required");
+
+        let resp = create_task_resp(&mut model, json!({"title": 123}));
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_DATA");
+
+        let resp = create_task_resp(
+            &mut model,
+            json!({"title": "x", "estimated_minutes": "lots"}),
+        );
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "INVALID_DATA");
+        assert!(err.message.starts_with("Failed to parse task data:"));
+
+        assert!(model.tasks.is_empty());
+    }
+
+    // ========================================================================
+    // Task Update Tests
+    // ========================================================================
+
+    fn update_task_resp(
+        model: &mut Model,
+        id: &str,
+        data: serde_json::Value,
+    ) -> PipeResponse<serde_json::Value> {
+        process(
+            model,
+            make_request_with_id_and_data(Operation::Update, EntityType::Task, id, data),
+        )
+    }
+
+    fn seed_task(model: &mut Model) -> String {
+        let data = create_task_resp(model, json!({"title": "Seed"}))
+            .data
+            .unwrap();
+        data["id"].as_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn test_task_update_error_paths() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+
+        let resp = process(
+            &mut model,
+            make_request_with_data(Operation::Update, EntityType::Task, json!({"title": "x"})),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+
+        let resp = process(
+            &mut model,
+            make_request_with_id(Operation::Update, EntityType::Task, &id),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+
+        let resp = update_task_resp(&mut model, "garbage", json!({"title": "x"}));
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "INVALID_ID");
+        assert_eq!(err.message, "Invalid UUID format: garbage");
+
+        let resp = update_task_resp(&mut model, NIL_UUID, json!({"title": "x"}));
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "NOT_FOUND");
+        assert_eq!(err.message, format!("Task not found: {NIL_UUID}"));
+
+        assert_eq!(task_by_id(&model, &id).title, "Seed");
+    }
+
+    #[test]
+    fn test_task_update_title_and_description() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+
+        let resp = update_task_resp(
+            &mut model,
+            &id,
+            json!({"title": "Renamed", "description": "Now with details"}),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["title"], "Renamed");
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.title, "Renamed");
+        assert_eq!(task.description.as_deref(), Some("Now with details"));
+
+        // Non-string title is ignored; null description clears it.
+        update_task_resp(&mut model, &id, json!({"title": 7, "description": null}));
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.title, "Renamed");
+        assert!(task.description.is_none());
+
+        // Non-string, non-null description also clears it.
+        update_task_resp(&mut model, &id, json!({"description": "x"}));
+        update_task_resp(&mut model, &id, json!({"description": 42}));
+        assert!(task_by_id(&model, &id).description.is_none());
+    }
+
+    #[test]
+    fn test_task_update_status_transitions() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+
+        update_task_resp(&mut model, &id, json!({"status": "done"}));
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.status, TaskStatus::Done);
+        let completed_at = task.completed_at.expect("completed_at set on completion");
+
+        // Completing an already complete task keeps the original timestamp.
+        update_task_resp(&mut model, &id, json!({"status": "cancelled"}));
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.status, TaskStatus::Cancelled);
+        assert_eq!(task.completed_at, Some(completed_at));
+
+        // Unknown status leaves everything untouched.
+        update_task_resp(&mut model, &id, json!({"status": "bogus"}));
+        assert_eq!(task_by_id(&model, &id).status, TaskStatus::Cancelled);
+
+        // Reopening clears completed_at.
+        update_task_resp(&mut model, &id, json!({"status": "in-progress"}));
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.status, TaskStatus::InProgress);
+        assert!(task.completed_at.is_none());
+
+        // Moving between two open statuses never touches completed_at.
+        update_task_resp(&mut model, &id, json!({"status": "blocked"}));
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.status, TaskStatus::Blocked);
+        assert!(task.completed_at.is_none());
+    }
+
+    #[test]
+    fn test_task_update_priority_project_and_tags() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+        let project = Uuid::new_v4();
+
+        update_task_resp(
+            &mut model,
+            &id,
+            json!({
+                "priority": "med",
+                "project_id": project.to_string(),
+                "tags": ["a", 1, "b", null]
+            }),
+        );
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.priority, Priority::Medium);
+        assert_eq!(task.project_id, Some(ProjectId(project)));
+        assert_eq!(task.tags, ["a", "b"]);
+
+        // Unknown priority and non-array tags are ignored; bad project id clears.
+        update_task_resp(
+            &mut model,
+            &id,
+            json!({"priority": "bogus", "project_id": "not-a-uuid", "tags": "a,b"}),
+        );
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.priority, Priority::Medium);
+        assert!(task.project_id.is_none());
+        assert_eq!(task.tags, ["a", "b"]);
+
+        update_task_resp(&mut model, &id, json!({"project_id": project.to_string()}));
+        update_task_resp(&mut model, &id, json!({"project_id": null, "tags": []}));
+        let task = task_by_id(&model, &id);
+        assert!(task.project_id.is_none());
+        assert!(task.tags.is_empty());
+    }
+
+    #[test]
+    fn test_task_update_dates_estimate_and_dependencies() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+        let dep = Uuid::new_v4();
+
+        update_task_resp(
+            &mut model,
+            &id,
+            json!({
+                "due_date": "2030-05-06",
+                "scheduled_date": "2030-05-01",
+                "estimated_minutes": 45,
+                "dependencies": [dep.to_string(), "bad", 3]
+            }),
+        );
+        let task = task_by_id(&model, &id);
+        assert_eq!(task.due_date.unwrap().to_string(), "2030-05-06");
+        assert_eq!(task.scheduled_date.unwrap().to_string(), "2030-05-01");
+        assert_eq!(task.estimated_minutes, Some(45));
+        assert_eq!(task.dependencies, [taskflow::domain::TaskId(dep)]);
+
+        // Nulls clear the optional fields.
+        update_task_resp(
+            &mut model,
+            &id,
+            json!({"due_date": null, "scheduled_date": null, "estimated_minutes": null}),
+        );
+        let task = task_by_id(&model, &id);
+        assert!(task.due_date.is_none());
+        assert!(task.scheduled_date.is_none());
+        assert!(task.estimated_minutes.is_none());
+
+        // Unparseable values also resolve to None.
+        update_task_resp(&mut model, &id, json!({"due_date": "2030-05-06"}));
+        update_task_resp(
+            &mut model,
+            &id,
+            json!({
+                "due_date": "06/05/2030",
+                "scheduled_date": 20300501,
+                "estimated_minutes": "many",
+                "dependencies": []
+            }),
+        );
+        let task = task_by_id(&model, &id);
+        assert!(task.due_date.is_none());
+        assert!(task.scheduled_date.is_none());
+        assert!(task.estimated_minutes.is_none());
+        assert!(task.dependencies.is_empty());
+    }
+
+    #[test]
+    fn test_task_update_bumps_updated_at_and_returns_task() {
+        let mut model = Model::new();
+        let id = seed_task(&mut model);
+        let before = at(2000, 1, 1);
+        model
+            .tasks
+            .get_mut(&taskflow::domain::TaskId(Uuid::parse_str(&id).unwrap()))
+            .unwrap()
+            .updated_at = before;
+
+        let resp = update_task_resp(&mut model, &id, json!({"title": "Bumped"}));
+        let data = resp.data.unwrap();
+        assert_eq!(data["id"], id);
+        assert_eq!(data["title"], "Bumped");
+        assert!(task_by_id(&model, &id).updated_at > before);
+    }
+
+    // ========================================================================
+    // Goal Update / KeyResult List Tests
+    // ========================================================================
+
+    fn goal_by_id(model: &Model, id: &str) -> taskflow::domain::Goal {
+        let uuid = Uuid::parse_str(id).unwrap();
+        model.goals[&taskflow::domain::GoalId(uuid)].clone()
+    }
+
+    fn update_goal_resp(
+        model: &mut Model,
+        id: &str,
+        data: serde_json::Value,
+    ) -> PipeResponse<serde_json::Value> {
+        process(
+            model,
+            make_request_with_id_and_data(Operation::Update, EntityType::Goal, id, data),
+        )
+    }
+
+    #[test]
+    fn test_goal_update_error_paths() {
+        let mut model = Model::new();
+        let id = create_goal_in_model(&mut model);
+
+        let resp = process(
+            &mut model,
+            make_request_with_id(Operation::Update, EntityType::Goal, &id),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+
+        let resp = update_goal_resp(&mut model, "nope", json!({"name": "x"}));
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "INVALID_ID");
+        assert_eq!(err.message, "Invalid UUID format: nope");
+    }
+
+    #[test]
+    fn test_goal_update_dates_and_quarter() {
+        let mut model = Model::new();
+        let id = create_goal_in_model(&mut model);
+
+        let resp = update_goal_resp(
+            &mut model,
+            &id,
+            json!({
+                "start_date": "2030-01-01",
+                "due_date": "2030-03-31",
+                "quarter": {"year": 2030, "quarter": "q1"}
+            }),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let goal = goal_by_id(&model, &id);
+        assert_eq!(goal.start_date.unwrap().to_string(), "2030-01-01");
+        assert_eq!(goal.due_date.unwrap().to_string(), "2030-03-31");
+        assert_eq!(goal.quarter, Some((2030, Quarter::Q1)));
+
+        // Unknown quarter or missing year leaves the quarter unchanged.
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"quarter": {"year": 2031, "quarter": "Q9"}}),
+        );
+        update_goal_resp(&mut model, &id, json!({"quarter": {"quarter": "Q2"}}));
+        assert_eq!(goal_by_id(&model, &id).quarter, Some((2030, Quarter::Q1)));
+
+        for (q_str, q) in [
+            ("Q2", Quarter::Q2),
+            ("q3", Quarter::Q3),
+            ("Q4", Quarter::Q4),
+        ] {
+            update_goal_resp(
+                &mut model,
+                &id,
+                json!({"quarter": {"year": 2031, "quarter": q_str}}),
+            );
+            assert_eq!(goal_by_id(&model, &id).quarter, Some((2031, q)));
+        }
+
+        // Invalid dates resolve to None; nulls clear.
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"start_date": "Jan 1", "due_date": null}),
+        );
+        let goal = goal_by_id(&model, &id);
+        assert!(goal.start_date.is_none());
+        assert!(goal.due_date.is_none());
+
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"start_date": null, "quarter": null}),
+        );
+        let goal = goal_by_id(&model, &id);
+        assert!(goal.start_date.is_none());
+        assert!(goal.quarter.is_none());
+    }
+
+    #[test]
+    fn test_goal_update_status_progress_color_icon() {
+        let mut model = Model::new();
+        let id = create_goal_in_model(&mut model);
+
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"manual_progress": 150, "color": "#ff0000", "icon": "target", "description": "d"}),
+        );
+        let goal = goal_by_id(&model, &id);
+        assert_eq!(
+            goal.manual_progress,
+            Some(100),
+            "progress is clamped to 100"
+        );
+        assert_eq!(goal.color.as_deref(), Some("#ff0000"));
+        assert_eq!(goal.icon.as_deref(), Some("target"));
+        assert_eq!(goal.description.as_deref(), Some("d"));
+
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"manual_progress": 42, "status": "bogus", "description": null}),
+        );
+        let goal = goal_by_id(&model, &id);
+        assert_eq!(goal.manual_progress, Some(42));
+        assert_eq!(goal.status, GoalStatus::Active, "unknown status is ignored");
+        assert!(goal.description.is_none());
+
+        for (s, expected) in [
+            ("hold", GoalStatus::OnHold),
+            ("done", GoalStatus::Completed),
+            ("ARCHIVED", GoalStatus::Archived),
+            ("active", GoalStatus::Active),
+            ("on-hold", GoalStatus::OnHold),
+        ] {
+            update_goal_resp(&mut model, &id, json!({"status": s}));
+            assert_eq!(goal_by_id(&model, &id).status, expected, "{s}");
+        }
+
+        update_goal_resp(
+            &mut model,
+            &id,
+            json!({"manual_progress": null, "color": null, "icon": null}),
+        );
+        let goal = goal_by_id(&model, &id);
+        assert!(goal.manual_progress.is_none());
+        assert!(goal.color.is_none());
+        assert!(goal.icon.is_none());
+    }
+
+    fn create_kr(model: &mut Model, goal_id: &str, name: &str) -> String {
+        let resp = process(
+            model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::KeyResult,
+                json!({"goal_id": goal_id, "name": name, "target_value": 10.0}),
+            ),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()["id"].as_str().unwrap().to_string()
+    }
+
+    fn list_krs(model: &mut Model, filters: Option<FilterParams>) -> serde_json::Value {
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::KeyResult,
+            id: None,
+            data: None,
+            filters,
+        };
+        let resp = process(model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()
+    }
+
+    fn kr_names(data: &serde_json::Value) -> Vec<String> {
+        data["key_results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|kr| kr["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_key_result_list_filters_and_sorting() {
+        let mut model = Model::new();
+        let goal1 = create_goal_in_model(&mut model);
+        let goal2 = create_goal_in_model(&mut model);
+        create_kr(&mut model, &goal1, "Zeta metric");
+        create_kr(&mut model, &goal1, "Alpha metric");
+        let beta = create_kr(&mut model, &goal2, "Beta metric");
+        process(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::KeyResult,
+                &beta,
+                json!({"description": "User retention"}),
+            ),
+        );
+
+        // No filters: everything, unsorted.
+        let data = list_krs(&mut model, None);
+        assert_eq!(data["total"], 3);
+
+        // Filter by goal (via project_id) sorts by name.
+        let data = list_krs(
+            &mut model,
+            Some(FilterParams {
+                project_id: Some(goal1.clone()),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(kr_names(&data), ["Alpha metric", "Zeta metric"]);
+
+        // Non-UUID goal filter is ignored.
+        let data = list_krs(
+            &mut model,
+            Some(FilterParams {
+                project_id: Some("not-a-uuid".to_string()),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(
+            kr_names(&data),
+            ["Alpha metric", "Beta metric", "Zeta metric"]
+        );
+
+        // Search matches description as well as name.
+        let data = list_krs(
+            &mut model,
+            Some(FilterParams {
+                search: Some("RETENTION".to_string()),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(kr_names(&data), ["Beta metric"]);
+
+        // Pagination.
+        let data = list_krs(
+            &mut model,
+            Some(FilterParams {
+                search: Some("metric".to_string()),
+                offset: Some(1),
+                limit: Some(1),
+                ..Default::default()
+            }),
+        );
+        assert_eq!(kr_names(&data), ["Beta metric"]);
+        assert_eq!(data["total"], 3);
+        assert_eq!(data["offset"], 1);
+        assert_eq!(data["limit"], 1);
+    }
+
+    #[test]
+    fn test_key_result_update_all_fields() {
+        let mut model = Model::new();
+        let goal = create_goal_in_model(&mut model);
+        let kr_id = create_kr(&mut model, &goal, "Signups");
+        let lookup = |model: &Model| {
+            let uuid = Uuid::parse_str(&kr_id).unwrap();
+            model.key_results[&taskflow::domain::KeyResultId(uuid)].clone()
+        };
+
+        let resp = process(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::KeyResult,
+                &kr_id,
+                json!({
+                    "name": "Paid signups",
+                    "description": "Monthly",
+                    "target_value": 500.5,
+                    "current_value": 120,
+                    "unit": "users",
+                    "manual_progress": 250
+                }),
+            ),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["name"], "Paid signups");
+        assert_eq!(data["target_value"], 500.5);
+        assert_eq!(data["current_value"], 120.0);
+        let kr = lookup(&model);
+        assert_eq!(kr.description.as_deref(), Some("Monthly"));
+        assert_eq!(kr.unit.as_deref(), Some("users"));
+        assert_eq!(kr.manual_progress, Some(100), "progress is clamped");
+
+        // Nulls clear optional fields; non-numeric values are ignored.
+        process(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::KeyResult,
+                &kr_id,
+                json!({
+                    "description": null,
+                    "unit": null,
+                    "manual_progress": null,
+                    "target_value": "lots"
+                }),
+            ),
+        );
+        let kr = lookup(&model);
+        assert!(kr.description.is_none());
+        assert!(kr.unit.is_none());
+        assert!(kr.manual_progress.is_none());
+        assert_eq!(kr.target_value.to_string(), "500.5");
+
+        let resp = process(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::KeyResult,
+                "bad-id",
+                json!({"name": "x"}),
+            ),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_ID");
+
+        let resp = process(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::KeyResult,
+                NIL_UUID,
+                json!({"name": "x"}),
+            ),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+    }
+
+    // ========================================================================
+    // Habit Update / List Tests
+    // ========================================================================
+
+    fn create_habit(model: &mut Model, name: &str) -> String {
+        let resp = process(
+            model,
+            make_request_with_data(Operation::Create, EntityType::Habit, json!({"name": name})),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()["id"].as_str().unwrap().to_string()
+    }
+
+    fn update_habit_resp(
+        model: &mut Model,
+        id: &str,
+        data: serde_json::Value,
+    ) -> PipeResponse<serde_json::Value> {
+        process(
+            model,
+            make_request_with_id_and_data(Operation::Update, EntityType::Habit, id, data),
+        )
+    }
+
+    fn habit_by_id(model: &Model, id: &str) -> taskflow::domain::Habit {
+        let uuid = Uuid::parse_str(id).unwrap();
+        model.habits[&taskflow::domain::HabitId(uuid)].clone()
+    }
+
+    #[test]
+    fn test_habit_update_all_fields() {
+        let mut model = Model::new();
+        let id = create_habit(&mut model, "Stretch");
+        let original_start = habit_by_id(&model, &id).start_date;
+
+        let resp = update_habit_resp(
+            &mut model,
+            &id,
+            json!({
+                "frequency": "weekly",
+                "archived": true,
+                "start_date": "2030-01-01",
+                "end_date": "2030-12-31",
+                "color": "#00ff00",
+                "tags": ["health", 7, "morning"]
+            }),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let habit = habit_by_id(&model, &id);
+        assert!(matches!(habit.frequency, HabitFrequency::Weekly { ref days } if days.len() == 3));
+        assert!(habit.archived);
+        assert_eq!(habit.start_date.to_string(), "2030-01-01");
+        assert_eq!(habit.end_date.unwrap().to_string(), "2030-12-31");
+        assert_eq!(habit.color.as_deref(), Some("#00ff00"));
+        assert_eq!(habit.tags, ["health", "morning"]);
+        assert_ne!(habit.start_date, original_start);
+
+        update_habit_resp(
+            &mut model,
+            &id,
+            json!({
+                "frequency": "every_3_days",
+                "start_date": "bad",
+                "end_date": "bad",
+                "description": "x"
+            }),
+        );
+        let habit = habit_by_id(&model, &id);
+        assert!(matches!(
+            habit.frequency,
+            HabitFrequency::EveryNDays { n: 3 }
+        ));
+        assert_eq!(
+            habit.start_date.to_string(),
+            "2030-01-01",
+            "bad start_date ignored"
+        );
+        assert!(habit.end_date.is_none(), "bad end_date clears");
+        assert_eq!(habit.description.as_deref(), Some("x"));
+
+        update_habit_resp(
+            &mut model,
+            &id,
+            json!({
+                "frequency": "fortnightly",
+                "end_date": null,
+                "color": null,
+                "description": null,
+                "archived": "yes"
+            }),
+        );
+        let habit = habit_by_id(&model, &id);
+        assert!(
+            matches!(habit.frequency, HabitFrequency::EveryNDays { n: 3 }),
+            "unknown frequency ignored"
+        );
+        assert!(habit.end_date.is_none());
+        assert!(habit.color.is_none());
+        assert!(habit.description.is_none());
+        assert!(habit.archived, "non-bool archived ignored");
+    }
+
+    #[test]
+    fn test_habit_update_error_paths() {
+        let mut model = Model::new();
+        let resp = process(
+            &mut model,
+            make_request_with_data(Operation::Update, EntityType::Habit, json!({"name": "x"})),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+
+        let resp = update_habit_resp(&mut model, "bad", json!({"name": "x"}));
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "INVALID_ID");
+        assert_eq!(err.message, "Invalid UUID format: bad");
+    }
+
+    fn list_habits(model: &mut Model, filters: Option<FilterParams>) -> Vec<String> {
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::Habit,
+            id: None,
+            data: None,
+            filters,
+        };
+        let resp = process(model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()["habits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn list_habits_with_archived(
+        model: &mut Model,
+        tags: Option<Vec<String>>,
+        mode: Option<&str>,
+    ) -> Vec<String> {
+        list_habits(
+            model,
+            Some(FilterParams {
+                tags,
+                tags_mode: mode.map(str::to_string),
+                include_completed: Some(true),
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn create_tagged_habits(model: &mut Model) {
+        let run = create_habit(model, "Run");
+        let read = create_habit(model, "Read");
+        let old = create_habit(model, "Old habit");
+        update_habit_resp(model, &run, json!({"tags": ["Fitness", "morning"]}));
+        update_habit_resp(model, &read, json!({"tags": ["mind"]}));
+        update_habit_resp(model, &old, json!({"tags": ["fitness"], "archived": true}));
+    }
+
+    #[test]
+    fn test_habit_list_archived_and_pagination() {
+        let mut model = Model::new();
+        create_tagged_habits(&mut model);
+
+        // No filters: archived habits included, no sorting applied.
+        let mut all = list_habits(&mut model, None);
+        all.sort();
+        assert_eq!(all, ["Old habit", "Read", "Run"]);
+
+        // Default filters exclude archived and sort by name.
+        assert_eq!(
+            list_habits(&mut model, Some(FilterParams::default())),
+            ["Read", "Run"]
+        );
+        assert_eq!(
+            list_habits_with_archived(&mut model, None, None),
+            ["Old habit", "Read", "Run"]
+        );
+
+        // Pagination over the sorted list.
+        assert_eq!(
+            list_habits(
+                &mut model,
+                Some(FilterParams {
+                    include_completed: Some(true),
+                    offset: Some(1),
+                    limit: Some(1),
+                    ..Default::default()
+                })
+            ),
+            ["Read"]
+        );
+    }
+
+    #[test]
+    fn test_habit_list_tag_filters() {
+        let mut model = Model::new();
+        create_tagged_habits(&mut model);
+
+        assert_eq!(
+            list_habits_with_archived(&mut model, strings(&["fitness"]), None),
+            ["Old habit", "Run"]
+        );
+        assert_eq!(
+            list_habits_with_archived(&mut model, strings(&["fitness", "MORNING"]), Some("all")),
+            ["Run"]
+        );
+        assert_eq!(
+            list_habits_with_archived(&mut model, strings(&["morning", "mind"]), Some("any")),
+            ["Read", "Run"]
+        );
+        assert!(
+            list_habits_with_archived(&mut model, strings(&["morning", "mind"]), Some("all"))
+                .is_empty()
+        );
+
+        // Archived filter applies after the tag filter.
+        assert_eq!(
+            list_habits(
+                &mut model,
+                Some(FilterParams {
+                    tags: strings(&["fitness"]),
+                    ..Default::default()
+                })
+            ),
+            ["Run"]
+        );
+    }
+
+    // ========================================================================
+    // Import Tests
+    // ========================================================================
+
+    fn import_resp(
+        model: &mut Model,
+        data: Option<serde_json::Value>,
+    ) -> PipeResponse<serde_json::Value> {
+        let req = PipeRequest {
+            operation: Operation::Import,
+            entity: EntityType::Task,
+            id: None,
+            data,
+            filters: None,
+        };
+        process(model, req)
+    }
+
+    fn export_value(model: &mut Model) -> serde_json::Value {
+        let resp = process(model, make_request(Operation::Export, EntityType::Task));
+        assert!(resp.success, "{:?}", resp.error);
+        resp.data.unwrap()
+    }
+
+    /// Populate a model with one of every importable entity and return it.
+    fn populated_model() -> Model {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        process(
+            &mut model,
+            make_request_with_data(Operation::Create, EntityType::Project, json!({"name": "P"})),
+        );
+        process(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::TimeEntry,
+                json!({"task_id": task_id, "duration_minutes": 30}),
+            ),
+        );
+        process(
+            &mut model,
+            make_request_with_data(
+                Operation::Create,
+                EntityType::WorkLog,
+                json!({"task_id": task_id, "content": "Did things"}),
+            ),
+        );
+        create_habit(&mut model, "H");
+        let goal_id = create_goal_in_model(&mut model);
+        create_kr(&mut model, &goal_id, "KR");
+        let filter = SavedFilter::new("Mine", Filter::default(), SortSpec::default());
+        model.saved_filters.insert(filter.id.clone(), filter);
+
+        assert_eq!(model.tasks.len(), 1);
+        assert_eq!(model.projects.len(), 1);
+        assert_eq!(model.time_entries.len(), 1);
+        assert_eq!(model.work_logs.len(), 1);
+        assert_eq!(model.habits.len(), 1);
+        assert_eq!(model.goals.len(), 1);
+        assert_eq!(model.key_results.len(), 1);
+        assert_eq!(model.saved_filters.len(), 1);
+        model
+    }
+
+    #[test]
+    fn test_import_missing_data() {
+        let mut model = Model::new();
+        let resp = import_resp(&mut model, None);
+        assert!(!resp.success);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "MISSING_DATA");
+        assert_eq!(err.message, "Import data is required");
+    }
+
+    #[test]
+    fn test_import_invalid_data() {
+        let mut model = Model::new();
+
+        // Wrong shape for a field.
+        let resp = import_resp(&mut model, Some(json!({"tasks": "nope"})));
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "INVALID_DATA");
+        assert!(err.message.starts_with("Failed to parse import data:"));
+
+        // Missing required fields.
+        let resp = import_resp(&mut model, Some(json!({"version": 1})));
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_DATA");
+
+        assert!(model.tasks.is_empty());
+    }
+
+    #[test]
+    fn test_import_minimal_payload_imports_nothing() {
+        let mut model = Model::new();
+        let resp = import_resp(
+            &mut model,
+            Some(json!({
+                "tasks": {},
+                "projects": [],
+                "tags": [],
+                "time_entries": [],
+                "version": 1
+            })),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["success"], true);
+        assert_eq!(
+            data["imported"],
+            json!({
+                "tasks": 0,
+                "projects": 0,
+                "time_entries": 0,
+                "work_logs": 0,
+                "habits": 0,
+                "goals": 0,
+                "key_results": 0,
+                "saved_filters": 0
+            })
+        );
+    }
+
+    #[test]
+    fn test_import_round_trip_from_export() {
+        let mut source = populated_model();
+        let exported = export_value(&mut source);
+
+        let mut target = Model::new();
+        let resp = import_resp(&mut target, Some(exported.clone()));
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(
+            data["imported"],
+            json!({
+                "tasks": 1,
+                "projects": 1,
+                "time_entries": 1,
+                "work_logs": 1,
+                "habits": 1,
+                "goals": 1,
+                "key_results": 1,
+                "saved_filters": 1
+            })
+        );
+
+        // Identity is preserved across the round trip.
+        let task_id = source.tasks.keys().next().unwrap();
+        assert_eq!(target.tasks[task_id].title, source.tasks[task_id].title);
+        let goal_id = source.goals.keys().next().unwrap();
+        assert!(target.goals.contains_key(goal_id));
+        let kr_id = source.key_results.keys().next().unwrap();
+        assert_eq!(target.key_results[kr_id].goal_id, *goal_id);
+        let filter_id = source.saved_filters.keys().next().unwrap();
+        assert_eq!(target.saved_filters[filter_id].name, "Mine");
+        assert_eq!(target.projects.len(), 1);
+        assert_eq!(target.time_entries.len(), 1);
+        assert_eq!(target.work_logs.len(), 1);
+        assert_eq!(target.habits.len(), 1);
+
+        // Importing the same payload again is a no-op.
+        let resp = import_resp(&mut target, Some(exported));
+        let data = resp.data.unwrap();
+        for (key, count) in data["imported"].as_object().unwrap() {
+            assert_eq!(count, 0, "{key} re-imported");
+        }
+        assert_eq!(target.tasks.len(), 1);
+        assert_eq!(target.saved_filters.len(), 1);
+    }
+
+    #[test]
+    fn test_import_merges_only_new_entities() {
+        let mut source = Model::new();
+        let existing = create_task_in_model(&mut source);
+        create_task_in_model(&mut source);
+        let exported = export_value(&mut source);
+
+        let mut target = Model::new();
+        let existing_id = taskflow::domain::TaskId(Uuid::parse_str(&existing).unwrap());
+        let mut local_copy = source.tasks[&existing_id].clone();
+        local_copy.title = "Local edit".to_string();
+        target.tasks.insert(existing_id, local_copy);
+
+        let resp = import_resp(&mut target, Some(exported));
+        let data = resp.data.unwrap();
+        assert_eq!(data["imported"]["tasks"], 1);
+        assert_eq!(target.tasks.len(), 2);
+        assert_eq!(
+            target.tasks[&existing_id].title, "Local edit",
+            "existing entities are not overwritten"
+        );
+    }
+
+    #[test]
+    fn test_import_operation_ignores_entity_type() {
+        let mut source = populated_model();
+        let exported = export_value(&mut source);
+        for entity in [EntityType::Habit, EntityType::Goal, EntityType::SavedFilter] {
+            let mut target = Model::new();
+            let req = PipeRequest {
+                operation: Operation::Import,
+                entity,
+                id: None,
+                data: Some(exported.clone()),
+                filters: None,
+            };
+            let resp = process(&mut target, req);
+            assert!(resp.success, "{entity:?}: {:?}", resp.error);
+            assert_eq!(target.tasks.len(), 1, "{entity:?}");
+        }
+    }
+
+    // ========================================================================
+    // Run Loop Tests
+    // ========================================================================
+
+    /// A reader whose first read fails and which then reports EOF.
+    struct FailOnceReader {
+        failed: bool,
+    }
+
+    impl std::io::Read for FailOnceReader {
+        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.failed {
+                Ok(0)
+            } else {
+                self.failed = true;
+                Err(std::io::Error::other("boom"))
+            }
+        }
+    }
+
+    impl std::io::BufRead for FailOnceReader {
+        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+            if self.failed {
+                Ok(&[])
+            } else {
+                self.failed = true;
+                Err(std::io::Error::other("boom"))
+            }
+        }
+
+        fn consume(&mut self, _amt: usize) {}
+    }
+
+    /// A writer that rejects every write.
+    struct FailingWriter;
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("disk full"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn run_loop(model: &mut Model, input: &str, format: OutputFormat) -> String {
+        let mut out = Vec::new();
+        super::super::run_pipe_loop(model, input.as_bytes(), &mut out, format).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    fn json_stream(output: &str) -> Vec<serde_json::Value> {
+        serde_json::Deserializer::from_str(output)
+            .into_iter::<serde_json::Value>()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_parse_output_format() {
+        let parse = super::super::parse_output_format;
+        assert_eq!(parse("json"), OutputFormat::Json);
+        assert_eq!(parse("JSON"), OutputFormat::Json);
+        assert_eq!(parse("yaml"), OutputFormat::Yaml);
+        assert_eq!(parse("yml"), OutputFormat::Yaml);
+        assert_eq!(parse("Csv"), OutputFormat::Csv);
+        assert_eq!(
+            parse("xml"),
+            OutputFormat::Json,
+            "unknown falls back to JSON"
+        );
+        assert_eq!(parse(""), OutputFormat::Json);
+    }
+
+    #[test]
+    fn test_run_pipe_loop_processes_each_line() {
+        let mut model = Model::new();
+        let input = concat!(
+            r#"{"operation":"create","entity":"task","data":{"title":"From pipe"}}"#,
+            "\n\n   \n",
+            r#"  {"operation":"list","entity":"task"}  "#,
+            "\n",
+            "this is not json\n",
+            r#"{"operation":"get","entity":"task","id":"nope"}"#,
+            "\n",
+        );
+        let out = run_loop(&mut model, input, OutputFormat::Json);
+        let responses = json_stream(&out);
+        assert_eq!(responses.len(), 4, "blank lines produce no output: {out}");
+
+        assert_eq!(responses[0]["success"], true);
+        assert_eq!(responses[0]["data"]["title"], "From pipe");
+
+        assert_eq!(responses[1]["success"], true);
+        assert_eq!(responses[1]["data"]["total"], 1);
+        assert_eq!(responses[1]["metadata"]["total"], 1);
+
+        assert_eq!(responses[2]["success"], false);
+        assert_eq!(responses[2]["error"]["code"], "PARSE_ERROR");
+        assert!(responses[2]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("Failed to parse request:"));
+
+        assert_eq!(responses[3]["error"]["code"], "INVALID_ID");
+
+        assert_eq!(model.tasks.len(), 1);
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_run_pipe_loop_empty_input_writes_nothing() {
+        let mut model = Model::new();
+        assert_eq!(run_loop(&mut model, "", OutputFormat::Json), "");
+        assert_eq!(run_loop(&mut model, "\n\n", OutputFormat::Yaml), "");
+    }
+
+    #[test]
+    fn test_run_pipe_loop_yaml_and_csv_formats() {
+        let mut model = create_test_model();
+
+        let out = run_loop(
+            &mut model,
+            r#"{"operation":"list","entity":"task"}"#,
+            OutputFormat::Yaml,
+        );
+        assert!(out.contains("success: true"), "{out}");
+        assert!(out.contains("total: 3"), "{out}");
+
+        let out = run_loop(
+            &mut model,
+            concat!(
+                r#"{"operation":"list","entity":"task"}"#,
+                "\n",
+                r#"{"operation":"get","entity":"task","id":"bad"}"#,
+                "\n"
+            ),
+            OutputFormat::Csv,
+        );
+        let mut lines = out.lines();
+        assert_eq!(
+            lines.next().unwrap(),
+            "id,title,status,priority,project_id,due_date,scheduled_date,tags,estimated_minutes,created_at,completed_at"
+        );
+        let csv_rows = lines
+            .by_ref()
+            .take_while(|l| !l.starts_with('{'))
+            .filter(|l| !l.is_empty())
+            .count();
+        assert_eq!(csv_rows, 3, "one CSV row per task: {out}");
+        // The error response falls back to JSON after the CSV block.
+        assert!(out.contains("\"code\": \"INVALID_ID\""), "{out}");
+    }
+
+    #[test]
+    fn test_run_pipe_loop_reports_read_errors() {
+        let mut model = Model::new();
+        let mut out = Vec::new();
+        super::super::run_pipe_loop(
+            &mut model,
+            FailOnceReader { failed: false },
+            &mut out,
+            OutputFormat::Json,
+        )
+        .unwrap();
+        let responses = json_stream(std::str::from_utf8(&out).unwrap());
+        assert_eq!(responses.len(), 1);
+        assert_eq!(responses[0]["success"], false);
+        assert_eq!(responses[0]["error"]["code"], "IO_ERROR");
+        assert_eq!(
+            responses[0]["error"]["message"],
+            "Failed to read stdin: boom"
+        );
+    }
+
+    #[test]
+    fn test_run_pipe_loop_propagates_write_errors() {
+        let mut model = Model::new();
+        let input = r#"{"operation":"list","entity":"task"}"#;
+        let err = super::super::run_pipe_loop(
+            &mut model,
+            input.as_bytes(),
+            &mut FailingWriter,
+            OutputFormat::Json,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("disk full"), "{err}");
+    }
+
+    #[test]
+    fn test_write_response_formats_and_terminates_line() {
+        let response = super::super::create_error_response("X", "why".to_string());
+        let mut out = Vec::new();
+        super::super::write_response(&mut out, &response, OutputFormat::Yaml).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.ends_with('\n'));
+        assert!(text.contains("code: X"));
+        assert!(text.contains("message: why"));
+
+        let err = super::super::write_response(&mut FailingWriter, &response, OutputFormat::Json)
+            .unwrap_err();
+        assert!(err.to_string().contains("disk full"));
     }
 }

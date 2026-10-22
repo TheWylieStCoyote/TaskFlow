@@ -579,4 +579,200 @@ mod tests {
         let id2 = GoalId::new();
         assert_ne!(id1, id2);
     }
+
+    #[test]
+    fn test_goal_status_display() {
+        assert_eq!(GoalStatus::Active.to_string(), "Active");
+        assert_eq!(GoalStatus::OnHold.to_string(), "On Hold");
+        assert_eq!(GoalStatus::Completed.to_string(), "Completed");
+        assert_eq!(GoalStatus::Archived.to_string(), "Archived");
+    }
+
+    #[test]
+    fn test_goal_status_as_str() {
+        assert_eq!(GoalStatus::Active.as_str(), "active");
+        assert_eq!(GoalStatus::OnHold.as_str(), "on_hold");
+        assert_eq!(GoalStatus::Completed.as_str(), "completed");
+        assert_eq!(GoalStatus::Archived.as_str(), "archived");
+    }
+
+    #[test]
+    fn test_goal_status_from_str_lossy() {
+        for status in [
+            GoalStatus::Active,
+            GoalStatus::OnHold,
+            GoalStatus::Completed,
+            GoalStatus::Archived,
+        ] {
+            assert_eq!(GoalStatus::from_str_lossy(status.as_str()), status);
+        }
+        // Unknown and differently-cased values fall back to Active.
+        assert_eq!(GoalStatus::from_str_lossy(""), GoalStatus::Active);
+        assert_eq!(GoalStatus::from_str_lossy("paused"), GoalStatus::Active);
+        assert_eq!(GoalStatus::from_str_lossy("COMPLETED"), GoalStatus::Active);
+        assert_eq!(GoalStatus::from_str_lossy("on-hold"), GoalStatus::Active);
+    }
+
+    #[test]
+    fn test_goal_status_predicates_and_default() {
+        assert_eq!(GoalStatus::default(), GoalStatus::Active);
+
+        assert!(GoalStatus::Active.is_active());
+        assert!(!GoalStatus::OnHold.is_active());
+        assert!(!GoalStatus::Completed.is_active());
+        assert!(!GoalStatus::Archived.is_active());
+
+        assert!(GoalStatus::Completed.is_complete());
+        assert!(!GoalStatus::Active.is_complete());
+        assert!(!GoalStatus::OnHold.is_complete());
+        assert!(!GoalStatus::Archived.is_complete());
+    }
+
+    #[test]
+    fn test_goal_status_serde_roundtrip() {
+        for status in [
+            GoalStatus::Active,
+            GoalStatus::OnHold,
+            GoalStatus::Completed,
+            GoalStatus::Archived,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let back: GoalStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, status, "roundtrip of {json}");
+        }
+        assert_eq!(
+            serde_json::to_string(&GoalStatus::OnHold).unwrap(),
+            "\"onhold\""
+        );
+    }
+
+    #[test]
+    fn test_quarter_display() {
+        assert_eq!(Quarter::Q1.to_string(), "Q1");
+        assert_eq!(Quarter::Q2.to_string(), "Q2");
+        assert_eq!(Quarter::Q3.to_string(), "Q3");
+        assert_eq!(Quarter::Q4.to_string(), "Q4");
+    }
+
+    #[test]
+    fn test_quarter_boundaries_for_every_variant() {
+        assert_eq!(Quarter::Q2.end_month(), 6);
+        assert_eq!(Quarter::Q3.end_month(), 9);
+        assert_eq!(Quarter::Q4.end_month(), 12);
+
+        assert_eq!(
+            Quarter::Q3.start_date(2025),
+            NaiveDate::from_ymd_opt(2025, 7, 1)
+        );
+        assert_eq!(
+            Quarter::Q3.end_date(2025),
+            NaiveDate::from_ymd_opt(2025, 9, 30)
+        );
+        assert_eq!(
+            Quarter::Q4.start_date(2025),
+            NaiveDate::from_ymd_opt(2025, 10, 1)
+        );
+        assert_eq!(
+            Quarter::Q4.end_date(2025),
+            NaiveDate::from_ymd_opt(2025, 12, 31)
+        );
+        assert_eq!(
+            Quarter::Q2.start_date(2024),
+            NaiveDate::from_ymd_opt(2024, 4, 1)
+        );
+        assert!(
+            Quarter::Q1 < Quarter::Q2 && Quarter::Q2 < Quarter::Q3 && Quarter::Q3 < Quarter::Q4
+        );
+    }
+
+    #[test]
+    fn test_quarter_current_matches_local_today() {
+        let now = today();
+        let (year, quarter) = Quarter::current();
+        assert_eq!(year, now.year());
+        assert_eq!(quarter, Quarter::from_date(now));
+        assert!(quarter.start_date(year).unwrap() <= now);
+        assert!(quarter.end_date(year).unwrap() >= now);
+    }
+
+    #[test]
+    fn test_goal_formatted_timeframe_custom_dates() {
+        let start = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        let end = NaiveDate::from_ymd_opt(2025, 3, 31).unwrap();
+
+        let both = Goal::new("Both").with_dates(Some(start), Some(end));
+        assert_eq!(both.formatted_timeframe(), "Jan 15 - Mar 31, 2025");
+
+        let end_only = Goal::new("End").with_dates(None, Some(end));
+        assert_eq!(end_only.formatted_timeframe(), "Due Mar 31, 2025");
+
+        let start_only = Goal::new("Start").with_dates(Some(start), None);
+        assert_eq!(start_only.formatted_timeframe(), "From Jan 15, 2025");
+
+        // A quarter takes precedence over custom dates.
+        let quarter = Goal::new("Q")
+            .with_dates(Some(start), Some(end))
+            .with_quarter(2026, Quarter::Q4);
+        assert_eq!(quarter.formatted_timeframe(), "Q4 2026");
+        assert_eq!(
+            quarter.effective_start_date(),
+            NaiveDate::from_ymd_opt(2026, 10, 1)
+        );
+        assert_eq!(
+            quarter.effective_end_date(),
+            NaiveDate::from_ymd_opt(2026, 12, 31)
+        );
+    }
+
+    #[test]
+    fn test_goal_effective_dates_none_when_unset() {
+        let goal = Goal::new("Nothing");
+        assert_eq!(goal.effective_start_date(), None);
+        assert_eq!(goal.effective_end_date(), None);
+    }
+
+    #[test]
+    fn test_goal_display_is_name() {
+        let goal = Goal::new("Grow revenue");
+        assert_eq!(goal.to_string(), "Grow revenue");
+        assert_eq!(format!("{goal}"), "Grow revenue");
+    }
+
+    #[test]
+    fn test_goal_id_display_is_uuid() {
+        let id = GoalId::new();
+        assert_eq!(id.to_string(), id.0.to_string());
+        assert_eq!(id.to_string().len(), 36);
+        assert_ne!(GoalId::default(), GoalId::default());
+    }
+
+    #[test]
+    fn test_goal_archive_and_with_status() {
+        let mut goal = Goal::new("Old").with_status(GoalStatus::OnHold);
+        assert_eq!(goal.status, GoalStatus::OnHold);
+        assert!(!goal.is_active());
+        assert!(!goal.is_complete());
+
+        goal.archive();
+        assert_eq!(goal.status, GoalStatus::Archived);
+        assert!(!goal.is_active());
+        assert!(!goal.is_complete());
+        assert!(goal.updated_at >= goal.created_at);
+    }
+
+    #[test]
+    fn test_goal_manual_progress_boundaries() {
+        assert_eq!(
+            Goal::new("a").with_manual_progress(0).manual_progress,
+            Some(0)
+        );
+        assert_eq!(
+            Goal::new("b").with_manual_progress(100).manual_progress,
+            Some(100)
+        );
+        assert_eq!(
+            Goal::new("c").with_manual_progress(101).manual_progress,
+            Some(100)
+        );
+    }
 }

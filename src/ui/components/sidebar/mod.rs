@@ -502,3 +502,155 @@ fn styled_view_name(
         )
     }
 }
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::domain::{Project, SavedFilter, Task};
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    fn render(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        buffer_content(&render_widget(Sidebar::new(model, &theme), width, height))
+    }
+
+    /// Render tall enough that every section is on screen.
+    fn render_tall(model: &Model) -> String {
+        render(model, 40, 60)
+    }
+
+    #[test]
+    fn test_empty_sections_show_placeholders() {
+        let model = Model::new();
+        let content = render_tall(&model);
+        assert!(content.contains("Projects"));
+        assert!(content.contains("No projects"));
+        assert!(content.contains("Contexts"));
+        assert!(content.contains("Use @tag for contexts"));
+        assert!(content.contains("Saved Filters"));
+        assert!(content.contains("Press F to add"));
+    }
+
+    #[test]
+    fn test_projects_render_with_task_counts() {
+        let mut model = Model::new();
+        let project = Project::new("Launch");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        for i in 0..3 {
+            let mut task = Task::new(format!("T{i}"));
+            task.project_id = Some(project_id);
+            model.tasks.insert(task.id, task);
+        }
+        let other = Project::new("Empty");
+        model.projects.insert(other.id, other);
+        model.selected_project = Some(project_id);
+
+        let content = render_tall(&model);
+
+        assert!(content.contains("Launch (3)"));
+        assert!(content.contains("Empty (0)"));
+        assert!(!content.contains("No projects"));
+    }
+
+    #[test]
+    fn test_contexts_render_counts_and_active_marker() {
+        let mut model = Model::new();
+        let mut home = Task::new("Home 1");
+        home.tags = vec!["@home".to_string()];
+        let mut home2 = Task::new("Home 2");
+        home2.tags = vec!["@home".to_string(), "misc".to_string()];
+        let mut work = Task::new("Work");
+        work.tags = vec!["@work".to_string()];
+        for task in [home, home2, work] {
+            model.tasks.insert(task.id, task);
+        }
+        model.refresh_visible_tasks();
+        model.filtering.filter.tags = Some(vec!["@home".to_string()]);
+
+        let content = render_tall(&model);
+
+        assert!(content.contains("@home (2) ✓"));
+        assert!(content.contains("@work (1)"));
+        assert!(!content.contains("@work (1) ✓"));
+        assert!(!content.contains("Use @tag for contexts"));
+    }
+
+    #[test]
+    fn test_saved_filters_sorted_with_icon_and_active_marker() {
+        let mut model = Model::new();
+        let zeta = SavedFilter::new(
+            "Zeta",
+            model.filtering.filter.clone(),
+            model.filtering.sort.clone(),
+        );
+        let mut alpha = SavedFilter::new(
+            "Alpha",
+            model.filtering.filter.clone(),
+            model.filtering.sort.clone(),
+        );
+        alpha.icon = Some("⭐".to_string());
+        let alpha_id = alpha.id.clone();
+        model.saved_filters.insert(zeta.id.clone(), zeta);
+        model.saved_filters.insert(alpha_id.clone(), alpha);
+        model.active_saved_filter = Some(alpha_id);
+
+        let content = render_tall(&model);
+
+        // Wide glyphs occupy two cells, so match the icon and text separately
+        assert!(content.contains("⭐"));
+        assert!(content.contains("Alpha ✓"));
+        assert!(content.contains("🔍"));
+        assert!(content.contains("Zeta"));
+        assert!(!content.contains("Zeta ✓"));
+        let alpha_pos = content.find("Alpha").unwrap();
+        let zeta_pos = content.find("Zeta").unwrap();
+        assert!(alpha_pos < zeta_pos, "filters are sorted by name");
+        assert!(!content.contains("Press F to add"));
+    }
+
+    #[test]
+    fn test_focused_sidebar_renders_navigation_title() {
+        let mut model = Model::new();
+        model.focus_pane = FocusPane::Sidebar;
+        let content = render(&model, 30, 15);
+        assert!(content.contains(" Navigation "));
+    }
+
+    #[test]
+    fn test_scrollbar_appears_when_items_exceed_height() {
+        let model = Model::new();
+        let content = render(&model, 30, 10);
+        assert!(content.contains("▲"));
+        assert!(content.contains("▼"));
+    }
+
+    #[test]
+    fn test_no_scrollbar_when_everything_fits() {
+        let model = Model::new();
+        let content = render(&model, 40, 60);
+        assert!(!content.contains("▲"));
+        assert!(!content.contains("▼"));
+    }
+
+    #[test]
+    fn test_current_view_is_highlighted_only_without_project_selection() {
+        let theme = Theme::default();
+        let highlighted = styled_view_name("Today", ViewId::Today, ViewId::Today, true, &theme);
+        assert!(highlighted.style.add_modifier.contains(Modifier::BOLD));
+
+        let with_project = styled_view_name("Today", ViewId::Today, ViewId::Today, false, &theme);
+        assert!(!with_project.style.add_modifier.contains(Modifier::BOLD));
+
+        let other = styled_view_name("Today", ViewId::Today, ViewId::TaskList, true, &theme);
+        assert!(!other.style.add_modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn test_selected_row_follows_sidebar_selected() {
+        let mut model = Model::new();
+        model.sidebar_selected = 3;
+        let _ = render(&model, 30, 20);
+        assert_eq!(model.sidebar_list_state.borrow().selected(), Some(3));
+    }
+}

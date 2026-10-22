@@ -489,3 +489,167 @@ mod tests {
         assert!((multiplier.unwrap() - 1.2).abs() < 0.01);
     }
 }
+
+#[cfg(test)]
+mod suggest_estimate_tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::domain::{Project, ProjectId, TaskStatus};
+    use chrono::{Duration, Utc};
+
+    /// Add `count` completed tasks estimated at 60 minutes that actually took
+    /// `actual` minutes, optionally in a project and with tags.
+    fn add_history(
+        model: &mut Model,
+        count: usize,
+        actual: u32,
+        project_id: Option<ProjectId>,
+        tags: &[&str],
+    ) {
+        for i in 0..count {
+            let mut task = Task::new(format!("History {i} ({actual}m)"));
+            task.status = TaskStatus::Done;
+            task.completed_at = Some(Utc::now() - Duration::days(2));
+            task.estimated_minutes = Some(60);
+            task.actual_minutes = actual;
+            task.project_id = project_id;
+            task.tags = tags.iter().map(ToString::to_string).collect();
+            model.tasks.insert(task.id, task);
+        }
+    }
+
+    #[test]
+    fn test_suggest_estimate_uses_global_accuracy() {
+        let mut model = Model::new();
+        add_history(&mut model, 6, 90, None, &[]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(60, None, &[])
+            .expect("enough history");
+
+        assert_eq!(suggestion.suggested_minutes, 90);
+        assert_eq!(suggestion.based_on_count, 6);
+        assert!(suggestion.project_multiplier.is_none());
+        assert!((suggestion.confidence - 0.3).abs() < 1e-9);
+        assert_eq!(
+            suggestion.explanation,
+            "Based on overall accuracy of 150% (6 tasks)"
+        );
+    }
+
+    #[test]
+    fn test_suggest_estimate_prefers_explicit_project_multiplier() {
+        let mut model = Model::new();
+        let mut project = Project::new("Calibrated");
+        project.estimation_multiplier = Some(2.0);
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        add_history(&mut model, 4, 90, Some(project_id), &[]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(45, Some(project_id), &[])
+            .expect("enough history");
+
+        assert_eq!(suggestion.suggested_minutes, 90);
+        assert_eq!(suggestion.project_multiplier, Some(2.0));
+        assert_eq!(
+            suggestion.explanation,
+            "Based on project multiplier of 2.0x (4 similar tasks)"
+        );
+        assert!((suggestion.confidence - 0.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_suggest_estimate_uses_project_accuracy_when_no_multiplier() {
+        let mut model = Model::new();
+        let project = Project::new("Measured");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        // Project tasks run at 200%, everything else at 100%
+        add_history(&mut model, 3, 120, Some(project_id), &[]);
+        add_history(&mut model, 3, 60, None, &[]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(30, Some(project_id), &["ignored".to_string()])
+            .expect("enough history");
+
+        assert_eq!(suggestion.suggested_minutes, 60);
+        assert!(suggestion.project_multiplier.is_none());
+        assert_eq!(
+            suggestion.explanation,
+            "Tasks in this project typically take 200% of estimates"
+        );
+    }
+
+    #[test]
+    fn test_suggest_estimate_falls_back_to_tag_accuracy() {
+        let mut model = Model::new();
+        add_history(&mut model, 3, 180, None, &["ops"]);
+        add_history(&mut model, 3, 60, None, &["docs"]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(20, None, &["ops".to_string(), "unknown".to_string()])
+            .expect("enough history");
+
+        assert_eq!(suggestion.suggested_minutes, 60);
+        assert_eq!(
+            suggestion.explanation,
+            "Tasks with similar tags typically take 300% of estimates"
+        );
+    }
+
+    #[test]
+    fn test_suggest_estimate_unknown_project_and_tags_use_global() {
+        let mut model = Model::new();
+        add_history(&mut model, 3, 30, None, &["docs"]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(100, Some(ProjectId::new()), &["nope".to_string()])
+            .expect("enough history");
+
+        assert_eq!(suggestion.suggested_minutes, 50);
+        assert!(suggestion
+            .explanation
+            .starts_with("Based on overall accuracy of 50%"));
+    }
+
+    #[test]
+    fn test_suggest_estimate_confidence_caps_at_one() {
+        let mut model = Model::new();
+        add_history(&mut model, 25, 60, None, &[]);
+        let engine = AnalyticsEngine::new(&model);
+
+        let suggestion = engine
+            .suggest_estimate(60, None, &[])
+            .expect("enough history");
+
+        assert!((suggestion.confidence - 1.0).abs() < 1e-9);
+        assert_eq!(suggestion.suggested_minutes, 60);
+    }
+
+    #[test]
+    fn test_suggest_estimate_ignores_old_or_incomplete_history() {
+        let mut model = Model::new();
+        add_history(&mut model, 2, 90, None, &[]);
+        // Completed too long ago
+        let mut old = Task::new("Old");
+        old.status = TaskStatus::Done;
+        old.completed_at = Some(Utc::now() - Duration::days(400));
+        old.estimated_minutes = Some(60);
+        old.actual_minutes = 90;
+        model.tasks.insert(old.id, old);
+        // Not complete
+        let mut open = Task::new("Open");
+        open.estimated_minutes = Some(60);
+        open.actual_minutes = 90;
+        model.tasks.insert(open.id, open);
+        let engine = AnalyticsEngine::new(&model);
+
+        assert!(engine.suggest_estimate(60, None, &[]).is_none());
+    }
+}

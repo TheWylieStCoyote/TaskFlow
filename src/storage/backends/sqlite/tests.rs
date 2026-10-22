@@ -898,3 +898,765 @@ fn test_sqlite_import_all_rolls_back_on_failure() {
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].title, "keep me");
 }
+
+// ============================================================================
+// Goals
+// ============================================================================
+
+mod goal_fixtures {
+    use chrono::{NaiveDate, TimeZone, Utc};
+
+    use crate::domain::{
+        Goal, GoalId, GoalStatus, KeyResult, KeyResultStatus, ProjectId, Quarter, TaskId,
+    };
+
+    pub(super) fn fixed_ts(day: u32) -> chrono::DateTime<Utc> {
+        Utc.with_ymd_and_hms(2025, 3, day, 9, 30, 15).unwrap()
+    }
+
+    /// A goal with every optional field populated.
+    pub(super) fn full_goal() -> Goal {
+        let mut goal = Goal::new("Ship v2")
+            .with_description("Everything for the second release")
+            .with_status(GoalStatus::OnHold)
+            .with_dates(
+                NaiveDate::from_ymd_opt(2025, 7, 1),
+                NaiveDate::from_ymd_opt(2025, 9, 30),
+            )
+            .with_quarter(2025, Quarter::Q3)
+            .with_manual_progress(42)
+            .with_color("#ff8800")
+            .with_icon("🚀");
+        goal.created_at = fixed_ts(1);
+        goal.updated_at = fixed_ts(2);
+        goal
+    }
+
+    /// A key result with every optional field populated.
+    pub(super) fn full_key_result(goal_id: GoalId) -> KeyResult {
+        let mut kr = KeyResult::new(goal_id, "Reach 1000 users")
+            .with_description("Signed-up accounts")
+            .with_status(KeyResultStatus::AtRisk)
+            .with_target(1000.0, Some("users"))
+            .with_current_value(437.5)
+            .with_manual_progress(55);
+        kr.linked_project_ids = vec![ProjectId::new(), ProjectId::new()];
+        kr.linked_task_ids = vec![TaskId::new()];
+        kr.created_at = fixed_ts(3);
+        kr.updated_at = fixed_ts(4);
+        kr
+    }
+}
+
+use chrono::NaiveDate;
+
+use crate::domain::{
+    Goal, GoalId, GoalStatus, KeyResult, KeyResultId, KeyResultStatus, PomodoroConfig,
+    PomodoroSession, PomodoroStats, Quarter, SavedFilter, SortField, SortOrder, SortSpec,
+};
+use crate::storage::{ExportData, GoalRepository, KeyResultRepository, StorageError};
+use goal_fixtures::{fixed_ts, full_goal, full_key_result};
+
+fn raw_column<T: rusqlite::types::FromSql>(backend: &SqliteBackend, sql: &str, id: &str) -> T {
+    backend
+        .inner
+        .conn()
+        .unwrap()
+        .query_row(sql, params![id], |r| r.get(0))
+        .unwrap()
+}
+
+#[test]
+fn test_sqlite_goal_roundtrip_all_fields() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = full_goal();
+
+    backend.create_goal(&goal).unwrap();
+    let retrieved = backend.get_goal(&goal.id).unwrap().unwrap();
+
+    assert_eq!(retrieved.id, goal.id);
+    assert_eq!(retrieved.name, "Ship v2");
+    assert_eq!(
+        retrieved.description.as_deref(),
+        Some("Everything for the second release")
+    );
+    assert_eq!(retrieved.status, GoalStatus::OnHold);
+    assert_eq!(retrieved.start_date, NaiveDate::from_ymd_opt(2025, 7, 1));
+    assert_eq!(retrieved.due_date, NaiveDate::from_ymd_opt(2025, 9, 30));
+    assert_eq!(retrieved.quarter, Some((2025, Quarter::Q3)));
+    assert_eq!(retrieved.manual_progress, Some(42));
+    assert_eq!(retrieved.color.as_deref(), Some("#ff8800"));
+    assert_eq!(retrieved.icon.as_deref(), Some("🚀"));
+    assert_eq!(retrieved.created_at, fixed_ts(1));
+    assert_eq!(retrieved.updated_at, fixed_ts(2));
+    assert_eq!(retrieved, goal);
+}
+
+#[test]
+fn test_sqlite_goal_roundtrip_minimal_fields() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Bare goal");
+
+    backend.create_goal(&goal).unwrap();
+    let retrieved = backend.get_goal(&goal.id).unwrap().unwrap();
+
+    assert_eq!(retrieved.name, "Bare goal");
+    assert_eq!(retrieved.status, GoalStatus::Active);
+    assert_eq!(retrieved.description, None);
+    assert_eq!(retrieved.start_date, None);
+    assert_eq!(retrieved.due_date, None);
+    assert_eq!(retrieved.quarter, None);
+    assert_eq!(retrieved.manual_progress, None);
+    assert_eq!(retrieved.color, None);
+    assert_eq!(retrieved.icon, None);
+}
+
+#[test]
+fn test_sqlite_get_goal_missing_returns_none() {
+    let (_dir, backend) = create_test_backend();
+    assert!(backend.get_goal(&GoalId::new()).unwrap().is_none());
+}
+
+#[test]
+fn test_sqlite_create_goal_duplicate_id_fails() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Once");
+    backend.create_goal(&goal).unwrap();
+    assert!(backend.create_goal(&goal).is_err());
+    assert_eq!(backend.list_goals().unwrap().len(), 1);
+}
+
+#[test]
+fn test_sqlite_update_goal_rewrites_every_column() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = full_goal();
+    backend.create_goal(&goal).unwrap();
+
+    let mut changed = goal.clone();
+    changed.name = "Ship v3".to_string();
+    changed.description = None;
+    changed.status = GoalStatus::Completed;
+    changed.start_date = None;
+    changed.due_date = NaiveDate::from_ymd_opt(2026, 1, 15);
+    changed.quarter = Some((2026, Quarter::Q1));
+    changed.manual_progress = Some(100);
+    changed.color = Some("#00ff00".to_string());
+    changed.icon = None;
+    changed.updated_at = fixed_ts(9);
+    backend.update_goal(&changed).unwrap();
+
+    let retrieved = backend.get_goal(&goal.id).unwrap().unwrap();
+    assert_eq!(retrieved, changed);
+    // created_at is immutable through update
+    assert_eq!(retrieved.created_at, fixed_ts(1));
+}
+
+#[test]
+fn test_sqlite_update_goal_clears_quarter() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = full_goal();
+    backend.create_goal(&goal).unwrap();
+
+    let mut changed = goal.clone();
+    changed.quarter = None;
+    backend.update_goal(&changed).unwrap();
+
+    let retrieved = backend.get_goal(&goal.id).unwrap().unwrap();
+    assert_eq!(retrieved.quarter, None);
+    let raw: Option<String> = raw_column(
+        &backend,
+        "SELECT quarter FROM goals WHERE id = ?1",
+        &goal.id.to_string(),
+    );
+    assert_eq!(raw, None);
+}
+
+#[test]
+fn test_sqlite_update_goal_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Ghost");
+    let err = backend.update_goal(&goal).unwrap_err();
+    assert!(
+        matches!(&err, StorageError::NotFound { entity_type, id } if entity_type == "Goal" && *id == goal.id.to_string()),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_sqlite_delete_goal_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+    let id = GoalId::new();
+    let err = backend.delete_goal(&id).unwrap_err();
+    assert!(
+        matches!(&err, StorageError::NotFound { entity_type, .. } if entity_type == "Goal"),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_sqlite_delete_goal_cascades_to_key_results() {
+    let (_dir, mut backend) = create_test_backend();
+    let keep = Goal::new("Keep");
+    let drop = Goal::new("Drop");
+    backend.create_goal(&keep).unwrap();
+    backend.create_goal(&drop).unwrap();
+    backend
+        .create_key_result(&KeyResult::new(keep.id, "kr-keep"))
+        .unwrap();
+    backend
+        .create_key_result(&KeyResult::new(drop.id, "kr-drop-1"))
+        .unwrap();
+    backend
+        .create_key_result(&KeyResult::new(drop.id, "kr-drop-2"))
+        .unwrap();
+
+    backend.delete_goal(&drop.id).unwrap();
+
+    assert!(backend.get_goal(&drop.id).unwrap().is_none());
+    assert!(backend.get_goal(&keep.id).unwrap().is_some());
+    let remaining = backend.list_key_results().unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].name, "kr-keep");
+    assert!(backend
+        .get_key_results_for_goal(&drop.id)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn test_sqlite_list_goals_sorted_by_name() {
+    let (_dir, mut backend) = create_test_backend();
+    for name in ["Charlie", "alpha", "Bravo"] {
+        backend.create_goal(&Goal::new(name)).unwrap();
+    }
+    let names: Vec<String> = backend
+        .list_goals()
+        .unwrap()
+        .into_iter()
+        .map(|g| g.name)
+        .collect();
+    // SQLite's default BINARY collation sorts uppercase before lowercase.
+    assert_eq!(names, vec!["Bravo", "Charlie", "alpha"]);
+}
+
+#[test]
+fn test_sqlite_list_active_goals_filters_by_status() {
+    let (_dir, mut backend) = create_test_backend();
+    backend
+        .create_goal(&Goal::new("Zeta active").with_status(GoalStatus::Active))
+        .unwrap();
+    backend
+        .create_goal(&Goal::new("Alpha active").with_status(GoalStatus::Active))
+        .unwrap();
+    backend
+        .create_goal(&Goal::new("On hold").with_status(GoalStatus::OnHold))
+        .unwrap();
+    backend
+        .create_goal(&Goal::new("Completed").with_status(GoalStatus::Completed))
+        .unwrap();
+    backend
+        .create_goal(&Goal::new("Archived").with_status(GoalStatus::Archived))
+        .unwrap();
+
+    let active: Vec<String> = backend
+        .list_active_goals()
+        .unwrap()
+        .into_iter()
+        .map(|g| g.name)
+        .collect();
+    assert_eq!(active, vec!["Alpha active", "Zeta active"]);
+    assert_eq!(backend.list_goals().unwrap().len(), 5);
+}
+
+#[test]
+fn test_sqlite_goal_status_stored_as_snake_case() {
+    let (_dir, mut backend) = create_test_backend();
+    let cases = [
+        (GoalStatus::Active, "active"),
+        (GoalStatus::OnHold, "on_hold"),
+        (GoalStatus::Completed, "completed"),
+        (GoalStatus::Archived, "archived"),
+    ];
+    for (status, expected) in cases {
+        let goal = Goal::new(expected).with_status(status);
+        backend.create_goal(&goal).unwrap();
+        let raw: String = raw_column(
+            &backend,
+            "SELECT status FROM goals WHERE id = ?1",
+            &goal.id.to_string(),
+        );
+        assert_eq!(raw, expected);
+        assert_eq!(backend.get_goal(&goal.id).unwrap().unwrap().status, status);
+
+        // update_goal uses the same mapping
+        let mut flipped = goal.clone();
+        flipped.status = GoalStatus::Archived;
+        backend.update_goal(&flipped).unwrap();
+        let raw: String = raw_column(
+            &backend,
+            "SELECT status FROM goals WHERE id = ?1",
+            &goal.id.to_string(),
+        );
+        assert_eq!(raw, "archived");
+    }
+}
+
+#[test]
+fn test_sqlite_goal_from_row_tolerates_malformed_values() {
+    let (_dir, backend) = create_test_backend();
+    let conn = backend.inner.conn().unwrap();
+    conn.execute(
+        r"INSERT INTO goals (id, name, description, status, start_date, due_date, quarter,
+            manual_progress, color, icon, created_at, updated_at)
+          VALUES ('not-a-uuid', 'Legacy', NULL, 'bogus', 'yesterday', '2025-13-45',
+            '{not json', 250, NULL, NULL, 'garbage', '2025-03-01T09:30:15Z')",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        r"INSERT INTO goals (id, name, status, manual_progress, created_at, updated_at)
+          VALUES (?1, 'Negative', 'active', -5, '2025-03-01T09:30:15Z', '2025-03-01T09:30:15Z')",
+        params![GoalId::new().to_string()],
+    )
+    .unwrap();
+
+    let goals = backend.list_goals().unwrap();
+    assert_eq!(goals.len(), 2);
+    let legacy = goals.iter().find(|g| g.name == "Legacy").unwrap();
+    assert_eq!(legacy.id.0, uuid::Uuid::nil());
+    assert_eq!(legacy.status, GoalStatus::Active);
+    assert_eq!(legacy.start_date, None);
+    assert_eq!(legacy.due_date, None);
+    assert_eq!(legacy.quarter, None);
+    assert_eq!(legacy.manual_progress, Some(100));
+    assert_eq!(legacy.updated_at, fixed_ts(1));
+    // Unparseable created_at falls back to "now": it must not be before updated_at.
+    assert!(legacy.created_at >= legacy.updated_at);
+
+    let negative = goals.iter().find(|g| g.name == "Negative").unwrap();
+    assert_eq!(negative.manual_progress, Some(0));
+}
+
+// ============================================================================
+// Key results
+// ============================================================================
+
+#[test]
+fn test_sqlite_key_result_roundtrip_all_fields() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let kr = full_key_result(goal.id);
+
+    backend.create_key_result(&kr).unwrap();
+    let retrieved = backend.get_key_result(&kr.id).unwrap().unwrap();
+
+    assert_eq!(retrieved.id, kr.id);
+    assert_eq!(retrieved.goal_id, goal.id);
+    assert_eq!(retrieved.name, "Reach 1000 users");
+    assert_eq!(retrieved.description.as_deref(), Some("Signed-up accounts"));
+    assert_eq!(retrieved.status, KeyResultStatus::AtRisk);
+    assert!((retrieved.target_value - 1000.0).abs() < f64::EPSILON);
+    assert!((retrieved.current_value - 437.5).abs() < f64::EPSILON);
+    assert_eq!(retrieved.unit.as_deref(), Some("users"));
+    assert_eq!(retrieved.manual_progress, Some(55));
+    assert_eq!(retrieved.linked_project_ids, kr.linked_project_ids);
+    assert_eq!(retrieved.linked_task_ids, kr.linked_task_ids);
+    assert_eq!(retrieved.created_at, fixed_ts(3));
+    assert_eq!(retrieved.updated_at, fixed_ts(4));
+    assert_eq!(retrieved, kr);
+
+    // Linked ids are stored as JSON arrays of UUID strings.
+    let raw_projects: String = raw_column(
+        &backend,
+        "SELECT linked_project_ids FROM key_results WHERE id = ?1",
+        &kr.id.to_string(),
+    );
+    let parsed: Vec<String> = serde_json::from_str(&raw_projects).unwrap();
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0], kr.linked_project_ids[0].0.to_string());
+}
+
+#[test]
+fn test_sqlite_key_result_roundtrip_minimal_fields() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let kr = KeyResult::new(goal.id, "Bare");
+
+    backend.create_key_result(&kr).unwrap();
+    let retrieved = backend.get_key_result(&kr.id).unwrap().unwrap();
+
+    assert_eq!(retrieved.status, KeyResultStatus::NotStarted);
+    assert_eq!(retrieved.description, None);
+    assert_eq!(retrieved.unit, None);
+    assert_eq!(retrieved.manual_progress, None);
+    assert!(retrieved.linked_project_ids.is_empty());
+    assert!(retrieved.linked_task_ids.is_empty());
+    assert!(retrieved.target_value.abs() < f64::EPSILON);
+    assert!(retrieved.current_value.abs() < f64::EPSILON);
+}
+
+#[test]
+fn test_sqlite_key_result_requires_existing_goal() {
+    let (_dir, mut backend) = create_test_backend();
+    let kr = KeyResult::new(GoalId::new(), "Orphan");
+    assert!(
+        backend.create_key_result(&kr).is_err(),
+        "foreign key to goals must be enforced"
+    );
+    assert!(backend.list_key_results().unwrap().is_empty());
+}
+
+#[test]
+fn test_sqlite_get_key_result_missing_returns_none() {
+    let (_dir, backend) = create_test_backend();
+    assert!(backend
+        .get_key_result(&KeyResultId::new())
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn test_sqlite_update_key_result_rewrites_every_column() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal_a = Goal::new("A");
+    let goal_b = Goal::new("B");
+    backend.create_goal(&goal_a).unwrap();
+    backend.create_goal(&goal_b).unwrap();
+    let kr = full_key_result(goal_a.id);
+    backend.create_key_result(&kr).unwrap();
+
+    let mut changed = kr.clone();
+    changed.goal_id = goal_b.id;
+    changed.name = "Renamed".to_string();
+    changed.description = None;
+    changed.status = KeyResultStatus::Completed;
+    changed.target_value = 10.0;
+    changed.current_value = 10.0;
+    changed.unit = None;
+    changed.manual_progress = None;
+    changed.linked_project_ids.clear();
+    changed.linked_task_ids.push(TaskId::new());
+    changed.updated_at = fixed_ts(20);
+    backend.update_key_result(&changed).unwrap();
+
+    let retrieved = backend.get_key_result(&kr.id).unwrap().unwrap();
+    assert_eq!(retrieved, changed);
+    assert_eq!(retrieved.created_at, fixed_ts(3));
+    assert_eq!(
+        backend.get_key_results_for_goal(&goal_a.id).unwrap().len(),
+        0
+    );
+    assert_eq!(
+        backend.get_key_results_for_goal(&goal_b.id).unwrap().len(),
+        1
+    );
+}
+
+#[test]
+fn test_sqlite_update_key_result_not_found() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let kr = KeyResult::new(goal.id, "Ghost");
+    let err = backend.update_key_result(&kr).unwrap_err();
+    assert!(
+        matches!(&err, StorageError::NotFound { entity_type, id } if entity_type == "KeyResult" && *id == kr.id.to_string()),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_sqlite_delete_key_result() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let kr1 = KeyResult::new(goal.id, "one");
+    let kr2 = KeyResult::new(goal.id, "two");
+    backend.create_key_result(&kr1).unwrap();
+    backend.create_key_result(&kr2).unwrap();
+
+    backend.delete_key_result(&kr1.id).unwrap();
+
+    assert!(backend.get_key_result(&kr1.id).unwrap().is_none());
+    assert!(backend.get_key_result(&kr2.id).unwrap().is_some());
+    // The parent goal is untouched.
+    assert!(backend.get_goal(&goal.id).unwrap().is_some());
+
+    let err = backend.delete_key_result(&kr1.id).unwrap_err();
+    assert!(
+        matches!(&err, StorageError::NotFound { entity_type, .. } if entity_type == "KeyResult"),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_sqlite_get_key_results_for_goal_sorted_by_name() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal_a = Goal::new("A");
+    let goal_b = Goal::new("B");
+    backend.create_goal(&goal_a).unwrap();
+    backend.create_goal(&goal_b).unwrap();
+    backend
+        .create_key_result(&KeyResult::new(goal_a.id, "beta"))
+        .unwrap();
+    backend
+        .create_key_result(&KeyResult::new(goal_a.id, "alpha"))
+        .unwrap();
+    backend
+        .create_key_result(&KeyResult::new(goal_b.id, "gamma"))
+        .unwrap();
+
+    let for_a: Vec<String> = backend
+        .get_key_results_for_goal(&goal_a.id)
+        .unwrap()
+        .into_iter()
+        .map(|k| k.name)
+        .collect();
+    assert_eq!(for_a, vec!["alpha", "beta"]);
+
+    let for_b = backend.get_key_results_for_goal(&goal_b.id).unwrap();
+    assert_eq!(for_b.len(), 1);
+    assert_eq!(for_b[0].goal_id, goal_b.id);
+
+    assert!(backend
+        .get_key_results_for_goal(&GoalId::new())
+        .unwrap()
+        .is_empty());
+    assert_eq!(backend.list_key_results().unwrap().len(), 3);
+}
+
+#[test]
+fn test_sqlite_key_result_status_stored_as_snake_case() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let cases = [
+        (KeyResultStatus::NotStarted, "not_started"),
+        (KeyResultStatus::InProgress, "in_progress"),
+        (KeyResultStatus::AtRisk, "at_risk"),
+        (KeyResultStatus::Completed, "completed"),
+    ];
+    for (status, expected) in cases {
+        let kr = KeyResult::new(goal.id, expected).with_status(status);
+        backend.create_key_result(&kr).unwrap();
+        let raw: String = raw_column(
+            &backend,
+            "SELECT status FROM key_results WHERE id = ?1",
+            &kr.id.to_string(),
+        );
+        assert_eq!(raw, expected);
+        assert_eq!(
+            backend.get_key_result(&kr.id).unwrap().unwrap().status,
+            status
+        );
+
+        let mut flipped = kr.clone();
+        flipped.status = KeyResultStatus::InProgress;
+        backend.update_key_result(&flipped).unwrap();
+        let raw: String = raw_column(
+            &backend,
+            "SELECT status FROM key_results WHERE id = ?1",
+            &kr.id.to_string(),
+        );
+        assert_eq!(raw, "in_progress");
+    }
+}
+
+#[test]
+fn test_sqlite_key_result_from_row_tolerates_malformed_values() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = Goal::new("Parent");
+    backend.create_goal(&goal).unwrap();
+    let conn = backend.inner.conn().unwrap();
+    conn.execute(
+        r#"INSERT INTO key_results (id, goal_id, name, status, target_value, current_value,
+            manual_progress, linked_project_ids, linked_task_ids, created_at, updated_at)
+          VALUES ('nope', ?1, 'Weird', 'unknown_status', 5.0, 2.5, 999,
+            'not json at all', '["also-not-a-uuid"]', '2025-03-01T09:30:15Z', 'bad')"#,
+        params![goal.id.to_string()],
+    )
+    .unwrap();
+    conn.execute(
+        r"INSERT INTO key_results (id, goal_id, name, manual_progress, created_at, updated_at)
+          VALUES (?1, ?2, 'Negative', -1, '2025-03-01T09:30:15Z', '2025-03-01T09:30:15Z')",
+        params![KeyResultId::new().to_string(), goal.id.to_string()],
+    )
+    .unwrap();
+
+    let krs = backend.get_key_results_for_goal(&goal.id).unwrap();
+    assert_eq!(krs.len(), 2);
+    let weird = krs.iter().find(|k| k.name == "Weird").unwrap();
+    assert_eq!(weird.id.0, uuid::Uuid::nil());
+    assert_eq!(weird.goal_id, goal.id);
+    assert_eq!(weird.status, KeyResultStatus::NotStarted);
+    assert!((weird.target_value - 5.0).abs() < f64::EPSILON);
+    assert!((weird.current_value - 2.5).abs() < f64::EPSILON);
+    assert_eq!(weird.manual_progress, Some(100));
+    assert!(weird.linked_project_ids.is_empty(), "invalid JSON -> empty");
+    assert_eq!(weird.linked_task_ids.len(), 1, "valid JSON, invalid UUID");
+    assert_eq!(weird.linked_task_ids[0].0, uuid::Uuid::nil());
+    assert_eq!(weird.created_at, fixed_ts(1));
+    assert!(weird.updated_at >= weird.created_at);
+
+    let negative = krs.iter().find(|k| k.name == "Negative").unwrap();
+    assert_eq!(negative.manual_progress, Some(0));
+    assert_eq!(negative.status, KeyResultStatus::NotStarted);
+}
+
+#[test]
+fn test_sqlite_export_import_includes_goals_and_key_results() {
+    let (_dir, mut backend) = create_test_backend();
+    let goal = full_goal();
+    let kr = full_key_result(goal.id);
+    backend.create_goal(&goal).unwrap();
+    backend.create_key_result(&kr).unwrap();
+
+    let exported = backend.export_all().unwrap();
+    assert_eq!(exported.goals, vec![goal.clone()]);
+    assert_eq!(exported.key_results, vec![kr.clone()]);
+
+    let dir2 = tempdir().unwrap();
+    let mut backend2 = SqliteBackend::new(&dir2.path().join("import.db")).unwrap();
+    backend2.initialize().unwrap();
+    backend2.import_all(&exported).unwrap();
+    assert_eq!(backend2.get_goal(&goal.id).unwrap(), Some(goal));
+    assert_eq!(backend2.get_key_result(&kr.id).unwrap(), Some(kr));
+}
+
+// ============================================================================
+// Saved filters and Pomodoro state
+// ============================================================================
+
+#[test]
+fn test_sqlite_saved_filters_roundtrip_through_import_export() {
+    let (_dir, mut backend) = create_test_backend();
+    assert!(backend.export_all().unwrap().saved_filters.is_empty());
+
+    let filter = Filter {
+        status: Some(vec![TaskStatus::Todo, TaskStatus::InProgress]),
+        tags: Some(vec!["work".to_string()]),
+        search_text: Some("login".to_string()),
+        include_completed: true,
+        ..Filter::default()
+    };
+    let with_icon = SavedFilter::new(
+        "Work in flight",
+        filter,
+        SortSpec {
+            field: SortField::Title,
+            order: SortOrder::Ascending,
+        },
+    )
+    .with_icon("💼");
+    let without_icon = SavedFilter::new("Everything", Filter::default(), SortSpec::default());
+
+    let data = ExportData {
+        saved_filters: vec![with_icon.clone(), without_icon.clone()],
+        ..ExportData::default()
+    };
+    backend.import_all(&data).unwrap();
+
+    let mut saved = backend.export_all().unwrap().saved_filters;
+    assert_eq!(saved.len(), 2);
+    saved.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let everything = &saved[0];
+    assert_eq!(everything.id, without_icon.id);
+    assert_eq!(everything.name, "Everything");
+    assert_eq!(everything.icon, None);
+    assert!(everything.filter.status.is_none());
+    assert!(matches!(everything.sort.field, SortField::CreatedAt));
+    assert!(matches!(everything.sort.order, SortOrder::Descending));
+
+    let work = &saved[1];
+    assert_eq!(work.id, with_icon.id);
+    assert_eq!(work.name, "Work in flight");
+    assert_eq!(work.icon.as_deref(), Some("💼"));
+    assert_eq!(
+        work.filter.status,
+        Some(vec![TaskStatus::Todo, TaskStatus::InProgress])
+    );
+    assert_eq!(work.filter.tags, Some(vec!["work".to_string()]));
+    assert_eq!(work.filter.search_text.as_deref(), Some("login"));
+    assert!(work.filter.include_completed);
+    assert!(matches!(work.sort.field, SortField::Title));
+    assert!(matches!(work.sort.order, SortOrder::Ascending));
+
+    // Re-importing replaces rather than appends.
+    backend.import_all(&data).unwrap();
+    assert_eq!(backend.export_all().unwrap().saved_filters.len(), 2);
+}
+
+#[test]
+fn test_sqlite_list_saved_filters_rejects_corrupt_json() {
+    let (_dir, backend) = create_test_backend();
+    let conn = backend.inner.conn().unwrap();
+    conn.execute(
+        "INSERT INTO saved_filters (id, name, filter_json, sort_json, icon) VALUES ('x', 'Broken', '{', '{}', NULL)",
+        [],
+    )
+    .unwrap();
+
+    let err = backend.export_all().unwrap_err();
+    assert!(
+        matches!(err, StorageError::Serialization { .. }),
+        "unexpected error: {err:?}"
+    );
+}
+
+#[test]
+fn test_sqlite_pomodoro_state_roundtrip() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let exported = backend.export_all().unwrap();
+    assert!(exported.pomodoro_session.is_none());
+    assert!(exported.pomodoro_config.is_none());
+    assert!(exported.pomodoro_stats.is_none());
+
+    let config = PomodoroConfig {
+        work_duration_mins: 50,
+        short_break_mins: 10,
+        long_break_mins: 30,
+        cycles_before_long_break: 2,
+    };
+    let task_id = TaskId::new();
+    let session = PomodoroSession::new(task_id, &config, 3);
+    let mut stats = PomodoroStats::new();
+    stats.record_cycle(50);
+    stats.record_cycle(50);
+
+    backend.set_pomodoro_config(&config).unwrap();
+    backend.set_pomodoro_session(Some(&session)).unwrap();
+    backend.set_pomodoro_stats(&stats).unwrap();
+
+    let exported = backend.export_all().unwrap();
+    assert_eq!(exported.pomodoro_config, Some(config.clone()));
+    let loaded_session = exported.pomodoro_session.unwrap();
+    assert_eq!(loaded_session.task_id, task_id);
+    assert_eq!(loaded_session.session_goal, 3);
+    assert_eq!(loaded_session.remaining_secs, session.remaining_secs);
+    let loaded_stats = exported.pomodoro_stats.unwrap();
+    assert_eq!(loaded_stats.total_cycles, 2);
+    assert_eq!(loaded_stats.total_work_mins, 100);
+
+    // Overwriting replaces the single row per key.
+    let config2 = PomodoroConfig::default();
+    backend.set_pomodoro_config(&config2).unwrap();
+    assert_eq!(backend.export_all().unwrap().pomodoro_config, Some(config2));
+
+    // Clearing the session deletes its row and leaves the others alone.
+    backend.set_pomodoro_session(None).unwrap();
+    let exported = backend.export_all().unwrap();
+    assert!(exported.pomodoro_session.is_none());
+    assert!(exported.pomodoro_config.is_some());
+    assert!(exported.pomodoro_stats.is_some());
+    let rows: i64 = backend
+        .inner
+        .conn()
+        .unwrap()
+        .query_row("SELECT COUNT(*) FROM pomodoro_state", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 2);
+}

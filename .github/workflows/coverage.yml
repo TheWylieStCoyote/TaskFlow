@@ -35,13 +35,15 @@ jobs:
 
       - name: Run tests with coverage
         run: |
+          set -o pipefail
+          mkdir -p coverage
           cargo tarpaulin \
             --out Xml \
             --out Html \
             --output-dir coverage \
             --skip-clean \
             --timeout 300 \
-            --ignore-tests
+            --ignore-tests 2>&1 | tee coverage/tarpaulin-output.txt
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -61,8 +63,8 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          # Extract coverage percentage from tarpaulin output
-          COVERAGE=$(cargo tarpaulin --skip-clean --ignore-tests 2>&1 | grep -oP '\d+\.\d+(?=% coverage)' | tail -1)
+          # Reuse the percentage from the run above instead of re-running tarpaulin
+          COVERAGE=$(grep -oP '\d+\.\d+(?=% coverage)' coverage/tarpaulin-output.txt | tail -1)
           echo "Coverage: ${COVERAGE}%"
 
           # Fail if coverage is below 81%

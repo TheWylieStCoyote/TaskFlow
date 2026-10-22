@@ -192,3 +192,174 @@ impl Calendar<'_> {
         StatefulWidget::render(list, inner, buf, &mut state);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::domain::{today, CalendarEvent, CalendarEventStatus, Priority, Task, TaskStatus};
+    use crate::ui::test_utils::buffer_content;
+    use chrono::{Datelike, Local, TimeZone, Utc};
+
+    fn render_tasks(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, width, height);
+        let mut buf = Buffer::empty(area);
+        Calendar::new(model, &theme).render_task_list(area, &mut buf, &theme);
+        buffer_content(&buf)
+    }
+
+    /// Build an event that starts today in local time (events are matched to
+    /// days by local date).
+    fn event_today(title: &str, hour: u32, status: CalendarEventStatus) -> CalendarEvent {
+        let date = today();
+        let start = Local
+            .with_ymd_and_hms(date.year(), date.month(), date.day(), hour, 0, 0)
+            .single()
+            .expect("valid local time")
+            .with_timezone(&Utc);
+        CalendarEvent::new(title)
+            .with_start(start)
+            .with_end(start + chrono::Duration::minutes(45))
+            .with_status(status)
+    }
+
+    #[test]
+    fn test_no_selected_day_prompts_selection() {
+        let mut model = Model::new();
+        model.calendar_state.selected_day = None;
+        let content = render_tasks(&model, 40, 10);
+        assert!(content.contains(" Tasks "));
+        assert!(content.contains("Select a day"));
+    }
+
+    #[test]
+    fn test_selected_day_without_items() {
+        let model = Model::new();
+        let content = render_tasks(&model, 40, 10);
+        let d = today();
+        assert!(content.contains(&format!(" Tasks for {}/{} ", d.month(), d.day())));
+        assert!(content.contains("No tasks or events"));
+    }
+
+    #[test]
+    fn test_tasks_render_with_priority_and_status_symbols() {
+        let mut model = Model::new();
+        let mut urgent = Task::new("Urgent thing");
+        urgent.priority = Priority::Urgent;
+        urgent.due_date = Some(today());
+        let mut done = Task::new("Done thing");
+        done.status = TaskStatus::Done;
+        done.due_date = Some(today());
+        model.tasks.insert(urgent.id, urgent);
+        model.tasks.insert(done.id, done);
+        model.filtering.show_completed = true;
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+
+        let content = render_tasks(&model, 50, 10);
+
+        assert!(content.contains("Urgent thing"));
+        assert!(content.contains("Done thing"));
+        assert!(content.contains(&format!("{} ", Priority::Urgent.symbol())));
+        assert!(content.contains(&format!("{} ", TaskStatus::Done.symbol())));
+        assert!(!content.contains("── Events ──"));
+    }
+
+    #[test]
+    fn test_long_task_titles_are_truncated() {
+        let mut model = Model::new();
+        let task = Task::new("An exceptionally long task title that cannot fit in the column");
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+
+        let content = render_tasks(&model, 30, 6);
+
+        assert!(content.contains("…"));
+        assert!(!content.contains("cannot fit"));
+    }
+
+    #[test]
+    fn test_events_render_after_tasks_with_separator() {
+        let mut model = Model::new();
+        let task = Task::new("Morning task");
+        model.tasks.insert(task.id, task);
+        model.refresh_visible_tasks();
+        let confirmed = event_today("Standup", 9, CalendarEventStatus::Confirmed);
+        let standup_range = confirmed.formatted_time_range();
+        let tentative = event_today("Maybe lunch", 12, CalendarEventStatus::Tentative);
+        let cancelled = event_today("Cancelled sync", 15, CalendarEventStatus::Cancelled);
+        for event in [confirmed, tentative, cancelled] {
+            model.calendar_events.insert(event.id, event);
+        }
+
+        let content = render_tasks(&model, 60, 12);
+
+        let d = today();
+        assert!(content.contains(&format!(" {}/{} (3 events) ", d.month(), d.day())));
+        assert!(content.contains("Morning task"));
+        assert!(content.contains("── Events ──"));
+        assert!(content.contains("📅"));
+        // The time range is rendered in UTC by `formatted_time_range`
+        assert!(content.contains(&format!("{standup_range} Standup")));
+        assert!(content.contains("Maybe lunch"));
+        assert!(content.contains("Cancelled sync"));
+        let task_pos = content.find("Morning task").unwrap();
+        let sep_pos = content.find("── Events ──").unwrap();
+        let event_pos = content.find("Standup").unwrap();
+        assert!(task_pos < sep_pos && sep_pos < event_pos);
+    }
+
+    #[test]
+    fn test_events_only_day_has_no_separator() {
+        let mut model = Model::new();
+        let event = event_today("Solo event", 10, CalendarEventStatus::Confirmed);
+        model.calendar_events.insert(event.id, event);
+
+        let content = render_tasks(&model, 50, 8);
+
+        assert!(content.contains("Solo event"));
+        assert!(!content.contains("── Events ──"));
+        assert!(!content.contains("No tasks or events"));
+    }
+
+    #[test]
+    fn test_all_day_event_label() {
+        let mut model = Model::new();
+        let event = event_today("Holiday", 0, CalendarEventStatus::Confirmed).with_all_day(true);
+        model.calendar_events.insert(event.id, event);
+
+        let content = render_tasks(&model, 50, 8);
+        assert!(content.contains("All day Holiday"));
+    }
+
+    #[test]
+    fn test_event_rows_are_limited_by_height() {
+        let mut model = Model::new();
+        for i in 0..10 {
+            let event = event_today(&format!("Event {i}"), 8 + i, CalendarEventStatus::Confirmed);
+            model.calendar_events.insert(event.id, event);
+        }
+
+        // inner height is 3 rows: only the first three events fit
+        let content = render_tasks(&model, 50, 5);
+        assert!(content.contains("Event 0"));
+        assert!(content.contains("Event 2"));
+        assert!(!content.contains("Event 3"));
+    }
+
+    #[test]
+    fn test_focused_task_list_still_renders_title() {
+        let mut model = Model::new();
+        model.calendar_state.focus_task_list = true;
+        let content = render_tasks(&model, 40, 8);
+        assert!(content.contains("Tasks for"));
+    }
+
+    #[test]
+    fn test_zero_height_inner_area_returns_early() {
+        let model = Model::new();
+        let content = render_tasks(&model, 40, 2);
+        assert!(!content.contains("No tasks or events"));
+    }
+}

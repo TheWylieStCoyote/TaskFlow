@@ -1456,4 +1456,468 @@ mod tests {
         .unwrap();
         assert!(evaluate_with_cache(&expr, &cache, &ctx));
     }
+
+    // ------------------------------------------------------------------
+    // Timestamp-based filters (completed / modified) and scheduled dates.
+    //
+    // Timestamps are built from the LOCAL noon of a calendar date so that
+    // `LocalDate::local_date()` maps them back to that same date in any
+    // timezone the tests happen to run in.
+    // ------------------------------------------------------------------
+
+    fn local_noon(date: NaiveDate) -> chrono::DateTime<Utc> {
+        use chrono::TimeZone;
+        chrono::Local
+            .from_local_datetime(&date.and_hms_opt(12, 0, 0).unwrap())
+            .earliest()
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    fn task_modified_on(date: NaiveDate) -> Task {
+        let mut task = Task::new("Test");
+        task.updated_at = local_noon(date);
+        task
+    }
+
+    fn task_completed_on(date: NaiveDate) -> Task {
+        let mut task = Task::new("Test");
+        task.status = TaskStatus::Done;
+        task.completed_at = Some(local_noon(date));
+        task
+    }
+
+    fn task_scheduled_on(date: NaiveDate) -> Task {
+        let mut task = Task::new("Test");
+        task.scheduled_date = Some(date);
+        task
+    }
+
+    fn matches(query: &str, task: &Task, ctx: &EvalContext<'_>) -> bool {
+        let expr = crate::domain::filter_dsl::parse(query).unwrap();
+        evaluate(&expr, task, ctx)
+    }
+
+    fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn test_local_noon_roundtrips_to_same_local_date() {
+        let date = ymd(2025, 6, 15);
+        assert_eq!(local_noon(date).local_date(), date);
+    }
+
+    // ---- modified ----
+
+    #[test]
+    fn test_eval_modified_today_and_yesterday() {
+        let today = ymd(2025, 6, 15);
+        let ctx = ctx_with_date(today);
+        let task_today = task_modified_on(today);
+        let task_yesterday = task_modified_on(ymd(2025, 6, 14));
+        let task_older = task_modified_on(ymd(2025, 6, 10));
+
+        assert!(matches("modified:today", &task_today, &ctx));
+        assert!(!matches("modified:today", &task_yesterday, &ctx));
+        assert!(!matches("modified:today", &task_older, &ctx));
+
+        assert!(!matches("modified:yesterday", &task_today, &ctx));
+        assert!(matches("modified:yesterday", &task_yesterday, &ctx));
+        assert!(!matches("modified:yesterday", &task_older, &ctx));
+
+        // `updated:` is an alias for `modified:`
+        assert!(matches("updated:today", &task_today, &ctx));
+    }
+
+    #[test]
+    fn test_eval_modified_thisweek_and_lastweek() {
+        // Wednesday, June 18, 2025: this week is Mon 16 - Sun 22, last week Mon 9 - Sun 15
+        let ctx = ctx_with_date(ymd(2025, 6, 18));
+        let this_monday = task_modified_on(ymd(2025, 6, 16));
+        let this_sunday = task_modified_on(ymd(2025, 6, 22));
+        let last_monday = task_modified_on(ymd(2025, 6, 9));
+        let last_sunday = task_modified_on(ymd(2025, 6, 15));
+        let two_weeks_ago = task_modified_on(ymd(2025, 6, 8));
+        let next_monday = task_modified_on(ymd(2025, 6, 23));
+
+        assert!(matches("modified:thisweek", &this_monday, &ctx));
+        assert!(matches("modified:thisweek", &this_sunday, &ctx));
+        assert!(!matches("modified:thisweek", &last_sunday, &ctx));
+        assert!(!matches("modified:thisweek", &next_monday, &ctx));
+
+        assert!(matches("modified:lastweek", &last_monday, &ctx));
+        assert!(matches("modified:lastweek", &last_sunday, &ctx));
+        assert!(!matches("modified:lastweek", &this_monday, &ctx));
+        assert!(!matches("modified:lastweek", &two_weeks_ago, &ctx));
+    }
+
+    #[test]
+    fn test_eval_modified_exact_and_comparisons() {
+        let ctx = ctx_with_date(ymd(2025, 6, 15));
+        let before = task_modified_on(ymd(2025, 6, 10));
+        let on = task_modified_on(ymd(2025, 6, 15));
+        let after = task_modified_on(ymd(2025, 6, 20));
+
+        assert!(!matches("modified:2025-06-15", &before, &ctx));
+        assert!(matches("modified:2025-06-15", &on, &ctx));
+        assert!(!matches("modified:2025-06-15", &after, &ctx));
+
+        assert!(matches("modified:<2025-06-15", &before, &ctx));
+        assert!(!matches("modified:<2025-06-15", &on, &ctx));
+        assert!(!matches("modified:<2025-06-15", &after, &ctx));
+
+        assert!(!matches("modified:>2025-06-15", &before, &ctx));
+        assert!(!matches("modified:>2025-06-15", &on, &ctx));
+        assert!(matches("modified:>2025-06-15", &after, &ctx));
+
+        assert!(!matches("modified:2025-06-12..2025-06-18", &before, &ctx));
+        assert!(matches("modified:2025-06-12..2025-06-18", &on, &ctx));
+        assert!(!matches("modified:2025-06-12..2025-06-18", &after, &ctx));
+        assert!(matches("modified:2025-06-10..2025-06-20", &before, &ctx));
+        assert!(matches("modified:2025-06-10..2025-06-20", &after, &ctx));
+
+        assert!(!matches("modified:2025-06-15..", &before, &ctx));
+        assert!(matches("modified:2025-06-15..", &on, &ctx));
+        assert!(matches("modified:2025-06-15..", &after, &ctx));
+
+        assert!(matches("modified:..2025-06-15", &before, &ctx));
+        assert!(matches("modified:..2025-06-15", &on, &ctx));
+        assert!(!matches("modified:..2025-06-15", &after, &ctx));
+    }
+
+    #[test]
+    fn test_eval_modified_uses_local_calendar_date_of_real_today() {
+        let ctx = empty_ctx();
+        let now = today();
+        let task_today = task_modified_on(now);
+        let task_yesterday = task_modified_on(now.pred_opt().unwrap());
+
+        assert!(matches("modified:today", &task_today, &ctx));
+        assert!(!matches("modified:yesterday", &task_today, &ctx));
+        assert!(!matches("modified:today", &task_yesterday, &ctx));
+        assert!(matches("modified:yesterday", &task_yesterday, &ctx));
+        assert!(matches("modified:thisweek", &task_today, &ctx));
+    }
+
+    // ---- completed ----
+
+    #[test]
+    fn test_eval_completed_requires_completion_timestamp() {
+        let today = ymd(2025, 6, 15);
+        let ctx = ctx_with_date(today);
+        // Done status without a timestamp never matches any completed: filter.
+        let mut task = Task::new("Test");
+        task.status = TaskStatus::Done;
+        task.updated_at = local_noon(today);
+        task.created_at = local_noon(today);
+
+        for query in [
+            "completed:today",
+            "completed:yesterday",
+            "completed:thisweek",
+            "completed:lastweek",
+            "completed:2025-06-15",
+            "completed:<2025-06-16",
+            "completed:>2025-06-14",
+            "completed:2025-06-01..2025-06-30",
+            "completed:2025-06-01..",
+            "completed:..2025-06-30",
+        ] {
+            assert!(
+                !matches(query, &task, &ctx),
+                "{query} matched a task with no completed_at"
+            );
+        }
+    }
+
+    #[test]
+    fn test_eval_completed_today_and_yesterday() {
+        let today = ymd(2025, 6, 15);
+        let ctx = ctx_with_date(today);
+        let done_today = task_completed_on(today);
+        let done_yesterday = task_completed_on(ymd(2025, 6, 14));
+
+        assert!(matches("completed:today", &done_today, &ctx));
+        assert!(!matches("completed:today", &done_yesterday, &ctx));
+        assert!(!matches("completed:yesterday", &done_today, &ctx));
+        assert!(matches("completed:yesterday", &done_yesterday, &ctx));
+    }
+
+    #[test]
+    fn test_eval_completed_thisweek_and_lastweek() {
+        // Wednesday, June 18, 2025
+        let ctx = ctx_with_date(ymd(2025, 6, 18));
+        let this_monday = task_completed_on(ymd(2025, 6, 16));
+        let this_sunday = task_completed_on(ymd(2025, 6, 22));
+        let last_monday = task_completed_on(ymd(2025, 6, 9));
+        let last_sunday = task_completed_on(ymd(2025, 6, 15));
+        let two_weeks_ago = task_completed_on(ymd(2025, 6, 8));
+
+        assert!(matches("completed:thisweek", &this_monday, &ctx));
+        assert!(matches("completed:thisweek", &this_sunday, &ctx));
+        assert!(!matches("completed:thisweek", &last_sunday, &ctx));
+
+        assert!(matches("completed:lastweek", &last_monday, &ctx));
+        assert!(matches("completed:lastweek", &last_sunday, &ctx));
+        assert!(!matches("completed:lastweek", &this_monday, &ctx));
+        assert!(!matches("completed:lastweek", &two_weeks_ago, &ctx));
+    }
+
+    #[test]
+    fn test_eval_completed_exact_and_comparisons() {
+        let ctx = ctx_with_date(ymd(2025, 6, 15));
+        let before = task_completed_on(ymd(2025, 6, 10));
+        let on = task_completed_on(ymd(2025, 6, 15));
+        let after = task_completed_on(ymd(2025, 6, 20));
+
+        assert!(matches("completed:2025-06-15", &on, &ctx));
+        assert!(!matches("completed:2025-06-15", &before, &ctx));
+
+        assert!(matches("completed:<2025-06-15", &before, &ctx));
+        assert!(!matches("completed:<2025-06-15", &on, &ctx));
+
+        assert!(matches("completed:>2025-06-15", &after, &ctx));
+        assert!(!matches("completed:>2025-06-15", &on, &ctx));
+
+        assert!(matches("completed:2025-06-10..2025-06-15", &before, &ctx));
+        assert!(matches("completed:2025-06-10..2025-06-15", &on, &ctx));
+        assert!(!matches("completed:2025-06-10..2025-06-15", &after, &ctx));
+
+        assert!(matches("completed:2025-06-15..", &on, &ctx));
+        assert!(matches("completed:2025-06-15..", &after, &ctx));
+        assert!(!matches("completed:2025-06-15..", &before, &ctx));
+
+        assert!(matches("completed:..2025-06-15", &on, &ctx));
+        assert!(matches("completed:..2025-06-15", &before, &ctx));
+        assert!(!matches("completed:..2025-06-15", &after, &ctx));
+    }
+
+    // ---- scheduled ----
+
+    #[test]
+    fn test_eval_scheduled_today_tomorrow_none() {
+        let today = ymd(2025, 6, 15);
+        let ctx = ctx_with_date(today);
+        let sched_today = task_scheduled_on(today);
+        let sched_tomorrow = task_scheduled_on(ymd(2025, 6, 16));
+        let unscheduled = Task::new("Test");
+
+        assert!(matches("scheduled:today", &sched_today, &ctx));
+        assert!(!matches("scheduled:today", &sched_tomorrow, &ctx));
+        assert!(!matches("scheduled:today", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:tomorrow", &sched_tomorrow, &ctx));
+        assert!(!matches("scheduled:tomorrow", &sched_today, &ctx));
+        assert!(!matches("scheduled:tomorrow", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:none", &unscheduled, &ctx));
+        assert!(!matches("scheduled:none", &sched_today, &ctx));
+    }
+
+    #[test]
+    fn test_eval_scheduled_thisweek_and_nextweek() {
+        // Wednesday, June 18, 2025: this week Mon 16 - Sun 22, next week Mon 23 - Sun 29
+        let ctx = ctx_with_date(ymd(2025, 6, 18));
+        let this_monday = task_scheduled_on(ymd(2025, 6, 16));
+        let this_sunday = task_scheduled_on(ymd(2025, 6, 22));
+        let next_monday = task_scheduled_on(ymd(2025, 6, 23));
+        let next_sunday = task_scheduled_on(ymd(2025, 6, 29));
+        let in_two_weeks = task_scheduled_on(ymd(2025, 6, 30));
+        let unscheduled = Task::new("Test");
+
+        assert!(matches("scheduled:thisweek", &this_monday, &ctx));
+        assert!(matches("scheduled:thisweek", &this_sunday, &ctx));
+        assert!(!matches("scheduled:thisweek", &next_monday, &ctx));
+        assert!(!matches("scheduled:thisweek", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:nextweek", &next_monday, &ctx));
+        assert!(matches("scheduled:nextweek", &next_sunday, &ctx));
+        assert!(!matches("scheduled:nextweek", &this_sunday, &ctx));
+        assert!(!matches("scheduled:nextweek", &in_two_weeks, &ctx));
+        assert!(!matches("scheduled:nextweek", &unscheduled, &ctx));
+    }
+
+    #[test]
+    fn test_eval_scheduled_exact_and_comparisons() {
+        let ctx = ctx_with_date(ymd(2025, 6, 15));
+        let before = task_scheduled_on(ymd(2025, 6, 10));
+        let on = task_scheduled_on(ymd(2025, 6, 15));
+        let after = task_scheduled_on(ymd(2025, 6, 20));
+        let unscheduled = Task::new("Test");
+
+        assert!(matches("scheduled:2025-06-15", &on, &ctx));
+        assert!(!matches("scheduled:2025-06-15", &before, &ctx));
+        assert!(!matches("scheduled:2025-06-15", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:<2025-06-15", &before, &ctx));
+        assert!(!matches("scheduled:<2025-06-15", &on, &ctx));
+        assert!(!matches("scheduled:<2025-06-15", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:>2025-06-15", &after, &ctx));
+        assert!(!matches("scheduled:>2025-06-15", &on, &ctx));
+        assert!(!matches("scheduled:>2025-06-15", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:2025-06-15..", &on, &ctx));
+        assert!(matches("scheduled:2025-06-15..", &after, &ctx));
+        assert!(!matches("scheduled:2025-06-15..", &before, &ctx));
+        assert!(!matches("scheduled:2025-06-15..", &unscheduled, &ctx));
+
+        assert!(matches("scheduled:..2025-06-15", &on, &ctx));
+        assert!(matches("scheduled:..2025-06-15", &before, &ctx));
+        assert!(!matches("scheduled:..2025-06-15", &after, &ctx));
+        assert!(!matches("scheduled:..2025-06-15", &unscheduled, &ctx));
+    }
+
+    // ---- due ----
+
+    #[test]
+    fn test_eval_due_nextweek() {
+        // Wednesday, June 18, 2025: next week is Mon 23 - Sun 29
+        let ctx = ctx_with_date(ymd(2025, 6, 18));
+        let this_sunday = Task::new("Test").with_due_date(ymd(2025, 6, 22));
+        let next_monday = Task::new("Test").with_due_date(ymd(2025, 6, 23));
+        let next_sunday = Task::new("Test").with_due_date(ymd(2025, 6, 29));
+        let in_two_weeks = Task::new("Test").with_due_date(ymd(2025, 6, 30));
+        let no_due = Task::new("Test");
+
+        assert!(matches("due:nextweek", &next_monday, &ctx));
+        assert!(matches("due:nextweek", &next_sunday, &ctx));
+        assert!(!matches("due:nextweek", &this_sunday, &ctx));
+        assert!(!matches("due:nextweek", &in_two_weeks, &ctx));
+        assert!(!matches("due:nextweek", &no_due, &ctx));
+    }
+
+    #[test]
+    fn test_eval_due_on_exact_date() {
+        let ctx = ctx_with_date(ymd(2025, 6, 15));
+        let on = Task::new("Test").with_due_date(ymd(2025, 6, 20));
+        let off = Task::new("Test").with_due_date(ymd(2025, 6, 21));
+        let no_due = Task::new("Test");
+
+        assert!(matches("due:2025-06-20", &on, &ctx));
+        assert!(!matches("due:2025-06-20", &off, &ctx));
+        assert!(!matches("due:2025-06-20", &no_due, &ctx));
+    }
+
+    #[test]
+    fn test_eval_due_overdue_excludes_completed_tasks() {
+        let ctx = ctx_with_date(ymd(2025, 6, 15));
+        let mut late_done = Task::new("Test").with_due_date(ymd(2025, 6, 1));
+        late_done.status = TaskStatus::Done;
+        let mut late_cancelled = Task::new("Test").with_due_date(ymd(2025, 6, 1));
+        late_cancelled.status = TaskStatus::Cancelled;
+        let late_open = Task::new("Test").with_due_date(ymd(2025, 6, 1));
+
+        assert!(matches("due:overdue", &late_open, &ctx));
+        assert!(!matches("due:overdue", &late_done, &ctx));
+        assert!(!matches("due:overdue", &late_cancelled, &ctx));
+    }
+
+    // ---- cached evaluation of non-text conditions ----
+
+    #[test]
+    fn test_cached_eval_date_numeric_and_project_fields() {
+        // Sunday, June 15, 2025: this week is Mon 9 - Sun 15
+        let today = ymd(2025, 6, 15);
+        let project = Project::new("Backend Services");
+        let project_id = project.id;
+        let mut projects = HashMap::new();
+        projects.insert(project_id, project);
+        let ctx = EvalContext::with_date(&projects, today);
+
+        let mut task = Task::new("Fix things")
+            .with_priority(Priority::High)
+            .with_tags(vec!["bug".to_string()])
+            .with_due_date(ymd(2025, 6, 16));
+        task.status = TaskStatus::Done;
+        task.scheduled_date = Some(ymd(2025, 6, 17));
+        task.created_at = local_noon(ymd(2025, 6, 10));
+        task.completed_at = Some(local_noon(today));
+        task.updated_at = local_noon(today);
+        task.estimated_minutes = Some(60);
+        task.actual_minutes = 30;
+        task.project_id = Some(project_id);
+
+        let cases = [
+            ("due:tomorrow", true),
+            ("due:today", false),
+            ("due:nextweek", true),
+            ("scheduled:2025-06-17", true),
+            ("scheduled:tomorrow", false),
+            ("scheduled:nextweek", true),
+            ("created:<2025-06-15", true),
+            ("created:today", false),
+            ("created:thisweek", true),
+            ("created:lastweek", false),
+            ("completed:today", true),
+            ("completed:yesterday", false),
+            ("completed:thisweek", true),
+            ("modified:today", true),
+            ("modified:lastweek", false),
+            ("modified:2025-06-15..", true),
+            ("estimate:60", true),
+            ("estimate:>60", false),
+            ("estimate:30..90", true),
+            ("actual:<60", true),
+            ("actual:none", false),
+            ("actual:30..", true),
+            ("actual:..29", false),
+            ("has:scheduled", true),
+            ("has:recurrence", false),
+            ("has:tracked", true),
+            ("project:backend", true),
+            ("project:frontend", false),
+            ("status:done", true),
+            ("priority:high", true),
+            ("priority:low", false),
+            ("tags:bug", true),
+            ("title:fix", true),
+            (r#"search:"things""#, true),
+            ("!has:due", false),
+            ("due:tomorrow AND completed:today AND estimate:60", true),
+            ("due:today OR modified:today", true),
+        ];
+
+        for (query, expected) in cases {
+            let expr = crate::domain::filter_dsl::parse(query).unwrap();
+            let cache = TaskLowerCache::new(&task);
+            let cached = evaluate_with_cache(&expr, &cache, &ctx);
+            let uncached = evaluate(&expr, &task, &ctx);
+            assert_eq!(cached, expected, "cached result for {query}");
+            assert_eq!(uncached, expected, "uncached result for {query}");
+        }
+    }
+
+    #[test]
+    fn test_cached_eval_completed_without_timestamp_and_missing_project() {
+        let today = ymd(2025, 6, 15);
+        let ctx = ctx_with_date(today);
+        let mut task = Task::new("Orphan");
+        task.status = TaskStatus::Done;
+        task.project_id = Some(ProjectId::new()); // not in ctx.projects
+        let cache = TaskLowerCache::new(&task);
+
+        for (query, expected) in [
+            ("completed:today", false),
+            ("completed:..2025-12-31", false),
+            ("project:anything", false),
+            ("has:project", true),
+            ("estimate:none", true),
+            ("scheduled:none", true),
+            ("due:none", true),
+        ] {
+            let expr = crate::domain::filter_dsl::parse(query).unwrap();
+            assert_eq!(
+                evaluate_with_cache(&expr, &cache, &ctx),
+                expected,
+                "cached result for {query}"
+            );
+            assert_eq!(
+                evaluate(&expr, &task, &ctx),
+                expected,
+                "uncached result for {query}"
+            );
+        }
+    }
 }

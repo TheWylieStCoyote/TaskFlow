@@ -427,3 +427,170 @@ mod tests {
         assert_eq!(result, "Exactly twenty chars");
     }
 }
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::domain::duplicate_detector::DuplicatePair;
+    use crate::domain::{Priority, Project, Task, TaskId, TaskStatus};
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    fn render(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        buffer_content(&render_widget(
+            Duplicates::new(model, &theme),
+            width,
+            height,
+        ))
+    }
+
+    fn pair(a: TaskId, b: TaskId, similarity: f64) -> DuplicatePair {
+        DuplicatePair {
+            task1_id: a,
+            task2_id: b,
+            similarity,
+        }
+    }
+
+    fn model_with_pairs() -> (Model, Vec<TaskId>) {
+        let mut model = Model::new();
+        let project = Project::new("Chores");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+
+        let mut a = Task::new("Buy groceries");
+        a.project_id = Some(project_id);
+        a.priority = Priority::High;
+        let mut b = Task::new("Buy the groceries");
+        b.status = TaskStatus::InProgress;
+        let c = Task::new("Call mom");
+        let d = Task::new("Call mum");
+        let ids = vec![a.id, b.id, c.id, d.id];
+        for task in [a, b, c, d] {
+            model.tasks.insert(task.id, task);
+        }
+        model.duplicates_view.pairs = vec![pair(ids[0], ids[1], 0.96), pair(ids[2], ids[3], 0.91)];
+        model.duplicates_view.threshold = 0.85;
+        (model, ids)
+    }
+
+    #[test]
+    fn test_header_counts_pairs_and_threshold() {
+        let (model, _) = model_with_pairs();
+        let content = render(&model, 120, 30);
+        assert!(content.contains("2 potential duplicate pairs found (threshold: 85%)"));
+    }
+
+    #[test]
+    fn test_header_singular_pair() {
+        let (mut model, _) = model_with_pairs();
+        model.duplicates_view.pairs.truncate(1);
+        let content = render(&model, 120, 30);
+        assert!(content.contains("1 potential duplicate pair found"));
+    }
+
+    #[test]
+    fn test_empty_list_message() {
+        let model = Model::new();
+        let content = render(&model, 100, 30);
+        assert!(content.contains("No duplicate tasks found!"));
+        assert!(!content.contains("Selected Pair Details"));
+    }
+
+    #[test]
+    fn test_list_rows_show_similarity_project_and_titles() {
+        let (model, _) = model_with_pairs();
+        let content = render(&model, 120, 30);
+        assert!(content.contains(" 96% [Chores] Buy groceries <-> Buy the groceries"));
+        assert!(content.contains(" 91% [Inbox] Call mom <-> Call mum"));
+    }
+
+    #[test]
+    fn test_detail_panel_for_selected_pair() {
+        let (mut model, _) = model_with_pairs();
+        model.duplicates_view.selected = 1;
+        let content = render(&model, 120, 30);
+        assert!(content.contains("Selected Pair Details"));
+        assert!(content.contains("Task 1: Call mom"));
+        assert!(content.contains("Task 2: Call mum"));
+        assert!(content.contains("Similarity: 91.0%"));
+        assert!(content.contains("Status: Todo"));
+        assert!(content.contains("Priority: None"));
+    }
+
+    #[test]
+    fn test_detail_panel_shows_status_and_priority_of_first_pair() {
+        let (model, _) = model_with_pairs();
+        let content = render(&model, 120, 30);
+        assert!(content.contains("Task 1: Buy groceries"));
+        assert!(content.contains("Priority: High"));
+        assert!(content.contains("Status: InProgress"));
+        assert!(content.contains("Similarity: 96.0%"));
+    }
+
+    #[test]
+    fn test_pair_with_deleted_task_renders_placeholder_and_no_detail() {
+        let (mut model, ids) = model_with_pairs();
+        model.tasks.remove(&ids[1]);
+        model.duplicates_view.selected = 0;
+        let content = render(&model, 120, 30);
+        assert!(content.contains("[Unknown] [deleted] <-> [deleted]"));
+        assert!(!content.contains("Selected Pair Details"));
+    }
+
+    #[test]
+    fn test_selected_index_past_end_skips_detail() {
+        let (mut model, _) = model_with_pairs();
+        model.duplicates_view.selected = 10;
+        let content = render(&model, 120, 30);
+        assert!(!content.contains("Selected Pair Details"));
+        assert!(content.contains("Buy groceries"));
+    }
+
+    #[test]
+    fn test_long_titles_are_truncated_in_list() {
+        let mut model = Model::new();
+        let a = Task::new("This is an extremely long task title that goes on and on");
+        let b = Task::new("This is an extremely long task title that goes on and onward");
+        let ids = [a.id, b.id];
+        model.tasks.insert(a.id, a);
+        model.tasks.insert(b.id, b);
+        model.duplicates_view.pairs = vec![pair(ids[0], ids[1], 0.88)];
+        let content = render(&model, 140, 30);
+        assert!(
+            content.contains("This is an extremely long t... <-> This is an extremely long t...")
+        );
+    }
+
+    #[test]
+    fn test_scroll_offset_hides_earlier_rows_and_shows_scrollbar() {
+        let mut model = Model::new();
+        let mut ids = Vec::new();
+        for i in 0..30 {
+            let a = Task::new(format!("Row {i:02} left"));
+            let b = Task::new(format!("Row {i:02} right"));
+            ids.push((a.id, b.id));
+            model.tasks.insert(a.id, a);
+            model.tasks.insert(b.id, b);
+        }
+        model.duplicates_view.pairs = ids.iter().map(|(a, b)| pair(*a, *b, 0.9)).collect();
+        model.duplicates_view.selected = 20;
+        model.duplicates_view.scroll_offset = 15;
+
+        let content = render(&model, 120, 30);
+
+        assert!(!content.contains("Row 00 left"));
+        assert!(content.contains("Row 15 left"));
+        assert!(
+            content.contains("▲") && content.contains("▼"),
+            "scrollbar rendered"
+        );
+    }
+
+    #[test]
+    fn test_help_footer_lists_keys() {
+        let (model, _) = model_with_pairs();
+        let content = render(&model, 120, 30);
+        assert!(content.contains("j/k navigate  D dismiss  M merge (keep first)  r refresh"));
+    }
+}

@@ -315,3 +315,67 @@ mod cli_tests {
         assert!(result.is_err());
     }
 }
+
+#[cfg(test)]
+mod load_model_tests {
+    use taskflow::domain::Task;
+    use taskflow::storage::BackendType;
+
+    use super::load_model_for_cli;
+    use crate::cli::Cli;
+    use crate::commands_tests::support::{add_task, data_file, seed_model, temp_dir};
+
+    fn cli(backend: BackendType, data: std::path::PathBuf) -> Cli {
+        Cli {
+            data: Some(data),
+            backend,
+            demo: false,
+            debug: false,
+            log_level: "info".to_string(),
+            command: None,
+        }
+    }
+
+    #[test]
+    fn explicit_backend_and_data_path_are_used() {
+        let dir = temp_dir();
+        let data = data_file(dir.path());
+        seed_model(&data, |model| {
+            add_task(model, Task::new("Persisted"));
+        });
+
+        let model = load_model_for_cli(&cli(BackendType::Yaml, data)).expect("loads yaml");
+        assert_eq!(model.tasks.len(), 1);
+        assert!(model.has_storage());
+    }
+
+    #[test]
+    fn sqlite_and_markdown_backends_open_fresh_stores() {
+        let dir = temp_dir();
+
+        let sqlite = load_model_for_cli(&cli(BackendType::Sqlite, dir.path().join("tasks.db")))
+            .expect("opens sqlite");
+        assert!(sqlite.tasks.is_empty());
+        assert!(sqlite.has_storage());
+
+        let markdown = load_model_for_cli(&cli(BackendType::Markdown, dir.path().join("md")))
+            .expect("opens markdown");
+        assert!(markdown.tasks.is_empty());
+        assert!(markdown.has_storage());
+    }
+
+    #[test]
+    fn unreadable_data_path_is_reported_with_its_location() {
+        let dir = temp_dir();
+        // A directory can never be parsed as a YAML document.
+        let Err(err) = load_model_for_cli(&cli(BackendType::Yaml, dir.path().to_path_buf())) else {
+            panic!("a directory must not load as a YAML store");
+        };
+        let message = err.to_string();
+        assert!(
+            message.starts_with("Could not load data from "),
+            "{message}"
+        );
+        assert!(message.contains(&dir.path().display().to_string()));
+    }
+}

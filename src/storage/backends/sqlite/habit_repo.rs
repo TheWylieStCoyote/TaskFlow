@@ -2,15 +2,14 @@
 
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use rusqlite::{params, OptionalExtension};
 
 use crate::domain::{Habit, HabitCheckIn, HabitId};
 use crate::storage::{HabitRepository, StorageError, StorageResult};
 
-use super::rows::habit_from_row;
+use super::rows::{collect_rows, habit_check_in_from_row, habit_from_row};
 use super::SqliteBackend;
-use crate::domain::today;
 
 impl SqliteBackend {
     /// Load check-ins for a habit from the database.
@@ -23,30 +22,14 @@ impl SqliteBackend {
             "SELECT date, completed, note, checked_at FROM habit_check_ins WHERE habit_id = ?1",
         )?;
 
-        let check_ins = stmt
-            .query_map(params![habit_id.0.to_string()], |row| {
-                let date_str: String = row.get(0)?;
-                let completed: i32 = row.get(1)?;
-                let note: Option<String> = row.get(2)?;
-                let checked_at_str: String = row.get(3)?;
-
-                let date =
-                    NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").unwrap_or_else(|_| today());
-                let checked_at = chrono::DateTime::parse_from_rfc3339(&checked_at_str)
-                    .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc));
-
-                Ok((
-                    date,
-                    HabitCheckIn {
-                        date,
-                        completed: completed != 0,
-                        note,
-                        checked_at,
-                    },
-                ))
-            })?
-            .filter_map(Result::ok)
-            .collect();
+        let check_ins = collect_rows(
+            &mut stmt,
+            params![habit_id.0.to_string()],
+            "habit_check_ins",
+            habit_check_in_from_row,
+        )?
+        .into_iter()
+        .collect();
 
         Ok(check_ins)
     }
@@ -187,11 +170,7 @@ impl HabitRepository for SqliteBackend {
     fn list_habits(&self) -> StorageResult<Vec<Habit>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM habits ORDER BY name")?;
-
-        let habits: Vec<Habit> = stmt
-            .query_map([], habit_from_row)?
-            .filter_map(Result::ok)
-            .collect();
+        let habits = collect_rows(&mut stmt, [], "habits", habit_from_row)?;
 
         // Load check-ins for each habit
         let mut result = Vec::with_capacity(habits.len());
@@ -206,11 +185,7 @@ impl HabitRepository for SqliteBackend {
     fn list_active_habits(&self) -> StorageResult<Vec<Habit>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM habits WHERE archived = 0 ORDER BY name")?;
-
-        let habits: Vec<Habit> = stmt
-            .query_map([], habit_from_row)?
-            .filter_map(Result::ok)
-            .collect();
+        let habits = collect_rows(&mut stmt, [], "habits", habit_from_row)?;
 
         // Load check-ins for each habit
         let mut result = Vec::with_capacity(habits.len());

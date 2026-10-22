@@ -5,6 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::Tag;
 use crate::storage::{StorageError, StorageResult, TagRepository};
 
+use super::rows::collect_rows;
 use super::SqliteBackend;
 
 impl TagRepository for SqliteBackend {
@@ -44,16 +45,12 @@ impl TagRepository for SqliteBackend {
     fn list_tags(&self) -> StorageResult<Vec<Tag>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM tags")?;
-        let tags = stmt
-            .query_map([], |row| {
-                Ok(Tag {
-                    name: row.get("name")?,
-                    color: row.get("color")?,
-                    description: row.get("description")?,
-                })
-            })?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(tags)
+        collect_rows(&mut stmt, [], "tags", |row| {
+            Ok(Tag {
+                name: row.get("name")?,
+                color: row.get("color")?,
+                description: row.get("description")?,
+            })
+        })
     }
 }

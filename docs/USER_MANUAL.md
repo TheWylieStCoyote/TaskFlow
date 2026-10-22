@@ -2067,6 +2067,11 @@ Use `--data <path>` to specify a custom location.
 3. Press `Ctrl+k` to verify current bindings
 4. Reset with `R` in keybindings editor
 
+#### Q: TaskFlow says "Cannot read data file ... The file was left untouched"
+**A:** With the Markdown backend, each auxiliary collection (`tags.yaml`, `time_entries.yaml`, `work_logs.yaml`, `habits.yaml`, `goals.yaml`, `key_results.yaml`, `saved_filters.yaml`, `pomodoro.yaml`) is a YAML file you may edit by hand. If one of them exists but no longer parses, TaskFlow refuses to start rather than reading it as empty and then saving that empty collection over your data. The message names the file and the YAML error. Fix the file (or move it aside to lose only that collection), then restart. A missing or blank file is fine and simply loads as empty.
+
+With the SQLite backend, a row whose stored value cannot be parsed (a malformed timestamp, UUID or JSON column) is skipped on load and reported with a `WARN` log line naming the table, the row id and the column, for example `Skipping unparsable SQLite row table="tasks" row_id=... error=column `created_at` has unparsable value "garbage": ...`. The row stays in the database untouched; repair it with the `sqlite3` CLI or delete it. Run with `RUST_LOG=warn` to see these lines.
+
 #### Q: How do I migrate to a different backend?
 **A:**
 1. Export all tasks to CSV: `Ctrl+e`

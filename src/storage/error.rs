@@ -10,6 +10,7 @@
 //! - `AlreadyExists`: Duplicate entity creation attempted
 //! - `Io`: File system errors
 //! - `Serialization`: JSON/YAML/TOML parsing errors
+//! - `CorruptFile`: a data file exists but cannot be parsed (left untouched)
 //! - `Database`: SQLite-specific errors
 
 use std::path::PathBuf;
@@ -45,6 +46,11 @@ pub enum StorageError {
 
     #[error("Deserialization error: {message}")]
     Deserialization { message: String },
+
+    /// A data file exists but cannot be parsed. The backend refuses to start so
+    /// that a later save cannot overwrite the file with an empty collection.
+    #[error("Cannot read data file '{path}': {message}. The file was left untouched; fix it or move it aside, then restart")]
+    CorruptFile { path: PathBuf, message: String },
 
     #[error("Database error: {0}")]
     Database(String),
@@ -95,6 +101,13 @@ impl StorageError {
 
     pub fn deserialization(message: impl Into<String>) -> Self {
         Self::Deserialization {
+            message: message.into(),
+        }
+    }
+
+    pub fn corrupt_file(path: impl Into<PathBuf>, message: impl Into<String>) -> Self {
+        Self::CorruptFile {
+            path: path.into(),
             message: message.into(),
         }
     }
@@ -201,6 +214,16 @@ mod tests {
             err.to_string(),
             "Deserialization error: unexpected end of input"
         );
+    }
+
+    #[test]
+    fn test_corrupt_file_error_display() {
+        let err = StorageError::corrupt_file("/data/goals.yaml", "did not find expected key");
+        let text = err.to_string();
+        assert!(
+            text.starts_with("Cannot read data file '/data/goals.yaml': did not find expected key")
+        );
+        assert!(text.contains("left untouched"));
     }
 
     #[test]

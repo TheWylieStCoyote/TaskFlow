@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::{Goal, GoalId, GoalStatus};
 use crate::storage::{GoalRepository, StorageError, StorageResult};
 
-use super::rows::goal_from_row;
+use super::rows::{collect_rows, goal_from_row};
 use super::SqliteBackend;
 
 impl GoalRepository for SqliteBackend {
@@ -102,25 +102,13 @@ impl GoalRepository for SqliteBackend {
     fn list_goals(&self) -> StorageResult<Vec<Goal>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM goals ORDER BY name")?;
-
-        let goals: Vec<Goal> = stmt
-            .query_map([], goal_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(goals)
+        collect_rows(&mut stmt, [], "goals", goal_from_row)
     }
 
     fn list_active_goals(&self) -> StorageResult<Vec<Goal>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM goals WHERE status = 'active' ORDER BY name")?;
-
-        let goals: Vec<Goal> = stmt
-            .query_map([], goal_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(goals)
+        collect_rows(&mut stmt, [], "goals", goal_from_row)
     }
 }
 

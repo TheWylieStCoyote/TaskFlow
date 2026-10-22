@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::{TaskId, WorkLogEntry, WorkLogEntryId};
 use crate::storage::{StorageError, StorageResult, WorkLogRepository};
 
-use super::rows::work_log_from_row;
+use super::rows::{collect_rows, work_log_from_row};
 use super::SqliteBackend;
 
 impl WorkLogRepository for SqliteBackend {
@@ -69,20 +69,17 @@ impl WorkLogRepository for SqliteBackend {
         let conn = self.inner.conn()?;
         let mut stmt =
             conn.prepare("SELECT * FROM work_logs WHERE task_id = ?1 ORDER BY created_at DESC")?;
-        let entries = stmt
-            .query_map(params![task_id.0.to_string()], work_log_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(entries)
+        collect_rows(
+            &mut stmt,
+            params![task_id.0.to_string()],
+            "work_logs",
+            work_log_from_row,
+        )
     }
 
     fn list_work_logs(&self) -> StorageResult<Vec<WorkLogEntry>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM work_logs ORDER BY created_at DESC")?;
-        let entries = stmt
-            .query_map([], work_log_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(entries)
+        collect_rows(&mut stmt, [], "work_logs", work_log_from_row)
     }
 }

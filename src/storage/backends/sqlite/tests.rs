@@ -518,7 +518,7 @@ fn test_sqlite_tag_migration_from_json() {
         // Insert task with JSON tags
         conn.execute(
             "INSERT INTO tasks (id, title, tags, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params!["test-id", "Test Task", r#"["tag1","tag2"]"#, "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z"],
+            params!["11111111-2222-4333-8444-555555555555", "Test Task", r#"["tag1","tag2"]"#, "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z"],
         )
         .unwrap();
     }
@@ -1202,39 +1202,109 @@ fn test_sqlite_goal_status_stored_as_snake_case() {
 }
 
 #[test]
-fn test_sqlite_goal_from_row_tolerates_malformed_values() {
+fn test_sqlite_goal_from_row_is_lossy_for_enums_but_strict_for_values() {
     let (_dir, backend) = create_test_backend();
     let conn = backend.inner.conn().unwrap();
+    let ts = "2025-03-01T09:30:15Z";
+
+    // A bogus status and an out-of-range progress have sensible defaults, so
+    // the row still loads.
     conn.execute(
-        r"INSERT INTO goals (id, name, description, status, start_date, due_date, quarter,
-            manual_progress, color, icon, created_at, updated_at)
-          VALUES ('not-a-uuid', 'Legacy', NULL, 'bogus', 'yesterday', '2025-13-45',
-            '{not json', 250, NULL, NULL, 'garbage', '2025-03-01T09:30:15Z')",
-        [],
+        r"INSERT INTO goals (id, name, status, manual_progress, created_at, updated_at)
+          VALUES (?1, 'Lossy', 'bogus', 250, ?2, '2025-03-02T09:30:15Z')",
+        params![GoalId::new().to_string(), ts],
     )
     .unwrap();
     conn.execute(
         r"INSERT INTO goals (id, name, status, manual_progress, created_at, updated_at)
-          VALUES (?1, 'Negative', 'active', -5, '2025-03-01T09:30:15Z', '2025-03-01T09:30:15Z')",
-        params![GoalId::new().to_string()],
+          VALUES (?1, 'Negative', 'active', -5, ?2, ?2)",
+        params![GoalId::new().to_string(), ts],
     )
     .unwrap();
 
+    // Each of these rows has one column that cannot be parsed. None of them may
+    // load with an invented value (nil UUID, "now", None); each is skipped.
+    let insert = |id: &str,
+                  name: &str,
+                  start: Option<&str>,
+                  due: Option<&str>,
+                  quarter: Option<&str>,
+                  created: &str| {
+        conn.execute(
+            r"INSERT INTO goals (id, name, status, start_date, due_date, quarter, created_at, updated_at)
+              VALUES (?1, ?2, 'active', ?3, ?4, ?5, ?6, ?7)",
+            params![id, name, start, due, quarter, created, ts],
+        )
+        .unwrap();
+    };
+    let bad_created = GoalId::new();
+    insert("not-a-uuid", "bad id", None, None, None, ts);
+    insert(
+        &bad_created.to_string(),
+        "bad created_at",
+        None,
+        None,
+        None,
+        "garbage",
+    );
+    insert(
+        &GoalId::new().to_string(),
+        "bad start_date",
+        Some("yesterday"),
+        None,
+        None,
+        ts,
+    );
+    insert(
+        &GoalId::new().to_string(),
+        "bad due_date",
+        None,
+        Some("2025-13-45"),
+        None,
+        ts,
+    );
+    insert(
+        &GoalId::new().to_string(),
+        "bad quarter",
+        None,
+        None,
+        Some("{not json"),
+        ts,
+    );
+    // Blank optionals are NULL-equivalent, not corrupt.
+    insert(
+        &GoalId::new().to_string(),
+        "blank optionals",
+        Some(""),
+        Some(""),
+        Some(""),
+        ts,
+    );
+
     let goals = backend.list_goals().unwrap();
-    assert_eq!(goals.len(), 2);
-    let legacy = goals.iter().find(|g| g.name == "Legacy").unwrap();
-    assert_eq!(legacy.id.0, uuid::Uuid::nil());
-    assert_eq!(legacy.status, GoalStatus::Active);
-    assert_eq!(legacy.start_date, None);
-    assert_eq!(legacy.due_date, None);
-    assert_eq!(legacy.quarter, None);
-    assert_eq!(legacy.manual_progress, Some(100));
-    assert_eq!(legacy.updated_at, fixed_ts(1));
-    // Unparseable created_at falls back to "now": it must not be before updated_at.
-    assert!(legacy.created_at >= legacy.updated_at);
+    let names: Vec<&str> = goals.iter().map(|g| g.name.as_str()).collect();
+    assert_eq!(names, ["Lossy", "Negative", "blank optionals"]);
+
+    let lossy = goals.iter().find(|g| g.name == "Lossy").unwrap();
+    assert_eq!(lossy.status, GoalStatus::Active);
+    assert_eq!(lossy.manual_progress, Some(100));
+    assert_eq!(lossy.created_at, fixed_ts(1));
+    assert_eq!(lossy.updated_at, fixed_ts(2));
 
     let negative = goals.iter().find(|g| g.name == "Negative").unwrap();
     assert_eq!(negative.manual_progress, Some(0));
+
+    let blank = goals.iter().find(|g| g.name == "blank optionals").unwrap();
+    assert_eq!(blank.start_date, None);
+    assert_eq!(blank.due_date, None);
+    assert_eq!(blank.quarter, None);
+
+    // Fetching the corrupt row directly is an error naming the column, not a
+    // goal created "now".
+    let err = backend.get_goal(&bad_created).unwrap_err();
+    assert!(matches!(err, StorageError::Database(_)), "{err:?}");
+    assert!(err.to_string().contains("column `created_at`"), "{err}");
+    assert!(err.to_string().contains("garbage"), "{err}");
 }
 
 // ============================================================================
@@ -1465,40 +1535,71 @@ fn test_sqlite_key_result_status_stored_as_snake_case() {
 }
 
 #[test]
-fn test_sqlite_key_result_from_row_tolerates_malformed_values() {
+fn test_sqlite_key_result_from_row_is_lossy_for_enums_but_strict_for_values() {
     let (_dir, mut backend) = create_test_backend();
     let goal = Goal::new("Parent");
     backend.create_goal(&goal).unwrap();
     let conn = backend.inner.conn().unwrap();
-    conn.execute(
-        r#"INSERT INTO key_results (id, goal_id, name, status, target_value, current_value,
-            manual_progress, linked_project_ids, linked_task_ids, created_at, updated_at)
-          VALUES ('nope', ?1, 'Weird', 'unknown_status', 5.0, 2.5, 999,
-            'not json at all', '["also-not-a-uuid"]', '2025-03-01T09:30:15Z', 'bad')"#,
-        params![goal.id.to_string()],
-    )
-    .unwrap();
+    let ts = "2025-03-01T09:30:15Z";
+    let goal_id = goal.id.to_string();
+
+    let insert = |id: &str, name: &str, projects: &str, tasks: &str, updated: &str| {
+        conn.execute(
+            r"INSERT INTO key_results (id, goal_id, name, status, target_value, current_value,
+                manual_progress, linked_project_ids, linked_task_ids, created_at, updated_at)
+              VALUES (?1, ?2, ?3, 'unknown_status', 5.0, 2.5, 999, ?4, ?5, ?6, ?7)",
+            params![id, goal_id, name, projects, tasks, ts, updated],
+        )
+        .unwrap();
+    };
+    // Unknown status and out-of-range progress are tolerated; everything else is valid.
+    insert(&KeyResultId::new().to_string(), "Lossy", "[]", "[]", ts);
+    // One unparsable column each: skipped rather than loaded with a nil UUID,
+    // an empty list or an updated_at of "now".
+    insert("nope", "bad id", "[]", "[]", ts);
+    insert(
+        &KeyResultId::new().to_string(),
+        "bad project json",
+        "not json at all",
+        "[]",
+        ts,
+    );
+    insert(
+        &KeyResultId::new().to_string(),
+        "bad task uuid",
+        "[]",
+        r#"["also-not-a-uuid"]"#,
+        ts,
+    );
+    insert(
+        &KeyResultId::new().to_string(),
+        "bad updated_at",
+        "[]",
+        "[]",
+        "bad",
+    );
     conn.execute(
         r"INSERT INTO key_results (id, goal_id, name, manual_progress, created_at, updated_at)
-          VALUES (?1, ?2, 'Negative', -1, '2025-03-01T09:30:15Z', '2025-03-01T09:30:15Z')",
-        params![KeyResultId::new().to_string(), goal.id.to_string()],
+          VALUES (?1, ?2, 'Negative', -1, ?3, ?3)",
+        params![KeyResultId::new().to_string(), goal_id, ts],
     )
     .unwrap();
 
     let krs = backend.get_key_results_for_goal(&goal.id).unwrap();
-    assert_eq!(krs.len(), 2);
-    let weird = krs.iter().find(|k| k.name == "Weird").unwrap();
-    assert_eq!(weird.id.0, uuid::Uuid::nil());
-    assert_eq!(weird.goal_id, goal.id);
-    assert_eq!(weird.status, KeyResultStatus::NotStarted);
-    assert!((weird.target_value - 5.0).abs() < f64::EPSILON);
-    assert!((weird.current_value - 2.5).abs() < f64::EPSILON);
-    assert_eq!(weird.manual_progress, Some(100));
-    assert!(weird.linked_project_ids.is_empty(), "invalid JSON -> empty");
-    assert_eq!(weird.linked_task_ids.len(), 1, "valid JSON, invalid UUID");
-    assert_eq!(weird.linked_task_ids[0].0, uuid::Uuid::nil());
-    assert_eq!(weird.created_at, fixed_ts(1));
-    assert!(weird.updated_at >= weird.created_at);
+    let names: Vec<&str> = krs.iter().map(|k| k.name.as_str()).collect();
+    assert_eq!(names, ["Lossy", "Negative"]);
+    assert_eq!(backend.list_key_results().unwrap().len(), 2);
+
+    let lossy = krs.iter().find(|k| k.name == "Lossy").unwrap();
+    assert_eq!(lossy.goal_id, goal.id);
+    assert_eq!(lossy.status, KeyResultStatus::NotStarted);
+    assert!((lossy.target_value - 5.0).abs() < f64::EPSILON);
+    assert!((lossy.current_value - 2.5).abs() < f64::EPSILON);
+    assert_eq!(lossy.manual_progress, Some(100));
+    assert!(lossy.linked_project_ids.is_empty());
+    assert!(lossy.linked_task_ids.is_empty());
+    assert_eq!(lossy.created_at, fixed_ts(1));
+    assert_eq!(lossy.updated_at, fixed_ts(1));
 
     let negative = krs.iter().find(|k| k.name == "Negative").unwrap();
     assert_eq!(negative.manual_progress, Some(0));
@@ -1659,4 +1760,255 @@ fn test_sqlite_pomodoro_state_roundtrip() {
         .query_row("SELECT COUNT(*) FROM pomodoro_state", [], |r| r.get(0))
         .unwrap();
     assert_eq!(rows, 2);
+}
+
+// ============================================================================
+// Unparsable rows
+// ============================================================================
+
+mod unparsable_rows {
+    use std::sync::{Arc, Mutex};
+
+    use tracing_subscriber::fmt::MakeWriter;
+
+    use super::super::rows::parse_rfc3339;
+    use super::*;
+    use crate::domain::TimeEntryId;
+
+    const TS: &str = "2025-03-01T09:30:15Z";
+
+    /// Collects everything a `tracing` fmt subscriber writes.
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+
+    impl Capture {
+        fn text(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    impl std::io::Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for Capture {
+        type Writer = Capture;
+
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn parse_rfc3339_rejects_garbage_instead_of_inventing_now() {
+        assert!(parse_rfc3339("garbage").is_err());
+        assert!(parse_rfc3339("").is_err());
+        assert!(parse_rfc3339("2025-03-01").is_err());
+        assert_eq!(parse_rfc3339(TS).unwrap(), fixed_ts(1));
+        assert_eq!(
+            parse_rfc3339("2025-03-01T11:30:15+02:00").unwrap(),
+            fixed_ts(1)
+        );
+    }
+
+    #[test]
+    fn list_tasks_skips_unparsable_rows_and_keeps_good_ones() {
+        let (_dir, mut backend) = create_test_backend();
+        let good = Task::new("good");
+        backend.create_task(&good).unwrap();
+
+        let conn = backend.inner.conn().unwrap();
+        let insert = |id: &str,
+                      title: &str,
+                      tags: &str,
+                      deps: &str,
+                      created: &str,
+                      done: Option<&str>| {
+            conn.execute(
+                    r"INSERT INTO tasks (id, title, tags, dependencies, created_at, updated_at, completed_at)
+                      VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)",
+                    params![id, title, tags, deps, created, done],
+                )
+                .unwrap();
+        };
+        let bad_created = TaskId::new();
+        insert(
+            &bad_created.to_string(),
+            "bad created_at",
+            "[]",
+            "[]",
+            "garbage",
+            None,
+        );
+        insert("not-a-uuid", "bad id", "[]", "[]", TS, None);
+        insert(
+            &TaskId::new().to_string(),
+            "bad tags json",
+            "{oops",
+            "[]",
+            TS,
+            None,
+        );
+        insert(
+            &TaskId::new().to_string(),
+            "bad dependency uuid",
+            "[]",
+            r#"["nope"]"#,
+            TS,
+            None,
+        );
+        insert(
+            &TaskId::new().to_string(),
+            "bad completed_at",
+            "[]",
+            "[]",
+            TS,
+            Some("yesterday"),
+        );
+        insert(
+            &TaskId::new().to_string(),
+            "blank completed_at",
+            "[]",
+            "[]",
+            TS,
+            Some(""),
+        );
+
+        let tasks = backend.list_tasks().unwrap();
+        let mut titles: Vec<&str> = tasks.iter().map(|t| t.title.as_str()).collect();
+        titles.sort_unstable();
+        assert_eq!(titles, ["blank completed_at", "good"]);
+
+        let blank = tasks
+            .iter()
+            .find(|t| t.title == "blank completed_at")
+            .unwrap();
+        assert_eq!(blank.completed_at, None);
+        assert_eq!(blank.created_at, fixed_ts(1));
+        assert_eq!(blank.updated_at, fixed_ts(1));
+
+        // Filtered listings go through the same path.
+        assert_eq!(
+            backend
+                .list_tasks_filtered(&Filter::default())
+                .unwrap()
+                .len(),
+            2
+        );
+
+        // A single-row lookup of the corrupt row is an error naming the column,
+        // not a task created "now".
+        let err = backend.get_task(&bad_created).unwrap_err();
+        assert!(matches!(err, StorageError::Database(_)), "{err:?}");
+        assert!(err.to_string().contains("column `created_at`"), "{err}");
+        assert!(err.to_string().contains("garbage"), "{err}");
+        assert!(backend.get_task(&good.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn time_entries_skip_unparsable_rows() {
+        let (_dir, mut backend) = create_test_backend();
+        let task = Task::new("tracked");
+        backend.create_task(&task).unwrap();
+
+        let conn = backend.inner.conn().unwrap();
+        let insert = |id: &str, task_id: &str, started: &str, ended: Option<&str>| {
+            conn.execute(
+                "INSERT INTO time_entries (id, task_id, started_at, ended_at) VALUES (?1, ?2, ?3, ?4)",
+                params![id, task_id, started, ended],
+            )
+            .unwrap();
+        };
+        let task_id = task.id.to_string();
+        let finished = TimeEntryId::new();
+        insert(
+            &finished.to_string(),
+            &task_id,
+            TS,
+            Some("2025-03-01T10:00:00Z"),
+        );
+        insert(&TimeEntryId::new().to_string(), &task_id, "noon", None);
+        insert(&TimeEntryId::new().to_string(), &task_id, TS, Some("later"));
+        insert(&TimeEntryId::new().to_string(), "not-a-task", TS, None);
+
+        let entries = backend.get_entries_for_task(&task.id).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, finished);
+        assert_eq!(entries[0].started_at, fixed_ts(1));
+        assert_eq!(backend.list_all_time_entries().unwrap().len(), 1);
+
+        // Only unparsable rows are still running, and a single-row lookup does
+        // not turn one of them into a timer started "now".
+        let err = backend.get_active_entry().unwrap_err();
+        assert!(err.to_string().contains("column `"), "{err}");
+    }
+
+    #[test]
+    fn habit_check_ins_skip_unparsable_rows() {
+        let (_dir, mut backend) = create_test_backend();
+        let habit = Habit::new("Stretch");
+        backend.create_habit(&habit).unwrap();
+
+        let conn = backend.inner.conn().unwrap();
+        let insert = |date: &str, checked_at: &str| {
+            conn.execute(
+                "INSERT INTO habit_check_ins (habit_id, date, completed, checked_at) VALUES (?1, ?2, 1, ?3)",
+                params![habit.id.to_string(), date, checked_at],
+            )
+            .unwrap();
+        };
+        insert("2025-03-01", TS);
+        insert("someday", TS);
+        insert("2025-03-02", "garbage");
+
+        let loaded = backend.get_habit(&habit.id).unwrap().unwrap();
+        assert_eq!(loaded.check_ins.len(), 1);
+        let only = loaded
+            .check_ins
+            .get(&NaiveDate::from_ymd_opt(2025, 3, 1).unwrap())
+            .unwrap();
+        assert!(only.completed);
+        assert_eq!(only.checked_at, fixed_ts(1));
+        assert_eq!(backend.list_habits().unwrap()[0].check_ins.len(), 1);
+    }
+
+    #[test]
+    fn skipped_row_is_reported_with_table_id_and_cause() {
+        let (_dir, backend) = create_test_backend();
+        let id = GoalId::new().to_string();
+        backend
+            .inner
+            .conn()
+            .unwrap()
+            .execute(
+                r"INSERT INTO goals (id, name, status, created_at, updated_at)
+                  VALUES (?1, 'Broken', 'active', 'garbage', ?2)",
+                params![id, TS],
+            )
+            .unwrap();
+
+        let capture = Capture::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(capture.clone())
+            .with_ansi(false)
+            .finish();
+        let goals = tracing::subscriber::with_default(subscriber, || backend.list_goals().unwrap());
+        assert!(goals.is_empty());
+
+        let log = capture.text();
+        assert!(log.contains("WARN"), "{log}");
+        assert!(log.contains("Skipping unparsable SQLite row"), "{log}");
+        assert!(log.contains("table=\"goals\""), "{log}");
+        assert!(log.contains(&format!("row_id={id} ")), "{log}");
+        assert!(log.contains("column `created_at`"), "{log}");
+        assert!(log.contains("\"garbage\""), "{log}");
+        assert_eq!(log.matches("Skipping unparsable").count(), 1, "{log}");
+    }
 }

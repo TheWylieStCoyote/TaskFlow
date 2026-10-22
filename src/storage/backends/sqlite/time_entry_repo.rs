@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::{TaskId, TimeEntry, TimeEntryId};
 use crate::storage::{StorageError, StorageResult, TimeEntryRepository};
 
-use super::rows::time_entry_from_row;
+use super::rows::{collect_rows, time_entry_from_row};
 use super::SqliteBackend;
 
 impl TimeEntryRepository for SqliteBackend {
@@ -71,11 +71,12 @@ impl TimeEntryRepository for SqliteBackend {
     fn get_entries_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<TimeEntry>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM time_entries WHERE task_id = ?1")?;
-        let entries = stmt
-            .query_map(params![task_id.0.to_string()], time_entry_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(entries)
+        collect_rows(
+            &mut stmt,
+            params![task_id.0.to_string()],
+            "time_entries",
+            time_entry_from_row,
+        )
     }
 
     fn get_active_entry(&self) -> StorageResult<Option<TimeEntry>> {
@@ -91,10 +92,6 @@ impl SqliteBackend {
     pub(crate) fn list_all_time_entries(&self) -> StorageResult<Vec<TimeEntry>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM time_entries")?;
-        let entries: Vec<TimeEntry> = stmt
-            .query_map([], time_entry_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(entries)
+        collect_rows(&mut stmt, [], "time_entries", time_entry_from_row)
     }
 }

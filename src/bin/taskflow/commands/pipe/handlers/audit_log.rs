@@ -31,10 +31,9 @@ pub fn handle(model: &mut Model, request: &PipeRequest) -> HandlerResult {
 
 /// List audit log entries, oldest first.
 ///
-/// Filters reuse the shared [`FilterParams`] fields the same way the other
-/// per-task entities do:
+/// Filters come from the shared [`FilterParams`]:
 ///
-/// - `project_id` is the **task** UUID whose history is wanted.
+/// - `task_id` is the UUID of the task whose history is wanted.
 /// - `status` is a list of actions (`created`, `modified`, `completed`,
 ///   `uncompleted`, `deleted`); an entry matches when its action is listed.
 /// - `due_after` / `due_before` are inclusive `YYYY-MM-DD` bounds on the
@@ -47,7 +46,7 @@ fn list_audit_logs(model: &Model, filters: Option<&FilterParams>) -> HandlerResu
     let mut entries: Vec<&AuditLogEntry> = model.audit_logs.values().collect();
 
     if let Some(f) = filters {
-        if let Some(ref task_id_str) = f.project_id {
+        if let Some(ref task_id_str) = f.task_id {
             if let Ok(uuid) = Uuid::parse_str(task_id_str) {
                 let task_id = TaskId(uuid);
                 entries.retain(|e| e.task_id == task_id);

@@ -1701,7 +1701,8 @@ All fields are optional. Unknown fields are ignored.
 | Field | Type | Applies to | Meaning |
 |-------|------|-----------|---------|
 | `project_id` | string | task | Only tasks in this project (UUID) |
-| `project_id` | string | time_entry, work_log, audit_log | **Task** UUID (the field is reused as the task filter) |
+| `project_id` | string | time_entry, work_log | **Task** UUID (the field is reused as the task filter) |
+| `task_id` | string | audit_log | Task UUID whose history is wanted |
 | `project_id` | string | key_result | **Goal** UUID |
 | `tags` | [string] | task, habit | Case-insensitive tag match |
 | `tags_mode` | `"all"` (default) or `"any"` | task, habit | Require every tag, or at least one |
@@ -1834,7 +1835,7 @@ the same shape `export` puts under `audit_logs`.
 
 ```bash
 # The last three changes to one task
-echo '{"operation":"list","entity":"audit_log","filters":{"project_id":"3635e628-3b32-4ceb-815e-3e2efa180a38","limit":3}}' | taskflow pipe
+echo '{"operation":"list","entity":"audit_log","filters":{"task_id":"3635e628-3b32-4ceb-815e-3e2efa180a38","limit":3}}' | taskflow pipe
 ```
 ```json
 {

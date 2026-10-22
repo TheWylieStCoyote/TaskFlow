@@ -4178,7 +4178,7 @@ mod pipe_interface_tests {
         let (mut model, task_a, task_b, ids) = audit_model();
 
         let req = audit_filters(FilterParams {
-            project_id: Some(task_a.0.to_string()),
+            task_id: Some(task_a.0.to_string()),
             ..Default::default()
         });
         let resp = super::super::process_request(&mut model, req);
@@ -4190,15 +4190,23 @@ mod pipe_interface_tests {
         assert_eq!(resp.data.unwrap()["total"], 3);
 
         let req = audit_filters(FilterParams {
-            project_id: Some(task_b.0.to_string()),
+            task_id: Some(task_b.0.to_string()),
             ..Default::default()
         });
         let resp = super::super::process_request(&mut model, req);
         assert_eq!(listed_ids(&resp), vec![ids[1].clone(), ids[3].clone()]);
 
+        // `project_id` is not the task filter for this entity.
+        let req = audit_filters(FilterParams {
+            project_id: Some(task_a.0.to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp).len(), ids.len());
+
         // A task with no history yields an empty list, not an error.
         let req = audit_filters(FilterParams {
-            project_id: Some(Uuid::new_v4().to_string()),
+            task_id: Some(Uuid::new_v4().to_string()),
             ..Default::default()
         });
         let resp = super::super::process_request(&mut model, req);

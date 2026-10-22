@@ -77,6 +77,8 @@ pub struct PipeRequest {
 pub struct FilterParams {
     /// Filter by project ID.
     pub project_id: Option<String>,
+    /// Filter by task ID (`audit_log`).
+    pub task_id: Option<String>,
     /// Filter by tags.
     pub tags: Option<Vec<String>>,
     /// Tag matching mode: "any" or "all" (default: "all").

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)
-- **`audit_log` entity in the pipe interface** (`list`/`get`, read-only): filter by task, action and date, page from the newest entry, CSV output flattens field changes
+- **`audit_log` entity in the pipe interface** (`list`/`get`, read-only): filter by `task_id`, action and date, page from the newest entry, CSV output flattens field changes
 - **`TASKFLOW_CONFIG_DIR`** overrides where `config.toml` and `keybindings.toml` live
 - **Saved filters and the audit log are persisted** on every backend (new `SavedFilterRepository`/`AuditLogRepository`; SQLite gains an `audit_log` table, Markdown an append-only `audit_log.jsonl`); the CalDAV backend keeps time entries, work logs, Pomodoro state and other local-only data in a `caldav.local.json` sidecar
 - **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)

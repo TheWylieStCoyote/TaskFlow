@@ -6,14 +6,13 @@
 //!
 //! ## Timezone Behavior
 //!
-//! The evaluator uses **UTC** for determining "today" via [`Utc::now()`]:
+//! The evaluator uses the **local** calendar date for "today" via
+//! [`crate::domain::today`]:
 //!
-//! - `today`, `tomorrow`, `yesterday` - Based on UTC date
+//! - `today`, `tomorrow`, `yesterday` - Based on the local date
 //! - Task timestamps (`created_at`, `completed_at`, `updated_at`) are stored in UTC
+//!   and converted to the local date via [`crate::domain::LocalDate`] before comparison
 //! - Due dates and scheduled dates are stored as [`NaiveDate`] (no timezone)
-//!
-//! **Note:** Users in timezones far from UTC may see unexpected behavior near midnight.
-//! For example, at 11 PM EST (4 AM UTC next day), `due:today` uses the UTC date.
 //!
 //! ## Week Boundaries
 //!

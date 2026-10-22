@@ -21,10 +21,22 @@
 //! results, Pomodoro state, saved filters and the audit log — has nowhere to
 //! live on the server, so it is persisted to a JSON sidecar file next to the
 //! config file: `caldav.toml` gets `caldav.local.json`. The sidecar is an
-//! [`ExportData`] document with an empty `tasks` map; it is loaded in
+//! [`ExportData`] document plus two queues (the `Sidecar` struct); it is loaded in
 //! [`initialize`](crate::storage::StorageBackend::initialize) before the
 //! server is contacted and rewritten (atomically) on every
 //! [`flush`](crate::storage::StorageBackend::flush) that has local changes.
+//!
+//! # Working offline
+//!
+//! The sidecar also carries a cache of the tasks last seen from the server
+//! and the IDs of tasks whose push or delete has not reached the server yet.
+//! When the server is unreachable the backend keeps working on the cache;
+//! every flush writes the cache and the queues to disk first and only then
+//! tries the network, so an edit made offline survives a restart and is
+//! pushed by the first flush that succeeds. While a task is queued for push
+//! the local copy wins over the server's; once pushed, the server's copy is
+//! authoritative again. Tasks queued for delete are never resurrected from
+//! the server.
 //!
 //! # Feature Flag
 //!
@@ -49,6 +61,23 @@ use crate::storage::{atomic_write, ExportData, StorageError, StorageResult};
 /// Extension appended to the config file's stem to name the local sidecar
 /// (`caldav.toml` -> `caldav.local.json`).
 pub(crate) const SIDECAR_EXTENSION: &str = "local.json";
+
+/// On-disk shape of the sidecar file.
+///
+/// The [`ExportData`] fields are flattened in, so a sidecar written before the
+/// queues existed still loads (both queues default to empty).
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub(crate) struct Sidecar {
+    /// Local-only data plus the cached copy of the server's tasks.
+    #[serde(flatten)]
+    pub data: ExportData,
+    /// Tasks created or edited locally whose push has not succeeded yet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_push: Vec<TaskId>,
+    /// Tasks deleted locally whose server delete has not succeeded yet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_delete: Vec<TaskId>,
+}
 
 /// Connection settings for a CalDAV server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,13 +104,16 @@ pub struct CalDavConfig {
 /// see the [module docs](self) for details.
 pub struct CalDavBackend {
     pub(crate) config: CalDavConfig,
-    /// In-memory data store (tasks + projects + tags + …).
+    /// In-memory data store (tasks + projects + tags + …). Tasks are the
+    /// cached view of the server plus any local edits not yet pushed.
     pub(crate) mem: ExportData,
     /// True when any in-memory data has changed since the last flush.
     pub(crate) mem_dirty: bool,
-    /// Task IDs mutated locally that need to be pushed on the next flush.
+    /// Task IDs mutated locally that still need to be pushed. Entries stay
+    /// here across flushes (and restarts, via the sidecar) until a push
+    /// succeeds.
     pub(crate) dirty_ids: HashSet<TaskId>,
-    /// Task IDs deleted locally that need a DELETE call on the next flush.
+    /// Task IDs deleted locally that still need a DELETE call on the server.
     pub(crate) deleted_ids: HashSet<TaskId>,
     /// Where local-only data is persisted; `None` keeps it in memory only.
     pub(crate) sidecar_path: Option<PathBuf>,
@@ -149,11 +181,13 @@ impl CalDavBackend {
         self.sidecar_path.as_deref()
     }
 
-    /// Load local-only data from the sidecar into `self.mem`.
+    /// Load the sidecar into `self.mem` and the pending queues.
     ///
-    /// Tasks already in memory are kept (they come from the server); every
-    /// other collection is replaced by the sidecar's contents. Returns `true`
-    /// when a sidecar file was found and read.
+    /// Every local-only collection is replaced by the sidecar's contents.
+    /// Cached tasks fill in only where memory has none: a task already in
+    /// memory came from the server and wins, unless the sidecar queued it
+    /// for push, in which case the local edit wins. Returns `true` when a
+    /// sidecar file was found and read.
     ///
     /// # Errors
     ///
@@ -166,16 +200,39 @@ impl CalDavBackend {
             return Ok(false);
         }
         let content = std::fs::read_to_string(&path).map_err(|e| StorageError::io(&path, e))?;
-        let mut local: ExportData = serde_json::from_str(&content).map_err(|e| {
+        let sidecar: Sidecar = serde_json::from_str(&content).map_err(|e| {
             StorageError::deserialization(format!("Invalid CalDAV sidecar {}: {e}", path.display()))
         })?;
-        // Tasks are owned by the server; never resurrect them from the sidecar.
-        local.tasks = std::mem::take(&mut self.mem.tasks);
-        self.mem = local;
+        let Sidecar {
+            mut data,
+            pending_push,
+            pending_delete,
+        } = sidecar;
+
+        self.dirty_ids.extend(pending_push);
+        self.deleted_ids.extend(pending_delete);
+
+        let mut tasks = std::mem::take(&mut self.mem.tasks);
+        for (id, cached) in data.tasks.drain() {
+            if self.deleted_ids.contains(&id) {
+                continue;
+            }
+            if self.dirty_ids.contains(&id) {
+                tasks.insert(id, cached);
+            } else {
+                tasks.entry(id).or_insert(cached);
+            }
+        }
+        for id in &self.deleted_ids {
+            tasks.remove(id);
+        }
+        data.tasks = tasks;
+        self.mem = data;
         Ok(true)
     }
 
-    /// Write local-only data (everything in `self.mem` except tasks) to the sidecar.
+    /// Write `self.mem` (including the task cache) and the pending queues to
+    /// the sidecar.
     ///
     /// A no-op when no sidecar path is configured.
     ///
@@ -186,12 +243,68 @@ impl CalDavBackend {
         let Some(path) = &self.sidecar_path else {
             return Ok(());
         };
-        let local = ExportData {
-            tasks: std::collections::HashMap::new(),
-            ..self.mem.clone()
+        let mut pending_push: Vec<TaskId> = self.dirty_ids.iter().copied().collect();
+        pending_push.sort_by_key(|id| id.0);
+        let mut pending_delete: Vec<TaskId> = self.deleted_ids.iter().copied().collect();
+        pending_delete.sort_by_key(|id| id.0);
+        let sidecar = Sidecar {
+            data: self.mem.clone(),
+            pending_push,
+            pending_delete,
         };
-        let content = serde_json::to_string_pretty(&local)
+        let content = serde_json::to_string_pretty(&sidecar)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
         atomic_write(path, content)
+    }
+
+    /// Number of task changes (pushes and deletes) still waiting for the
+    /// server.
+    #[must_use]
+    pub fn pending_sync_count(&self) -> usize {
+        self.dirty_ids.len() + self.deleted_ids.len()
+    }
+
+    /// Fold a fresh copy of the server's tasks into memory.
+    ///
+    /// Server tasks replace the cached copy when they are newer (or new).
+    /// Tasks queued for push keep their local version; tasks queued for
+    /// delete are not resurrected. Cached tasks the server no longer has are
+    /// dropped unless they are queued for push (created offline). Returns the
+    /// number of tasks that changed.
+    pub(crate) fn merge_remote_tasks(&mut self, remote: Vec<crate::domain::Task>) -> usize {
+        let mut changed = 0usize;
+        let remote_ids: HashSet<TaskId> = remote.iter().map(|t| t.id).collect();
+
+        for task in remote {
+            if self.dirty_ids.contains(&task.id) || self.deleted_ids.contains(&task.id) {
+                continue;
+            }
+            let outdated = self
+                .mem
+                .tasks
+                .get(&task.id)
+                .is_none_or(|local| local.updated_at < task.updated_at);
+            if outdated {
+                self.mem.tasks.insert(task.id, task);
+                changed += 1;
+            }
+        }
+
+        let to_remove: Vec<TaskId> = self
+            .mem
+            .tasks
+            .keys()
+            .filter(|id| !remote_ids.contains(id) && !self.dirty_ids.contains(id))
+            .copied()
+            .collect();
+        changed += to_remove.len();
+        for id in to_remove {
+            self.mem.tasks.remove(&id);
+        }
+
+        // A delete the server already applied needs no retry.
+        self.deleted_ids.retain(|id| remote_ids.contains(id));
+
+        changed
     }
 }

@@ -518,8 +518,9 @@ impl StorageBackend for CalDavBackend {
 
         match client::fetch_all_vtodos(&self.config) {
             Ok(tasks) => {
-                for task in tasks {
-                    self.mem.tasks.insert(task.id, task);
+                if self.merge_remote_tasks(tasks) > 0 {
+                    // Refresh the on-disk cache on the next flush.
+                    self.mem_dirty = true;
                 }
                 tracing::info!(
                     "CalDAV: loaded {} tasks from {}",
@@ -528,41 +529,70 @@ impl StorageBackend for CalDavBackend {
                 );
             }
             Err(e) => {
-                // Network unavailable at startup — log and continue with empty
-                // cache rather than hard-crashing.
-                tracing::warn!("CalDAV: failed to fetch tasks on init: {e}");
+                // Network unavailable at startup: keep working on the cached
+                // tasks from the sidecar rather than hard-crashing.
+                tracing::warn!(
+                    "CalDAV: failed to fetch tasks on init ({e}); working offline with {} cached tasks",
+                    self.mem.tasks.len()
+                );
             }
+        }
+        if self.pending_sync_count() > 0 {
+            tracing::info!(
+                "CalDAV: {} task changes waiting to sync",
+                self.pending_sync_count()
+            );
         }
         Ok(())
     }
 
     fn flush(&mut self) -> StorageResult<()> {
-        if !self.mem_dirty && self.deleted_ids.is_empty() {
+        if !self.mem_dirty && self.pending_sync_count() == 0 {
             return Ok(());
         }
 
-        // Persist local-only data before talking to the server, so a failed
-        // push never costs the user their projects, time entries, etc.
+        // Persist everything, including the pending queues, before talking to
+        // the server, so a failed push never costs the user their edits.
         if self.mem_dirty {
             self.save_sidecar()?;
         }
 
+        let before = self.pending_sync_count();
+        let mut pushed = Vec::new();
         for task_id in &self.dirty_ids {
-            if let Some(task) = self.mem.tasks.get(task_id) {
-                if let Err(e) = client::push_vtodo(&self.config, task) {
-                    tracing::warn!("CalDAV: failed to push task {}: {e}", task_id.0);
-                }
+            match self.mem.tasks.get(task_id) {
+                Some(task) => match client::push_vtodo(&self.config, task) {
+                    Ok(()) => pushed.push(*task_id),
+                    Err(e) => tracing::warn!("CalDAV: failed to push task {}: {e}", task_id.0),
+                },
+                // Deleted after being queued; nothing to push.
+                None => pushed.push(*task_id),
             }
         }
+        for task_id in pushed {
+            self.dirty_ids.remove(&task_id);
+        }
 
+        let mut removed = Vec::new();
         for task_id in &self.deleted_ids {
-            if let Err(e) = client::delete_vtodo(&self.config, task_id) {
-                tracing::warn!("CalDAV: failed to delete task {}: {e}", task_id.0);
+            match client::delete_vtodo(&self.config, task_id) {
+                Ok(()) => removed.push(*task_id),
+                Err(e) => tracing::warn!("CalDAV: failed to delete task {}: {e}", task_id.0),
             }
         }
+        for task_id in removed {
+            self.deleted_ids.remove(&task_id);
+        }
 
-        self.dirty_ids.clear();
-        self.deleted_ids.clear();
+        let after = self.pending_sync_count();
+        if after > 0 {
+            tracing::warn!("CalDAV: {after} task changes still waiting to sync");
+        }
+        // The queues on disk must match memory, or the next start re-pushes
+        // changes the server already has.
+        if after != before {
+            self.save_sidecar()?;
+        }
         self.mem_dirty = false;
         Ok(())
     }
@@ -572,17 +602,13 @@ impl StorageBackend for CalDavBackend {
     }
 
     fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
-        for task in data.tasks.values() {
-            if let Err(e) = client::push_vtodo(&self.config, task) {
-                tracing::warn!("CalDAV import: failed to push '{}': {e}", task.title);
-            }
-        }
         self.mem = data.clone();
-        self.save_sidecar()?;
-        self.mem_dirty = false;
-        self.dirty_ids.clear();
+        self.dirty_ids = data.tasks.keys().copied().collect();
         self.deleted_ids.clear();
-        Ok(())
+        self.mem_dirty = true;
+        // Pushes every imported task; whatever the server does not take stays
+        // queued in the sidecar for the next flush.
+        self.flush()
     }
 
     fn backend_type(&self) -> &'static str {
@@ -610,34 +636,11 @@ impl StorageBackend for CalDavBackend {
     fn refresh(&mut self) -> usize {
         match client::fetch_all_vtodos(&self.config) {
             Ok(remote_tasks) => {
-                let mut changed = 0usize;
-                let remote_ids: std::collections::HashSet<_> =
-                    remote_tasks.iter().map(|t| t.id).collect();
-
-                for task in &remote_tasks {
-                    let outdated = self
-                        .mem
-                        .tasks
-                        .get(&task.id)
-                        .is_none_or(|local| local.updated_at < task.updated_at);
-                    if outdated {
-                        self.mem.tasks.insert(task.id, task.clone());
-                        changed += 1;
-                    }
+                let changed = self.merge_remote_tasks(remote_tasks);
+                if changed > 0 {
+                    // Keep the cache on disk current for the next offline start.
+                    self.mem_dirty = true;
                 }
-
-                let to_remove: Vec<_> = self
-                    .mem
-                    .tasks
-                    .keys()
-                    .filter(|id| !remote_ids.contains(id))
-                    .copied()
-                    .collect();
-                changed += to_remove.len();
-                for id in to_remove {
-                    self.mem.tasks.remove(&id);
-                }
-
                 changed
             }
             Err(e) => {

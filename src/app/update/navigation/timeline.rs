@@ -1,4 +1,7 @@
 //! Timeline view navigation handlers.
+//!
+//! Only the selection moves here; the view scrolls the task rows so the
+//! selection stays visible for whatever height the terminal has.
 
 use crate::app::{Model, NavigationMessage, TimelineZoom, ViewId};
 use crate::domain::today;
@@ -33,25 +36,12 @@ pub fn handle_timeline_navigation(model: &mut Model, msg: NavigationMessage) {
         NavigationMessage::TimelineUp => {
             if model.timeline_state.selected_task_index > 0 {
                 model.timeline_state.selected_task_index -= 1;
-                // Adjust scroll offset to keep selection visible
-                let idx = model.timeline_state.selected_task_index;
-                if idx < model.timeline_state.task_scroll_offset {
-                    model.timeline_state.task_scroll_offset = idx;
-                }
             }
         }
         NavigationMessage::TimelineDown => {
             let max_index = model.visible_tasks.len().saturating_sub(1);
             if model.timeline_state.selected_task_index < max_index {
                 model.timeline_state.selected_task_index += 1;
-                // Adjust scroll offset to keep selection visible (estimate viewport ~15 rows)
-                let idx = model.timeline_state.selected_task_index;
-                let scroll = model.timeline_state.task_scroll_offset;
-                const ESTIMATED_VIEWPORT: usize = 15;
-                if idx >= scroll + ESTIMATED_VIEWPORT {
-                    model.timeline_state.task_scroll_offset =
-                        idx.saturating_sub(ESTIMATED_VIEWPORT - 1);
-                }
             }
         }
         _ => {}

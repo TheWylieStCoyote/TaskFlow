@@ -5,12 +5,13 @@ use std::path::Path;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::domain::{
-    Filter, PomodoroConfig, PomodoroSession, PomodoroStats, SavedFilter, SavedFilterId, SortSpec,
+    AuditAction, AuditLogEntry, AuditLogEntryId, Filter, PomodoroConfig, PomodoroSession,
+    PomodoroStats, SavedFilter, SavedFilterId, SortSpec, TaskId,
 };
 use crate::storage::{
-    ExportData, GoalRepository, HabitRepository, KeyResultRepository, ProjectRepository,
-    StorageBackend, StorageError, StorageResult, TagRepository, TaskRepository,
-    TimeEntryRepository, WorkLogRepository,
+    AuditLogRepository, ExportData, GoalRepository, HabitRepository, KeyResultRepository,
+    ProjectRepository, SavedFilterRepository, StorageBackend, StorageError, StorageResult,
+    TagRepository, TaskRepository, TimeEntryRepository, WorkLogRepository,
 };
 
 use super::SqliteBackendInner;
@@ -70,37 +71,38 @@ impl SqliteBackend {
         Ok(())
     }
 
-    fn list_saved_filters(&self) -> StorageResult<Vec<SavedFilter>> {
-        let conn = self.inner.conn()?;
-        let mut stmt =
-            conn.prepare("SELECT id, name, filter_json, sort_json, icon FROM saved_filters")?;
-        let rows = stmt.query_map([], |row| {
-            let id: String = row.get(0)?;
-            let name: String = row.get(1)?;
-            let filter_json: String = row.get(2)?;
-            let sort_json: String = row.get(3)?;
-            let icon: Option<String> = row.get(4)?;
-            Ok((id, name, filter_json, sort_json, icon))
-        })?;
-
-        let mut filters = Vec::new();
-        for row in rows {
-            let (id, name, filter_json, sort_json, icon) = row?;
-            let filter: Filter = serde_json::from_str(&filter_json)
-                .map_err(|e| StorageError::serialization(e.to_string()))?;
-            let sort: SortSpec = serde_json::from_str(&sort_json)
-                .map_err(|e| StorageError::serialization(e.to_string()))?;
-            let mut saved = SavedFilter::new(name, filter, sort);
-            saved.id = SavedFilterId(id);
-            if let Some(i) = icon {
-                saved = saved.with_icon(i);
-            }
-            filters.push(saved);
-        }
-        Ok(filters)
+    /// Creates the audit log table if it does not exist yet.
+    ///
+    /// Kept here (rather than in the main schema) so the table is available on
+    /// databases created before the audit log existed; the statements are
+    /// idempotent and run once per `initialize`.
+    fn ensure_audit_log_table(&self) -> StorageResult<()> {
+        self.inner.conn()?.execute_batch(
+            "CREATE TABLE IF NOT EXISTS audit_log (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                changed_at TEXT NOT NULL,
+                action TEXT NOT NULL,
+                changes_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_log_task_id ON audit_log(task_id);",
+        )?;
+        Ok(())
     }
 
-    fn create_saved_filter(&self, filter: &SavedFilter) -> StorageResult<()> {
+    fn saved_filter_exists(&self, id: &SavedFilterId) -> StorageResult<bool> {
+        let conn = self.inner.conn()?;
+        let found: Option<i64> = conn
+            .query_row(
+                "SELECT 1 FROM saved_filters WHERE id = ?1",
+                params![id.0],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(found.is_some())
+    }
+
+    fn upsert_saved_filter(&self, filter: &SavedFilter) -> StorageResult<()> {
         let conn = self.inner.conn()?;
         let filter_json = serde_json::to_string(&filter.filter)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
@@ -119,7 +121,7 @@ impl SqliteBackend {
 
         // Clear existing data (habits cascade to habit_check_ins, goals cascade to key_results)
         conn.execute_batch(
-            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits; DELETE FROM key_results; DELETE FROM goals; DELETE FROM saved_filters;",
+            "DELETE FROM work_logs; DELETE FROM time_entries; DELETE FROM tasks; DELETE FROM projects; DELETE FROM tags; DELETE FROM habits; DELETE FROM key_results; DELETE FROM goals; DELETE FROM saved_filters; DELETE FROM audit_log;",
         )?;
 
         // Import data
@@ -150,6 +152,9 @@ impl SqliteBackend {
         for filter in &data.saved_filters {
             self.create_saved_filter(filter)?;
         }
+        for entry in &data.audit_logs {
+            self.append_audit_entry(entry)?;
+        }
 
         // Import Pomodoro state
         self.set_pomodoro_session(data.pomodoro_session.as_ref())?;
@@ -178,6 +183,7 @@ impl StorageBackend for SqliteBackend {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         self.inner.conn = Some(conn);
         self.inner.create_tables()?;
+        self.ensure_audit_log_table()?;
         // Run migrations (all are idempotent)
         self.inner.migrate_tags_to_junction_table()?;
         self.inner.migrate_add_estimation_multiplier()?;
@@ -205,7 +211,7 @@ impl StorageBackend for SqliteBackend {
             pomodoro_config: self.get_pomodoro_value("config")?,
             pomodoro_stats: self.get_pomodoro_value("stats")?,
             saved_filters: self.list_saved_filters()?,
-            audit_logs: Vec::new(),
+            audit_logs: self.list_audit_entries()?,
         })
     }
 
@@ -241,5 +247,127 @@ impl StorageBackend for SqliteBackend {
 
     fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
         self.set_pomodoro_value("stats", Some(stats))
+    }
+}
+
+impl SavedFilterRepository for SqliteBackend {
+    fn create_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()> {
+        if self.saved_filter_exists(&filter.id)? {
+            return Err(StorageError::already_exists(
+                "SavedFilter",
+                filter.id.0.clone(),
+            ));
+        }
+        self.upsert_saved_filter(filter)
+    }
+
+    fn get_saved_filter(&self, id: &SavedFilterId) -> StorageResult<Option<SavedFilter>> {
+        Ok(self.list_saved_filters()?.into_iter().find(|f| &f.id == id))
+    }
+
+    fn update_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()> {
+        if !self.saved_filter_exists(&filter.id)? {
+            return Err(StorageError::not_found("SavedFilter", filter.id.0.clone()));
+        }
+        self.upsert_saved_filter(filter)
+    }
+
+    fn delete_saved_filter(&mut self, id: &SavedFilterId) -> StorageResult<()> {
+        let conn = self.inner.conn()?;
+        let deleted = conn.execute("DELETE FROM saved_filters WHERE id = ?1", params![id.0])?;
+        if deleted == 0 {
+            return Err(StorageError::not_found("SavedFilter", id.0.clone()));
+        }
+        Ok(())
+    }
+
+    fn list_saved_filters(&self) -> StorageResult<Vec<SavedFilter>> {
+        let conn = self.inner.conn()?;
+        let mut stmt =
+            conn.prepare("SELECT id, name, filter_json, sort_json, icon FROM saved_filters")?;
+        let rows = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let name: String = row.get(1)?;
+            let filter_json: String = row.get(2)?;
+            let sort_json: String = row.get(3)?;
+            let icon: Option<String> = row.get(4)?;
+            Ok((id, name, filter_json, sort_json, icon))
+        })?;
+
+        let mut filters = Vec::new();
+        for row in rows {
+            let (id, name, filter_json, sort_json, icon) = row?;
+            let filter: Filter = serde_json::from_str(&filter_json)
+                .map_err(|e| StorageError::serialization(e.to_string()))?;
+            let sort: SortSpec = serde_json::from_str(&sort_json)
+                .map_err(|e| StorageError::serialization(e.to_string()))?;
+            let mut saved = SavedFilter::new(name, filter, sort);
+            saved.id = SavedFilterId(id);
+            if let Some(i) = icon {
+                saved = saved.with_icon(i);
+            }
+            filters.push(saved);
+        }
+        Ok(filters)
+    }
+}
+
+impl AuditLogRepository for SqliteBackend {
+    fn append_audit_entry(&mut self, entry: &AuditLogEntry) -> StorageResult<()> {
+        let conn = self.inner.conn()?;
+        let action = serde_json::to_string(&entry.action)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        let changes_json = serde_json::to_string(&entry.changes)
+            .map_err(|e| StorageError::serialization(e.to_string()))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO audit_log (id, task_id, changed_at, action, changes_json) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                entry.id.0.to_string(),
+                entry.task_id.0.to_string(),
+                entry.changed_at.to_rfc3339(),
+                action,
+                changes_json,
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn list_audit_entries(&self) -> StorageResult<Vec<AuditLogEntry>> {
+        let conn = self.inner.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, task_id, changed_at, action, changes_json FROM audit_log ORDER BY changed_at, rowid",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let changed_at: String = row.get(2)?;
+            let action: String = row.get(3)?;
+            let changes_json: String = row.get(4)?;
+            Ok((id, task_id, changed_at, action, changes_json))
+        })?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            let (id, task_id, changed_at, action, changes_json) = row?;
+            let id = uuid::Uuid::parse_str(&id)
+                .map_err(|e| StorageError::deserialization(format!("audit_log.id: {e}")))?;
+            let task_id = uuid::Uuid::parse_str(&task_id)
+                .map_err(|e| StorageError::deserialization(format!("audit_log.task_id: {e}")))?;
+            let changed_at = chrono::DateTime::parse_from_rfc3339(&changed_at)
+                .map_err(|e| StorageError::deserialization(format!("audit_log.changed_at: {e}")))?
+                .with_timezone(&chrono::Utc);
+            let action: AuditAction = serde_json::from_str(&action)
+                .map_err(|e| StorageError::deserialization(format!("audit_log.action: {e}")))?;
+            let changes = serde_json::from_str(&changes_json)
+                .map_err(|e| StorageError::deserialization(format!("audit_log.changes: {e}")))?;
+            entries.push(AuditLogEntry {
+                id: AuditLogEntryId(id),
+                task_id: TaskId(task_id),
+                changed_at,
+                action,
+                changes,
+            });
+        }
+        Ok(entries)
     }
 }

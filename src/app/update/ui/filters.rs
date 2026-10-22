@@ -68,6 +68,7 @@ pub fn handle_ui_saved_filters(model: &mut Model, msg: UiMessage) {
                 }
 
                 model.saved_filters.remove(&id_to_remove);
+                model.delete_saved_filter_from_storage(&id_to_remove);
                 model.storage.dirty = true;
 
                 // Adjust selection

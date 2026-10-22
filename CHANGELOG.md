@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Saved filters and the audit log are persisted** on every backend (new `SavedFilterRepository`/`AuditLogRepository`; SQLite gains an `audit_log` table, Markdown an append-only `audit_log.jsonl`); the CalDAV backend keeps time entries, work logs, Pomodoro state and other local-only data in a `caldav.local.json` sidecar
 - **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)
 - **Reports → Time panel**: selectable 7/30/90-day window (`w`), Today / This Week / Avg per active day / live Tracking stats, time by project with hours and share, daily series (bars or sparkline), local hour-of-day chart, top tasks
 - **Reports → Tasks panel**: every task with tracked time in the selected window as a scrollable table (task, project, entries, time, share; `j`/`k`, `g`/`G`, PgUp/PgDn); the exported Markdown/HTML reports list the top 25 tasks the same way
@@ -50,6 +51,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Unparsable SQLite rows are reported, not dropped**: every skipped row is logged with table, id and the failing column; a bad timestamp is a row error instead of becoming "now"; single-row lookups on such a row return an error
+- **Markdown backend no longer overwrites corrupt data files**: a `*.yaml` aux file that does not parse makes startup fail with `CorruptFile` naming the file, leaving it untouched
+- **Kanban, Eisenhower, Timeline and Duplicates scroll from the real viewport height** instead of estimated 5–15 row windows, so the selection stays visible at any terminal size
+- **Snooze, clear snooze and bulk snooze are undoable**
+- **Redo of a timer stop** no longer leaves the stopped entry marked as the active timer
+- **Pomodoro statistics record the minutes actually worked** in each cycle (pauses excluded) instead of the configured length
+- **`taskflow list --project <unknown>`** errors and lists the available projects instead of silently listing everything
+- **Merged-branch detection** recognises branches checked out in another worktree (`+ ` marker in `git branch --merged`)
+- **CSV import follows RFC 4180**: quoted fields may contain commas, newlines and doubled quotes, so exports round-trip
+- **Help popup** no longer advertises digit keys for switching views; docs (README, CLAUDE.md, manual, quick reference) now match the code for Esc, the pipe protocol, the CLI and every key table
 - **Time totals counted twice**: Reports → Time, Insights and the Markdown/HTML reports added each task's cached total on top of its time entries; focus mode added the live session twice
 - **Stale task totals**: `actual_minutes` was only recomputed when a timer stopped; adding, editing or deleting time log entries, undo and the pipe API now recompute it and refresh caches
 - **Report windows spanned N+1 days**: "last 7 days" covered eight calendar dates (the 7-day Daily chart showed eight bars); every report window now covers exactly N dates ending today

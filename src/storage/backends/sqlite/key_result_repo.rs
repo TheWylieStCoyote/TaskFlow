@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::{GoalId, KeyResult, KeyResultId, KeyResultStatus};
 use crate::storage::{KeyResultRepository, StorageError, StorageResult};
 
-use super::rows::key_result_from_row;
+use super::rows::{collect_rows, key_result_from_row};
 use super::SqliteBackend;
 
 impl KeyResultRepository for SqliteBackend {
@@ -124,26 +124,19 @@ impl KeyResultRepository for SqliteBackend {
     fn list_key_results(&self) -> StorageResult<Vec<KeyResult>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM key_results ORDER BY name")?;
-
-        let key_results: Vec<KeyResult> = stmt
-            .query_map([], key_result_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(key_results)
+        collect_rows(&mut stmt, [], "key_results", key_result_from_row)
     }
 
     fn get_key_results_for_goal(&self, goal_id: &GoalId) -> StorageResult<Vec<KeyResult>> {
         let conn = self.inner.conn()?;
         let mut stmt =
             conn.prepare("SELECT * FROM key_results WHERE goal_id = ?1 ORDER BY name")?;
-
-        let key_results: Vec<KeyResult> = stmt
-            .query_map(params![goal_id.0.to_string()], key_result_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(key_results)
+        collect_rows(
+            &mut stmt,
+            params![goal_id.0.to_string()],
+            "key_results",
+            key_result_from_row,
+        )
     }
 }
 

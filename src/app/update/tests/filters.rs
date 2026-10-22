@@ -155,3 +155,105 @@ fn test_clear_saved_filter() {
     assert!(model.active_saved_filter.is_none());
     assert!(model.alerts.status_message.is_some());
 }
+
+// ============================================================================
+// Persistence: saving / deleting a filter in the TUI reaches the backend
+// ============================================================================
+
+mod persistence {
+    use std::path::Path;
+
+    use tempfile::TempDir;
+
+    use crate::app::{update::update, Message, Model, UiMessage};
+    use crate::domain::{Priority, SavedFilter};
+    use crate::storage::BackendType;
+    use crate::ui::{InputMode, InputTarget};
+
+    fn stored_model(dir: &TempDir) -> Model {
+        Model::new()
+            .with_storage(BackendType::Json, dir.path().join("tasks.json"))
+            .expect("storage")
+    }
+
+    fn reload(dir: &TempDir) -> Model {
+        Model::new()
+            .with_storage(BackendType::Json, dir.path().join("tasks.json"))
+            .expect("reload")
+    }
+
+    fn save_filter_named(model: &mut Model, name: &str) {
+        update(model, Message::Ui(UiMessage::SaveCurrentFilter));
+        assert_eq!(model.input.mode, InputMode::Editing);
+        assert_eq!(model.input.target, InputTarget::SavedFilterName);
+        model.input.buffer = name.to_string();
+        model.input.cursor = name.len();
+        update(model, Message::Ui(UiMessage::SubmitInput));
+    }
+
+    #[test]
+    fn saving_a_filter_in_the_tui_survives_reload() {
+        let dir = TempDir::new().unwrap();
+        let mut model = stored_model(&dir);
+        model.filtering.filter.priority = Some(vec![Priority::High]);
+        model.filtering.filter.include_completed = true;
+
+        save_filter_named(&mut model, "Hot items");
+
+        let saved: Vec<&SavedFilter> = model.saved_filters.values().collect();
+        assert_eq!(saved.len(), 1);
+        let saved_id = saved[0].id.clone();
+        assert_eq!(model.active_saved_filter, Some(saved_id.clone()));
+        assert!(model.storage.dirty);
+        model.save().expect("save");
+
+        let reloaded = reload(&dir);
+        assert_eq!(reloaded.saved_filters.len(), 1);
+        let restored = &reloaded.saved_filters[&saved_id];
+        assert_eq!(restored.name, "Hot items");
+        assert_eq!(restored.filter.priority, Some(vec![Priority::High]));
+        assert!(restored.filter.include_completed);
+    }
+
+    #[test]
+    fn deleting_a_filter_in_the_tui_survives_reload() {
+        let dir = TempDir::new().unwrap();
+        let mut model = stored_model(&dir);
+        save_filter_named(&mut model, "Alpha");
+        save_filter_named(&mut model, "Beta");
+        model.save().unwrap();
+        assert_eq!(reload(&dir).saved_filters.len(), 2);
+
+        // The picker lists filters sorted by name, so index 0 is "Alpha".
+        update(&mut model, Message::Ui(UiMessage::ShowSavedFilters));
+        model.saved_filter_picker.selected = 0;
+        update(&mut model, Message::Ui(UiMessage::DeleteSavedFilter));
+        assert_eq!(model.saved_filters.len(), 1);
+        model.save().unwrap();
+
+        let reloaded = reload(&dir);
+        assert_eq!(reloaded.saved_filters.len(), 1);
+        assert_eq!(reloaded.saved_filters.values().next().unwrap().name, "Beta");
+    }
+
+    #[test]
+    fn empty_filter_name_persists_nothing() {
+        let dir = TempDir::new().unwrap();
+        let mut model = stored_model(&dir);
+        save_filter_named(&mut model, "");
+        model.save().unwrap();
+        assert!(reload(&dir).saved_filters.is_empty());
+    }
+
+    #[test]
+    fn sample_data_mode_never_writes_filters() {
+        let dir = TempDir::new().unwrap();
+        let mut model = stored_model(&dir).with_sample_data();
+        save_filter_named(&mut model, "Demo only");
+        model.save().unwrap();
+        assert!(
+            !Path::new(&dir.path().join("tasks.json")).exists(),
+            "sample data mode must not touch the disk"
+        );
+    }
+}

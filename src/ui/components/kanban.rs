@@ -17,6 +17,7 @@ use ratatui::{
 use crate::app::Model;
 use crate::config::Theme;
 use crate::domain::TaskStatus;
+use crate::ui::primitives::scroll_offset;
 
 /// Kanban board widget showing tasks in status columns.
 pub struct Kanban<'a> {
@@ -76,35 +77,35 @@ impl Widget for Kanban<'_> {
             } else {
                 None
             };
-            let scroll_offset = self.model.view_selection.kanban_scroll_offsets[i];
             self.render_column(
                 chunks[i],
                 buf,
-                i,
                 *status,
                 title,
                 *color,
                 is_selected_column,
                 task_index,
-                scroll_offset,
             );
         }
     }
 }
 
 impl Kanban<'_> {
+    /// Render one status column.
+    ///
+    /// The column scrolls only to keep `selected_task_index` visible; the
+    /// offset is derived from the real inner height every frame, so it
+    /// follows terminal resizes without any stored state.
     #[allow(clippy::too_many_arguments)]
     fn render_column(
         &self,
         area: Rect,
         buf: &mut Buffer,
-        _column_index: usize,
         status: TaskStatus,
         title: &str,
         title_color: Color,
         is_selected_column: bool,
         selected_task_index: Option<usize>,
-        scroll_offset: usize,
     ) {
         let theme = self.theme;
 
@@ -147,9 +148,9 @@ impl Kanban<'_> {
             return;
         }
 
-        // Calculate viewport and apply scroll offset
+        // Scroll from the real viewport so the selection is always on screen
         let viewport_height = inner.height as usize;
-        let scroll_offset = scroll_offset.min(count.saturating_sub(viewport_height));
+        let scroll_offset = scroll_offset(selected_task_index.unwrap_or(0), count, viewport_height);
 
         // Create list items for visible tasks only
         let items: Vec<ListItem<'_>> = tasks
@@ -442,5 +443,90 @@ mod tests {
             content.contains("⚠"),
             "Overdue task should show ⚠ indicator"
         );
+    }
+}
+
+#[cfg(test)]
+mod scrolling_tests {
+    use super::*;
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    /// Model with `count` Todo tasks titled `Card NN`, column 0 selected.
+    fn model_with_cards(count: usize) -> Model {
+        let mut model = Model::new();
+        let mut ids = Vec::new();
+        for i in 0..count {
+            let task =
+                crate::domain::Task::new(format!("Card {i:02}")).with_status(TaskStatus::Todo);
+            ids.push(task.id);
+            model.tasks.insert(task.id, task);
+        }
+        model.visible_tasks = ids;
+        model.view_selection.kanban_column = 0;
+        model
+    }
+
+    fn render(model: &Model, width: u16, height: u16) -> (String, Buffer) {
+        let theme = Theme::default();
+        let buffer = render_widget(Kanban::new(model, &theme), width, height);
+        (buffer_content(&buffer), buffer)
+    }
+
+    /// True when some cell carries the selection background.
+    fn has_selection_highlight(buffer: &Buffer) -> bool {
+        let bg = Theme::default().colors.accent_secondary.to_color();
+        buffer.content.iter().any(|cell| cell.bg == bg)
+    }
+
+    #[test]
+    fn test_selection_visible_at_first_middle_and_last_for_two_heights() {
+        for height in [24u16, 50] {
+            let mut model = model_with_cards(60);
+            for selected in [0usize, 30, 59] {
+                model.view_selection.kanban_task_index = selected;
+                let (content, buffer) = render(&model, 120, height);
+                assert!(
+                    content.contains(&format!("Card {selected:02}")),
+                    "card {selected} must be visible at height {height}:\n{content}"
+                );
+                assert!(has_selection_highlight(&buffer));
+            }
+        }
+    }
+
+    #[test]
+    fn test_taller_terminal_shows_more_cards_without_blank_space() {
+        let mut model = model_with_cards(60);
+        model.view_selection.kanban_task_index = 59;
+        let (short, _) = render(&model, 120, 24);
+        let (tall, _) = render(&model, 120, 50);
+        let cards = |s: &str| s.matches("Card ").count();
+        // Column inner height = height - 2 (borders)
+        assert_eq!(cards(&short), 22);
+        assert_eq!(cards(&tall), 48);
+    }
+
+    #[test]
+    fn test_short_list_never_scrolls() {
+        let mut model = model_with_cards(5);
+        model.view_selection.kanban_task_index = 4;
+        let (content, _) = render(&model, 120, 30);
+        assert!(content.contains("Card 00"));
+        assert!(content.contains("Card 04"));
+        assert!(!content.contains("▲"), "no scrollbar for a list that fits");
+    }
+
+    #[test]
+    fn test_tiny_terminal_keeps_selection_visible_without_panic() {
+        let mut model = model_with_cards(60);
+        model.view_selection.kanban_task_index = 30;
+        let (_, buffer) = render(&model, 40, 12);
+        assert!(
+            has_selection_highlight(&buffer),
+            "selected card highlighted at 40x12"
+        );
+        // Degenerate sizes must not panic either
+        let _ = render(&model, 40, 2);
+        let _ = render(&model, 1, 1);
     }
 }

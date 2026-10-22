@@ -14,6 +14,7 @@ use ratatui::{
 
 use crate::app::TimelineZoom;
 use crate::domain::Task;
+use crate::ui::primitives::scroll_offset;
 
 use super::{Timeline, LABEL_WIDTH};
 
@@ -190,9 +191,9 @@ impl Timeline<'_> {
         let inner = block.inner(area);
         block.render(area, buf);
 
-        // Visible rows
+        // Scroll from the real viewport so the selection is always on screen
         let visible_rows = inner.height as usize;
-        let scroll_offset = state.task_scroll_offset;
+        let scroll_offset = scroll_offset(state.selected_task_index, tasks.len(), visible_rows);
 
         for (row_idx, task) in tasks
             .iter()

@@ -27,11 +27,11 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Git Integration**: Extract TODO/FIXME comments from code and create tasks automatically
 - **Search & Filter**: Search tasks by title or tags, filter by view (Today, Upcoming, Projects)
 - **Filter DSL**: Advanced query language for complex task filtering (see [FILTER_SYNTAX.md](docs/FILTER_SYNTAX.md))
-- **Sorting**: Sort tasks by priority, due date, title, status, or creation date
+- **Sorting**: Sort tasks by priority, due date, title, status, creation date, or last update
 - **Multiple Views**: Calendar, Timeline, Kanban, Eisenhower Matrix, Heatmap, Burndown charts, and more
 - **Review Modes**: Daily, Weekly, and Evening review workflows for task planning and reflection
 - **Focus Mode**: Distraction-free single-task view with full-screen option and focus queue
-- **Pipe Interface**: JSON input/output for scripting and external tool integration
+- **Pipe Interface**: `taskflow pipe` reads JSON requests on stdin and answers in JSON, YAML or CSV for scripting and external tool integration (see the [User Manual](docs/USER_MANUAL.md#pipe-interface))
 - **Undo Support**: Undo task, project, and time tracking operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
 - **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown
@@ -111,9 +111,11 @@ cargo run -- --demo
 # Work from the shell without the TUI
 taskflow add "Write release notes #docs due:friday"
 taskflow list --view today
+taskflow done "release notes"        # complete a task by title
 taskflow stats
 taskflow time --week --by project     # tracked time: --today, --week, --days N,
 taskflow time --days 30 --json        # --from/--to, --project, --by day|task|tag
+echo '{"operation":"list","entity":"task"}' | taskflow pipe   # scripting interface
 ```
 
 ## Usage
@@ -184,7 +186,15 @@ Each task shows:
 | `m` | Move task to project |
 | `t` | Toggle time tracking |
 | `L` | Open time log editor |
-| `Alt+t` | Edit time estimate |
+| `Alt+t` | Edit time estimate (`1h30m`, `90m`, `1.5h`) |
+| `S` | Edit scheduled date |
+| `N` | Edit description in the multi-line editor (`Ctrl+s` saves, `Esc` cancels) |
+| `Y` | Duplicate task |
+| `]` / `[` / `M` | Reschedule to tomorrow / next week / next Monday |
+| `z` / `Z` | Snooze task until a date / clear snooze |
+| `W` | Open work log (`a` add, `e` edit, `d` delete, `/` search, `Ctrl+s` saves an entry) |
+| `Ctrl+↑` / `Ctrl+↓` | Move task up / down (manual ordering) |
+| `Alt+l` / `Alt+u` | Link to the next task in a chain / unlink |
 
 #### Project Actions
 
@@ -202,7 +212,7 @@ Each task shows:
 | `Ctrl+l` | Clear search |
 | `#` | Filter by tag (comma-separated) |
 | `Ctrl+t` | Clear tag filter |
-| `s` | Cycle sort field (Created → Priority → Due Date → Title → Status) |
+| `s` | Cycle sort field (Created → Priority → Due Date → Title → Status → Updated) |
 | `Ctrl+o` | Toggle sort order (Ascending/Descending) |
 
 #### View Controls
@@ -211,7 +221,12 @@ Each task shows:
 |-----|--------|
 | `b` | Toggle sidebar |
 | `c` | Toggle showing completed tasks |
-| `?` | Show/hide help popup |
+| `?` | Show help popup (`j`/`k` scroll, any other key closes) |
+| `:` or `Alt+p` | Command palette: search every action by name and run it |
+| `Alt+d` / `Alt+w` / `Alt+e` | Daily / Weekly / Evening review |
+| `Alt+g` | Git TODOs view (`r` rescans the repository) |
+| `Ctrl+k` | Keybindings editor |
+| `Esc` | In the specialised views (Calendar, Kanban, Timeline, Reports, ...), return focus to the sidebar |
 
 #### Multi-Select (Bulk Operations)
 
@@ -222,7 +237,7 @@ Each task shows:
 | `Space` | Toggle selection of current task (in multi-select mode) |
 | `Ctrl+v` | Clear selection and exit multi-select |
 
-When in multi-select mode, selected tasks show a `●` indicator. After selecting tasks, you can delete them with `d` or perform other operations.
+When in multi-select mode, selected tasks show a `●` indicator. With at least one task selected, `p` (set priority), `T` (add tags), `D` (set due date) and `z` (snooze) apply to every selected task. Bulk delete, bulk move-to-project and bulk set-status have no default key; run them from the command palette (`:`). Other keys, including `d`, still act on the highlighted task only.
 
 #### Dependencies & Recurrence
 
@@ -249,6 +264,9 @@ When you complete a recurring task, a new task is automatically created with the
 | `←`/`→` or `h`/`l` | Navigate days |
 | `↑`/`↓` or `j`/`k` | Navigate weeks |
 | `<`/`>` | Previous/Next month |
+| `Tab` | Switch focus between the calendar grid and the selected day's task list |
+| `Enter` | Open the day's task list (on the grid) / open focus mode on the task (in the list) |
+| `Esc` | Return focus to the sidebar |
 
 The Calendar view shows a monthly grid with tasks displayed for each day. Days with tasks show a dot indicator, and the selected day's tasks are listed in a panel on the right.
 
@@ -258,6 +276,11 @@ The Calendar view shows a monthly grid with tasks displayed for each day. Days w
 |-----|--------|
 | `Ctrl+e` | Export tasks to CSV |
 | `Ctrl+i` | Export tasks to ICS (iCalendar) |
+| `Ctrl+g` | Export task chains as Graphviz DOT |
+| `Ctrl+m` | Export task chains as a Mermaid diagram |
+| `Ctrl+p` | Export a Markdown report |
+| `Ctrl+h` | Export an HTML report |
+| `I` / `Alt+i` | Import CSV / ICS (shows a preview; `Enter`/`y` confirms, `Esc`/`n` cancels) |
 
 #### Macros
 
@@ -302,7 +325,7 @@ The Pomodoro timer appears in the status bar when active, showing:
 Templates allow quickly creating common task types with preset fields:
 - **Bug Fix**: High priority with #bug tag and structured description
 - **Feature**: Medium priority with #feature tag
-- **Review**: Medium priority, due tomorrow
+- **Review**: Medium priority with #review tag, due tomorrow
 - **Meeting Notes**: Low priority with attendee/agenda template
 - **Daily Task**: Low priority, due today
 - **Weekly Task**: Low priority, due in 7 days
@@ -319,7 +342,8 @@ After selecting a template, the task is created and you can edit the title.
 | `U` or `Ctrl+r` | Redo last action |
 | `Ctrl+s` | Save |
 | `Alt+r` | Reload tasks from storage |
-| `q` or `Esc` | Quit TaskFlow |
+| `q` | Quit TaskFlow |
+| `Esc` | Cancel the current dialog or prompt, close a popup, leave focus mode, or return focus to the sidebar (never quits) |
 
 ### Task Priorities
 
@@ -351,9 +375,20 @@ Tasks can have one of five priority levels:
 | Today | Tasks due today |
 | Upcoming | Tasks with future due dates |
 | Overdue | Tasks past their due date |
+| Scheduled | Tasks with a scheduled date |
 | Calendar | Monthly calendar view with task indicators |
 | Dashboard | Statistics overview with completion rates and time tracking |
-| Projects | Tasks assigned to a project |
+| Reports | Analytics panels (Overview, Velocity, Tags, Time, Tasks, Focus, Insights, Estimation) |
+| Habits / Goals | Habit tracker and OKR goals with key results |
+| Blocked / Untagged / No Project / Recent | Tasks with unmet dependencies, without tags, without a project, or modified in the last 7 days |
+| Kanban / Eisenhower / Weekly Planner / Timeline | Board, matrix, week and Gantt-style layouts |
+| Snoozed | Tasks hidden until their snooze date |
+| Heatmap / Forecast / Network / Burndown | Completion heatmap, workload forecast, dependency graph, burndown chart |
+| Duplicates | Likely duplicate task pairs (`D` dismiss, `M` merge, `r` refresh) |
+| Git TODOs | Tasks extracted from code comments (`r` rescans) |
+| Projects | Tasks assigned to a project (one sidebar entry per project) |
+
+All views are selected from the sidebar (`h`, then `j`/`k` and `Enter`); there are no number-key shortcuts.
 
 ### Dashboard View
 
@@ -553,7 +588,7 @@ TaskFlow uses **The Elm Architecture (TEA)** pattern:
 ```
 taskflow/
 ├── src/
-│   ├── main.rs           # Entry point and event loop
+│   ├── bin/taskflow/     # CLI binary: event loop, input handling, subcommands, pipe interface
 │   ├── lib.rs            # Library exports
 │   ├── domain/           # Core entities
 │   │   ├── task.rs       # Task model
@@ -564,11 +599,11 @@ taskflow/
 │   ├── app/              # TEA architecture
 │   │   ├── model.rs      # Application state
 │   │   ├── message.rs    # Event types
-│   │   ├── update.rs     # State transitions
-│   │   └── undo.rs       # Undo stack
+│   │   ├── update/       # State transitions (one module per message family)
+│   │   └── undo/         # Undo stack
 │   ├── config/           # Configuration
 │   │   ├── settings.rs   # App settings
-│   │   ├── keybindings.rs# Key mappings
+│   │   ├── keybindings/  # Key mappings and actions
 │   │   └── theme.rs      # Color themes
 │   ├── storage/          # Persistence
 │   │   └── backends/     # JSON, YAML, SQLite, Markdown
@@ -906,17 +941,15 @@ For 10,000 tasks: expect ~15-20MB memory usage.
 
 - **Markdown backend**: Not recommended for 500+ tasks (file I/O overhead)
 - **Tag search in SQLite**: Uses string matching (no dedicated index)
-- **Undo stack**: Keeps last 100 actions in memory
+- **Undo stack**: Keeps last 50 actions in memory
 
 ## Known Issues
 
 ### Current Limitations
 
-1. **Large update.rs file**: The main update logic is in a single 5500-line file. While functional, this makes navigation difficult. A future refactor may split this into modules.
+1. **SQLite tag queries**: Tag filtering in SQLite uses JSON string matching rather than a normalized table, which is slower for large datasets.
 
-2. **SQLite tag queries**: Tag filtering in SQLite uses JSON string matching rather than a normalized table, which is slower for large datasets.
-
-3. **No external cache invalidation**: The Markdown backend caches parsed files but doesn't detect external modifications until restart.
+2. **No external cache invalidation**: The Markdown backend caches parsed files but doesn't detect external modifications until restart.
 
 ### Workarounds
 

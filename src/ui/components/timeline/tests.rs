@@ -575,3 +575,91 @@ fn test_task_color_completed() {
     // Completed task should have a color
     assert_ne!(color, Color::Reset);
 }
+
+// =========================================================================
+// Vertical scrolling: offset derived from the real viewport height
+// =========================================================================
+
+mod scrolling {
+    use super::*;
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    /// Model with `count` tasks due today titled `Task NN`; the timeline
+    /// sorts same-day, same-priority tasks by title so index == NN.
+    fn model_with_tasks(count: usize) -> Model {
+        let mut model = Model::new();
+        for i in 0..count {
+            let mut task = Task::new(format!("Task {i:02}"));
+            task.due_date = Some(today());
+            model.tasks.insert(task.id, task);
+        }
+        model.refresh_visible_tasks();
+        model
+    }
+
+    fn render(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        buffer_content(&render_widget(Timeline::new(model, &theme), width, height))
+    }
+
+    #[test]
+    fn test_selection_visible_at_first_middle_and_last_for_two_heights() {
+        for height in [24u16, 50] {
+            let mut model = model_with_tasks(60);
+            for selected in [0usize, 30, 59] {
+                model.timeline_state.selected_task_index = selected;
+                let content = render(&model, 80, height);
+                assert!(
+                    content.contains(&format!("Task {selected:02}")),
+                    "task {selected} must be visible at height {height}:\n{content}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_taller_terminal_shows_more_rows_without_blank_space() {
+        let mut model = model_with_tasks(60);
+        model.timeline_state.selected_task_index = 59;
+        let short = render(&model, 80, 24);
+        let tall = render(&model, 80, 50);
+        let rows = |s: &str| s.matches("Task ").count();
+        // Title (1) + date headers (2) + top border (1) + footer (1)
+        assert_eq!(rows(&short), 19);
+        assert_eq!(rows(&tall), 45);
+        assert!(short.contains("Task 59") && tall.contains("Task 59"));
+    }
+
+    #[test]
+    fn test_short_list_never_scrolls() {
+        let mut model = model_with_tasks(4);
+        model.timeline_state.selected_task_index = 3;
+        let content = render(&model, 80, 30);
+        assert!(content.contains("Task 00"));
+        assert!(content.contains("Task 03"));
+        assert!(!content.contains("▲"), "no scrollbar for a list that fits");
+    }
+
+    #[test]
+    fn test_tiny_terminal_keeps_selection_visible_without_panic() {
+        let mut model = model_with_tasks(60);
+        model.timeline_state.selected_task_index = 30;
+        let content = render(&model, 40, 12);
+        assert!(
+            content.contains("Task 30"),
+            "selected task visible at 40x12:\n{content}"
+        );
+        // Degenerate sizes must not panic either
+        let _ = render(&model, 40, 5);
+        let _ = render(&model, 1, 1);
+    }
+
+    #[test]
+    fn test_selection_past_end_does_not_panic() {
+        // TimelineDown bounds by visible_tasks, which can exceed the dated set
+        let mut model = model_with_tasks(10);
+        model.timeline_state.selected_task_index = 99;
+        let content = render(&model, 80, 24);
+        assert!(content.contains("Task 09"));
+    }
+}

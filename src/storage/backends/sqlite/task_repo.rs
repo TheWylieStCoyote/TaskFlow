@@ -11,7 +11,7 @@ fn json_serialize<T: serde::Serialize>(value: &T) -> StorageResult<String> {
         .map_err(|e| StorageError::serialization(format!("JSON serialization failed: {e}")))
 }
 
-use super::rows::task_from_row;
+use super::rows::{collect_rows, task_from_row};
 use super::SqliteBackend;
 
 impl TaskRepository for SqliteBackend {
@@ -155,11 +155,7 @@ impl TaskRepository for SqliteBackend {
     fn list_tasks(&self) -> StorageResult<Vec<Task>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM tasks")?;
-        let tasks = stmt
-            .query_map([], task_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(tasks)
+        collect_rows(&mut stmt, [], "tasks", task_from_row)
     }
 
     fn list_tasks_filtered(&self, filter: &Filter) -> StorageResult<Vec<Task>> {
@@ -290,22 +286,18 @@ impl TaskRepository for SqliteBackend {
         let mut stmt = conn.prepare(&sql)?;
         let param_refs: Vec<&dyn rusqlite::ToSql> =
             params.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
-        let tasks = stmt
-            .query_map(param_refs.as_slice(), task_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-
-        Ok(tasks)
+        collect_rows(&mut stmt, param_refs.as_slice(), "tasks", task_from_row)
     }
 
     fn get_tasks_by_project(&self, project_id: &ProjectId) -> StorageResult<Vec<Task>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM tasks WHERE project_id = ?1")?;
-        let tasks = stmt
-            .query_map(params![project_id.0.to_string()], task_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(tasks)
+        collect_rows(
+            &mut stmt,
+            params![project_id.0.to_string()],
+            "tasks",
+            task_from_row,
+        )
     }
 
     fn get_tasks_by_tag(&self, tag: &str) -> StorageResult<Vec<Task>> {
@@ -316,11 +308,7 @@ impl TaskRepository for SqliteBackend {
               INNER JOIN task_tags tt ON t.id = tt.task_id
               WHERE tt.tag_name = ?1",
         )?;
-        let tasks = stmt
-            .query_map(params![tag], task_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(tasks)
+        collect_rows(&mut stmt, params![tag], "tasks", task_from_row)
     }
 }
 

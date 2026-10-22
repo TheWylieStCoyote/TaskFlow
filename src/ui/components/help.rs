@@ -23,12 +23,12 @@ use crate::config::{Keybindings, Theme};
 
 /// View-specific navigation hints (key, description)
 const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
-    ("1-0", "Switch views (Task/Calendar/Dashboard/...)"),
+    ("Views", "h sidebar, j/k pick, Enter open"),
     ("Kanban", "h/l columns, j/k tasks"),
     ("Eisenhwr", "h/l/j/k quadrants"),
     ("Weekly", "h/l days, j/k tasks"),
     ("Timeline", "h/l scroll, </> zoom, t today"),
-    ("Habits", "n new, Space check-in, e edit"),
+    ("Habits", "n new, Space/x check-in, e edit, a analytics"),
     ("Network", "h/l/j/k navigate nodes"),
     ("Focus", "[/] chain nav, t timer, f exit"),
     ("Reports", "Tab/S-Tab panels, w window, j/k tasks"),

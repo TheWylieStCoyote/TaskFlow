@@ -17,7 +17,9 @@ pub enum TimelineZoom {
 
 /// State for the timeline/Gantt view.
 ///
-/// Tracks the viewport position, selection, and display options.
+/// Tracks the viewport position, selection, and display options. The
+/// vertical scroll position is not stored: the view derives it from the
+/// selected index and the real viewport height at render time.
 #[derive(Debug, Clone)]
 pub struct TimelineState {
     /// Leftmost visible date in the viewport
@@ -30,8 +32,6 @@ pub struct TimelineState {
     pub show_dependencies: bool,
     /// Current zoom level
     pub zoom_level: TimelineZoom,
-    /// Vertical scroll offset for task list
-    pub task_scroll_offset: usize,
 }
 
 impl Default for TimelineState {
@@ -44,7 +44,6 @@ impl Default for TimelineState {
             selected_task_index: 0,
             show_dependencies: false,
             zoom_level: TimelineZoom::default(),
-            task_scroll_offset: 0,
         }
     }
 }

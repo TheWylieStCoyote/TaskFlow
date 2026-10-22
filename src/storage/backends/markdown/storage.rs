@@ -7,6 +7,7 @@ use crate::storage::{
 };
 
 use super::{MarkdownBackend, PomodoroState};
+use crate::storage::repository::AuditLogRepository;
 
 impl StorageBackend for MarkdownBackend {
     fn initialize(&mut self) -> StorageResult<()> {
@@ -53,7 +54,7 @@ impl StorageBackend for MarkdownBackend {
             pomodoro_config: self.pomodoro_state.config.clone(),
             pomodoro_stats: self.pomodoro_state.stats.clone(),
             saved_filters: self.saved_filters.clone(),
-            audit_logs: Vec::new(),
+            audit_logs: self.list_audit_entries()?,
         })
     }
 
@@ -97,6 +98,15 @@ impl StorageBackend for MarkdownBackend {
             self.work_logs.push(entry.clone());
         }
         self.save_work_logs()?;
+
+        // Replace the audit log (append-only file: drop it, then re-append)
+        let audit_path = self.audit_log_path();
+        if audit_path.exists() {
+            std::fs::remove_file(&audit_path)?;
+        }
+        for entry in &data.audit_logs {
+            self.append_audit_entry(entry)?;
+        }
 
         // Import habits
         for habit in &data.habits {

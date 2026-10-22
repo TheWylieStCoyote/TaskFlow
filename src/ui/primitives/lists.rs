@@ -75,3 +75,60 @@ pub fn with_muted_highlight<'a>(list: List<'a>, theme: &Theme) -> List<'a> {
     )
     .highlight_symbol("> ")
 }
+
+/// First visible index for a list that keeps `selected` in view.
+///
+/// Call this at render time with the real viewport height so the result
+/// tracks the terminal size instead of a guessed row count. The selection
+/// is centred once the list overflows and the offset is clamped so the
+/// last page is always full; a list that fits never scrolls.
+///
+/// # Arguments
+///
+/// * `selected` - Index of the selected item
+/// * `total` - Number of items in the list
+/// * `visible` - Rows available for items (`area.height`)
+#[must_use]
+pub fn scroll_offset(selected: usize, total: usize, visible: usize) -> usize {
+    if total <= visible {
+        return 0;
+    }
+    let max_offset = total - visible;
+    selected.saturating_sub(visible / 2).min(max_offset)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scroll_offset;
+
+    #[test]
+    fn scroll_offset_never_scrolls_a_list_that_fits() {
+        assert_eq!(scroll_offset(0, 5, 10), 0);
+        assert_eq!(scroll_offset(4, 5, 10), 0);
+        assert_eq!(scroll_offset(9, 10, 10), 0);
+    }
+
+    #[test]
+    fn scroll_offset_centres_selection_and_clamps() {
+        assert_eq!(scroll_offset(0, 50, 10), 0);
+        assert_eq!(scroll_offset(4, 50, 10), 0, "still in the first page");
+        assert_eq!(scroll_offset(25, 50, 10), 20, "centred");
+        assert_eq!(scroll_offset(49, 50, 10), 40, "clamped at the end");
+        assert_eq!(
+            scroll_offset(99, 50, 10),
+            40,
+            "out-of-range selection clamps"
+        );
+    }
+
+    #[test]
+    fn scroll_offset_handles_degenerate_viewports() {
+        assert_eq!(
+            scroll_offset(3, 10, 0),
+            3,
+            "zero rows: offset tracks selection"
+        );
+        assert_eq!(scroll_offset(3, 10, 1), 3, "one row: the selected row");
+        assert_eq!(scroll_offset(0, 0, 0), 0);
+    }
+}

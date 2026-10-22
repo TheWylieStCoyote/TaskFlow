@@ -18,6 +18,7 @@ use ratatui::{
 use crate::app::Model;
 use crate::config::Theme;
 use crate::domain::plural_s;
+use crate::ui::primitives::scroll_offset;
 
 /// Duplicates view widget showing potential duplicate task pairs
 pub struct Duplicates<'a> {
@@ -56,11 +57,13 @@ impl<'a> Duplicates<'a> {
         Paragraph::new(header).render(area, buf);
     }
 
-    /// Render the list of duplicate pairs
+    /// Render the list of duplicate pairs.
+    ///
+    /// The list scrolls only to keep the selected pair visible; the offset
+    /// is derived from the real list height every frame.
     fn render_list(&self, area: Rect, buf: &mut Buffer) {
         let pairs = &self.model.duplicates_view.pairs;
         let selected = self.model.duplicates_view.selected;
-        let scroll_offset = self.model.duplicates_view.scroll_offset;
 
         if pairs.is_empty() {
             let empty_msg = Paragraph::new(Line::from(vec![Span::styled(
@@ -76,7 +79,7 @@ impl<'a> Duplicates<'a> {
 
         let total_pairs = pairs.len();
         let viewport_height = area.height as usize;
-        let scroll_offset = scroll_offset.min(total_pairs.saturating_sub(viewport_height));
+        let scroll_offset = scroll_offset(selected, total_pairs, viewport_height);
 
         let items: Vec<ListItem<'_>> = pairs
             .iter()
@@ -562,11 +565,11 @@ mod render_tests {
         );
     }
 
-    #[test]
-    fn test_scroll_offset_hides_earlier_rows_and_shows_scrollbar() {
+    /// Model with `count` duplicate pairs titled `Row NN left <-> Row NN right`.
+    fn model_with_rows(count: usize) -> Model {
         let mut model = Model::new();
         let mut ids = Vec::new();
-        for i in 0..30 {
+        for i in 0..count {
             let a = Task::new(format!("Row {i:02} left"));
             let b = Task::new(format!("Row {i:02} right"));
             ids.push((a.id, b.id));
@@ -574,17 +577,67 @@ mod render_tests {
             model.tasks.insert(b.id, b);
         }
         model.duplicates_view.pairs = ids.iter().map(|(a, b)| pair(*a, *b, 0.9)).collect();
+        model
+    }
+
+    #[test]
+    fn test_overflowing_list_scrolls_to_selection_and_shows_scrollbar() {
+        let mut model = model_with_rows(30);
         model.duplicates_view.selected = 20;
-        model.duplicates_view.scroll_offset = 15;
 
         let content = render(&model, 120, 30);
 
-        assert!(!content.contains("Row 00 left"));
-        assert!(content.contains("Row 15 left"));
+        assert!(!content.contains("Row 00 left"), "top rows scrolled away");
+        assert!(content.contains("Row 20 left"), "selection visible");
         assert!(
             content.contains("▲") && content.contains("▼"),
             "scrollbar rendered"
         );
+    }
+
+    #[test]
+    fn test_selection_visible_at_first_middle_and_last_for_two_heights() {
+        for height in [24u16, 50] {
+            let mut model = model_with_rows(40);
+            for selected in [0usize, 20, 39] {
+                model.duplicates_view.selected = selected;
+                let content = render(&model, 80, height);
+                assert!(
+                    content.contains(&format!("Row {selected:02} left")),
+                    "pair {selected} must be visible at height {height}:\n{content}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_taller_terminal_shows_more_rows_without_blank_space() {
+        let mut model = model_with_rows(40);
+        model.duplicates_view.selected = 39;
+        let short = render(&model, 80, 24);
+        let tall = render(&model, 80, 50);
+        let rows = |s: &str| s.matches(" left <-> ").count();
+        assert!(
+            rows(&tall) > rows(&short),
+            "the taller list fills the extra rows ({} vs {})",
+            rows(&tall),
+            rows(&short)
+        );
+        assert!(tall.contains("Row 39 left") && short.contains("Row 39 left"));
+    }
+
+    #[test]
+    fn test_tiny_terminal_keeps_selection_visible_without_panic() {
+        let mut model = model_with_rows(40);
+        model.duplicates_view.selected = 25;
+        let content = render(&model, 40, 12);
+        assert!(
+            content.contains("Row 25 left"),
+            "selection visible at 40x12:\n{content}"
+        );
+        // Degenerate sizes must not panic either
+        let _ = render(&model, 40, 3);
+        let _ = render(&model, 1, 1);
     }
 
     #[test]

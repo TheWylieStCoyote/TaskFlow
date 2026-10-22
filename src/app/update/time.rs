@@ -253,12 +253,11 @@ fn transition_pomodoro_phase(model: &mut Model) {
 
     // Update session
     if let Some(ref mut session) = model.pomodoro.session {
-        // Record stats when completing a work phase
+        // Record stats when completing a work phase: the minutes actually
+        // worked (phase wall time minus pauses), not the configured length.
         if session.phase == PomodoroPhase::Work {
-            model
-                .pomodoro
-                .stats
-                .record_cycle(model.pomodoro.config.work_duration_mins);
+            let worked_mins = session.elapsed_phase_minutes(chrono::Utc::now());
+            model.pomodoro.stats.record_cycle(worked_mins);
         }
 
         session.phase = next_phase;
@@ -501,6 +500,99 @@ mod tests {
 
     fn selected_task(model: &Model) -> crate::domain::TaskId {
         model.selected_task_id().unwrap()
+    }
+
+    #[test]
+    fn redo_of_a_timer_stop_leaves_no_active_entry() {
+        use crate::app::update::update;
+        use crate::app::{Message, SystemMessage};
+
+        let mut model = setup_model_with_task();
+        let task_id = selected_task(&model);
+
+        handle_time(&mut model, TimeMessage::StartTracking);
+        let entry_id = model.active_time_entry.expect("timer running");
+        model.time_entries.get_mut(&entry_id).unwrap().started_at -= chrono::Duration::minutes(30);
+        handle_time(&mut model, TimeMessage::StopTracking);
+        assert!(model.active_time_entry.is_none());
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.active_time_entry, Some(entry_id), "undo restarts it");
+        assert!(model.is_tracking_task(&task_id));
+
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.active_time_entry, None, "redo stops it again");
+        assert!(!model.is_tracking_task(&task_id));
+        assert_eq!(model.time_entries.len(), 1);
+        assert!(model.time_entries[&entry_id].ended_at.is_some());
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+        model.recompute_task_time(&task_id);
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+    }
+
+    #[test]
+    fn redo_of_a_timer_switch_leaves_only_the_new_entry_active() {
+        use crate::app::update::update;
+        use crate::app::{Message, SystemMessage};
+
+        let mut model = setup_model_with_task();
+        let first = selected_task(&model);
+        let other = Task::new("Other");
+        let other_id = other.id;
+        model.tasks.insert(other_id, other);
+
+        start_tracking_with_undo(&mut model, first);
+        let first_entry = model.active_time_entry.unwrap();
+        start_tracking_with_undo(&mut model, other_id);
+        let second_entry = model.active_time_entry.unwrap();
+        assert_ne!(first_entry, second_entry);
+
+        update(&mut model, Message::System(SystemMessage::Undo));
+        assert_eq!(model.active_time_entry, Some(first_entry));
+        assert_eq!(model.time_entries.len(), 1);
+
+        update(&mut model, Message::System(SystemMessage::Redo));
+        assert_eq!(model.active_time_entry, Some(second_entry));
+        assert!(model.time_entries[&first_entry].ended_at.is_some());
+        assert!(model.time_entries[&second_entry].ended_at.is_none());
+    }
+
+    #[test]
+    fn pomodoro_stats_record_minutes_actually_worked() {
+        let mut model = setup_model_with_task();
+        assert_eq!(model.pomodoro.config.work_duration_mins, 25);
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 4 });
+
+        // The work phase began 17 minutes ago and was paused for 2 of them.
+        {
+            let session = model.pomodoro.session.as_mut().unwrap();
+            session.phase_started_at = chrono::Utc::now() - chrono::Duration::minutes(17);
+            session.paused_duration_secs = 120;
+        }
+        handle_pomodoro(&mut model, PomodoroMessage::Skip);
+        assert_eq!(model.pomodoro.stats.total_cycles, 1);
+        assert_eq!(
+            model.pomodoro.stats.total_work_mins, 15,
+            "17 min elapsed minus 2 min paused, not the configured 25"
+        );
+
+        // A full phase that runs down on its own records its real length.
+        handle_pomodoro(&mut model, PomodoroMessage::Skip); // break -> work
+        {
+            let session = model.pomodoro.session.as_mut().unwrap();
+            session.phase_started_at = chrono::Utc::now() - chrono::Duration::minutes(25);
+            session.remaining_secs = 1;
+        }
+        handle_pomodoro(&mut model, PomodoroMessage::Tick);
+        assert_eq!(model.pomodoro.stats.total_cycles, 2);
+        assert_eq!(model.pomodoro.stats.total_work_mins, 40);
+
+        // Skipping a phase that only just started records a cycle of 0 min.
+        handle_pomodoro(&mut model, PomodoroMessage::Skip); // break -> work
+        handle_pomodoro(&mut model, PomodoroMessage::Skip); // work -> break
+        assert_eq!(model.pomodoro.stats.total_cycles, 3);
+        assert_eq!(model.pomodoro.stats.total_work_mins, 40);
     }
 
     #[test]

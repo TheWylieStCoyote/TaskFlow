@@ -294,15 +294,31 @@ impl PomodoroSession {
             return;
         }
 
-        // Calculate how much time has elapsed in this phase
-        let now = Utc::now();
-        let elapsed_since_phase_start = (now - self.phase_started_at).num_seconds().max(0) as u32;
-        let running_time = elapsed_since_phase_start.saturating_sub(self.paused_duration_secs);
-
+        // Calculate what remaining_secs should be from the time actually run
+        let running_time = self.elapsed_phase_secs(Utc::now());
         let phase_duration = self.phase_duration(config);
-
-        // Calculate what remaining_secs should be
         self.remaining_secs = phase_duration.saturating_sub(running_time);
+    }
+
+    /// Seconds actually spent in the current phase up to `now`: wall time
+    /// since the phase started minus time spent paused, including a pause
+    /// that is still in progress. Never negative.
+    #[must_use]
+    pub fn elapsed_phase_secs(&self, now: DateTime<Utc>) -> u32 {
+        let elapsed = (now - self.phase_started_at).num_seconds().max(0) as u32;
+        let mut paused = self.paused_duration_secs;
+        if let Some(paused_at) = self.paused_at {
+            paused += (now - paused_at).num_seconds().max(0) as u32;
+        }
+        elapsed.saturating_sub(paused)
+    }
+
+    /// Minutes actually spent in the current phase up to `now`, rounded to
+    /// the nearest minute. This is what a completed work cycle records in
+    /// [`PomodoroStats`], rather than the configured phase length.
+    #[must_use]
+    pub fn elapsed_phase_minutes(&self, now: DateTime<Utc>) -> u32 {
+        (self.elapsed_phase_secs(now) + 30) / 60
     }
 
     /// Resets phase timing when transitioning to a new phase.
@@ -335,6 +351,10 @@ impl PomodoroStats {
     }
 
     /// Records a completed work cycle.
+    ///
+    /// `work_duration_mins` is the time actually worked in the cycle (see
+    /// [`PomodoroSession::elapsed_phase_minutes`]), not the configured length:
+    /// a skipped or paused phase counts only the minutes that really ran.
     pub fn record_cycle(&mut self, work_duration_mins: u32) {
         self.total_work_mins += work_duration_mins;
         self.total_cycles += 1;
@@ -388,6 +408,43 @@ impl PomodoroStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn elapsed_phase_secs_subtracts_pauses() {
+        use chrono::TimeZone;
+
+        let config = PomodoroConfig::default();
+        let mut session = PomodoroSession::new(TaskId::new(), &config, 4);
+        let start = Utc.with_ymd_and_hms(2026, 10, 22, 9, 0, 0).unwrap();
+        session.phase_started_at = start;
+        session.paused_duration_secs = 60;
+
+        let now = start + chrono::Duration::minutes(10);
+        assert_eq!(session.elapsed_phase_secs(now), 540);
+        assert_eq!(session.elapsed_phase_minutes(now), 9);
+
+        // A pause still in progress is subtracted too.
+        session.paused = true;
+        session.paused_at = Some(now - chrono::Duration::minutes(2));
+        assert_eq!(session.elapsed_phase_secs(now), 420);
+        assert_eq!(session.elapsed_phase_minutes(now), 7);
+
+        // Rounds to the nearest minute and never underflows.
+        session.paused_at = None;
+        session.paused_duration_secs = 0;
+        assert_eq!(
+            session.elapsed_phase_minutes(start + chrono::Duration::seconds(1529)),
+            25
+        );
+        assert_eq!(
+            session.elapsed_phase_minutes(start + chrono::Duration::seconds(1530)),
+            26
+        );
+        assert_eq!(
+            session.elapsed_phase_secs(start - chrono::Duration::seconds(5)),
+            0
+        );
+    }
 
     #[test]
     fn test_pomodoro_config_defaults() {

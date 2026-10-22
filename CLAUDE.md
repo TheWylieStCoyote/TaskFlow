@@ -43,4 +43,5 @@ TaskFlow is a TUI project management application built with Rust using the Elm A
 - `f` / `F` - Focus mode / Full-screen focus
 - `Alt+d/w/e` - Daily/Weekly/Evening review
 - `?` - Show help
-- `q` or Esc - Quit
+- `q` - Quit
+- `Esc` - Cancel a dialog or prompt, close a popup, leave focus mode, or return focus to the sidebar (never quits)

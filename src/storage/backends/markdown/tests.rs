@@ -685,3 +685,130 @@ fn test_markdown_work_log_delete_not_found() {
     let result = backend.delete_work_log(&WorkLogEntryId::new());
     assert!(result.is_err());
 }
+
+// ============================================================================
+// Auxiliary YAML files: corrupt, missing, valid
+// ============================================================================
+
+mod aux_yaml_files {
+    use super::*;
+    use crate::domain::{Goal, KeyResult, PomodoroConfig};
+    use crate::storage::{GoalRepository, KeyResultRepository, StorageError};
+
+    /// Every YAML file the backend reads next to `tasks/` and `projects/`.
+    const AUX_FILES: [&str; 8] = [
+        "tags.yaml",
+        "time_entries.yaml",
+        "work_logs.yaml",
+        "habits.yaml",
+        "goals.yaml",
+        "key_results.yaml",
+        "saved_filters.yaml",
+        "pomodoro.yaml",
+    ];
+
+    #[test]
+    fn corrupt_aux_file_blocks_initialize_and_is_left_untouched() {
+        for name in AUX_FILES {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join(name);
+            let garbage = "- this: [is not\n  valid: yaml: {{{\n";
+            fs::write(&path, garbage).unwrap();
+
+            let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+            let err = backend.initialize().unwrap_err();
+            assert!(
+                matches!(err, StorageError::CorruptFile { .. }),
+                "{name}: {err:?}"
+            );
+            let message = err.to_string();
+            assert!(message.contains(name), "{name}: {message}");
+            assert!(message.contains("left untouched"), "{name}: {message}");
+
+            // Nothing was written over the file the user has to repair.
+            assert_eq!(fs::read_to_string(&path).unwrap(), garbage, "{name}");
+        }
+    }
+
+    #[test]
+    fn aux_file_of_the_wrong_shape_is_corrupt_too() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("goals.yaml");
+        let content = "- not_a_goal: true\n";
+        fs::write(&path, content).unwrap();
+
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        let err = backend.initialize().unwrap_err();
+        assert!(matches!(err, StorageError::CorruptFile { .. }), "{err:?}");
+        assert!(err.to_string().contains("goals.yaml"), "{err}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), content);
+    }
+
+    #[test]
+    fn missing_or_blank_aux_files_load_as_empty() {
+        let dir = tempdir().unwrap();
+        // Some files missing, some blank: both mean "nothing stored yet".
+        fs::write(dir.path().join("goals.yaml"), "").unwrap();
+        fs::write(dir.path().join("time_entries.yaml"), "\n  \n").unwrap();
+        fs::write(dir.path().join("pomodoro.yaml"), "").unwrap();
+
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        backend.initialize().unwrap();
+
+        assert!(backend.list_goals().unwrap().is_empty());
+        assert!(backend.list_tags().unwrap().is_empty());
+        let exported = backend.export_all().unwrap();
+        assert!(exported.time_entries.is_empty());
+        assert!(exported.work_logs.is_empty());
+        assert!(exported.habits.is_empty());
+        assert!(exported.key_results.is_empty());
+        assert!(exported.saved_filters.is_empty());
+        assert!(exported.pomodoro_config.is_none());
+        assert!(exported.pomodoro_session.is_none());
+    }
+
+    #[test]
+    fn valid_aux_files_round_trip() {
+        let dir = tempdir().unwrap();
+        let task = Task::new("tracked");
+        let goal = Goal::new("Ship it").with_description("the second release");
+        let kr = KeyResult::new(goal.id, "1000 users");
+        let config = PomodoroConfig {
+            work_duration_mins: 50,
+            short_break_mins: 10,
+            long_break_mins: 30,
+            cycles_before_long_break: 2,
+        };
+
+        {
+            let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+            backend.initialize().unwrap();
+            backend.create_task(&task).unwrap();
+            backend.create_goal(&goal).unwrap();
+            backend.create_key_result(&kr).unwrap();
+            backend.save_tag(&Tag::new("urgent")).unwrap();
+            backend
+                .create_time_entry(&TimeEntry::start(task.id))
+                .unwrap();
+            backend.set_pomodoro_config(&config).unwrap();
+            backend.flush().unwrap();
+        }
+        for name in AUX_FILES {
+            assert!(dir.path().join(name).exists(), "{name} was not written");
+        }
+
+        let mut backend = MarkdownBackend::new(dir.path()).unwrap();
+        backend.initialize().unwrap();
+
+        let goals = backend.list_goals().unwrap();
+        assert_eq!(goals.len(), 1);
+        assert_eq!(goals[0].id, goal.id);
+        assert_eq!(goals[0].description.as_deref(), Some("the second release"));
+        let krs = backend.get_key_results_for_goal(&goal.id).unwrap();
+        assert_eq!(krs.len(), 1);
+        assert_eq!(krs[0].id, kr.id);
+        assert_eq!(backend.list_tags().unwrap()[0].name, "urgent");
+        assert_eq!(backend.get_entries_for_task(&task.id).unwrap().len(), 1);
+        assert_eq!(backend.export_all().unwrap().pomodoro_config, Some(config));
+    }
+}

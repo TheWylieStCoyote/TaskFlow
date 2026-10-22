@@ -2,7 +2,7 @@
 
 use crate::app::{parse_date, parse_quick_add, Model, UndoAction};
 use crate::domain::duplicate_detector::{find_similar_task, DEFAULT_SIMILARITY_THRESHOLD};
-use crate::domain::TaskId;
+use crate::domain::{Task, TaskId};
 use crate::ui::{InputMode, InputTarget};
 
 use crate::app::update::system::handle_execute_import;
@@ -492,10 +492,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 let count = tasks_to_update.len();
                 for task_id in tasks_to_update {
-                    if let Some(task) = model.tasks.get_mut(&task_id) {
-                        task.clear_snooze();
-                    }
-                    model.sync_task_by_id(&task_id);
+                    model.modify_task_with_undo(&task_id, Task::clear_snooze);
                 }
                 model.multi_select.selected.clear();
                 model.multi_select.mode = false;
@@ -505,10 +502,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 let tasks_to_update: Vec<_> = model.multi_select.selected.iter().copied().collect();
                 let count = tasks_to_update.len();
                 for task_id in tasks_to_update {
-                    if let Some(task) = model.tasks.get_mut(&task_id) {
-                        task.snooze_until_date(date);
-                    }
-                    model.sync_task_by_id(&task_id);
+                    model.modify_task_with_undo(&task_id, |task| task.snooze_until_date(date));
                 }
                 model.multi_select.selected.clear();
                 model.multi_select.mode = false;
@@ -662,6 +656,7 @@ pub fn handle_submit_input(model: &mut Model) {
                     model.filtering.sort.clone(),
                 );
                 let filter_id = saved_filter.id.clone();
+                model.sync_saved_filter(&saved_filter);
                 model.saved_filters.insert(filter_id.clone(), saved_filter);
                 model.active_saved_filter = Some(filter_id);
                 model.storage.dirty = true;
@@ -671,18 +666,12 @@ pub fn handle_submit_input(model: &mut Model) {
         InputTarget::SnoozeTask(task_id) => {
             let task_id = *task_id;
             if input.is_empty() {
-                // Clear snooze
-                if let Some(task) = model.tasks.get_mut(&task_id) {
-                    task.clear_snooze();
-                }
-                model.sync_task_by_id(&task_id);
+                // Clear snooze (recorded for undo like any other task edit)
+                model.modify_task_with_undo(&task_id, Task::clear_snooze);
                 model.alerts.status_message = Some("Snooze cleared".to_string());
             } else if let Some(date) = parse_date(&input) {
-                // Set snooze date
-                if let Some(task) = model.tasks.get_mut(&task_id) {
-                    task.snooze_until_date(date);
-                }
-                model.sync_task_by_id(&task_id);
+                // Set snooze date (recorded for undo like any other task edit)
+                model.modify_task_with_undo(&task_id, |task| task.snooze_until_date(date));
                 model.alerts.status_message =
                     Some(format!("Snoozed until {}", date.format("%Y-%m-%d")));
             } else {

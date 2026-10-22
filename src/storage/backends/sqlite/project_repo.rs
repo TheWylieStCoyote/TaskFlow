@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::domain::{Project, ProjectId};
 use crate::storage::{ProjectRepository, StorageError, StorageResult};
 
-use super::rows::project_from_row;
+use super::rows::{collect_rows, project_from_row};
 use super::SqliteBackend;
 
 impl ProjectRepository for SqliteBackend {
@@ -91,20 +91,17 @@ impl ProjectRepository for SqliteBackend {
     fn list_projects(&self) -> StorageResult<Vec<Project>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM projects")?;
-        let projects = stmt
-            .query_map([], project_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(projects)
+        collect_rows(&mut stmt, [], "projects", project_from_row)
     }
 
     fn get_subprojects(&self, parent_id: &ProjectId) -> StorageResult<Vec<Project>> {
         let conn = self.inner.conn()?;
         let mut stmt = conn.prepare("SELECT * FROM projects WHERE parent_id = ?1")?;
-        let projects = stmt
-            .query_map(params![parent_id.0.to_string()], project_from_row)?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(projects)
+        collect_rows(
+            &mut stmt,
+            params![parent_id.0.to_string()],
+            "projects",
+            project_from_row,
+        )
     }
 }

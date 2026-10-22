@@ -166,7 +166,20 @@ pub fn is_branch_merged(repo_path: &Path, branch: &str, base: &str) -> Result<bo
 
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
-        .any(|line| line.trim().trim_start_matches("* ") == branch))
+        .any(|line| branch_name_from_listing(line) == branch))
+}
+
+/// The branch name from one line of `git branch` output.
+///
+/// `git branch` marks the current branch with `* ` and a branch checked out
+/// in another worktree with `+ `; both markers (and surrounding whitespace)
+/// are stripped.
+fn branch_name_from_listing(line: &str) -> &str {
+    let line = line.trim();
+    line.strip_prefix("* ")
+        .or_else(|| line.strip_prefix("+ "))
+        .unwrap_or(line)
+        .trim()
 }
 
 /// Get the default base branch (main or master).
@@ -431,6 +444,104 @@ mod tests {
             .unwrap();
 
         assert!(!is_branch_merged(repo.path(), "feature/unmerged", "main").unwrap());
+    }
+
+    #[test]
+    fn test_branch_name_from_listing_strips_markers() {
+        assert_eq!(branch_name_from_listing("* main"), "main");
+        assert_eq!(branch_name_from_listing("+ feature/wt"), "feature/wt");
+        assert_eq!(branch_name_from_listing("  feature/plain"), "feature/plain");
+        assert_eq!(branch_name_from_listing("  + feature/wt  "), "feature/wt");
+        assert_eq!(branch_name_from_listing(""), "");
+    }
+
+    #[test]
+    fn test_is_branch_merged_for_branch_checked_out_in_another_worktree() {
+        let git_available = Command::new("git")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !git_available {
+            eprintln!("git not available; skipping worktree test");
+            return;
+        }
+
+        let repo = setup_test_repo();
+
+        // Create a feature branch with a commit and merge it into main.
+        Command::new("git")
+            .args(["checkout", "-b", "feature/worktree"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        std::fs::write(repo.path().join("wt.txt"), "worktree").unwrap();
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "Worktree commit"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["checkout", "main"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["merge", "feature/worktree"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+
+        // Check the merged branch out in a second worktree, so that
+        // `git branch --merged` lists it with the `+ ` marker.
+        let worktree_dir = TempDir::new().unwrap();
+        let worktree_path = worktree_dir.path().join("wt");
+        let added = Command::new("git")
+            .args([
+                "worktree",
+                "add",
+                &worktree_path.to_string_lossy(),
+                "feature/worktree",
+            ])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        assert!(
+            added.status.success(),
+            "git worktree add failed: {}",
+            String::from_utf8_lossy(&added.stderr)
+        );
+        let listing = Command::new("git")
+            .args(["branch", "--merged", "main"])
+            .current_dir(repo.path())
+            .output()
+            .unwrap();
+        let listing = String::from_utf8_lossy(&listing.stdout);
+        assert!(
+            listing.lines().any(|l| l.starts_with("+ feature/worktree")),
+            "expected the worktree marker in:\n{listing}"
+        );
+
+        assert!(
+            is_branch_merged(repo.path(), "feature/worktree", "main").unwrap(),
+            "a merged branch checked out elsewhere is still merged"
+        );
+        assert!(!is_branch_merged(repo.path(), "feature/absent", "main").unwrap());
+
+        // Detach the worktree before the temp directories go away.
+        let _ = Command::new("git")
+            .args([
+                "worktree",
+                "remove",
+                "--force",
+                &worktree_path.to_string_lossy(),
+            ])
+            .current_dir(repo.path())
+            .output();
     }
 
     #[test]

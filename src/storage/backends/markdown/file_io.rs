@@ -1,14 +1,38 @@
 //! File I/O operations for markdown backend.
 //!
 //! Handles reading, writing, and parsing of markdown files with YAML frontmatter.
+//!
+//! Auxiliary collections (tags, time entries, goals, ...) live in one YAML file
+//! each. Loading them is strict: a file that exists but does not parse makes
+//! `initialize()` fail with [`StorageError::CorruptFile`] instead of being
+//! read as empty, because the next `flush()` would otherwise write that empty
+//! collection over the only copy of the data.
 
 use crate::domain::{Project, ProjectId, Task, TaskId};
 use crate::storage::atomic_write;
 use crate::storage::{StorageError, StorageResult};
+use serde::de::DeserializeOwned;
 use std::fs;
 use std::path::Path;
+use tracing::warn;
 
 use super::MarkdownBackend;
+
+/// Load one auxiliary YAML file.
+///
+/// A missing or blank file is `T::default()`. A file with content that does
+/// not deserialize is a [`StorageError::CorruptFile`] naming the path and the
+/// parse error; the file itself is not touched.
+fn load_yaml_file<T: DeserializeOwned + Default>(path: &Path) -> StorageResult<T> {
+    if !path.exists() {
+        return Ok(T::default());
+    }
+    let content = fs::read_to_string(path).map_err(|e| StorageError::io(path, e))?;
+    if content.trim().is_empty() {
+        return Ok(T::default());
+    }
+    serde_yaml::from_str(&content).map_err(|e| StorageError::corrupt_file(path, e.to_string()))
+}
 
 impl MarkdownBackend {
     /// Ensure the required directories exist.
@@ -35,14 +59,21 @@ impl MarkdownBackend {
             let path = entry.path();
 
             if path.extension().is_some_and(|e| e == "md") {
-                if let Ok(task) = self.parse_task_file(&path) {
-                    // Track file modification time
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        if let Ok(mtime) = metadata.modified() {
-                            self.task_mtimes.insert(task.id, mtime);
+                match self.parse_task_file(&path) {
+                    Ok(task) => {
+                        // Track file modification time
+                        if let Ok(metadata) = fs::metadata(&path) {
+                            if let Ok(mtime) = metadata.modified() {
+                                self.task_mtimes.insert(task.id, mtime);
+                            }
                         }
+                        self.tasks_cache.insert(task.id, task);
                     }
-                    self.tasks_cache.insert(task.id, task);
+                    Err(e) => warn!(
+                        path = %path.display(),
+                        error = %e,
+                        "Skipping unparsable task file"
+                    ),
                 }
             }
         }
@@ -66,14 +97,21 @@ impl MarkdownBackend {
             let path = entry.path();
 
             if path.extension().is_some_and(|e| e == "md") {
-                if let Ok(project) = self.parse_project_file(&path) {
-                    // Track file modification time
-                    if let Ok(metadata) = fs::metadata(&path) {
-                        if let Ok(mtime) = metadata.modified() {
-                            self.project_mtimes.insert(project.id, mtime);
+                match self.parse_project_file(&path) {
+                    Ok(project) => {
+                        // Track file modification time
+                        if let Ok(metadata) = fs::metadata(&path) {
+                            if let Ok(mtime) = metadata.modified() {
+                                self.project_mtimes.insert(project.id, mtime);
+                            }
                         }
+                        self.projects_cache.insert(project.id, project);
                     }
-                    self.projects_cache.insert(project.id, project);
+                    Err(e) => warn!(
+                        path = %path.display(),
+                        error = %e,
+                        "Skipping unparsable project file"
+                    ),
                 }
             }
         }
@@ -83,23 +121,13 @@ impl MarkdownBackend {
 
     /// Load tags from tags.yaml.
     pub(crate) fn load_tags(&mut self) -> StorageResult<()> {
-        let tags_file = self.base_path.join("tags.yaml");
-        if tags_file.exists() {
-            let content =
-                fs::read_to_string(&tags_file).map_err(|e| StorageError::io(&tags_file, e))?;
-            self.tags = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.tags = load_yaml_file(&self.base_path.join("tags.yaml"))?;
         Ok(())
     }
 
     /// Load time entries from time_entries.yaml.
     pub(crate) fn load_time_entries(&mut self) -> StorageResult<()> {
-        let entries_file = self.base_path.join("time_entries.yaml");
-        if entries_file.exists() {
-            let content = fs::read_to_string(&entries_file)
-                .map_err(|e| StorageError::io(&entries_file, e))?;
-            self.time_entries = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.time_entries = load_yaml_file(&self.base_path.join("time_entries.yaml"))?;
         Ok(())
     }
 
@@ -123,12 +151,7 @@ impl MarkdownBackend {
 
     /// Load work logs from work_logs.yaml.
     pub(crate) fn load_work_logs(&mut self) -> StorageResult<()> {
-        let work_logs_file = self.base_path.join("work_logs.yaml");
-        if work_logs_file.exists() {
-            let content = fs::read_to_string(&work_logs_file)
-                .map_err(|e| StorageError::io(&work_logs_file, e))?;
-            self.work_logs = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.work_logs = load_yaml_file(&self.base_path.join("work_logs.yaml"))?;
         Ok(())
     }
 
@@ -143,12 +166,7 @@ impl MarkdownBackend {
 
     /// Load habits from habits.yaml.
     pub(crate) fn load_habits(&mut self) -> StorageResult<()> {
-        let habits_file = self.base_path.join("habits.yaml");
-        if habits_file.exists() {
-            let content =
-                fs::read_to_string(&habits_file).map_err(|e| StorageError::io(&habits_file, e))?;
-            self.habits = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.habits = load_yaml_file(&self.base_path.join("habits.yaml"))?;
         Ok(())
     }
 
@@ -163,12 +181,7 @@ impl MarkdownBackend {
 
     /// Load goals from goals.yaml.
     pub(crate) fn load_goals(&mut self) -> StorageResult<()> {
-        let goals_file = self.base_path.join("goals.yaml");
-        if goals_file.exists() {
-            let content =
-                fs::read_to_string(&goals_file).map_err(|e| StorageError::io(&goals_file, e))?;
-            self.goals = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.goals = load_yaml_file(&self.base_path.join("goals.yaml"))?;
         Ok(())
     }
 
@@ -183,12 +196,7 @@ impl MarkdownBackend {
 
     /// Load key results from key_results.yaml.
     pub(crate) fn load_key_results(&mut self) -> StorageResult<()> {
-        let key_results_file = self.base_path.join("key_results.yaml");
-        if key_results_file.exists() {
-            let content = fs::read_to_string(&key_results_file)
-                .map_err(|e| StorageError::io(&key_results_file, e))?;
-            self.key_results = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.key_results = load_yaml_file(&self.base_path.join("key_results.yaml"))?;
         Ok(())
     }
 
@@ -203,12 +211,7 @@ impl MarkdownBackend {
 
     /// Load pomodoro state from pomodoro.yaml.
     pub(crate) fn load_pomodoro_state(&mut self) -> StorageResult<()> {
-        let pomodoro_file = self.base_path.join("pomodoro.yaml");
-        if pomodoro_file.exists() {
-            let content = fs::read_to_string(&pomodoro_file)
-                .map_err(|e| StorageError::io(&pomodoro_file, e))?;
-            self.pomodoro_state = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.pomodoro_state = load_yaml_file(&self.base_path.join("pomodoro.yaml"))?;
         Ok(())
     }
 
@@ -223,12 +226,7 @@ impl MarkdownBackend {
 
     /// Load saved filters from saved_filters.yaml.
     pub(crate) fn load_saved_filters(&mut self) -> StorageResult<()> {
-        let filters_file = self.base_path.join("saved_filters.yaml");
-        if filters_file.exists() {
-            let content = fs::read_to_string(&filters_file)
-                .map_err(|e| StorageError::io(&filters_file, e))?;
-            self.saved_filters = serde_yaml::from_str(&content).unwrap_or_default();
-        }
+        self.saved_filters = load_yaml_file(&self.base_path.join("saved_filters.yaml"))?;
         Ok(())
     }
 

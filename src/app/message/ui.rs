@@ -45,6 +45,10 @@ pub enum UiMessage {
     /// Advance to next task in focus queue
     AdvanceFocusQueue,
 
+    // Reports view
+    /// Cycle the Reports → Time panel window (7 → 30 → 90 days)
+    ReportsCycleTimeWindow,
+
     // Input mode - starting various edit operations
     /// Enter input mode to create a new task
     StartCreateTask,

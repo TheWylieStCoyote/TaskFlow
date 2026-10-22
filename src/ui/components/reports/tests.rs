@@ -223,3 +223,241 @@ fn test_reports_view_small_area() {
     // Very small area should not panic
     let _ = render_widget(view, 10, 5);
 }
+
+// ==================== Time Panel ====================
+
+mod time_panel {
+    use chrono::{Duration, Local, NaiveDate, TimeZone, Utc};
+
+    use super::*;
+    use crate::app::TimeWindow;
+    use crate::domain::{today, Project, Task, TaskId, TimeEntry};
+
+    /// A finished entry that started at `hour`:00 local time on `date`.
+    fn entry_on(task_id: TaskId, date: NaiveDate, hour: u32, minutes: u32) -> TimeEntry {
+        let naive = date.and_hms_opt(hour, 0, 0).expect("valid time");
+        let started = Local
+            .from_local_datetime(&naive)
+            .earliest()
+            .expect("valid local time")
+            .with_timezone(&Utc);
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = started;
+        entry.ended_at = Some(started + Duration::minutes(i64::from(minutes)));
+        entry.duration_minutes = Some(minutes);
+        entry
+    }
+
+    /// Two tasks (one in a project), three entries: 45m today at noon,
+    /// 2h three days ago at 09:00, 30m twenty days ago at 15:00.
+    fn time_model() -> (Model, TaskId) {
+        let mut model = Model::new();
+        let project = Project::new("Alpha Project");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+
+        let mut deep = Task::new("Deep work session");
+        deep.project_id = Some(project_id);
+        let deep_id = deep.id;
+        model.tasks.insert(deep_id, deep);
+        let misc = Task::new("Inbox triage");
+        let misc_id = misc.id;
+        model.tasks.insert(misc_id, misc);
+
+        let today = today();
+        model.add_time_entry(entry_on(deep_id, today, 12, 45));
+        model.add_time_entry(entry_on(deep_id, today - Duration::days(3), 9, 120));
+        model.add_time_entry(entry_on(misc_id, today - Duration::days(20), 15, 30));
+        (model, deep_id)
+    }
+
+    fn render_time(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        let view = ReportsView::new(model, ReportPanel::Time, &theme);
+        buffer_content(&render_widget(view, width, height))
+    }
+
+    #[test]
+    fn header_shows_window_and_hint_for_every_window() {
+        let (mut model, _) = time_model();
+        for (window, label) in [
+            (TimeWindow::Days7, "Time (last 7 days)"),
+            (TimeWindow::Days30, "Time (last 30 days)"),
+            (TimeWindow::Days90, "Time (last 90 days)"),
+        ] {
+            model.reports_time_window = window;
+            let content = render_time(&model, 100, 40);
+            assert!(content.contains(label), "missing {label:?} in:\n{content}");
+            assert!(
+                content.contains("[w] window"),
+                "missing hint in:\n{content}"
+            );
+        }
+    }
+
+    #[test]
+    fn window_cycles_change_the_rendered_title() {
+        let (mut model, _) = time_model();
+        assert!(render_time(&model, 100, 40).contains("last 30 days"));
+        model.reports_time_window = model.reports_time_window.next();
+        assert!(render_time(&model, 100, 40).contains("last 90 days"));
+        model.reports_time_window = model.reports_time_window.next();
+        assert!(render_time(&model, 100, 40).contains("last 7 days"));
+    }
+
+    #[test]
+    fn all_sections_render_with_data_in_30_day_window() {
+        let (model, _) = time_model();
+        let content = render_time(&model, 100, 40);
+
+        // Stat boxes: 45 + 120 + 30 minutes in the window, 45 today, 3 active days
+        for expected in [
+            "Total",
+            "3h 15m",
+            "Today",
+            "45m",
+            "This Week",
+            "Avg/active day",
+            "1h 5m",
+        ] {
+            assert!(
+                content.contains(expected),
+                "missing {expected:?} in:\n{content}"
+            );
+        }
+        assert!(content.contains("Tracking"));
+        assert!(content.contains("idle"), "no timer is running");
+
+        // By Project: name or "No project", hours with one decimal and share
+        assert!(content.contains("By Project"));
+        assert!(content.contains("Alpha Project"));
+        assert!(content.contains("No project"));
+        assert!(content.contains("0.5h  15%"), "30m of 195m:\n{content}");
+        assert!(content.contains("85%"), "165m of 195m:\n{content}");
+
+        // Daily sparkline names the busiest day
+        let busiest = (today() - Duration::days(3)).format("%b %d").to_string();
+        assert!(content.contains("Daily"));
+        assert!(
+            content.contains(&format!("max 2h on {busiest}")),
+            "missing sparkline caption in:\n{content}"
+        );
+
+        // By Hour names the peak local hour; Top Tasks lists both tasks
+        assert!(content.contains("By Hour (peak 09:00)"), "{content}");
+        assert!(content.contains("Top Tasks"));
+        assert!(content.contains("Deep work session"));
+        assert!(content.contains("2h 45m"), "deep work total");
+        assert!(content.contains("Inbox triage"));
+
+        // Tall enough for the weekday chart too
+        assert!(content.contains("Minutes by Day of Week"));
+        assert!(!content.contains("No time tracked"));
+    }
+
+    #[test]
+    fn seven_day_window_shows_a_bar_per_day_with_weekday_labels() {
+        let (mut model, _) = time_model();
+        model.reports_time_window = TimeWindow::Days7;
+        let content = render_time(&model, 100, 40);
+
+        let today = today();
+        assert!(content.contains(&today.format("%a %d").to_string()));
+        assert!(content.contains(&(today - Duration::days(3)).format("%a %d").to_string()));
+        assert!(
+            !content.contains("max "),
+            "7-day view uses bars, not a sparkline"
+        );
+        // Window total excludes the 20-day-old entry
+        assert!(content.contains("2h 45m"), "{content}");
+        // The 20-day-old "Inbox triage" entry is outside the window
+        assert!(!content.contains("Inbox triage"), "{content}");
+    }
+
+    #[test]
+    fn long_windows_show_sparkline_with_first_and_last_dates() {
+        let (mut model, _) = time_model();
+        model.reports_time_window = TimeWindow::Days90;
+        let content = render_time(&model, 100, 40);
+
+        let today = today();
+        assert!(content.contains(&(today - Duration::days(90)).format("%b %d").to_string()));
+        assert!(content.contains(&today.format("%b %d").to_string()));
+        assert!(content.contains("max 2h on "));
+        assert!(
+            content.contains("Inbox triage"),
+            "20-day-old entry is inside 90 days"
+        );
+    }
+
+    #[test]
+    fn empty_model_shows_placeholders_without_panicking() {
+        let model = Model::new();
+        let content = render_time(&model, 100, 40);
+
+        assert!(content.contains("Time (last 30 days)"));
+        assert!(content.contains("No time tracked in this window"));
+        assert!(content.contains("idle"));
+        assert!(content.contains("By Hour "), "{content}");
+        assert!(!content.contains("peak"), "no peak hour without data");
+        assert!(content.contains("Top Tasks"));
+        assert!(content.contains("Daily"));
+        // Minutes by Day of Week still renders its (all-zero) bars
+        assert!(content.contains("Minutes by Day of Week"));
+    }
+
+    #[test]
+    fn tracking_box_shows_running_task_and_clock() {
+        let (mut model, deep_id) = time_model();
+        model.start_time_tracking(deep_id);
+        let content = render_time(&model, 100, 40);
+
+        assert!(!content.contains("idle"));
+        assert!(content.contains("00:0"), "live HH:MM:SS clock:\n{content}");
+        assert!(
+            content.contains("Deep work"),
+            "running task title:\n{content}"
+        );
+    }
+
+    #[test]
+    fn uses_cached_report_when_populated() {
+        let (mut model, _) = time_model();
+        model.ensure_report_cache_populated();
+        for window in [TimeWindow::Days7, TimeWindow::Days30, TimeWindow::Days90] {
+            model.reports_time_window = window;
+            assert!(model.report_cache.report_for_window(window).is_some());
+            let content = render_time(&model, 100, 40);
+            assert!(content.contains("Alpha Project"), "{window:?}:\n{content}");
+            assert!(content.contains("45m"), "today's entry in {window:?}");
+        }
+    }
+
+    #[test]
+    fn degrades_gracefully_at_small_sizes() {
+        let (mut model, deep_id) = time_model();
+        model.start_time_tracking(deep_id);
+
+        // 80x24: stat boxes, projects/daily and hour/tasks fit; weekday chart is dropped
+        let content = render_time(&model, 80, 24);
+        assert!(content.contains("By Project"), "{content}");
+        assert!(content.contains("Daily"));
+        assert!(content.contains("By Hour"));
+        assert!(content.contains("Top Tasks"));
+        assert!(!content.contains("Day of Week"), "{content}");
+
+        // 40x12: only the header and a compact text stats block fit
+        let content = render_time(&model, 40, 12);
+        assert!(content.contains("Time (last"), "{content}");
+        assert!(content.contains("Total"), "{content}");
+        assert!(!content.contains("By Project"));
+
+        // Nothing panics at any size for any window
+        for window in [TimeWindow::Days7, TimeWindow::Days30, TimeWindow::Days90] {
+            model.reports_time_window = window;
+            for (w, h) in [(80, 24), (40, 12), (30, 8), (10, 5), (3, 3), (120, 60)] {
+                let _ = render_time(&model, w, h);
+            }
+        }
+    }
+}

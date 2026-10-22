@@ -246,6 +246,7 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
         KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
+        KeyCode::Char('w') => Some(Message::Ui(UiMessage::ReportsCycleTimeWindow)),
         _ => None,
     }
 }
@@ -766,6 +767,10 @@ mod tests {
         assert!(matches!(
             handle_reports_view(key(KeyCode::BackTab)),
             Some(Message::Navigation(NavigationMessage::ReportsPrevPanel))
+        ));
+        assert!(matches!(
+            handle_reports_view(ch('w')),
+            Some(Message::Ui(UiMessage::ReportsCycleTimeWindow))
         ));
         assert!(handle_reports_view(ch('j')).is_none());
     }

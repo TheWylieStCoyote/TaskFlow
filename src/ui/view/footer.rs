@@ -18,7 +18,7 @@
 //! When no alerts are active, the footer displays (left to right):
 //!
 //! ```text
-//! N tasks (M completed) | [MULTI-SELECT: X] | K overdue | L due today | 🍅 MM:SS [C/G] | hint | mode | ? help
+//! N tasks (M completed) | [MULTI-SELECT: X] | K overdue | L due today | 🍅 MM:SS [C/G] | ⏱ HH:MM:SS title | hint | mode | ? help
 //! ```
 //!
 //! | Component | Condition | Color |
@@ -28,6 +28,7 @@
 //! | Overdue count | > 0 | Danger, bold |
 //! | Due today count | > 0 | Warning, bold |
 //! | Pomodoro timer | Active session | Accent (work) / Success (break) |
+//! | Task timer | `model.active_time_entry()` is `Some` | Success, bold |
 //! | View hint | View-specific | Accent |
 //! | Show mode | Always | Muted |
 //! | Help | Always | Muted |
@@ -51,6 +52,11 @@ use ratatui::{
 
 use crate::app::{Model, ViewId};
 use crate::config::Theme;
+use crate::domain::format_hms;
+use crate::domain::text::truncate_chars;
+
+/// Longest task title shown next to the live timer in the footer.
+const TIMER_TITLE_CHARS: usize = 24;
 
 /// Renders the footer status bar.
 ///
@@ -184,6 +190,24 @@ pub(super) fn render_footer(model: &Model, frame: &mut Frame<'_>, area: Rect, th
         ));
     }
 
+    // Add live task timer if one is running (may sit next to the Pomodoro readout)
+    if let Some((title, secs)) = model.active_tracking() {
+        spans.push(Span::styled(
+            " | ",
+            Style::default().fg(theme.colors.muted.to_color()),
+        ));
+        spans.push(Span::styled(
+            format!(
+                "⏱ {} {}",
+                format_hms(secs),
+                truncate_chars(&title, TIMER_TITLE_CHARS, "…")
+            ),
+            Style::default()
+                .fg(theme.colors.success.to_color())
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+
     // Add view-specific navigation hints
     if let Some(hint) = get_view_hint(model) {
         spans.push(Span::styled(
@@ -246,5 +270,85 @@ pub(super) fn get_view_hint(model: &Model) -> Option<&'static str> {
         ViewId::Duplicates => Some("j/k: navigate | D: dismiss | M: merge"),
         ViewId::Heatmap | ViewId::Forecast | ViewId::Burndown => None, // View-only
         _ => None, // Task list and others use default controls
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::{backend::TestBackend, Terminal};
+
+    use super::render_footer;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::{PomodoroConfig, PomodoroSession, Task};
+
+    fn render(model: &Model, width: u16) -> String {
+        let theme = Theme::default();
+        let mut terminal = Terminal::new(TestBackend::new(width, 1)).expect("terminal");
+        terminal
+            .draw(|frame| render_footer(model, frame, frame.area(), &theme))
+            .expect("draw");
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.width)
+            .map(|x| {
+                buffer
+                    .cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect()
+    }
+
+    fn model_with_task(title: &str) -> (Model, crate::domain::TaskId) {
+        let mut model = Model::new();
+        let task = Task::new(title);
+        let id = task.id;
+        model.tasks.insert(id, task);
+        (model, id)
+    }
+
+    #[test]
+    fn no_timer_means_no_stopwatch() {
+        let (model, _) = model_with_task("Quiet task");
+        let content = render(&model, 120);
+        assert!(!content.contains('⏱'), "{content}");
+        assert!(content.contains("tasks"));
+    }
+
+    #[test]
+    fn running_timer_shows_clock_and_title() {
+        let (mut model, id) = model_with_task("Quarterly report");
+        model.start_time_tracking(id);
+        let content = render(&model, 120);
+        assert!(content.contains('⏱'), "{content}");
+        assert!(
+            content.contains("⏱ 00:0"),
+            "fresh timer shows HH:MM:SS:\n{content}"
+        );
+        assert!(content.contains("Quarterly report"), "{content}");
+
+        model.stop_time_tracking();
+        assert!(!render(&model, 120).contains('⏱'));
+    }
+
+    #[test]
+    fn long_title_is_truncated_next_to_the_clock() {
+        let (mut model, id) =
+            model_with_task("An extremely long task title that would crowd out the footer");
+        model.start_time_tracking(id);
+        let content = render(&model, 160);
+        assert!(content.contains("⏱ 00:0"), "{content}");
+        assert!(content.contains('…'), "{content}");
+        assert!(!content.contains("crowd out the footer"), "{content}");
+    }
+
+    #[test]
+    fn timer_and_pomodoro_are_both_visible() {
+        let (mut model, id) = model_with_task("Focus block");
+        model.start_time_tracking(id);
+        model.pomodoro.session = Some(PomodoroSession::new(id, &PomodoroConfig::default(), 4));
+        let content = render(&model, 160);
+        assert!(content.contains('⏱'), "{content}");
+        assert!(content.contains("Focus block"), "{content}");
+        assert!(content.contains("[0/4]"), "pomodoro readout:\n{content}");
     }
 }

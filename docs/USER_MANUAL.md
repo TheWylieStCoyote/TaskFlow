@@ -890,9 +890,13 @@ Access the Dashboard from the sidebar to see at-a-glance statistics:
 ├─────────────────────┬─────────────────────┬────────────────────┤
 │   Completion        │   Time Tracking     │    This Week       │
 │   ────────────      │   ─────────────     │    ──────────      │
-│   Total: 47         │   Tracked: 12h 30m  │    Created: 8      │
-│   Done: 23 (49%)    │   Avg/task: 32m     │    Completed: 12   │
-│   Overdue: 3        │   Currently: —      │    Active: 24      │
+│   Total: 47         │   Today: 1h 20m     │    Created: 8      │
+│   Done: 23 (49%)    │   This Week: 6h 5m  │    Completed: 12   │
+│   Overdue: 3        │   Last 30 days: 31h │    Active: 24      │
+│                     │   Avg/active day    │                    │
+│                     │     (30d): 1h 45m   │                    │
+│                     │   Tracking: ● 00:12:│                    │
+│                     │     34 Write report │                    │
 ├─────────────────────┴─────────────────────┴────────────────────┤
 │                    Status Distribution                         │
 │   ─────────────────────────────────────────────────────────    │
@@ -910,13 +914,19 @@ Access the Dashboard from the sidebar to see at-a-glance statistics:
 
 ![Dashboard](../screenshots/svg/dashboard.svg)
 
+The **Time Tracking** panel sums your time entries directly:
+
+- **Today** and **This Week** (Monday to today) use the local date of each entry's start
+- **Last 30 days** and **Avg/active day (30d)** come from the same 30-day analytics the Reports view uses; an "active day" is any day with tracked time
+- **Tracking** shows the running task's title with a live `HH:MM:SS` clock, or `○ Idle`
+
 ### Reports View
 
 Access detailed analytics from the sidebar → Reports.
 
 ![Reports view](../screenshots/svg/reports.svg)
 
-The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`):
+The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`; `w` cycles the Time panel's window):
 
 #### Overview Panel
 Summary statistics:
@@ -941,11 +951,27 @@ Tag usage statistics:
 Tags are sorted by count, with alphabetical sorting for equal counts.
 
 #### Time Panel
-Time tracking analysis:
-- Total time tracked
-- Time per project
-- Peak productivity hours
-- Most productive day of week
+Time tracking analysis over a selectable window. The title shows the current
+window, e.g. `Time (last 30 days)  [w] window`; press `w` to cycle
+7 → 30 → 90 days. The three reports are cached, so switching is instant.
+
+- **Stat boxes**: Total (the window), Today, This Week (Monday to today),
+  Avg/active day, and Tracking (running task title with a live `HH:MM:SS`
+  clock, or `idle`). Today and This Week are summed straight from your time
+  entries and do not change with the window.
+- **By Project**: the top 8 projects as horizontal bars, each labelled with the
+  project name (or "No project") and showing hours with one decimal plus its
+  share of the window total, e.g. `2.5h  41%`.
+- **Daily**: with the 7-day window, one bar per day labelled with the weekday
+  and date; with 30 or 90 days, a sparkline with the first and last dates and
+  the busiest day (`max 3h 20m on Oct 14`).
+- **By Hour**: 24 local-hour columns (labelled every third hour) with the peak
+  hour in the title.
+- **Top Tasks**: the five tasks with the most tracked time in the window.
+- **Minutes by Day of Week**: shown when the terminal is tall enough.
+
+On short terminals the lower sections are dropped first; the stat boxes and
+By Project / Daily rows are kept as long as there is room.
 
 #### Insights Panel
 Productivity patterns:

@@ -250,6 +250,10 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         UiMessage::AddToFocusQueue => view_state::add_to_focus_queue(model),
         UiMessage::ClearFocusQueue => view_state::clear_focus_queue(model),
         UiMessage::AdvanceFocusQueue => view_state::advance_focus_queue(model),
+        // Reports view: the 7/30/90-day reports are all cached, nothing to invalidate
+        UiMessage::ReportsCycleTimeWindow => {
+            model.reports_time_window = model.reports_time_window.next();
+        }
         // Input mode handling
         UiMessage::StartCreateTask => {
             start_input(model, InputTarget::Task, None);

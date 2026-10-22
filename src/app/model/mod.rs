@@ -65,8 +65,8 @@ pub use types::{
     CommandPaletteState, DailyReviewState, DescriptionEditorState, DuplicatesViewState,
     EveningReviewState, FilterState, GoalViewState, HabitViewState, ImportState, InputState,
     KeybindingsEditorState, MultiSelectState, PomodoroState, RunningState, SavedFilterPickerState,
-    StorageState, TaskDetailState, TemplatePickerState, TimeLogEditorState, TimelineState,
-    TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
+    StorageState, TaskDetailState, TemplatePickerState, TimeLogEditorState, TimeWindow,
+    TimelineState, TimelineZoom, ViewSelectionState, WeeklyReviewState, WorkLogEditorState,
 };
 pub use view_queries::extract_git_location;
 
@@ -282,6 +282,8 @@ pub struct Model {
     // Reports state
     /// Selected panel in the reports view
     pub report_panel: crate::ui::ReportPanel,
+    /// Window (7/30/90 days) shown by the Reports → Time panel
+    pub reports_time_window: TimeWindow,
 
     // Import state
     /// Import state (pending, show_preview)
@@ -450,6 +452,7 @@ impl Model {
             keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
             report_panel: crate::ui::ReportPanel::default(),
+            reports_time_window: TimeWindow::default(),
             import: ImportState::default(),
             alerts: AlertState::default(),
             time_log: TimeLogEditorState::default(),
@@ -838,6 +841,13 @@ impl Model {
         use crate::app::analytics::AnalyticsEngine;
         use crate::domain::analytics::ReportConfig;
 
+        // Generate 7-day report if missing (used by the time panel's 7-day window)
+        if self.report_cache.report_7d.is_none() {
+            let engine = AnalyticsEngine::new(self);
+            let config = ReportConfig::last_n_days(7);
+            self.report_cache.report_7d = Some(engine.generate_report(&config));
+        }
+
         // Generate 30-day report if missing (used by overview, tags, time panels)
         if self.report_cache.report_30d.is_none() {
             let engine = AnalyticsEngine::new(self);
@@ -866,6 +876,24 @@ impl Model {
     /// fresh reports are generated on the next Reports view render.
     pub fn invalidate_report_cache(&mut self) {
         self.report_cache.clear();
+    }
+
+    /// The task being timed right now and the live elapsed seconds of its
+    /// running entry, or `None` when no timer is running.
+    ///
+    /// The title falls back to `"(deleted task)"` if the entry's task is gone.
+    #[must_use]
+    pub fn active_tracking(&self) -> Option<(String, u64)> {
+        let entry = self.active_time_entry()?;
+        let title = self
+            .tasks
+            .get(&entry.task_id)
+            .map_or_else(|| "(deleted task)".to_string(), |t| t.title.clone());
+        let secs = (chrono::Utc::now() - entry.started_at)
+            .num_seconds()
+            .max(0)
+            .unsigned_abs();
+        Some((title, secs))
     }
 }
 
@@ -896,21 +924,78 @@ mod report_cache_tests {
     #[test]
     fn test_ensure_report_cache_populated_fills_all_windows() {
         let mut model = model_with_history();
+        assert!(model.report_cache.report_7d.is_none());
         assert!(model.report_cache.report_30d.is_none());
         assert!(model.report_cache.report_60d.is_none());
         assert!(model.report_cache.report_90d.is_none());
 
         model.ensure_report_cache_populated();
 
+        let r7 = model.report_cache.report_7d.as_ref().expect("7d report");
         let r30 = model.report_cache.report_30d.as_ref().expect("30d report");
         let r60 = model.report_cache.report_60d.as_ref().expect("60d report");
         let r90 = model.report_cache.report_90d.as_ref().expect("90d report");
         let span = |cfg: &crate::domain::analytics::ReportConfig| {
             (cfg.end_date - cfg.start_date).num_days()
         };
+        assert_eq!(span(&r7.config), 7);
         assert_eq!(span(&r30.config), 30);
         assert_eq!(span(&r60.config), 60);
         assert_eq!(span(&r90.config), 90);
+    }
+
+    #[test]
+    fn test_reports_time_window_cycles_without_touching_cache() {
+        use crate::app::{update, Message, TimeWindow, UiMessage};
+
+        let mut model = model_with_history();
+        model.ensure_report_cache_populated();
+        assert_eq!(model.reports_time_window, TimeWindow::Days30);
+
+        update(&mut model, Message::Ui(UiMessage::ReportsCycleTimeWindow));
+        assert_eq!(model.reports_time_window, TimeWindow::Days90);
+        update(&mut model, Message::Ui(UiMessage::ReportsCycleTimeWindow));
+        assert_eq!(model.reports_time_window, TimeWindow::Days7);
+        update(&mut model, Message::Ui(UiMessage::ReportsCycleTimeWindow));
+        assert_eq!(model.reports_time_window, TimeWindow::Days30);
+
+        assert!(
+            !model.report_cache.is_empty(),
+            "cycling the window must not invalidate the cached reports"
+        );
+        for window in [TimeWindow::Days7, TimeWindow::Days30, TimeWindow::Days90] {
+            let report = model
+                .report_cache
+                .report_for_window(window)
+                .expect("every window has a cached report");
+            assert_eq!(
+                (report.config.end_date - report.config.start_date).num_days(),
+                window.days()
+            );
+        }
+    }
+
+    #[test]
+    fn test_active_tracking_reports_running_task() {
+        let mut model = Model::new();
+        assert!(model.active_tracking().is_none());
+
+        let task = Task::new("Write the report");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.start_time_tracking(task_id);
+
+        let (title, secs) = model.active_tracking().expect("timer running");
+        assert_eq!(title, "Write the report");
+        assert!(secs < 60, "freshly started timer is under a minute");
+
+        // A running entry whose task was deleted still reports its time
+        model.tasks.remove(&task_id);
+        let (title, _) = model.active_tracking().expect("entry still running");
+        assert_eq!(title, "(deleted task)");
+
+        model.stop_time_tracking();
+        assert!(model.active_tracking().is_none());
     }
 
     #[test]

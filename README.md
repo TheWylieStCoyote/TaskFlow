@@ -360,7 +360,7 @@ Tasks can have one of five priority levels:
 The Dashboard provides an overview of your task statistics:
 
 - **Completion Panel**: Overall completion rate, overdue count, and completion by priority
-- **Time Tracking Panel**: Total time tracked, average time per task, current tracking status
+- **Time Tracking Panel**: Time tracked today, this week (Monday to today) and over the last 30 days, average per active day, and the running timer (task title with a live `HH:MM:SS` clock, or `○ Idle`)
 - **Projects Panel**: Per-project completion percentages
 - **Status Distribution**: Bar chart showing task counts by status (Todo, In Progress, Blocked, Done, Cancelled)
 - **This Week Panel**: Tasks created and completed this week, active tasks count

@@ -1,6 +1,5 @@
 ---
 source: tests/ui_snapshots.rs
-assertion_line: 474
 expression: output
 ---
 ┌ Completion ────────────────────────────────────┐┌ Status Distribution ───────────────────────────┐
@@ -10,14 +9,14 @@ expression: output
 │High: 0/0 (0%)                                  ││Done         0                                  │
 └────────────────────────────────────────────────┘│Cancelled    0                                  │
 ┌ Time Tracking ─────────────────────────────────┐│                                                │
-│Total: 0m                                       │└────────────────────────────────────────────────┘
-│Avg/task: 0m                                    │┌ Estimation ────────────────────────────────────┐
-│Tracking: ○ Idle                                ││Accuracy: N/A                                   │
-│                                                ││Variance: on target                             │
-└────────────────────────────────────────────────┘│Est: 0m | Act: 0m                               │
-┌ Projects ──────────────────────────────────────┐│Over: 0 Under: 0 OK: 0                          │
-│No projects                                     │└────────────────────────────────────────────────┘
-│                                                │┌ Focus Sessions ────────────────────────────────┐
+│Today: 0m                                       │└────────────────────────────────────────────────┘
+│This Week: 0m                                   │┌ Estimation ────────────────────────────────────┐
+│Last 30 days: 0m                                ││Accuracy: N/A                                   │
+│Avg/active day (30d): 0m                        ││Variance: on target                             │
+│Tracking: ○ Idle                                ││Est: 0m | Act: 0m                               │
+└────────────────────────────────────────────────┘│Over: 0 Under: 0 OK: 0                          │
+┌ Projects ──────────────────────────────────────┐└────────────────────────────────────────────────┘
+│No projects                                     │┌ Focus Sessions ────────────────────────────────┐
 │                                                ││Today: 0 🍅  | ○ Idle                            │
 │                                                ││All time: 0 cycles | 0m                         │
 │                                                ││Streak: 0 days (best: 0)                        │

@@ -36,6 +36,7 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::NaiveDate;
 
+use super::TimeWindow;
 use crate::domain::analytics::AnalyticsReport;
 use crate::domain::{
     is_context_tag, ProjectId, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
@@ -318,14 +319,16 @@ impl TaskCache {
 ///
 /// Reports are expensive to compute as they iterate through all tasks
 /// and time entries. This cache stores pre-computed reports for common
-/// time windows (30, 60, 90 days).
+/// time windows (7, 30, 60, 90 days).
 #[derive(Debug, Clone, Default)]
 pub struct ReportCache {
-    /// Report for 30-day window (used by overview, tags, time panels)
+    /// Report for 7-day window (used by the time panel's 7-day view)
+    pub report_7d: Option<AnalyticsReport>,
+    /// Report for 30-day window (used by overview, tags, time panels, dashboard)
     pub report_30d: Option<AnalyticsReport>,
     /// Report for 60-day window (used by velocity panel)
     pub report_60d: Option<AnalyticsReport>,
-    /// Report for 90-day window (used by insights panel)
+    /// Report for 90-day window (used by insights and time panels)
     pub report_90d: Option<AnalyticsReport>,
 }
 
@@ -340,6 +343,7 @@ impl ReportCache {
     ///
     /// Call this when tasks or time entries are modified.
     pub fn clear(&mut self) {
+        self.report_7d = None;
         self.report_30d = None;
         self.report_60d = None;
         self.report_90d = None;
@@ -348,7 +352,20 @@ impl ReportCache {
     /// Check if any reports are cached.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.report_30d.is_none() && self.report_60d.is_none() && self.report_90d.is_none()
+        self.report_7d.is_none()
+            && self.report_30d.is_none()
+            && self.report_60d.is_none()
+            && self.report_90d.is_none()
+    }
+
+    /// The cached report backing a Reports → Time window, if generated.
+    #[must_use]
+    pub fn report_for_window(&self, window: TimeWindow) -> Option<&AnalyticsReport> {
+        match window {
+            TimeWindow::Days7 => self.report_7d.as_ref(),
+            TimeWindow::Days30 => self.report_30d.as_ref(),
+            TimeWindow::Days90 => self.report_90d.as_ref(),
+        }
     }
 }
 
@@ -363,6 +380,46 @@ mod tests {
         assert_eq!(stats.completed_count, 0);
         assert_eq!(stats.overdue_count, 0);
         assert_eq!(stats.due_today_count, 0);
+    }
+
+    fn sample_report(days: i64) -> AnalyticsReport {
+        use crate::app::analytics::AnalyticsEngine;
+        use crate::app::Model;
+        use crate::domain::analytics::ReportConfig;
+
+        let model = Model::new();
+        AnalyticsEngine::new(&model).generate_report(&ReportConfig::last_n_days(days))
+    }
+
+    #[test]
+    fn test_report_cache_window_lookup_and_clear() {
+        let mut cache = ReportCache::new();
+        assert!(cache.is_empty());
+        assert!(cache.report_for_window(TimeWindow::Days7).is_none());
+
+        cache.report_7d = Some(sample_report(7));
+        assert!(!cache.is_empty(), "a 7-day report counts as cached");
+        assert!(cache.report_for_window(TimeWindow::Days7).is_some());
+        assert!(cache.report_for_window(TimeWindow::Days30).is_none());
+        assert!(cache.report_for_window(TimeWindow::Days90).is_none());
+
+        cache.report_30d = Some(sample_report(30));
+        cache.report_90d = Some(sample_report(90));
+        let span = |report: &AnalyticsReport| {
+            (report.config.end_date - report.config.start_date).num_days()
+        };
+        assert_eq!(
+            cache.report_for_window(TimeWindow::Days30).map(span),
+            Some(30)
+        );
+        assert_eq!(
+            cache.report_for_window(TimeWindow::Days90).map(span),
+            Some(90)
+        );
+
+        cache.clear();
+        assert!(cache.is_empty());
+        assert!(cache.report_7d.is_none());
     }
 
     #[test]

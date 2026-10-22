@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)
+- **`audit_log` entity in the pipe interface** (`list`/`get`, read-only): filter by task, action and date, page from the newest entry, CSV output flattens field changes
+- **`TASKFLOW_CONFIG_DIR`** overrides where `config.toml` and `keybindings.toml` live
 - **Saved filters and the audit log are persisted** on every backend (new `SavedFilterRepository`/`AuditLogRepository`; SQLite gains an `audit_log` table, Markdown an append-only `audit_log.jsonl`); the CalDAV backend keeps time entries, work logs, Pomodoro state and other local-only data in a `caldav.local.json` sidecar
 - **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)
 - **Reports → Time panel**: selectable 7/30/90-day window (`w`), Today / This Week / Avg per active day / live Tracking stats, time by project with hours and share, daily series (bars or sparkline), local hour-of-day chart, top tasks
@@ -44,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Time log lists a day's entries in time order** (days still newest first); the task detail preview keeps showing the five most recent entries
 - **Error Messages**: More actionable guidance when operations fail
 - **Theme Consistency**: Standardized highlighting and dialog styling across all views
 - **Analytics Module**: Split into focused submodules for better maintainability
@@ -51,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Timeline selection stops at the last drawn row** instead of the last visible task, and Enter opens the highlighted row (it could open a different task when the list order differed from the timeline order)
 - **Unparsable SQLite rows are reported, not dropped**: every skipped row is logged with table, id and the failing column; a bad timestamp is a row error instead of becoming "now"; single-row lookups on such a row return an error
 - **Markdown backend no longer overwrites corrupt data files**: a `*.yaml` aux file that does not parse makes startup fail with `CorruptFile` naming the file, leaving it untouched
 - **Kanban, Eisenhower, Timeline and Duplicates scroll from the real viewport height** instead of estimated 5–15 row windows, so the selection stays visible at any terminal size

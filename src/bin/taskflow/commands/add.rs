@@ -98,3 +98,99 @@ pub fn quick_add_task(cli: &Cli, task_words: &[String]) -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::NaiveDate;
+
+    use taskflow::domain::{Priority, Project};
+
+    use super::quick_add_task;
+    use crate::commands_tests::support::{
+        add_project, assert_exit_one, data_file, open_model, run_exit_case, seed_model, temp_dir,
+        yaml_cli,
+    };
+
+    fn words(items: &[&str]) -> Vec<String> {
+        items.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn adds_a_plain_task_and_persists_it() {
+        let dir = temp_dir();
+        let data = data_file(dir.path());
+        seed_model(&data, |_| {});
+
+        quick_add_task(&yaml_cli(&data), &words(&["Buy", "milk"])).expect("add succeeds");
+
+        let model = open_model(&data);
+        assert_eq!(model.tasks.len(), 1);
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "Buy milk");
+        assert!(task.tags.is_empty());
+        assert!(task.project_id.is_none());
+    }
+
+    #[test]
+    fn applies_quick_add_metadata_and_resolves_project() {
+        let dir = temp_dir();
+        let data = data_file(dir.path());
+        let mut backend_id = None;
+        seed_model(&data, |model| {
+            backend_id = Some(add_project(model, Project::new("Backend API")));
+        });
+
+        quick_add_task(
+            &yaml_cli(&data),
+            &words(&[
+                "Fix",
+                "login",
+                "#bug",
+                "#auth",
+                "!high",
+                "due:2026-12-01",
+                "sched:2026-11-28",
+                "@backend",
+            ]),
+        )
+        .expect("add succeeds");
+
+        let model = open_model(&data);
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "Fix login");
+        assert_eq!(task.tags, vec!["bug".to_string(), "auth".to_string()]);
+        assert_eq!(task.priority, Priority::High);
+        assert_eq!(task.due_date, NaiveDate::from_ymd_opt(2026, 12, 1));
+        assert_eq!(task.scheduled_date, NaiveDate::from_ymd_opt(2026, 11, 28));
+        assert_eq!(task.project_id, backend_id);
+    }
+
+    #[test]
+    fn unknown_project_leaves_task_unassigned() {
+        let dir = temp_dir();
+        let data = data_file(dir.path());
+        seed_model(&data, |model| {
+            add_project(model, Project::new("Backend"));
+        });
+
+        quick_add_task(&yaml_cli(&data), &words(&["Call", "mum", "@nowhere"]))
+            .expect("add succeeds even when the project is missing");
+
+        let model = open_model(&data);
+        let task = model.tasks.values().next().unwrap();
+        assert_eq!(task.title, "Call mum");
+        assert!(task.project_id.is_none());
+    }
+
+    #[test]
+    fn empty_description_exits_with_status_one() {
+        let dir = temp_dir();
+        let data = data_file(dir.path());
+
+        let output = run_exit_case("add_empty", &data, None);
+        let text = assert_exit_one(&output);
+        assert!(text.contains("Error: Task description cannot be empty"));
+        assert!(text.contains("Usage: taskflow add <task description>"));
+        assert!(!data.exists(), "nothing is written before validation");
+    }
+}

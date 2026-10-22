@@ -147,7 +147,18 @@ pub fn extract_git_todos(
 
 #[cfg(test)]
 mod tests {
-    use taskflow::app::extract_git_location;
+    use std::path::PathBuf;
+
+    use tempfile::TempDir;
+
+    use taskflow::app::{extract_git_location, Model};
+    use taskflow::domain::{Priority, Project, Task};
+
+    use super::extract_git_todos;
+    use crate::commands_tests::support::{
+        add_project, commit_file, data_file, git_available, init_repo, open_model, seed_model,
+        temp_dir, yaml_cli,
+    };
 
     #[test]
     fn test_extract_git_location() {
@@ -159,5 +170,257 @@ mod tests {
 
         let desc = "No git marker here";
         assert_eq!(extract_git_location(desc), None);
+    }
+
+    struct Fixture {
+        _dir: TempDir,
+        repo: PathBuf,
+        data: PathBuf,
+    }
+
+    /// A repository with two annotated comments on tracked files, or `None`
+    /// when git cannot run on this machine.
+    fn fixture() -> Option<Fixture> {
+        if !git_available() {
+            eprintln!("git binary not available; skipping");
+            return None;
+        }
+        let dir = temp_dir();
+        let repo = dir.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        init_repo(&repo);
+        commit_file(
+            &repo,
+            "src/lib.rs",
+            "fn a() {}\n// TODO: refactor parser\n// FIXME(wylie): handle errors\nlet todo = 1; // TODO not on a comment line\n",
+            "Add annotated source",
+        );
+        commit_file(&repo, "notes.py", "# HACK: temporary\n", "Add notes");
+        let data = data_file(dir.path());
+        Some(Fixture {
+            _dir: dir,
+            repo,
+            data,
+        })
+    }
+
+    fn patterns(items: &[&str]) -> Vec<String> {
+        items.iter().map(ToString::to_string).collect()
+    }
+
+    fn task_named<'a>(model: &'a Model, title: &str) -> &'a Task {
+        model
+            .tasks
+            .values()
+            .find(|t| t.title == title)
+            .unwrap_or_else(|| panic!("task {title} exists"))
+    }
+
+    fn extract(
+        f: &Fixture,
+        project: Option<&str>,
+        tags: Option<&[String]>,
+        priority: &str,
+        dry_run: bool,
+    ) -> anyhow::Result<()> {
+        extract_git_todos(
+            &yaml_cli(&f.data),
+            &f.repo,
+            &patterns(&["TODO", "FIXME"]),
+            project,
+            tags,
+            priority,
+            dry_run,
+        )
+    }
+
+    #[test]
+    fn dry_run_touches_no_data() {
+        let Some(f) = fixture() else { return };
+        extract(&f, None, None, "medium", true).expect("dry run succeeds");
+        assert!(!f.data.exists(), "dry run never opens storage");
+    }
+
+    #[test]
+    fn no_matches_touches_no_data() {
+        let Some(f) = fixture() else { return };
+        extract_git_todos(
+            &yaml_cli(&f.data),
+            &f.repo,
+            &patterns(&["XYZZY"]),
+            None,
+            None,
+            "medium",
+            false,
+        )
+        .expect("no matches is not an error");
+        assert!(!f.data.exists());
+
+        let not_a_repo = f._dir.path().join("plain");
+        std::fs::create_dir_all(&not_a_repo).unwrap();
+        extract_git_todos(
+            &yaml_cli(&f.data),
+            &not_a_repo,
+            &patterns(&["TODO"]),
+            None,
+            None,
+            "medium",
+            false,
+        )
+        .expect("a non-repository yields no matches");
+        assert!(!f.data.exists());
+    }
+
+    #[test]
+    fn creates_one_task_per_comment_with_tags_priority_and_location() {
+        let Some(f) = fixture() else { return };
+        let mut backend_id = None;
+        seed_model(&f.data, |model| {
+            backend_id = Some(add_project(model, Project::new("Backend")));
+        });
+
+        extract(&f, Some("back"), Some(&patterns(&["scan"])), "high", false)
+            .expect("extraction succeeds");
+
+        let model = open_model(&f.data);
+        assert_eq!(
+            model.tasks.len(),
+            2,
+            "the HACK line and code line are ignored"
+        );
+
+        let todo = task_named(&model, "refactor parser");
+        assert_eq!(
+            todo.tags,
+            vec![
+                "git-todo".to_string(),
+                "todo".to_string(),
+                "scan".to_string()
+            ]
+        );
+        assert_eq!(todo.priority, Priority::High);
+        assert_eq!(todo.project_id, backend_id);
+        let desc = todo.description.as_deref().unwrap();
+        assert!(desc.starts_with("git:src/lib.rs:2\n"), "{desc}");
+        assert!(desc.contains("Pattern: TODO"));
+        assert_eq!(
+            extract_git_location(desc),
+            Some(("src/lib.rs".to_string(), 2))
+        );
+
+        let fixme = task_named(&model, "handle errors");
+        assert_eq!(
+            fixme.tags[..2],
+            ["git-todo".to_string(), "fixme".to_string()]
+        );
+        assert_eq!(
+            extract_git_location(fixme.description.as_deref().unwrap()),
+            Some(("src/lib.rs".to_string(), 3))
+        );
+    }
+
+    #[test]
+    fn rerun_updates_existing_tasks_instead_of_duplicating() {
+        let Some(f) = fixture() else { return };
+        seed_model(&f.data, |_| {});
+        extract(&f, None, None, "low", false).expect("first run");
+
+        let mut backend_id = None;
+        seed_model(&f.data, |model| {
+            backend_id = Some(add_project(model, Project::new("Backend")));
+        });
+        extract(
+            &f,
+            Some("backend"),
+            Some(&patterns(&["second"])),
+            "urgent",
+            false,
+        )
+        .expect("second run");
+
+        let model = open_model(&f.data);
+        assert_eq!(
+            model.tasks.len(),
+            2,
+            "same locations are updated, not recreated"
+        );
+        for task in model.tasks.values() {
+            assert!(task.tags.contains(&"second".to_string()), "{:?}", task.tags);
+            assert_eq!(task.tags.iter().filter(|t| *t == "git-todo").count(), 1);
+            assert_eq!(
+                task.priority,
+                Priority::Low,
+                "priority of an existing task is left alone"
+            );
+            assert_eq!(
+                task.project_id, backend_id,
+                "a project is assigned when the task had none"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_project_leaves_tasks_unassigned() {
+        let Some(f) = fixture() else { return };
+        seed_model(&f.data, |model| {
+            add_project(model, Project::new("Backend"));
+        });
+
+        extract(&f, Some("nowhere"), None, "medium", false).expect("extraction succeeds");
+
+        let model = open_model(&f.data);
+        assert_eq!(model.tasks.len(), 2);
+        assert!(model.tasks.values().all(|t| t.project_id.is_none()));
+    }
+
+    #[test]
+    fn priority_strings_are_parsed_case_insensitively() {
+        let Some(f) = fixture() else { return };
+        let cases = [
+            ("URGENT", Priority::Urgent),
+            ("Medium", Priority::Medium),
+            ("med", Priority::Medium),
+            ("low", Priority::Low),
+            ("bogus", Priority::None),
+        ];
+        for (input, expected) in cases {
+            let data = f._dir.path().join(format!("{input}.yaml"));
+            let cli = yaml_cli(&data);
+            extract_git_todos(
+                &cli,
+                &f.repo,
+                &patterns(&["TODO"]),
+                None,
+                None,
+                input,
+                false,
+            )
+            .expect("extraction succeeds");
+            let model = open_model(&data);
+            assert_eq!(model.tasks.len(), 1);
+            assert_eq!(
+                model.tasks.values().next().unwrap().priority,
+                expected,
+                "priority string {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn single_pattern_extracts_only_that_pattern() {
+        let Some(f) = fixture() else { return };
+        extract_git_todos(
+            &yaml_cli(&f.data),
+            &f.repo,
+            &patterns(&["FIXME"]),
+            None,
+            None,
+            "none",
+            false,
+        )
+        .expect("extraction succeeds");
+        let model = open_model(&f.data);
+        assert_eq!(model.tasks.len(), 1);
+        assert_eq!(model.tasks.values().next().unwrap().title, "handle errors");
     }
 }

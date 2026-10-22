@@ -299,6 +299,21 @@ Snoozed tasks are hidden until their snooze time expires.
 
 ---
 
+## Command Line
+
+| Command | Does |
+|---------|------|
+| `taskflow add "Task #tag !high due:fri"` | Quick-add a task |
+| `taskflow list --view today` | List tasks |
+| `taskflow done "query"` | Complete a task |
+| `taskflow stats` | Quick statistics |
+| `taskflow time` | Time tracked today (+ this week) |
+| `taskflow time --week --by day` | This week, per day (`--by project\|day\|task\|tag`) |
+| `taskflow time --days 30 --project api` | Last 30 days, one project |
+| `taskflow time --from 2026-01-05 --to 2026-01-09 --json` | Custom window as JSON |
+
+---
+
 ## Priority Symbols
 
 | Symbol | Level |
@@ -336,6 +351,7 @@ v → j/k and Space to select → d to delete (or x to complete)
 **Track time on a task:**
 ```
 Select task → t (start) → work → t (stop)
+taskflow time --week          # then see where the week went
 ```
 
 **Start a Pomodoro session:**

@@ -620,6 +620,86 @@ mod cli_command_tests {
 /// stored in `Settings` is never consulted) and a data file under a fresh
 /// temporary directory.
 #[cfg(test)]
+/// Argument parsing for `taskflow time`.
+#[cfg(test)]
+mod time_cli_tests {
+    use chrono::NaiveDate;
+    use clap::Parser;
+
+    use crate::cli::{Breakdown, Cli, Commands, TimeArgs};
+
+    fn parse(args: &[&str]) -> TimeArgs {
+        let cli = Cli::try_parse_from(std::iter::once("taskflow").chain(args.iter().copied()))
+            .expect("arguments parse");
+        match cli.command {
+            Some(Commands::Time(args)) => args,
+            other => panic!("expected the time command, got {other:?}"),
+        }
+    }
+
+    fn rejects(args: &[&str]) {
+        let result = Cli::try_parse_from(std::iter::once("taskflow").chain(args.iter().copied()));
+        assert!(result.is_err(), "{args:?} should be rejected");
+    }
+
+    #[test]
+    fn time_with_no_flags_is_the_default_report() {
+        let args = parse(&["time"]);
+        assert_eq!(args, TimeArgs::default());
+        assert_eq!(args.by, Breakdown::Project);
+        assert!(!args.json);
+    }
+
+    #[test]
+    fn time_alias_and_every_flag() {
+        let args = parse(&[
+            "tt",
+            "--week",
+            "--by",
+            "day",
+            "--json",
+            "--project",
+            "Backend",
+        ]);
+        assert!(args.week);
+        assert!(!args.today);
+        assert_eq!(args.by, Breakdown::Day);
+        assert!(args.json);
+        assert_eq!(args.project.as_deref(), Some("Backend"));
+
+        assert_eq!(
+            parse(&["time", "-p", "Docs", "--by", "tag"]).by,
+            Breakdown::Tag
+        );
+        assert_eq!(parse(&["time", "--by", "task"]).by, Breakdown::Task);
+        assert!(parse(&["time", "--today"]).today);
+    }
+
+    #[test]
+    fn time_days_and_custom_window() {
+        assert_eq!(parse(&["time", "--days", "7"]).days, Some(7));
+
+        let args = parse(&["time", "--from", "2026-01-05", "--to", "2026-01-09"]);
+        assert_eq!(args.from, NaiveDate::from_ymd_opt(2026, 1, 5));
+        assert_eq!(args.to, NaiveDate::from_ymd_opt(2026, 1, 9));
+
+        let open = parse(&["time", "--from", "2026-01-05"]);
+        assert!(open.to.is_none());
+    }
+
+    #[test]
+    fn time_window_flags_are_mutually_exclusive() {
+        rejects(&["time", "--today", "--week"]);
+        rejects(&["time", "--days", "3", "--from", "2026-01-01"]);
+        rejects(&["time", "--week", "--days", "3"]);
+        // --to only narrows a --from window.
+        rejects(&["time", "--to", "2026-01-09"]);
+        rejects(&["time", "--by", "hour"]);
+        rejects(&["time", "--from", "01/05/2026"]);
+        rejects(&["time", "--days", "many"]);
+    }
+}
+
 pub(crate) mod support {
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output};
@@ -628,7 +708,7 @@ pub(crate) mod support {
     use tempfile::TempDir;
 
     use taskflow::app::Model;
-    use taskflow::domain::{Project, ProjectId, Task, TaskId};
+    use taskflow::domain::{Project, ProjectId, Task, TaskId, TimeEntry};
     use taskflow::storage::BackendType;
 
     use crate::cli::Cli;
@@ -691,6 +771,15 @@ pub(crate) mod support {
         model.projects.insert(id, project.clone());
         model.sync_project(&project);
         id
+    }
+
+    /// Insert `entry` into the model and its storage, keeping the task's
+    /// cached total in step.
+    pub(crate) fn add_time_entry(model: &mut Model, entry: TimeEntry) {
+        let task_id = entry.task_id;
+        model.time_entries.insert(entry.id, entry.clone());
+        model.sync_time_entry(&entry);
+        model.recompute_task_time(&task_id);
     }
 
     /// Local noon on `date`, as a UTC instant.

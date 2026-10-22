@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use chrono::NaiveDate;
-use clap::{Parser, Subcommand, ValueHint};
+use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
 use clap_complete::Shell;
 
 use taskflow::domain::today;
@@ -182,6 +182,9 @@ pub enum Commands {
     /// Show quick productivity statistics
     #[command(alias = "s")]
     Stats,
+    /// Report tracked time by project, day, task or tag
+    #[command(alias = "tt")]
+    Time(TimeArgs),
     /// Pipe interface for scripting integration (stdin/stdout JSON/YAML/CSV)
     #[command(alias = "p")]
     Pipe {
@@ -193,6 +196,52 @@ pub enum Commands {
     #[command(alias = "g")]
     #[command(subcommand)]
     Git(GitCommands),
+}
+
+/// Options for `taskflow time`.
+///
+/// At most one window flag may be given; with none the report covers today
+/// and adds a this-week total.
+#[derive(Args, Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimeArgs {
+    /// Today only, plus a this-week total (the default)
+    #[arg(long, group = "window")]
+    pub today: bool,
+    /// Monday of this week through today
+    #[arg(long, group = "window")]
+    pub week: bool,
+    /// The last N days, ending today
+    #[arg(long, value_name = "N", group = "window")]
+    pub days: Option<u32>,
+    /// First day of a custom window (YYYY-MM-DD)
+    #[arg(long, value_name = "YYYY-MM-DD", group = "window")]
+    pub from: Option<NaiveDate>,
+    /// Last day of a custom window (YYYY-MM-DD, defaults to today)
+    #[arg(long, value_name = "YYYY-MM-DD", requires = "from")]
+    pub to: Option<NaiveDate>,
+    /// Only count time on tasks in this project (case-insensitive name)
+    #[arg(short, long)]
+    pub project: Option<String>,
+    /// Which breakdown table to print
+    #[arg(long, value_enum, default_value_t = Breakdown::Project)]
+    pub by: Breakdown,
+    /// Print the full report as JSON instead of text
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Breakdown axis for `taskflow time --by`.
+#[derive(ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Breakdown {
+    /// Minutes per project
+    #[default]
+    Project,
+    /// Minutes per calendar day in the window
+    Day,
+    /// Minutes per task
+    Task,
+    /// Minutes per tag
+    Tag,
 }
 
 /// Git integration subcommands

@@ -970,10 +970,15 @@ Press `Ctrl+p` to export a report as Markdown (`.md` file).
 Press `Ctrl+h` to export a formatted HTML report.
 
 Both formats include:
-- Summary statistics
-- Charts and graphs (ASCII in MD, visual in HTML)
-- Task breakdown
-- Time tracking summary
+- Overview, status and priority breakdowns
+- Velocity and productivity insights (streaks, best day, peak hour)
+- A **Time Tracking** section: total and active days, time per project
+  with its share, a per-day bar chart over the report window, peak hour
+  and best weekday (shown when any time was tracked)
+- Top tags and project progress
+
+For the same numbers in the shell, see `taskflow time` under
+[CLI Options](#cli-options).
 
 ---
 
@@ -1282,9 +1287,45 @@ Subcommands:
     add <TASK>          Quick add a task from the command line
     list                List tasks (without launching TUI)
     done <QUERY>        Mark a task as done by searching for it
+    today               List today's tasks
+    next                Show the next task to work on
+    stats               Show quick productivity statistics
+    time                Report tracked time by project, day, task or tag
     git-todos           Extract TODO/FIXME comments from git repository
     completion <SHELL>  Generate shell completions (bash, zsh, fish)
 ```
+
+**`taskflow time`** (alias `tt`) reports tracked time for a window:
+
+```bash
+taskflow time                      # today, plus a this-week total (default)
+taskflow time --week               # Monday through today
+taskflow time --days 30            # the last 30 days
+taskflow time --from 2026-01-05 --to 2026-01-09
+taskflow time --project backend    # one project, matched by name (case-insensitive)
+taskflow time --week --by day      # breakdown: project (default), day, task or tag
+taskflow time --days 7 --json      # machine-readable output
+```
+
+The text report prints the window and total, a proportional bar per row
+with its time and share of the total, and a `Tracking now:` line when a
+timer is running:
+
+```
+Time Tracked: This week (2026-10-19 to 2026-10-22)
+========================================
+  Total:        6h 15m (9 entries)
+  Tracking now: Write docs 00:12:34
+
+By project
+----------------------------------------
+  Backend       ████████████████████    4h 10m   66.7%
+  Docs          ██████████              2h 05m   33.3%
+```
+
+`--json` emits `window {from, to}`, `total_minutes`, `by_project`,
+`by_day`, `by_task` and `by_tag` arrays (each row with `minutes` and
+`percent`), and `tracking` (`{task_id, title, elapsed_seconds}` or `null`).
 
 **Examples:**
 ```bash
@@ -1306,6 +1347,10 @@ taskflow list --tags bug,urgent --limit 10
 
 # Mark a task as done
 taskflow done "Review PR"
+
+# Tracked time this week, per project; the last 7 days as JSON
+taskflow time --week
+taskflow time --days 7 --by day --json
 
 # Extract TODOs from code (see Git Integration section)
 taskflow git-todos --dry-run

@@ -47,7 +47,11 @@ fn sample_report() -> AnalyticsReport {
             ideal_line: None,
         }],
         time_analytics: TimeAnalytics {
-            by_project: std::collections::HashMap::default(),
+            by_project: std::collections::HashMap::from([(None, 160)]),
+            by_day: std::collections::BTreeMap::from([
+                (start, 100),
+                (NaiveDate::from_ymd_opt(2025, 1, 2).unwrap(), 60),
+            ]),
             by_day_of_week: [10, 20, 30, 40, 50, 5, 5],
             by_hour: {
                 let mut arr = [0; 24];
@@ -226,7 +230,63 @@ fn test_markdown_productivity_insights() {
     assert!(output.contains("**Longest Streak:** 10 days"));
     assert!(output.contains("**Most Productive Day:** Fri"));
     assert!(output.contains("**Peak Productivity Hour:** 14:00"));
-    assert!(output.contains("**Total Time Tracked:** 8h 0m"));
+    assert!(!output.contains("Total Time Tracked"));
+}
+
+#[test]
+fn test_markdown_time_tracking_section() {
+    let report = sample_report();
+    let output = export_report_to_markdown_string(&report).unwrap();
+
+    assert!(output.contains("## Time Tracking\n"));
+    assert!(output.contains("- **Total:** 2h 40m over 2 active days (1h 20m per active day)\n"));
+    assert!(output.contains("- **Peak Hour:** 14:00\n"));
+    assert!(output.contains("- **Best Weekday:** Fri\n"));
+    assert!(output.contains("| Project | Time | Share |\n|---------|------|-------|\n"));
+    assert!(output.contains("| (no project) | 2h 40m | 100.0% |\n"));
+    assert!(output.contains("| Day | Time | |\n|-----|------|---|\n"));
+    assert!(output.contains(&format!("| 2025-01-01 | 1h 40m | {} |\n", "█".repeat(20))));
+    // 60/100 of 160 eighths = 96 -> 12 full cells, no fraction.
+    assert!(output.contains(&format!("| 2025-01-02 | 1h | {} |\n", "█".repeat(12))));
+    assert!(output.contains("| 2025-01-03 | 0m |  |\n"));
+    // The chart covers the whole report window.
+    assert!(output.contains("| 2025-01-31 | 0m |  |\n"));
+    assert_eq!(output.matches("\n| 2025-01-").count(), 31);
+}
+
+#[test]
+fn test_markdown_time_tracking_resolves_project_names() {
+    use crate::domain::ProjectId;
+
+    let mut report = sample_report();
+    let backend = ProjectId::new();
+    let orphan = ProjectId::new();
+    report.burn_charts.push(BurnChart {
+        project_name: "Backend & Co".to_string(),
+        project_id: Some(backend),
+        scope_line: vec![],
+        completed_line: vec![],
+        ideal_line: None,
+    });
+    report.time_analytics.by_project =
+        std::collections::HashMap::from([(Some(backend), 90), (None, 60), (Some(orphan), 10)]);
+    report.time_analytics.total_minutes = 160;
+    let output = export_report_to_markdown_string(&report).unwrap();
+
+    // The project table sits between the section heading and the day chart.
+    let section = &output[position(&output, "## Time Tracking")..position(&output, "| Day |")];
+    let rows: Vec<&str> = section
+        .lines()
+        .filter(|l| l.starts_with("| ") && l.ends_with("% |"))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            "| Backend & Co | 1h 30m | 56.2% |",
+            "| (no project) | 1h | 37.5% |",
+            "| (unknown project) | 10m | 6.2% |",
+        ]
+    );
 }
 
 #[test]
@@ -314,6 +374,7 @@ fn test_html_report_all_cards() {
     assert!(output.contains("<h2>Priority Breakdown</h2>"));
     assert!(output.contains("<h2>Velocity</h2>"));
     assert!(output.contains("<h2>Productivity Insights</h2>"));
+    assert!(output.contains("<h2>Time Tracking</h2>"));
     assert!(output.contains("<h2>Top Tags</h2>"));
     assert!(output.contains("<h2>Project Progress</h2>"));
 }
@@ -497,6 +558,7 @@ fn test_html_card_order() {
         "<h2>Priority Breakdown</h2>",
         "<h2>Velocity</h2>",
         "<h2>Productivity Insights</h2>",
+        "<h2>Time Tracking</h2>",
         "<h2>Top Tags</h2>",
         "<h2>Project Progress</h2>",
         "<footer",
@@ -583,8 +645,60 @@ fn test_html_insights_card_all_fields() {
     assert!(output.contains("  <p><strong>Longest Streak:</strong> 10 days</p>\n"));
     assert!(output.contains("  <p><strong>Most Productive Day:</strong> Fri</p>\n"));
     assert!(output.contains("  <p><strong>Peak Hour:</strong> 14:00</p>\n"));
-    assert!(output.contains("  <p><strong>Total Time Tracked:</strong> 8h 0m</p>\n"));
+    assert!(!output.contains("Total Time Tracked"));
     assert!(!output.contains("🏆"));
+}
+
+#[test]
+fn test_html_time_card_metrics_tables_and_bars() {
+    let output = export_report_to_html_string(&sample_report()).unwrap();
+
+    assert!(output.contains("  <h2>Time Tracking</h2>\n"));
+    assert!(output.contains(
+        "  <span class=\"metric\">Total: <span class=\"metric-value\">2h 40m</span></span>\n"
+    ));
+    assert!(output.contains(
+        "  <span class=\"metric\">Active Days: <span class=\"metric-value\">2</span></span>\n"
+    ));
+    assert!(output.contains(
+        "  <span class=\"metric\">Per Active Day: <span class=\"metric-value\">1h 20m</span></span>\n"
+    ));
+    assert!(output.contains("  <p><strong>Best Weekday:</strong> Fri</p>\n"));
+    assert!(output.contains("    <tr><th>Project</th><th>Time</th><th>Share</th></tr>\n"));
+    assert!(output.contains("    <tr><td>(no project)</td><td>2h 40m</td><td>100.0%</td></tr>\n"));
+    assert!(output.contains("    <tr><th>Day</th><th>Time</th><th></th></tr>\n"));
+    assert!(output.contains(
+        "    <tr><td>2025-01-01</td><td>1h 40m</td><td><div class=\"progress-bar\"><div class=\"progress-fill\" style=\"width: 100.0%\"></div></div></td></tr>\n"
+    ));
+    assert!(output.contains("<td>2025-01-02</td><td>1h</td><td><div class=\"progress-bar\"><div class=\"progress-fill\" style=\"width: 60.0%\"></div></div></td></tr>\n"));
+    assert!(output.contains("<td>2025-01-03</td><td>0m</td><td><div class=\"progress-bar\"><div class=\"progress-fill\" style=\"width: 0.0%\"></div></div></td></tr>\n"));
+    assert_eq!(output.matches("<tr><td>2025-01-").count(), 31);
+    // Both time-card tables, plus the status, priority and tags tables.
+    assert_eq!(output.matches("<table>").count(), 5);
+}
+
+#[test]
+fn test_html_time_card_escapes_project_names() {
+    use crate::domain::ProjectId;
+
+    let mut report = sample_report();
+    let backend = ProjectId::new();
+    report.burn_charts.push(BurnChart {
+        project_name: "R&D <core>".to_string(),
+        project_id: Some(backend),
+        scope_line: vec![],
+        completed_line: vec![],
+        ideal_line: None,
+    });
+    report.time_analytics.by_project =
+        std::collections::HashMap::from([(Some(backend), 120), (None, 40)]);
+    let output = export_report_to_html_string(&report).unwrap();
+
+    assert!(
+        output.contains("    <tr><td>R&amp;D &lt;core&gt;</td><td>2h</td><td>75.0%</td></tr>\n")
+    );
+    assert!(output.contains("    <tr><td>(no project)</td><td>40m</td><td>25.0%</td></tr>\n"));
+    assert!(!output.contains("<td>R&D <core></td>"));
 }
 
 #[test]
@@ -596,7 +710,7 @@ fn test_html_insights_card_omits_optional_lines() {
     assert!(output.contains("  <p><strong>Longest Streak:</strong> 0 days</p>\n"));
     assert!(!output.contains("Most Productive Day"));
     assert!(!output.contains("Peak Hour"));
-    assert!(!output.contains("Total Time Tracked"));
+    assert!(!output.contains("<h2>Time Tracking</h2>"));
     assert!(!output.contains("🏆"));
 }
 
@@ -617,12 +731,24 @@ fn test_html_insights_trophy_when_current_streak_is_best() {
 #[test]
 fn test_html_insights_time_tracked_with_minutes() {
     let mut report = empty_report();
-    report.insights.total_time_tracked = 95;
+    report.time_analytics.total_minutes = 95;
+    report
+        .time_analytics
+        .by_day
+        .insert(NaiveDate::from_ymd_opt(2025, 1, 20).unwrap(), 95);
     report.insights.peak_hour = Some(0);
     report.insights.best_day = Some(Weekday::Mon);
     let output = export_report_to_html_string(&report).unwrap();
 
-    assert!(output.contains("<strong>Total Time Tracked:</strong> 1h 35m</p>"));
+    assert!(output.contains(
+        "<span class=\"metric\">Total: <span class=\"metric-value\">1h 35m</span></span>"
+    ));
+    assert!(output.contains(
+        "<span class=\"metric\">Active Days: <span class=\"metric-value\">1</span></span>"
+    ));
+    // The time card has no peak-hour/weekday lines when nothing was bucketed.
+    assert_eq!(output.matches("<strong>Peak Hour:</strong>").count(), 1);
+    assert!(!output.contains("Best Weekday"));
     assert!(output.contains("<strong>Peak Hour:</strong> 0:00</p>"));
     assert!(output.contains("<strong>Most Productive Day:</strong> Mon</p>"));
 }
@@ -665,7 +791,13 @@ fn test_html_project_card_text_and_bar() {
     assert!(
         output.contains("  <p><strong>Test Project</strong> - 25 remaining (75.0% complete)</p>\n")
     );
-    assert_eq!(output.matches("<div class=\"progress-bar\">").count(), 1);
+    // Only the project card's own bars: the time card draws one per day.
+    let project_card = |html: &str| -> usize {
+        html[position(html, "<h2>Project Progress</h2>")..]
+            .matches("<div class=\"progress-bar\">")
+            .count()
+    };
+    assert_eq!(project_card(&output), 1);
 
     let mut report = sample_report();
     report.burn_charts.push(BurnChart {
@@ -682,7 +814,7 @@ fn test_html_project_card_text_and_bar() {
         ideal_line: None,
     });
     let output = export_report_to_html_string(&report).unwrap();
-    assert_eq!(output.matches("<div class=\"progress-bar\">").count(), 2);
+    assert_eq!(project_card(&output), 2);
     assert!(output.contains("<strong>Second</strong> - 8 remaining (20.0% complete)"));
     assert!(output.contains("style=\"width: 20.0%\""));
 }
@@ -723,6 +855,7 @@ fn test_markdown_section_order() {
         "## Priority Breakdown",
         "## Velocity",
         "## Productivity Insights",
+        "## Time Tracking",
         "## Top Tags",
         "## Project Progress",
         "---\n*Generated by TaskFlow*",
@@ -775,20 +908,26 @@ fn test_markdown_insights_omit_optional_lines() {
     assert!(!output.contains("🏆"));
     assert!(!output.contains("Most Productive Day"));
     assert!(!output.contains("Peak Productivity Hour"));
-    assert!(!output.contains("Total Time Tracked"));
+    assert!(!output.contains("## Time Tracking"));
 }
 
 #[test]
 fn test_markdown_insights_time_tracked_with_minutes_and_equal_streaks() {
     let mut report = empty_report();
-    report.insights.total_time_tracked = 125;
+    report.time_analytics.total_minutes = 125;
+    report
+        .time_analytics
+        .by_day
+        .insert(NaiveDate::from_ymd_opt(2025, 1, 10).unwrap(), 125);
     report.insights.current_streak = 3;
     report.insights.longest_streak = 3;
     report.insights.peak_hour = Some(23);
     report.insights.best_day = Some(Weekday::Sun);
     let output = export_report_to_markdown_string(&report).unwrap();
 
-    assert!(output.contains("- **Total Time Tracked:** 2h 5m"));
+    assert!(output.contains("- **Total:** 2h 5m over 1 active day (2h 5m per active day)\n"));
+    assert!(!output.contains("**Peak Hour:**"));
+    assert!(!output.contains("**Best Weekday:**"));
     assert!(output.contains("- **Current Streak:** 3 days 🏆"));
     assert!(output.contains("- **Longest Streak:** 3 days"));
     assert!(output.contains("- **Peak Productivity Hour:** 23:00"));

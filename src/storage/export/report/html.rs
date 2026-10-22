@@ -3,6 +3,9 @@
 use std::io::Write;
 
 use crate::domain::analytics::AnalyticsReport;
+use crate::domain::format_minutes;
+
+use super::time_section::{day_rows, project_rows, share};
 
 /// Exports an analytics report to HTML format.
 ///
@@ -38,6 +41,11 @@ pub fn export_report_to_html<W: Write>(
 
     // Productivity insights card
     write_insights_card(writer, report)?;
+
+    // Time tracking card
+    if report.time_analytics.total_minutes > 0 {
+        write_time_card(writer, report)?;
+    }
 
     // Tag statistics card
     if !report.tag_stats.is_empty() {
@@ -286,14 +294,66 @@ fn write_insights_card<W: Write>(writer: &mut W, report: &AnalyticsReport) -> st
     if let Some(hour) = report.insights.peak_hour {
         writeln!(writer, "  <p><strong>Peak Hour:</strong> {hour}:00</p>")?;
     }
-    if report.insights.total_time_tracked > 0 {
-        let hours = report.insights.total_time_tracked / 60;
-        let mins = report.insights.total_time_tracked % 60;
+    writeln!(writer, "</div>")?;
+    Ok(())
+}
+
+/// The "Time Tracking" card: totals, a per-project table and a per-day bar
+/// chart over the report window.
+fn write_time_card<W: Write>(writer: &mut W, report: &AnalyticsReport) -> std::io::Result<()> {
+    let time = &report.time_analytics;
+    writeln!(writer, "<div class=\"card\">")?;
+    writeln!(writer, "  <h2>Time Tracking</h2>")?;
+    writeln!(
+        writer,
+        "  <span class=\"metric\">Total: <span class=\"metric-value\">{}</span></span>",
+        format_minutes(time.total_minutes)
+    )?;
+    writeln!(
+        writer,
+        "  <span class=\"metric\">Active Days: <span class=\"metric-value\">{}</span></span>",
+        time.active_days()
+    )?;
+    writeln!(
+        writer,
+        "  <span class=\"metric\">Per Active Day: <span class=\"metric-value\">{}</span></span>",
+        format_minutes(time.avg_minutes_per_active_day())
+    )?;
+    if let Some(hour) = time.peak_hour() {
+        writeln!(writer, "  <p><strong>Peak Hour:</strong> {hour}:00</p>")?;
+    }
+    if let Some(day) = time.most_productive_day() {
+        writeln!(writer, "  <p><strong>Best Weekday:</strong> {day}</p>")?;
+    }
+
+    writeln!(writer, "  <table>")?;
+    writeln!(
+        writer,
+        "    <tr><th>Project</th><th>Time</th><th>Share</th></tr>"
+    )?;
+    for (name, minutes, pct) in project_rows(report) {
         writeln!(
             writer,
-            "  <p><strong>Total Time Tracked:</strong> {hours}h {mins}m</p>"
+            "    <tr><td>{}</td><td>{}</td><td>{pct:.1}%</td></tr>",
+            escape_html(&name),
+            format_minutes(minutes)
         )?;
     }
+    writeln!(writer, "  </table>")?;
+
+    let days = day_rows(report);
+    let max = days.iter().map(|(_, m)| *m).max().unwrap_or(0);
+    writeln!(writer, "  <table>")?;
+    writeln!(writer, "    <tr><th>Day</th><th>Time</th><th></th></tr>")?;
+    for (date, minutes) in days {
+        writeln!(
+            writer,
+            "    <tr><td>{date}</td><td>{}</td><td><div class=\"progress-bar\"><div class=\"progress-fill\" style=\"width: {:.1}%\"></div></div></td></tr>",
+            format_minutes(minutes),
+            share(minutes, max)
+        )?;
+    }
+    writeln!(writer, "  </table>")?;
     writeln!(writer, "</div>")?;
     Ok(())
 }

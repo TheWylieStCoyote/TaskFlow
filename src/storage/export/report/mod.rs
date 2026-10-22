@@ -10,6 +10,7 @@
 
 mod html;
 mod markdown;
+mod time_section;
 
 #[cfg(test)]
 mod tests;

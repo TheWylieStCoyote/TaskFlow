@@ -9,6 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::widgets::Widget;
 use taskflow::app::Model;
 use taskflow::config::Theme;
+use taskflow::domain::today;
 use taskflow::domain::{Priority, Project, Task, TaskStatus};
 
 /// Helper to extract text content from a ratatui Buffer.
@@ -94,7 +95,7 @@ mod help_component {
 
         let area = Rect::new(0, 0, 80, 30);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);
@@ -108,7 +109,7 @@ mod help_component {
 
         let area = Rect::new(0, 0, 40, 15);
         let mut buffer = Buffer::empty(area);
-        let help = HelpPopup::new(&keybindings, &theme);
+        let help = HelpPopup::new(&keybindings, &theme, 0);
         help.render(area, &mut buffer);
 
         let output = buffer_to_string(&buffer);
@@ -858,7 +859,7 @@ mod evening_review_component {
 
     fn create_model_for_evening_review() -> Model {
         let mut model = Model::new();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Completed task today
         let mut completed = Task::new("Completed task");
@@ -997,7 +998,7 @@ mod evening_review_component {
     fn test_evening_review_welcome_high_completion() {
         // Test the "Great day!" branch (completion >= 80%)
         let mut model = Model::new();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Add 5 completed tasks and 1 incomplete = 83% completion
         for i in 0..5 {

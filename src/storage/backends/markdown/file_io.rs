@@ -3,6 +3,7 @@
 //! Handles reading, writing, and parsing of markdown files with YAML frontmatter.
 
 use crate::domain::{Project, ProjectId, Task, TaskId};
+use crate::storage::atomic_write;
 use crate::storage::{StorageError, StorageResult};
 use std::fs;
 use std::path::Path;
@@ -107,7 +108,7 @@ impl MarkdownBackend {
         let tags_file = self.base_path.join("tags.yaml");
         let content = serde_yaml::to_string(&self.tags)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&tags_file, content).map_err(|e| StorageError::io(&tags_file, e))?;
+        atomic_write(&tags_file, content)?;
         Ok(())
     }
 
@@ -116,7 +117,7 @@ impl MarkdownBackend {
         let entries_file = self.base_path.join("time_entries.yaml");
         let content = serde_yaml::to_string(&self.time_entries)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&entries_file, content).map_err(|e| StorageError::io(&entries_file, e))?;
+        atomic_write(&entries_file, content)?;
         Ok(())
     }
 
@@ -136,7 +137,7 @@ impl MarkdownBackend {
         let work_logs_file = self.base_path.join("work_logs.yaml");
         let content = serde_yaml::to_string(&self.work_logs)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&work_logs_file, content).map_err(|e| StorageError::io(&work_logs_file, e))?;
+        atomic_write(&work_logs_file, content)?;
         Ok(())
     }
 
@@ -156,7 +157,7 @@ impl MarkdownBackend {
         let habits_file = self.base_path.join("habits.yaml");
         let content = serde_yaml::to_string(&self.habits)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&habits_file, content).map_err(|e| StorageError::io(&habits_file, e))?;
+        atomic_write(&habits_file, content)?;
         Ok(())
     }
 
@@ -176,7 +177,7 @@ impl MarkdownBackend {
         let goals_file = self.base_path.join("goals.yaml");
         let content = serde_yaml::to_string(&self.goals)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&goals_file, content).map_err(|e| StorageError::io(&goals_file, e))?;
+        atomic_write(&goals_file, content)?;
         Ok(())
     }
 
@@ -196,8 +197,7 @@ impl MarkdownBackend {
         let key_results_file = self.base_path.join("key_results.yaml");
         let content = serde_yaml::to_string(&self.key_results)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&key_results_file, content)
-            .map_err(|e| StorageError::io(&key_results_file, e))?;
+        atomic_write(&key_results_file, content)?;
         Ok(())
     }
 
@@ -217,7 +217,7 @@ impl MarkdownBackend {
         let pomodoro_file = self.base_path.join("pomodoro.yaml");
         let content = serde_yaml::to_string(&self.pomodoro_state)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&pomodoro_file, content).map_err(|e| StorageError::io(&pomodoro_file, e))?;
+        atomic_write(&pomodoro_file, content)?;
         Ok(())
     }
 
@@ -237,7 +237,7 @@ impl MarkdownBackend {
         let filters_file = self.base_path.join("saved_filters.yaml");
         let content = serde_yaml::to_string(&self.saved_filters)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
-        fs::write(&filters_file, content).map_err(|e| StorageError::io(&filters_file, e))?;
+        atomic_write(&filters_file, content)?;
         Ok(())
     }
 
@@ -323,7 +323,7 @@ impl MarkdownBackend {
             content.push('\n');
         }
 
-        fs::write(&path, content).map_err(|e| StorageError::io(&path, e))?;
+        atomic_write(&path, content)?;
 
         // Update mtime cache after write
         if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {
@@ -352,7 +352,7 @@ impl MarkdownBackend {
             content.push('\n');
         }
 
-        fs::write(&path, content).map_err(|e| StorageError::io(&path, e))?;
+        atomic_write(&path, content)?;
 
         // Update mtime cache after write
         if let Ok(mtime) = fs::metadata(&path).and_then(|m| m.modified()) {

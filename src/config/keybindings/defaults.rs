@@ -1,191 +1,176 @@
 //! Default keybindings.
+//!
+//! The defaults live in a flat slice rather than being inserted straight into a
+//! `HashMap` so that a unit test can assert every key appears exactly once. A
+//! duplicate key in a map silently shadows the earlier binding, which is how
+//! several documented actions ended up unreachable in the past.
 
 use std::collections::HashMap;
 
 use super::Action;
 
+/// Every default `(key, action)` pair. Keys must be unique.
+///
+/// Key strings follow the format produced by the input layer: a single
+/// character (`j`, `G`, `?`), a named key (`enter`, `f5`, `pagedown`), or a
+/// `ctrl+`/`alt+` prefixed key. `shift+` is only ever emitted for non-character
+/// keys (`shift+tab`); for letters use the uppercase character instead.
+///
+/// Two-character entries beginning with a non-alphanumeric character (`@0`) are
+/// chords: the first key is pressed, then the second.
+pub(crate) const DEFAULT_BINDINGS: &[(&str, Action)] = &[
+    // Navigation
+    ("j", Action::MoveDown),
+    ("J", Action::MoveDown),
+    ("k", Action::MoveUp),
+    ("K", Action::MoveUp),
+    ("down", Action::MoveDown),
+    ("up", Action::MoveUp),
+    ("g", Action::MoveFirst),
+    ("G", Action::MoveLast),
+    ("ctrl+u", Action::PageUp),
+    ("ctrl+d", Action::PageDown),
+    ("pageup", Action::PageUp),
+    ("pagedown", Action::PageDown),
+    // Task actions
+    ("x", Action::ToggleComplete),
+    ("space", Action::ToggleComplete),
+    ("a", Action::CreateTask),
+    ("alt+a", Action::QuickCapture),
+    ("A", Action::CreateSubtask),
+    ("P", Action::CreateProject),
+    ("E", Action::EditProject),
+    ("X", Action::DeleteProject),
+    ("e", Action::EditTask),
+    ("D", Action::EditDueDate),
+    ("S", Action::EditScheduledDate),
+    ("alt+s", Action::EditScheduledTime),
+    ("T", Action::EditTags),
+    ("n", Action::EditDescription),
+    ("N", Action::EditDescriptionMultiline),
+    ("d", Action::DeleteTask),
+    ("Y", Action::DuplicateTask),
+    ("p", Action::CyclePriority),
+    ("m", Action::MoveToProject),
+    // Quick reschedule
+    ("]", Action::RescheduleTomorrow),
+    ("[", Action::RescheduleNextWeek),
+    ("M", Action::RescheduleNextMonday),
+    // Task snooze
+    ("z", Action::SnoozeTask),
+    ("Z", Action::ClearSnooze),
+    // Time tracking
+    ("t", Action::ToggleTimeTracking),
+    ("L", Action::ShowTimeLog),
+    ("W", Action::ShowWorkLog),
+    ("alt+t", Action::EditEstimate),
+    // UI actions
+    ("b", Action::ToggleSidebar),
+    ("c", Action::ToggleShowCompleted),
+    ("?", Action::ShowHelp),
+    ("f", Action::ToggleFocusMode),
+    ("F", Action::ToggleFullScreenFocus),
+    ("Q", Action::AddToFocusQueue),
+    ("h", Action::FocusSidebar),
+    ("H", Action::FocusSidebar),
+    ("l", Action::FocusTaskList),
+    ("left", Action::FocusSidebar),
+    ("right", Action::FocusTaskList),
+    ("enter", Action::Select),
+    ("/", Action::Search),
+    ("ctrl+l", Action::ClearSearch),
+    ("#", Action::FilterByTag),
+    ("ctrl+t", Action::ClearTagFilter),
+    ("s", Action::CycleSortField),
+    ("ctrl+o", Action::ToggleSortOrder),
+    // Multi-select / Bulk operations
+    ("v", Action::ToggleMultiSelect),
+    ("V", Action::SelectAll),
+    ("ctrl+v", Action::ClearSelection),
+    // Dependencies
+    ("B", Action::EditDependencies),
+    // Recurrence
+    ("R", Action::EditRecurrence),
+    // Manual ordering
+    ("ctrl+up", Action::MoveTaskUp),
+    ("ctrl+down", Action::MoveTaskDown),
+    // Task chains
+    ("alt+l", Action::LinkTask),
+    ("alt+u", Action::UnlinkTask),
+    // Calendar navigation
+    ("<", Action::CalendarPrevMonth),
+    (">", Action::CalendarNextMonth),
+    // System
+    ("ctrl+s", Action::Save),
+    ("u", Action::Undo),
+    ("ctrl+z", Action::Undo),
+    ("ctrl+r", Action::Redo),
+    ("U", Action::Redo),
+    ("q", Action::Quit),
+    ("alt+r", Action::RefreshStorage),
+    // Export
+    ("ctrl+e", Action::ExportCsv),
+    ("ctrl+i", Action::ExportIcs),
+    ("ctrl+g", Action::ExportChainsDot),
+    ("ctrl+m", Action::ExportChainsMermaid),
+    ("ctrl+p", Action::ExportReportMarkdown),
+    ("ctrl+h", Action::ExportReportHtml),
+    // Import
+    ("I", Action::ImportCsv),
+    ("alt+i", Action::ImportIcs),
+    // Reports navigation (Tab/Shift+Tab or l/h when in reports view)
+    ("tab", Action::ReportsNextPanel),
+    ("shift+tab", Action::ReportsPrevPanel),
+    // Macros: ctrl+q then a digit starts (or stops) recording into that slot;
+    // `@` then a digit plays the slot back. Stopping is handled by the same
+    // ctrl+q flow, so StopRecordMacro needs no key of its own.
+    ("ctrl+q", Action::RecordMacro),
+    ("@0", Action::PlayMacro0),
+    ("@1", Action::PlayMacro1),
+    ("@2", Action::PlayMacro2),
+    ("@3", Action::PlayMacro3),
+    ("@4", Action::PlayMacro4),
+    ("@5", Action::PlayMacro5),
+    ("@6", Action::PlayMacro6),
+    ("@7", Action::PlayMacro7),
+    ("@8", Action::PlayMacro8),
+    ("@9", Action::PlayMacro9),
+    // Templates
+    ("ctrl+n", Action::ShowTemplates),
+    // Keybindings editor
+    ("ctrl+k", Action::ShowKeybindingsEditor),
+    // Pomodoro timer
+    ("f5", Action::PomodoroStart),
+    ("f6", Action::PomodoroTogglePause),
+    ("f7", Action::PomodoroSkip),
+    ("f8", Action::PomodoroStop),
+    // Habit tracking: handled contextually in the Habits view
+    // (n=create, e=edit, d=delete, space/x=toggle, a=analytics).
+    // Burndown chart controls (work in Burndown view)
+    ("w", Action::BurndownCycleWindow),
+    ("o", Action::BurndownToggleMode),
+    ("+", Action::BurndownToggleScopeCreep),
+    // Duplicate detection: handled contextually in the Duplicates view
+    // (D=dismiss, M=merge, r=refresh) so `D`/`M` keep their global meanings.
+    // Git integration
+    ("alt+g", Action::ViewGitTodos),
+    ("O", Action::OpenInEditor),
+    // Reviews
+    ("alt+d", Action::ShowDailyReview),
+    ("alt+w", Action::ShowWeeklyReview),
+    ("alt+e", Action::ShowEveningReview),
+    // Task detail
+    ("i", Action::ShowTaskDetail),
+    // Command palette
+    ("alt+p", Action::ShowCommandPalette),
+    (":", Action::ShowCommandPalette),
+];
+
 /// Create the default keybindings map.
 #[must_use]
 pub fn default_bindings() -> HashMap<String, Action> {
-    let mut bindings = HashMap::new();
-
-    // Navigation
-    bindings.insert("j".to_string(), Action::MoveDown);
-    bindings.insert("k".to_string(), Action::MoveUp);
-    bindings.insert("down".to_string(), Action::MoveDown);
-    bindings.insert("up".to_string(), Action::MoveUp);
-    bindings.insert("g".to_string(), Action::MoveFirst);
-    bindings.insert("G".to_string(), Action::MoveLast);
-    bindings.insert("ctrl+u".to_string(), Action::PageUp);
-    bindings.insert("ctrl+d".to_string(), Action::PageDown);
-    bindings.insert("pageup".to_string(), Action::PageUp);
-    bindings.insert("pagedown".to_string(), Action::PageDown);
-
-    // Task actions
-    bindings.insert("x".to_string(), Action::ToggleComplete);
-    bindings.insert("space".to_string(), Action::ToggleComplete);
-    bindings.insert("a".to_string(), Action::CreateTask);
-    bindings.insert("Q".to_string(), Action::QuickCapture);
-    bindings.insert("A".to_string(), Action::CreateSubtask);
-    bindings.insert("P".to_string(), Action::CreateProject);
-    bindings.insert("E".to_string(), Action::EditProject);
-    bindings.insert("X".to_string(), Action::DeleteProject);
-    bindings.insert("e".to_string(), Action::EditTask);
-    bindings.insert("D".to_string(), Action::EditDueDate);
-    bindings.insert("S".to_string(), Action::EditScheduledDate);
-    bindings.insert("alt+s".to_string(), Action::EditScheduledTime);
-    bindings.insert("T".to_string(), Action::EditTags);
-    bindings.insert("n".to_string(), Action::EditDescription);
-    bindings.insert("N".to_string(), Action::EditDescriptionMultiline);
-    bindings.insert("d".to_string(), Action::DeleteTask);
-    bindings.insert("Y".to_string(), Action::DuplicateTask);
-    bindings.insert("p".to_string(), Action::CyclePriority);
-    bindings.insert("m".to_string(), Action::MoveToProject);
-
-    // Quick reschedule
-    bindings.insert("]".to_string(), Action::RescheduleTomorrow);
-    bindings.insert("[".to_string(), Action::RescheduleNextWeek);
-    bindings.insert("M".to_string(), Action::RescheduleNextMonday);
-
-    // Task snooze
-    bindings.insert("z".to_string(), Action::SnoozeTask);
-    bindings.insert("Z".to_string(), Action::ClearSnooze);
-
-    // Time tracking
-    bindings.insert("t".to_string(), Action::ToggleTimeTracking);
-    bindings.insert("L".to_string(), Action::ShowTimeLog);
-    bindings.insert("W".to_string(), Action::ShowWorkLog);
-    bindings.insert("E".to_string(), Action::EditEstimate);
-
-    // UI actions
-    bindings.insert("b".to_string(), Action::ToggleSidebar);
-    bindings.insert("c".to_string(), Action::ToggleShowCompleted);
-    bindings.insert("?".to_string(), Action::ShowHelp);
-    bindings.insert("f".to_string(), Action::ToggleFocusMode);
-    bindings.insert("F".to_string(), Action::ToggleFullScreenFocus);
-    bindings.insert("Q".to_string(), Action::AddToFocusQueue);
-    bindings.insert("h".to_string(), Action::FocusSidebar);
-    bindings.insert("l".to_string(), Action::FocusTaskList);
-    bindings.insert("left".to_string(), Action::FocusSidebar);
-    bindings.insert("right".to_string(), Action::FocusTaskList);
-    bindings.insert("enter".to_string(), Action::Select);
-    bindings.insert("/".to_string(), Action::Search);
-    bindings.insert("ctrl+l".to_string(), Action::ClearSearch);
-    bindings.insert("#".to_string(), Action::FilterByTag);
-    bindings.insert("ctrl+t".to_string(), Action::ClearTagFilter);
-    bindings.insert("s".to_string(), Action::CycleSortField);
-    bindings.insert("ctrl+s".to_string(), Action::ToggleSortOrder);
-
-    // Multi-select / Bulk operations
-    bindings.insert("v".to_string(), Action::ToggleMultiSelect);
-    bindings.insert("V".to_string(), Action::SelectAll);
-    bindings.insert("ctrl+v".to_string(), Action::ClearSelection);
-
-    // Dependencies
-    bindings.insert("B".to_string(), Action::EditDependencies);
-
-    // Recurrence
-    bindings.insert("R".to_string(), Action::EditRecurrence);
-
-    // Manual ordering
-    bindings.insert("ctrl+up".to_string(), Action::MoveTaskUp);
-    bindings.insert("ctrl+down".to_string(), Action::MoveTaskDown);
-
-    // Task chains
-    bindings.insert("ctrl+l".to_string(), Action::LinkTask);
-    bindings.insert("ctrl+shift+l".to_string(), Action::UnlinkTask);
-
-    // Calendar navigation
-    bindings.insert("<".to_string(), Action::CalendarPrevMonth);
-    bindings.insert(">".to_string(), Action::CalendarNextMonth);
-
-    // System
-    bindings.insert("ctrl+s".to_string(), Action::Save);
-    bindings.insert("u".to_string(), Action::Undo);
-    bindings.insert("ctrl+z".to_string(), Action::Undo);
-    bindings.insert("ctrl+r".to_string(), Action::Redo);
-    bindings.insert("U".to_string(), Action::Redo);
-    bindings.insert("q".to_string(), Action::Quit);
-    // bindings.insert("esc".to_string(), Action::Quit);
-    bindings.insert("f5".to_string(), Action::RefreshStorage);
-
-    // Export
-    bindings.insert("ctrl+e".to_string(), Action::ExportCsv);
-    bindings.insert("ctrl+i".to_string(), Action::ExportIcs);
-    bindings.insert("ctrl+g".to_string(), Action::ExportChainsDot);
-    bindings.insert("ctrl+m".to_string(), Action::ExportChainsMermaid);
-    bindings.insert("ctrl+p".to_string(), Action::ExportReportMarkdown);
-    bindings.insert("ctrl+h".to_string(), Action::ExportReportHtml);
-
-    // Import
-    bindings.insert("I".to_string(), Action::ImportCsv); // Shift+I for CSV import
-    bindings.insert("alt+i".to_string(), Action::ImportIcs); // Alt+I for ICS import
-
-    // Reports navigation (Tab/Shift+Tab or l/h when in reports view)
-    bindings.insert("tab".to_string(), Action::ReportsNextPanel);
-    bindings.insert("shift+tab".to_string(), Action::ReportsPrevPanel);
-
-    // Macros - q to record, Q to stop, @0-9 to play
-    bindings.insert("ctrl+q".to_string(), Action::RecordMacro);
-    bindings.insert("ctrl+Q".to_string(), Action::StopRecordMacro);
-    bindings.insert("@0".to_string(), Action::PlayMacro0);
-    bindings.insert("@1".to_string(), Action::PlayMacro1);
-    bindings.insert("@2".to_string(), Action::PlayMacro2);
-    bindings.insert("@3".to_string(), Action::PlayMacro3);
-    bindings.insert("@4".to_string(), Action::PlayMacro4);
-    bindings.insert("@5".to_string(), Action::PlayMacro5);
-    bindings.insert("@6".to_string(), Action::PlayMacro6);
-    bindings.insert("@7".to_string(), Action::PlayMacro7);
-    bindings.insert("@8".to_string(), Action::PlayMacro8);
-    bindings.insert("@9".to_string(), Action::PlayMacro9);
-
-    // Templates
-    bindings.insert("ctrl+n".to_string(), Action::ShowTemplates);
-
-    // Keybindings editor
-    bindings.insert("ctrl+k".to_string(), Action::ShowKeybindingsEditor);
-
-    // Pomodoro timer
-    bindings.insert("f5".to_string(), Action::PomodoroStart);
-    bindings.insert("f6".to_string(), Action::PomodoroTogglePause);
-    bindings.insert("f7".to_string(), Action::PomodoroSkip);
-    bindings.insert("f8".to_string(), Action::PomodoroStop);
-
-    // Habit tracking (work in Habits view)
-    // Note: These use different keys to avoid conflicts with task actions
-    // In Habits view: n=create, e=edit, d=delete, space/x=toggle, a=analytics
-    // The habit-specific actions are mapped contextually in the key handler
-
-    // Burndown chart controls (work in Burndown view)
-    // w = cycle time window (7/14/30/90 days)
-    // o = toggle mode (tasks vs hours)
-    // + = toggle scope creep display
-    bindings.insert("w".to_string(), Action::BurndownCycleWindow);
-    bindings.insert("o".to_string(), Action::BurndownToggleMode);
-    bindings.insert("+".to_string(), Action::BurndownToggleScopeCreep);
-
-    // Duplicate detection controls (work in Duplicates view)
-    // D = dismiss selected duplicate pair
-    // M = merge duplicates (delete second task)
-    // r = refresh duplicate list
-    bindings.insert("D".to_string(), Action::DismissDuplicate);
-    bindings.insert("M".to_string(), Action::MergeDuplicates);
-    bindings.insert("r".to_string(), Action::RefreshDuplicates);
-    // Git integration
-    bindings.insert("alt+g".to_string(), Action::ViewGitTodos);
-    bindings.insert("O".to_string(), Action::OpenInEditor);
-
-    // Reviews
-    bindings.insert("alt+d".to_string(), Action::ShowDailyReview);
-    bindings.insert("alt+w".to_string(), Action::ShowWeeklyReview);
-    bindings.insert("alt+e".to_string(), Action::ShowEveningReview);
-
-    // Task detail
-    bindings.insert("i".to_string(), Action::ShowTaskDetail);
-
-    // Command palette
-    bindings.insert("alt+p".to_string(), Action::ShowCommandPalette);
-    bindings.insert(":".to_string(), Action::ShowCommandPalette);
-
-    bindings
+    DEFAULT_BINDINGS
+        .iter()
+        .map(|(key, action)| ((*key).to_string(), action.clone()))
+        .collect()
 }

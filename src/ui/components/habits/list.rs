@@ -1,6 +1,6 @@
 //! Habit list rendering.
 
-use chrono::{TimeDelta, Utc};
+use chrono::TimeDelta;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -10,11 +10,12 @@ use ratatui::{
 };
 
 use super::HabitsView;
+use crate::domain::today;
 
 impl HabitsView<'_> {
     pub(crate) fn render_habit_list(&self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
-        let today = Utc::now().date_naive();
+        let today = today();
 
         let title = if self.model.habit_view.show_archived {
             " Habits (showing archived) "
@@ -117,7 +118,7 @@ impl HabitsView<'_> {
 
     pub(crate) fn render_week_calendar(&self, habit: &crate::domain::Habit) -> Span<'_> {
         let theme = self.theme;
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Show last 7 days
         let mut calendar = String::new();

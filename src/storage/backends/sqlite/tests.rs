@@ -13,6 +13,7 @@ use crate::storage::{
 };
 
 use super::SqliteBackend;
+use crate::domain::today;
 
 fn create_test_backend() -> (tempfile::TempDir, SqliteBackend) {
     let dir = tempdir().unwrap();
@@ -594,8 +595,6 @@ fn test_sqlite_habit_list_active() {
 
 #[test]
 fn test_sqlite_habit_with_check_ins() {
-    use chrono::Utc;
-
     let (_dir, mut backend) = create_test_backend();
 
     let mut habit = Habit::new("Exercise");
@@ -607,7 +606,7 @@ fn test_sqlite_habit_with_check_ins() {
     let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
     assert_eq!(retrieved.check_ins.len(), 1);
 
-    let today = Utc::now().date_naive();
+    let today = today();
     let check_in = retrieved.check_ins.get(&today).unwrap();
     assert!(check_in.completed);
     assert_eq!(check_in.note, Some("30 minutes".to_string()));
@@ -615,8 +614,6 @@ fn test_sqlite_habit_with_check_ins() {
 
 #[test]
 fn test_sqlite_habit_update_check_ins() {
-    use chrono::Utc;
-
     let (_dir, mut backend) = create_test_backend();
 
     let mut habit = Habit::new("Exercise");
@@ -629,7 +626,7 @@ fn test_sqlite_habit_update_check_ins() {
 
     // Verify update
     let retrieved = backend.get_habit(&habit.id).unwrap().unwrap();
-    let today = Utc::now().date_naive();
+    let today = today();
     let check_in = retrieved.check_ins.get(&today).unwrap();
     assert!(!check_in.completed);
 }
@@ -753,4 +750,151 @@ fn test_sqlite_work_log_delete_not_found() {
 
     let result = backend.delete_work_log(&WorkLogEntryId::new());
     assert!(result.is_err());
+}
+
+// ---------------------------------------------------------------------------
+// Durability regressions: columns that used to be dropped, pragmas, transactions
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sqlite_persists_snooze_and_recurrence_options() {
+    use crate::domain::{Recurrence, RecurrenceOptions};
+    use chrono::NaiveDate;
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("test.db");
+
+    let snooze = NaiveDate::from_ymd_opt(2030, 1, 15).unwrap();
+    let end = NaiveDate::from_ymd_opt(2031, 6, 30).unwrap();
+    let task = Task::new("Snoozed").with_recurrence_options(RecurrenceOptions {
+        interval: 3,
+        end_date: Some(end),
+        max_occurrences: Some(7),
+        occurrence_count: 2,
+    });
+    let mut task = task;
+    task.recurrence = Some(Recurrence::Daily);
+    task.snooze_until = Some(snooze);
+    let id = task.id;
+
+    {
+        let mut backend = SqliteBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+        backend.create_task(&task).unwrap();
+    }
+
+    // Reopen from disk so nothing is served from memory.
+    let mut backend = SqliteBackend::new(&path).unwrap();
+    backend.initialize().unwrap();
+    let loaded = backend.get_task(&id).unwrap().expect("task should exist");
+    assert_eq!(loaded.snooze_until, Some(snooze));
+    assert_eq!(loaded.recurrence_options.interval, 3);
+    assert_eq!(loaded.recurrence_options.end_date, Some(end));
+    assert_eq!(loaded.recurrence_options.max_occurrences, Some(7));
+    assert_eq!(loaded.recurrence_options.occurrence_count, 2);
+
+    // And updates round-trip too.
+    let mut updated = loaded.clone();
+    updated.snooze_until = None;
+    updated.recurrence_options.interval = 1;
+    backend.update_task(&updated).unwrap();
+    let reloaded = backend.get_task(&id).unwrap().unwrap();
+    assert_eq!(reloaded.snooze_until, None);
+    assert_eq!(reloaded.recurrence_options.interval, 1);
+}
+
+#[test]
+fn test_sqlite_migrates_old_schema_without_snooze_columns() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("old.db");
+
+    // Simulate a database created before the columns existed.
+    {
+        let mut backend = SqliteBackend::new(&path).unwrap();
+        backend.initialize().unwrap();
+        let conn = backend.inner.conn().unwrap();
+        conn.execute_batch(
+            "ALTER TABLE tasks DROP COLUMN snooze_until; ALTER TABLE tasks DROP COLUMN recurrence_options;",
+        )
+        .unwrap();
+        assert!(conn.prepare("SELECT snooze_until FROM tasks").is_err());
+    }
+
+    let mut backend = SqliteBackend::new(&path).unwrap();
+    backend.initialize().unwrap();
+    let conn = backend.inner.conn().unwrap();
+    assert!(conn
+        .prepare("SELECT snooze_until, recurrence_options FROM tasks")
+        .is_ok());
+
+    // A task with defaults still loads fine when the columns hold NULL.
+    conn.execute(
+        "INSERT INTO tasks (id, title, created_at, updated_at) VALUES (?1, 'legacy', ?2, ?2)",
+        params![TaskId::new().0.to_string(), chrono::Utc::now().to_rfc3339()],
+    )
+    .unwrap();
+    let tasks = backend.list_tasks().unwrap();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].snooze_until, None);
+    assert_eq!(
+        tasks[0].recurrence_options,
+        crate::domain::RecurrenceOptions::default()
+    );
+}
+
+#[test]
+fn test_sqlite_foreign_keys_cascade_on_task_delete() {
+    let (_dir, mut backend) = create_test_backend();
+
+    let mut task = Task::new("Parent");
+    task.tags = vec!["alpha".to_string(), "beta".to_string()];
+    let id = task.id;
+    backend.create_task(&task).unwrap();
+    backend
+        .create_work_log(&WorkLogEntry::new(id, "did a thing"))
+        .unwrap();
+
+    let conn = backend.inner.conn().unwrap();
+    let fk: i64 = conn
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(fk, 1, "foreign_keys pragma must be enabled");
+    let tag_rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_tags", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(tag_rows, 2);
+
+    backend.delete_task(&id).unwrap();
+
+    let conn = backend.inner.conn().unwrap();
+    let tag_rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task_tags", [], |r| r.get(0))
+        .unwrap();
+    let log_rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM work_logs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(tag_rows, 0, "task_tags should cascade");
+    assert_eq!(log_rows, 0, "work_logs should cascade");
+}
+
+#[test]
+fn test_sqlite_import_all_rolls_back_on_failure() {
+    use crate::storage::ExportData;
+
+    let (_dir, mut backend) = create_test_backend();
+    backend.create_task(&Task::new("keep me")).unwrap();
+
+    // A work log pointing at a task that is not part of the import violates the
+    // foreign key and must abort the whole import.
+    let mut data = ExportData::default();
+    let orphan = WorkLogEntry::new(TaskId::new(), "orphan");
+    data.work_logs.push(orphan);
+
+    let result = backend.import_all(&data);
+    assert!(result.is_err(), "import with orphan work log should fail");
+
+    // The pre-existing data survived because the transaction rolled back.
+    let tasks = backend.list_tasks().unwrap();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].title, "keep me");
 }

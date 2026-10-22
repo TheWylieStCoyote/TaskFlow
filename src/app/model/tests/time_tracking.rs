@@ -13,7 +13,7 @@ fn test_model_start_time_tracking() {
     model.start_time_tracking(model.tasks.keys().next().copied().unwrap());
 
     assert!(model.active_time_entry.is_some());
-    assert!(model.time_entries.len() == 1);
+    assert_eq!(model.time_entries.len(), 1);
     assert!(model.storage.dirty);
 
     let entry = model.active_time_entry().unwrap();

@@ -7,7 +7,7 @@ mod render;
 #[cfg(test)]
 mod tests;
 
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -18,6 +18,7 @@ use ratatui::{
 
 use crate::app::{Model, TimelineZoom};
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Task;
 
 /// Width of the task label column
@@ -71,7 +72,7 @@ impl<'a> Timeline<'a> {
 
     /// Compute the date span for a task.
     pub(crate) fn task_span(task: &Task) -> (NaiveDate, NaiveDate) {
-        let today = Utc::now().date_naive();
+        let today = today();
 
         match (task.scheduled_date, task.due_date, task.estimated_minutes) {
             // Both dates present
@@ -153,7 +154,7 @@ impl Widget for Timeline<'_> {
         let theme = self.theme;
         let state = &self.model.timeline_state;
         let viewport_days = state.viewport_days as usize;
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Layout: header (2 lines) + tasks + footer (1 line)
         let chunks = Layout::default()

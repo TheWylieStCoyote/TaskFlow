@@ -1,6 +1,7 @@
 //! Filtering and view tests.
 
 use crate::app::model::{Model, ViewId};
+use crate::domain::today;
 use crate::domain::SortSpec;
 use crate::domain::{Priority, SortField, SortOrder, TagFilterMode, Task, TaskStatus};
 
@@ -137,7 +138,7 @@ fn test_view_today_filters_due_today() {
     let mut model = Model::new();
     model.current_view = ViewId::Today;
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let tomorrow = today + chrono::Duration::days(1);
 
     let task_today = Task::new("Due today").with_due_date(today);
@@ -160,7 +161,7 @@ fn test_view_upcoming_filters_future() {
     let mut model = Model::new();
     model.current_view = ViewId::Upcoming;
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let tomorrow = today + chrono::Duration::days(1);
     let next_week = today + chrono::Duration::days(7);
 
@@ -211,7 +212,7 @@ fn test_view_overdue_filters_past_due() {
     let mut model = Model::new();
     model.current_view = ViewId::Overdue;
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let yesterday = today - chrono::Duration::days(1);
     let last_week = today - chrono::Duration::days(7);
     let tomorrow = today + chrono::Duration::days(1);
@@ -245,7 +246,7 @@ fn test_view_overdue_excludes_today() {
     let mut model = Model::new();
     model.current_view = ViewId::Overdue;
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let task_today = Task::new("Due today").with_due_date(today);
 
     model.tasks.insert(task_today.id, task_today);

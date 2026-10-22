@@ -2,9 +2,11 @@
 source: tests/ui_snapshots.rs
 expression: output
 ---
-┌─────────────────────── Help (press ? or Esc to close) ───────────────────────┐
+┌───────────────── Help (j/k scroll · any other key to close) ─────────────────┐
 │Navigation                                                                    │
 │G         Go to last                                                          │
+│J         Move down                                                           │
+│K         Move up                                                             │
 │Ctrl+d    Page down                                                           │
 │Ctrl+u    Page up                                                             │
 │↓         Move down                                                           │
@@ -17,6 +19,8 @@ expression: output
 │                                                                              │
 │Tasks                                                                         │
 │A         Create subtask                                                      │
+│D         Edit due date                                                       │
+│M         Reschedule to next Monday                                           │
 │N         Edit description (multi-line)                                       │
 │S         Edit scheduled date                                                 │
 │T         Edit tags                                                           │
@@ -25,10 +29,6 @@ expression: output
 │[         Reschedule to next week                                             │
 │]         Reschedule to tomorrow                                              │
 │a         Create task                                                         │
+│Alt+a     Quick capture with hints                                            │
 │Alt+s     Edit scheduled time block                                           │
-│Ctrl+↓    Move task down                                                      │
-│Ctrl+↑    Move task up                                                        │
-│d         Delete task                                                         │
-│e         Edit task title                                                     │
-│i         Show task details                                                   │
 └──────────────────────────────────────────────────────────────────────────────┘

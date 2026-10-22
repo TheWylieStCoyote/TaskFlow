@@ -3,9 +3,9 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Task;
 use crate::ui::test_utils::{buffer_content, render_widget};
-use chrono::Utc;
 
 #[test]
 fn test_calendar_renders_month_name() {
@@ -125,7 +125,7 @@ fn test_calendar_renders_tasks_for_selected_day() {
     use chrono::Datelike;
 
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Add a task due today
     let task = Task::new("Today's Task").with_due_date(today);

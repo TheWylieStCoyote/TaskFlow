@@ -3,6 +3,7 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::{Task, TaskStatus};
 use ratatui::buffer::Buffer;
 
@@ -138,13 +139,13 @@ fn test_burndown_with_project_filter() {
 
 #[test]
 fn test_burndown_velocity_calculation() {
-    use chrono::{Duration, Local};
+    use chrono::Duration;
 
     let mut model = Model::new();
     let theme = Theme::default();
 
     // Add some tasks with completion dates spread over time
-    let today = Local::now().date_naive();
+    let today = today();
     let mut task1 = Task::new("Task 1").with_status(TaskStatus::Done);
     task1.completed_at = Some(
         (today - Duration::days(3))

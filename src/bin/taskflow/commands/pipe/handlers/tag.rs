@@ -102,11 +102,11 @@ fn list_tags(model: &Model, filters: &Option<FilterParams>) -> HandlerResult {
             }
         } else {
             // Default: sort by count descending
-            tags.sort_by(|a, b| b.total_count.cmp(&a.total_count));
+            tags.sort_by_key(|a| std::cmp::Reverse(a.total_count));
         }
     } else {
         // Default: sort by count descending
-        tags.sort_by(|a, b| b.total_count.cmp(&a.total_count));
+        tags.sort_by_key(|a| std::cmp::Reverse(a.total_count));
     }
 
     let total = tags.len();

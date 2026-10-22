@@ -1,11 +1,12 @@
 //! Tests for the timeline widget.
 
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate};
 use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
 
 use super::*;
 use crate::app::{Model, TimelineZoom};
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::{Priority, Task, TaskStatus};
 
 fn create_test_timeline<'a>(model: &'a Model, theme: &'a Theme) -> Timeline<'a> {
@@ -311,7 +312,7 @@ fn test_task_span_no_dates() {
     let (start, end) = Timeline::task_span(&task);
 
     // Should default to today (UTC, matching task_span implementation)
-    let today = Utc::now().date_naive();
+    let today = today();
     assert_eq!(start, today);
     assert_eq!(end, today);
 }
@@ -559,7 +560,7 @@ fn test_task_color_priority_high() {
     let color = timeline.task_color(&task);
 
     // High priority should have a color
-    assert!(color != Color::Reset);
+    assert_ne!(color, Color::Reset);
 }
 
 #[test]
@@ -572,5 +573,5 @@ fn test_task_color_completed() {
     let color = timeline.task_color(&task);
 
     // Completed task should have a color
-    assert!(color != Color::Reset);
+    assert_ne!(color, Color::Reset);
 }

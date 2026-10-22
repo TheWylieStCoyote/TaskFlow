@@ -7,6 +7,7 @@ use chrono::Utc;
 use tracing::debug;
 
 use crate::app::{HabitMessage, Model};
+use crate::domain::today;
 use crate::domain::Habit;
 
 /// Handle habit tracking messages.
@@ -24,7 +25,7 @@ pub(crate) fn handle_habit(model: &mut Model, msg: HabitMessage) {
             habit_id,
             completed,
         } => {
-            let today = Utc::now().date_naive();
+            let today = today();
             if let Some(habit) = model.habits.get_mut(&habit_id) {
                 habit.check_in(today, completed, None);
             }
@@ -43,7 +44,7 @@ pub(crate) fn handle_habit(model: &mut Model, msg: HabitMessage) {
             debug!(?habit_id, ?date, completed, "Recorded habit check-in");
         }
         HabitMessage::ToggleToday(habit_id) => {
-            let today = Utc::now().date_naive();
+            let today = today();
             let completed = if let Some(habit) = model.habits.get_mut(&habit_id) {
                 let currently_completed = habit.is_completed_on(today);
                 habit.check_in(today, !currently_completed, None);

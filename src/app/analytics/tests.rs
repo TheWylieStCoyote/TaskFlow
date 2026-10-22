@@ -3,6 +3,7 @@
 use super::*;
 use crate::app::Model;
 use crate::domain::analytics::ReportConfig;
+use crate::domain::today;
 use crate::domain::{Priority, Project, Task, TaskStatus};
 
 fn create_test_model() -> Model {
@@ -113,8 +114,8 @@ fn test_completion_trend() {
     let model = create_test_model();
     let engine = AnalyticsEngine::new(&model);
 
-    let start = chrono::Local::now().date_naive() - chrono::Duration::days(7);
-    let end = chrono::Local::now().date_naive();
+    let start = today() - chrono::Duration::days(7);
+    let end = today();
 
     let trend = engine.compute_completion_trend(start, end);
 
@@ -128,8 +129,8 @@ fn test_velocity_metrics() {
     let model = create_test_model();
     let engine = AnalyticsEngine::new(&model);
 
-    let start = chrono::Local::now().date_naive() - chrono::Duration::days(30);
-    let end = chrono::Local::now().date_naive();
+    let start = today() - chrono::Duration::days(30);
+    let end = today();
 
     let velocity = engine.compute_velocity(start, end);
 
@@ -151,8 +152,8 @@ fn test_burn_charts() {
     let model = create_test_model();
     let engine = AnalyticsEngine::new(&model);
 
-    let start = chrono::Local::now().date_naive() - chrono::Duration::days(7);
-    let end = chrono::Local::now().date_naive();
+    let start = today() - chrono::Duration::days(7);
+    let end = today();
 
     let charts = engine.compute_burn_charts(start, end);
 
@@ -166,8 +167,8 @@ fn test_time_analytics() {
     let model = create_test_model();
     let engine = AnalyticsEngine::new(&model);
 
-    let start = chrono::Local::now().date_naive() - chrono::Duration::days(7);
-    let end = chrono::Local::now().date_naive();
+    let start = today() - chrono::Duration::days(7);
+    let end = today();
 
     let analytics = engine.compute_time_analytics(start, end);
 

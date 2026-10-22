@@ -1,6 +1,7 @@
 //! Timeline view state types.
 
-use chrono::{Duration, NaiveDate, Utc};
+use crate::domain::today;
+use chrono::{Duration, NaiveDate};
 
 /// Zoom level for the timeline view.
 ///
@@ -35,7 +36,7 @@ pub struct TimelineState {
 
 impl Default for TimelineState {
     fn default() -> Self {
-        let today = Utc::now().date_naive();
+        let today = today();
         Self {
             // Start viewport 7 days before today
             viewport_start: today - Duration::days(7),

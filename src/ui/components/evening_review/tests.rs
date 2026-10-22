@@ -3,6 +3,7 @@
 use super::*;
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::{Task, TaskStatus};
 use chrono::{Duration, Utc};
 
@@ -17,17 +18,17 @@ fn create_model_with_tasks() -> Model {
 
     // Add an incomplete task due today
     let mut due_today = Task::new("Due today");
-    due_today.due_date = Some(Utc::now().date_naive());
+    due_today.due_date = Some(today());
     model.tasks.insert(due_today.id, due_today);
 
     // Add an incomplete task scheduled for today
     let mut scheduled_today = Task::new("Scheduled today");
-    scheduled_today.scheduled_date = Some(Utc::now().date_naive());
+    scheduled_today.scheduled_date = Some(today());
     model.tasks.insert(scheduled_today.id, scheduled_today);
 
     // Add a task for tomorrow
     let mut tomorrow_task = Task::new("Tomorrow task");
-    tomorrow_task.due_date = Some(Utc::now().date_naive() + Duration::days(1));
+    tomorrow_task.due_date = Some(today() + Duration::days(1));
     model.tasks.insert(tomorrow_task.id, tomorrow_task);
 
     model
@@ -106,7 +107,7 @@ fn test_completion_rate_all_complete() {
     let mut task = Task::new("Done");
     task.status = TaskStatus::Done;
     task.completed_at = Some(Utc::now());
-    task.due_date = Some(Utc::now().date_naive());
+    task.due_date = Some(today());
     model.tasks.insert(task.id, task);
 
     let theme = Theme::default();

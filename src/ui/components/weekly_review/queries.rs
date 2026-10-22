@@ -5,10 +5,11 @@ use chrono::NaiveDate;
 use crate::domain::{Project, ProjectId, Task};
 
 use super::WeeklyReview;
+use crate::domain::LocalDate;
 
 impl WeeklyReview<'_> {
     pub(crate) fn today() -> NaiveDate {
-        chrono::Utc::now().date_naive()
+        crate::domain::today()
     }
 
     pub(crate) fn week_ago() -> NaiveDate {
@@ -26,7 +27,7 @@ impl WeeklyReview<'_> {
             .tasks
             .values()
             .filter(|t| {
-                t.status.is_complete() && t.completed_at.is_some_and(|d| d.date_naive() >= week_ago)
+                t.status.is_complete() && t.completed_at.is_some_and(|d| d.local_date() >= week_ago)
             })
             .collect()
     }
@@ -72,7 +73,7 @@ impl WeeklyReview<'_> {
 
                 // Check if any task was modified in the past week
                 let has_recent_activity = self.model.tasks.values().any(|t| {
-                    t.project_id.as_ref() == Some(id) && t.updated_at.date_naive() >= week_ago
+                    t.project_id.as_ref() == Some(id) && t.updated_at.local_date() >= week_ago
                 });
 
                 // Stale if has tasks but no recent activity

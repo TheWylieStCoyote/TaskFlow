@@ -18,6 +18,8 @@
 //! - Work log entries
 //! - Bulk operations
 
+use crate::domain::text::truncate_chars;
+
 mod action;
 mod stack;
 
@@ -90,11 +92,7 @@ pub(crate) use inverse_swap;
 
 /// Truncate a string with ellipsis if too long
 pub(crate) fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
+    truncate_chars(s, max_len, "...")
 }
 
 #[cfg(test)]

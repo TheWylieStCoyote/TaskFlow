@@ -119,6 +119,7 @@
 pub mod analytics;
 mod audit_log;
 mod calendar_event;
+pub mod dates;
 pub mod duplicate_detector;
 mod filter;
 pub mod filter_dsl;
@@ -130,6 +131,7 @@ mod pomodoro;
 mod project;
 mod tag;
 mod task;
+pub mod text;
 mod time_entry;
 mod work_log;
 
@@ -138,6 +140,7 @@ mod proptest_tests;
 
 pub use audit_log::*;
 pub use calendar_event::*;
+pub use dates::{today, LocalDate};
 pub use filter::*;
 pub use goal::*;
 pub use habit::*;

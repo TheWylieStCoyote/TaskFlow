@@ -14,11 +14,11 @@ use taskflow::config::Keybindings;
 use taskflow::ui::InputMode;
 
 pub use handlers::{
-    handle_calendar_view, handle_daily_review, handle_description_editor, handle_eisenhower_view,
-    handle_evening_review, handle_goals_view, handle_habits_view, handle_kanban_view,
-    handle_keybindings_editor, handle_macro_slot, handle_network_view, handle_reports_view,
-    handle_task_detail, handle_template_picker, handle_time_log, handle_timeline_view,
-    handle_weekly_planner_view, handle_weekly_review, handle_work_log,
+    handle_calendar_view, handle_daily_review, handle_description_editor, handle_duplicates_view,
+    handle_eisenhower_view, handle_evening_review, handle_goals_view, handle_habits_view,
+    handle_kanban_view, handle_keybindings_editor, handle_macro_slot, handle_network_view,
+    handle_reports_view, handle_task_detail, handle_template_picker, handle_time_log,
+    handle_timeline_view, handle_weekly_planner_view, handle_weekly_review, handle_work_log,
 };
 pub use mouse::handle_mouse_event;
 pub use util::{action_to_message, key_event_to_string};
@@ -89,9 +89,23 @@ pub fn handle_key_event(
         return Message::Ui(UiMessage::DismissOverdueAlert);
     }
 
-    // If help is showing, any key closes it
+    // If help is showing, scroll with j/k/arrows/page keys; any other key closes it
     if model.show_help {
-        return Message::Ui(UiMessage::HideHelp);
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => Message::Ui(UiMessage::HelpScrollDown),
+            KeyCode::Char('k') | KeyCode::Up => Message::Ui(UiMessage::HelpScrollUp),
+            KeyCode::PageDown | KeyCode::Char('d')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                Message::Ui(UiMessage::HelpPageDown)
+            }
+            KeyCode::PageUp | KeyCode::Char('u')
+                if key.modifiers.contains(event::KeyModifiers::CONTROL) =>
+            {
+                Message::Ui(UiMessage::HelpPageUp)
+            }
+            _ => Message::Ui(UiMessage::HideHelp),
+        };
     }
 
     // If focus mode is active, handle special keys
@@ -206,6 +220,13 @@ pub fn handle_key_event(
         return Message::System(SystemMessage::ScanGitTodos);
     }
 
+    // In Duplicates view, D/M/r act on duplicate pairs
+    if model.current_view == taskflow::app::ViewId::Duplicates {
+        if let Some(msg) = handle_duplicates_view(key) {
+            return msg;
+        }
+    }
+
     // In Network view, handle task navigation
     if model.current_view == taskflow::app::ViewId::Network {
         if let Some(msg) = handle_network_view(key) {
@@ -255,6 +276,14 @@ pub fn handle_key_event(
         return handle_macro_slot(key, model);
     }
 
+    // Complete a pending multi-key chord (e.g. `@` then `3` plays macro 3)
+    if let Some(prefix) = model.pending_chord.take() {
+        let chord = format!("{prefix}{}", key_event_to_string(&key));
+        return keybindings
+            .get_action(&chord)
+            .map_or(Message::None, action_to_message);
+    }
+
     // Enter opens task detail when task list is focused
     if key.code == KeyCode::Enter && model.focus_pane == taskflow::app::FocusPane::TaskList {
         return Message::Ui(UiMessage::ShowTaskDetail);
@@ -262,6 +291,12 @@ pub fn handle_key_event(
 
     // Convert key event to string for lookup
     let key_str = key_event_to_string(&key);
+
+    // Start a chord: remember the prefix and wait for the next key
+    if keybindings.is_chord_prefix(&key_str) {
+        model.pending_chord = Some(key_str);
+        return Message::None;
+    }
 
     // Look up action in keybindings
     if let Some(action) = keybindings.get_action(&key_str) {

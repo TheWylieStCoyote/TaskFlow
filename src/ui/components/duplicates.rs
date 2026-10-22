@@ -3,6 +3,7 @@
 //! Displays tasks that may be duplicates based on fuzzy title matching,
 //! allowing users to review and merge or dismiss duplicate pairs.
 
+use crate::domain::text::truncate_chars;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -352,11 +353,7 @@ impl Widget for Duplicates<'_> {
 
 /// Truncate a title to a maximum length, adding ellipsis if needed
 fn truncate_title(title: &str, max_len: usize) -> String {
-    if title.len() <= max_len {
-        title.to_string()
-    } else {
-        format!("{}...", &title[..max_len.saturating_sub(3)])
-    }
+    truncate_chars(title, max_len, "...")
 }
 
 #[cfg(test)]

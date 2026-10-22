@@ -58,6 +58,7 @@ use chrono::{Datelike, NaiveDate, Weekday};
 use std::collections::HashMap;
 
 use super::{ProjectId, TaskId};
+use crate::domain::today;
 
 /// A single point in a time series.
 #[derive(Debug, Clone, PartialEq)]
@@ -371,7 +372,7 @@ impl ReportConfig {
     /// Create a report config for the last N days.
     #[must_use]
     pub fn last_n_days(days: i64) -> Self {
-        let end = chrono::Local::now().date_naive();
+        let end = today();
         let start = end - chrono::Duration::days(days);
         Self {
             start_date: start,
@@ -386,7 +387,7 @@ impl ReportConfig {
     /// Create a report config for the current month.
     #[must_use]
     pub fn current_month() -> Self {
-        let today = chrono::Local::now().date_naive();
+        let today = today();
         let start = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
             .expect("day 1 of current month always exists");
         Self {

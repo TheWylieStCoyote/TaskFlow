@@ -5,6 +5,7 @@ use chrono::Datelike;
 use crate::app::{
     update::update, Message, Model, NavigationMessage, TaskMessage, UiMessage, ViewId,
 };
+use crate::domain::today;
 use crate::domain::{Task, TaskStatus};
 
 #[test]
@@ -40,7 +41,7 @@ fn test_calendar_task_navigation() {
     let mut model = Model::new();
 
     // Add multiple tasks for the same day
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let task1 = Task::new("Task 1").with_due_date(today);
     let task2 = Task::new("Task 2").with_due_date(today);
     let task3 = Task::new("Task 3").with_due_date(today);
@@ -118,7 +119,7 @@ fn test_calendar_task_actions_when_focused() {
     let mut model = Model::new();
 
     // Add a task for today
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let task = Task::new("Test task").with_due_date(today);
     let task_id = task.id;
     model.tasks.insert(task_id, task);

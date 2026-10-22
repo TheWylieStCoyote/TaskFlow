@@ -1,8 +1,9 @@
 //! Tests for filtering module.
 
-use chrono::{Datelike, Duration, Utc};
+use chrono::{Datelike, Duration};
 
 use crate::app::Model;
+use crate::domain::today;
 use crate::domain::{Priority, Project, SortField, SortOrder, Task, TaskStatus};
 
 // ========================================================================
@@ -34,7 +35,7 @@ fn test_kanban_column_tasks() {
 #[test]
 fn test_eisenhower_quadrant_tasks() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Q0: Urgent + Important (due within 2 days, high priority)
     let mut urgent_important = Task::new("Urgent Important");
@@ -86,7 +87,7 @@ fn test_eisenhower_quadrant_tasks() {
 #[test]
 fn test_weekly_planner_day_tasks() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
     let days_since_monday = today.weekday().num_days_from_monday();
     let monday = today - Duration::days(i64::from(days_since_monday));
 
@@ -356,7 +357,7 @@ fn test_refresh_visible_tasks_by_due_date_sort() {
     let mut model = Model::new();
     model.filtering.sort.field = SortField::DueDate;
     model.filtering.sort.order = SortOrder::Ascending;
-    let today = Utc::now().date_naive();
+    let today = today();
 
     let mut soon = Task::new("Due soon");
     soon.due_date = Some(today + Duration::days(1));

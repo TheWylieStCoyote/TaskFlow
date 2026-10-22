@@ -236,11 +236,7 @@ impl Model {
     #[must_use]
     pub fn subtask_percentage(&self, task_id: &TaskId) -> Option<u8> {
         let (completed, total) = self.subtask_progress(task_id);
-        if total == 0 {
-            None
-        } else {
-            Some(((completed * 100) / total) as u8)
-        }
+        (completed * 100).checked_div(total).map(|pct| pct as u8)
     }
 
     /// Returns true if the task has any incomplete dependencies (is blocked).

@@ -368,12 +368,12 @@ fn test_dashboard_completion_by_priority_all_levels() {
 
 #[test]
 fn test_dashboard_overdue_count_with_overdue_tasks() {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let mut model = Model::new();
 
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let yesterday = today() - Duration::days(1);
+    let tomorrow = today() + Duration::days(1);
 
     // Overdue task (due yesterday, not done)
     let task1 = Task::new("Overdue").with_due_date(yesterday);
@@ -394,11 +394,11 @@ fn test_dashboard_overdue_count_with_overdue_tasks() {
 
 #[test]
 fn test_dashboard_overdue_count_no_overdue() {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let mut model = Model::new();
 
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let tomorrow = today() + Duration::days(1);
 
     let task1 = Task::new("Future").with_due_date(tomorrow);
     let task2 = Task::new("No due date");
@@ -579,6 +579,7 @@ fn test_dashboard_format_duration_hours_only() {
 // Panel content tests - verify conditional formatting and threshold logic
 // =====================================================================
 
+use crate::domain::today;
 use crate::domain::Project;
 
 #[test]
@@ -652,11 +653,11 @@ fn test_panel_completion_low_rate() {
 
 #[test]
 fn test_panel_overdue_shows_count() {
-    use chrono::{Duration, Utc};
+    use chrono::Duration;
 
     let mut model = Model::new();
 
-    let yesterday = Utc::now().date_naive() - Duration::days(1);
+    let yesterday = today() - Duration::days(1);
     let task1 = Task::new("Overdue 1").with_due_date(yesterday);
     let task2 = Task::new("Overdue 2").with_due_date(yesterday);
 

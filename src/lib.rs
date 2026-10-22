@@ -16,6 +16,8 @@
 #![allow(clippy::missing_panics_doc)] // Internal functions with known-valid inputs
 #![allow(clippy::comparison_chain)] // if-else chains often clearer than match on Ordering
 #![allow(clippy::format_push_string)] // Minor perf, readability preferred
+#![allow(unknown_lints)] // Lints below may be newer than the local toolchain
+#![allow(clippy::assert_is_empty)] // `assert!(v.is_empty())` reads better than `assert_eq!(v, [] as [T; 0])`
 
 //! # `TaskFlow`
 //!
@@ -40,14 +42,13 @@
 //! ### Creating Tasks
 //!
 //! ```
-//! use taskflow::domain::{Task, Priority, TaskStatus};
-//! use chrono::Utc;
+//! use taskflow::domain::{today, Task, Priority, TaskStatus};
 //!
 //! // Create a simple task
 //! let task = Task::new("Write documentation");
 //!
 //! // Create a task with priority and due date
-//! let today = Utc::now().date_naive();
+//! let today = today();
 //! let urgent_task = Task::new("Fix critical bug")
 //!     .with_priority(Priority::Urgent)
 //!     .with_due_date(today)

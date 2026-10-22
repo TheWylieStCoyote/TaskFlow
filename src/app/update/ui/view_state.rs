@@ -16,11 +16,13 @@ pub fn toggle_sidebar(model: &mut Model) {
 /// Show help panel.
 pub fn show_help(model: &mut Model) {
     model.show_help = true;
+    model.help_scroll = 0;
 }
 
 /// Hide help panel.
 pub fn hide_help(model: &mut Model) {
     model.show_help = false;
+    model.help_scroll = 0;
 }
 
 /// Toggle focus mode (only if a task is selected).

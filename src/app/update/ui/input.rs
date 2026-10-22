@@ -6,6 +6,7 @@ use crate::domain::TaskId;
 use crate::ui::{InputMode, InputTarget};
 
 use crate::app::update::system::handle_execute_import;
+use crate::domain::today;
 
 /// Start input editing mode with the given target.
 ///
@@ -578,7 +579,7 @@ pub fn handle_submit_input(model: &mut Model) {
                 .collect();
             let interval: u32 = interval_str.parse().unwrap_or(1).max(1);
 
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
 
             let new_recurrence = match first_char {
                 'd' => Some(Recurrence::Daily),

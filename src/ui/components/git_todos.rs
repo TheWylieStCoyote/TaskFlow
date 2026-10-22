@@ -3,6 +3,7 @@
 //! Displays tasks extracted from git repositories, grouped by source file.
 //! Shows file headers with line numbers for easy navigation.
 
+use crate::domain::text::{truncate_chars, truncate_chars_start};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -71,17 +72,18 @@ impl Widget for GitTodos<'_> {
             return;
         }
 
-        // Build flat list with file headers and tasks
+        // Build flat list with file headers and tasks.
+        // The flat list contains headers and spacers in addition to tasks, so we
+        // track the flat-list index for each task separately and use that for
+        // ListState so ratatui's built-in scroll-to-selected works correctly.
         let mut items: Vec<ListItem<'_>> = Vec::new();
-        let selected_index = self.model.selected_index;
+        let selected_task_index = self.model.selected_index;
+        let mut task_count: usize = 0;
+        let mut selected_flat_index: Option<usize> = None;
 
         for (file, tasks) in &grouped {
             // File header
-            let file_display = if file.len() > 60 {
-                format!("...{}", &file[file.len() - 57..])
-            } else {
-                file.clone()
-            };
+            let file_display = truncate_chars_start(file, 60, "...");
 
             items.push(ListItem::new(Line::from(vec![Span::styled(
                 format!("📁 {file_display}"),
@@ -93,16 +95,17 @@ impl Widget for GitTodos<'_> {
             // Tasks under this file
             for (task_id, line_num) in tasks {
                 if let Some(task) = self.model.tasks.get(task_id) {
-                    // Check if this task's position matches selected_index
-                    let is_selected = selected_index == items.len();
+                    let flat_idx = items.len();
+                    let is_selected = task_count == selected_task_index;
+                    if is_selected {
+                        selected_flat_index = Some(flat_idx);
+                    }
+                    task_count += 1;
+
                     let is_completed = task.completed_at.is_some();
 
                     // Truncate title if needed
-                    let title = if task.title.len() > 50 {
-                        format!("{}...", &task.title[..47])
-                    } else {
-                        task.title.clone()
-                    };
+                    let title = truncate_chars(&task.title, 50, "...");
 
                     // Style based on completion and selection
                     let (title_style, line_style) = if is_completed {
@@ -142,16 +145,16 @@ impl Widget for GitTodos<'_> {
             items.push(ListItem::new(Line::from("")));
         }
 
-        // Render the list with selection
+        // Render with the flat-list index of the selected task so ratatui
+        // auto-scrolls to keep it visible.
         let list = List::new(items).highlight_style(
             Style::default()
                 .bg(theme.colors.accent_secondary.to_color())
                 .add_modifier(Modifier::BOLD),
         );
 
-        // Use stateful rendering for selection highlight
         let mut state = ListState::default();
-        state.select(Some(selected_index));
+        state.select(selected_flat_index);
         StatefulWidget::render(list, inner, buf, &mut state);
     }
 }

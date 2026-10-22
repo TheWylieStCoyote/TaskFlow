@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::types::{HabitCheckIn, HabitFrequency, HabitId, HabitTrend};
+use crate::domain::today;
 
 /// A habit with daily check-in tracking and streak analytics.
 ///
@@ -89,7 +90,7 @@ impl Habit {
             name: name.into(),
             description: None,
             frequency: HabitFrequency::default(),
-            start_date: now.date_naive(),
+            start_date: today(),
             end_date: None,
             check_ins: HashMap::new(),
             color: None,
@@ -138,7 +139,7 @@ impl Habit {
 
     /// Check in for today.
     pub fn check_in_today(&mut self, completed: bool, note: Option<String>) {
-        let today = Utc::now().date_naive();
+        let today = today();
         self.check_in(today, completed, note);
     }
 
@@ -165,7 +166,7 @@ impl Habit {
     /// Returns whether the habit is due today.
     #[must_use]
     pub fn is_due_today(&self) -> bool {
-        let today = Utc::now().date_naive();
+        let today = today();
         self.frequency.is_due_on(today, self.start_date)
     }
 
@@ -181,7 +182,7 @@ impl Habit {
     /// hasn't been checked in yet but yesterday was completed).
     #[must_use]
     pub fn current_streak(&self) -> u32 {
-        let today = Utc::now().date_naive();
+        let today = today();
         self.streak_ending_on(today)
             .or_else(|| {
                 let yesterday = today - TimeDelta::days(1);
@@ -344,7 +345,7 @@ impl Habit {
     /// - `None` if not enough data
     #[must_use]
     pub fn trend(&self) -> Option<HabitTrend> {
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Recent period: last 7 days
         let recent_start = today - TimeDelta::days(6);
@@ -381,7 +382,7 @@ impl Habit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{NaiveDate, TimeDelta, Utc, Weekday};
+    use chrono::{NaiveDate, TimeDelta, Weekday};
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -457,7 +458,7 @@ mod tests {
     #[test]
     fn test_current_streak_today_only() {
         let mut habit = Habit::new("Walk");
-        let today = Utc::now().date_naive();
+        let today = today();
         habit.check_in(today, true, None);
         assert_eq!(habit.current_streak(), 1);
     }
@@ -465,14 +466,14 @@ mod tests {
     #[test]
     fn test_current_streak_yesterday_only() {
         let mut habit = Habit::new("Walk");
-        let yesterday = Utc::now().date_naive() - TimeDelta::days(1);
+        let yesterday = today() - TimeDelta::days(1);
         habit.check_in(yesterday, true, None);
         assert_eq!(habit.current_streak(), 1);
     }
 
     #[test]
     fn test_current_streak_consecutive_days() {
-        let today = Utc::now().date_naive();
+        let today = today();
         let mut habit = Habit::new("Walk").with_start_date(today - TimeDelta::days(10));
         // Check in for 3 consecutive days ending today
         habit.check_in(today, true, None);
@@ -484,7 +485,7 @@ mod tests {
     #[test]
     fn test_current_streak_broken() {
         let mut habit = Habit::new("Walk");
-        let today = Utc::now().date_naive();
+        let today = today();
         // Today and 2 days ago but NOT yesterday — breaks the streak
         habit.check_in(today, true, None);
         habit.check_in(today - TimeDelta::days(2), true, None);

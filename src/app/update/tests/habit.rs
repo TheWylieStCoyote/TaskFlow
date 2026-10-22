@@ -1,8 +1,7 @@
 //! Habit tracking tests.
 
-use chrono::Utc;
-
 use crate::app::{update::update, HabitMessage, Message, Model};
+use crate::domain::today;
 use crate::domain::Habit;
 
 fn create_test_model_with_habit() -> (Model, crate::domain::HabitId) {
@@ -32,7 +31,7 @@ fn test_habit_create() {
 #[test]
 fn test_habit_check_in_today() {
     let (mut model, habit_id) = create_test_model_with_habit();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Initially not completed
     assert!(!model.habits.get(&habit_id).unwrap().is_completed_on(today));
@@ -51,7 +50,7 @@ fn test_habit_check_in_today() {
 #[test]
 fn test_habit_check_in_specific_date() {
     let (mut model, habit_id) = create_test_model_with_habit();
-    let date = Utc::now().date_naive();
+    let date = today();
 
     update(
         &mut model,
@@ -68,7 +67,7 @@ fn test_habit_check_in_specific_date() {
 #[test]
 fn test_habit_toggle_today() {
     let (mut model, habit_id) = create_test_model_with_habit();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Initially not completed
     assert!(!model.habits.get(&habit_id).unwrap().is_completed_on(today));
@@ -159,7 +158,7 @@ fn test_habit_toggle_nonexistent() {
 fn test_habit_check_in_nonexistent() {
     let mut model = Model::new();
     let fake_id = crate::domain::HabitId::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Should not panic
     update(

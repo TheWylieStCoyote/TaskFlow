@@ -6,6 +6,7 @@ use crate::app::{update::update, Message, SystemMessage, UiMessage};
 use crate::ui::{InputMode, InputTarget};
 
 use super::create_test_model_with_tasks;
+use crate::domain::today;
 
 // === Task Title Editing ===
 
@@ -606,7 +607,7 @@ fn test_reschedule_tomorrow() {
     let task_id = model.visible_tasks[0];
 
     // Set initial due date to today
-    let today = chrono::Local::now().date_naive();
+    let today = today();
     model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
 
     update(&mut model, Message::Ui(UiMessage::RescheduleTomorrow));
@@ -622,7 +623,7 @@ fn test_reschedule_next_week() {
     let mut model = create_test_model_with_tasks();
     let task_id = model.visible_tasks[0];
 
-    let today = chrono::Local::now().date_naive();
+    let today = today();
     model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
 
     update(&mut model, Message::Ui(UiMessage::RescheduleNextWeek));
@@ -639,7 +640,7 @@ fn test_reschedule_next_monday() {
     let mut model = create_test_model_with_tasks();
     let task_id = model.visible_tasks[0];
 
-    let today = chrono::Local::now().date_naive();
+    let today = today();
     model.tasks.get_mut(&task_id).unwrap().due_date = Some(today);
 
     update(&mut model, Message::Ui(UiMessage::RescheduleNextMonday));

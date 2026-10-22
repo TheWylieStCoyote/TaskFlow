@@ -5,6 +5,7 @@ use crate::domain::Task;
 use crate::ui::{InputMode, InputTarget};
 
 use super::create_test_model_with_tasks;
+use crate::domain::today;
 
 #[test]
 fn test_start_link_task_enters_editing_mode() {
@@ -202,7 +203,7 @@ fn test_completing_chained_task_schedules_next() {
     update(&mut model, Message::Task(TaskMessage::ToggleComplete));
 
     // Next task should now be scheduled for today (local time)
-    let today = chrono::Local::now().date_naive();
+    let today = today();
     assert_eq!(
         model.tasks.get(&next_id).unwrap().scheduled_date,
         Some(today)

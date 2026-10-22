@@ -355,7 +355,7 @@ impl ReportCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Task, TaskStatus};
+    use crate::domain::{today, Task, TaskStatus};
 
     #[test]
     fn test_footer_stats_default() {
@@ -487,14 +487,14 @@ mod tests {
 
     #[test]
     fn test_footer_stats_with_overdue_task() {
-        use chrono::{Duration, Utc};
+        use chrono::Duration;
 
         let mut stats = FooterStats::default();
         let mut tasks = HashMap::new();
 
         // Add an overdue task (due yesterday)
         let mut overdue_task = Task::new("Overdue");
-        overdue_task.due_date = Some(Utc::now().date_naive() - Duration::days(1));
+        overdue_task.due_date = Some(today() - Duration::days(1));
         tasks.insert(overdue_task.id, overdue_task);
 
         stats.rebuild(&tasks);
@@ -506,14 +506,12 @@ mod tests {
 
     #[test]
     fn test_footer_stats_with_due_today_task() {
-        use chrono::Utc;
-
         let mut stats = FooterStats::default();
         let mut tasks = HashMap::new();
 
         // Add a task due today
         let mut today_task = Task::new("Due Today");
-        today_task.due_date = Some(Utc::now().date_naive());
+        today_task.due_date = Some(today());
         tasks.insert(today_task.id, today_task);
 
         stats.rebuild(&tasks);
@@ -525,11 +523,11 @@ mod tests {
 
     #[test]
     fn test_footer_stats_combined() {
-        use chrono::{Duration, Utc};
+        use chrono::Duration;
 
         let mut stats = FooterStats::default();
         let mut tasks = HashMap::new();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Completed task
         let completed = Task::new("Completed").with_status(TaskStatus::Done);

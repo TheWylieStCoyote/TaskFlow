@@ -7,8 +7,9 @@
 //! - Moving tasks between projects
 
 use crate::app::{Model, TaskMessage, UndoAction};
+use crate::domain::today;
 use crate::domain::{Priority, Recurrence, RecurrenceOptions, Task, TaskId, TaskStatus};
-use chrono::{Datelike, Duration, NaiveDate, Utc};
+use chrono::{Datelike, Duration, NaiveDate};
 
 // ============================================================================
 // Toggle Completion Data Structures
@@ -128,7 +129,7 @@ fn auto_unblock_dependents(model: &mut Model, completed_id: &TaskId) {
 /// Schedule the next task in a chain for today.
 fn schedule_chained_task(model: &mut Model, next_id: &TaskId) {
     model.modify_task_with_undo(next_id, |task| {
-        task.scheduled_date = Some(chrono::Local::now().date_naive());
+        task.scheduled_date = Some(today());
     });
 }
 
@@ -329,7 +330,7 @@ pub fn handle_task(model: &mut Model, msg: TaskMessage) {
 /// the returned task is incremented by 1.
 #[must_use]
 pub fn create_next_recurring_task(task: &Task) -> Option<Task> {
-    let today = Utc::now().date_naive();
+    let today = today();
     let base_date = task.due_date.unwrap_or(today);
     let opts = &task.recurrence_options;
     let interval = i64::from(opts.interval.max(1));
@@ -574,7 +575,7 @@ mod tests {
         let task = Task::new("No due date").with_recurrence(Some(Recurrence::Daily));
 
         let next = create_next_recurring_task(&task).unwrap();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Should use today as base, so next is tomorrow
         assert_eq!(next.due_date, Some(today + Duration::days(1)));

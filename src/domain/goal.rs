@@ -243,7 +243,7 @@ impl Quarter {
     /// Returns the current quarter.
     #[must_use]
     pub fn current() -> (i32, Self) {
-        let now = Utc::now().date_naive();
+        let now = today();
         (now.year(), Self::from_date(now))
     }
 }
@@ -259,6 +259,7 @@ impl std::fmt::Display for Quarter {
     }
 }
 
+use crate::domain::today;
 use chrono::Datelike;
 
 /// A goal/objective in the OKR hierarchy.

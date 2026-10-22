@@ -59,7 +59,7 @@ impl<B: InMemoryBackend> WorkLogRepository for B {
             .cloned()
             .collect();
         // Sort by creation time, newest first
-        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         Ok(logs)
     }
 

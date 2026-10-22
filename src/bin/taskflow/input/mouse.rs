@@ -255,14 +255,18 @@ fn handle_reports_click(x: u16, y: u16, model: &Model) -> Message {
 }
 
 /// Handle scroll wheel up.
-fn handle_scroll_up(_model: &Model) -> Message {
-    // Scroll up moves selection up in the currently focused pane
+fn handle_scroll_up(model: &Model) -> Message {
+    if model.show_help {
+        return Message::Ui(taskflow::app::UiMessage::HelpScrollUp);
+    }
     Message::Navigation(NavigationMessage::Up)
 }
 
 /// Handle scroll wheel down.
-fn handle_scroll_down(_model: &Model) -> Message {
-    // Scroll down moves selection down in the currently focused pane
+fn handle_scroll_down(model: &Model) -> Message {
+    if model.show_help {
+        return Message::Ui(taskflow::app::UiMessage::HelpScrollDown);
+    }
     Message::Navigation(NavigationMessage::Down)
 }
 

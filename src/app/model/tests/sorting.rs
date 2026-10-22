@@ -1,6 +1,7 @@
 //! Sorting tests.
 
 use crate::app::model::Model;
+use crate::domain::today;
 use crate::domain::SortSpec;
 use crate::domain::{Priority, SortField, SortOrder, Task, TaskStatus};
 
@@ -54,7 +55,7 @@ fn test_sort_by_title_descending() {
 fn test_sort_by_due_date() {
     let mut model = Model::new();
 
-    let today = chrono::Utc::now().date_naive();
+    let today = today();
     let tomorrow = today + chrono::Duration::days(1);
     let next_week = today + chrono::Duration::days(7);
 

@@ -116,10 +116,8 @@ pub fn handle_task_list_navigation(model: &mut Model, msg: NavigationMessage) {
                 model.sidebar_selected = (model.sidebar_selected + 5).min(max_index);
             }
         },
-        NavigationMessage::Select(index) => {
-            if index < model.visible_tasks.len() {
-                model.selected_index = index;
-            }
+        NavigationMessage::Select(index) if index < model.visible_tasks.len() => {
+            model.selected_index = index;
         }
         _ => {}
     }

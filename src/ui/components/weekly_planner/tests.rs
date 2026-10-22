@@ -1,6 +1,7 @@
 //! Tests for weekly planner component.
 
 use super::*;
+use crate::domain::today;
 use crate::domain::{Priority, Task};
 use chrono::Weekday;
 
@@ -39,7 +40,7 @@ fn test_weekly_planner_empty_model() {
 #[test]
 fn test_weekly_planner_tasks_for_today() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Create task due today
     let mut task = Task::new("Due Today");
@@ -58,7 +59,7 @@ fn test_weekly_planner_tasks_for_today() {
 #[test]
 fn test_weekly_planner_scheduled_tasks() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Create task scheduled for today (not due)
     let mut task = Task::new("Scheduled Today");
@@ -76,7 +77,7 @@ fn test_weekly_planner_scheduled_tasks() {
 #[test]
 fn test_weekly_planner_no_tasks_other_day() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
     let next_week = today + chrono::Duration::days(10);
 
     // Create task for next week (outside this week's view)
@@ -96,7 +97,7 @@ fn test_weekly_planner_no_tasks_other_day() {
 #[test]
 fn test_weekly_planner_completed_task() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     let mut task = Task::new("Done Task");
     task.due_date = Some(today);
@@ -117,7 +118,7 @@ fn test_weekly_planner_completed_task() {
 #[test]
 fn test_weekly_planner_high_priority_task() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     let mut task = Task::new("Urgent Task");
     task.due_date = Some(today);
@@ -167,7 +168,7 @@ fn test_weekly_planner_day_selection() {
 #[test]
 fn test_weekly_planner_task_selection() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
     let week_start = WeeklyPlanner::week_start();
     let day_offset = (today - week_start).num_days() as usize;
 
@@ -196,7 +197,7 @@ fn test_weekly_planner_task_selection() {
 #[test]
 fn test_weekly_planner_long_task_title() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     let mut task = Task::new(
         "This is a very long task title that should be truncated to fit the column width",
@@ -218,7 +219,7 @@ fn test_weekly_planner_long_task_title() {
 #[test]
 fn test_weekly_planner_overdue_task() {
     let mut model = Model::new();
-    let yesterday = Utc::now().date_naive() - chrono::Duration::days(1);
+    let yesterday = today() - chrono::Duration::days(1);
     let week_start = WeeklyPlanner::week_start();
 
     // Only test if yesterday is still in this week
@@ -242,7 +243,7 @@ fn test_weekly_planner_overdue_task() {
 #[test]
 fn test_weekly_planner_both_scheduled_and_due() {
     let mut model = Model::new();
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Task with both scheduled and due date on same day
     let mut task = Task::new("Scheduled and Due");

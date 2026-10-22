@@ -914,6 +914,7 @@ fn test_unicode_in_branch_names() {
 // ============================================================================
 
 #[test]
+#[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
 fn test_list_branches_performance_100_branches() {
     let repo = setup_test_repo();
 
@@ -938,6 +939,7 @@ fn test_list_branches_performance_100_branches() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
 fn test_branch_matching_performance_many_tasks() {
     let matcher = BranchMatcher::new();
 
@@ -958,6 +960,7 @@ fn test_branch_matching_performance_many_tasks() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
 fn test_get_commits_performance_many_commits() {
     let repo = setup_test_repo();
 
@@ -988,6 +991,7 @@ fn test_get_commits_performance_many_commits() {
 }
 
 #[test]
+#[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
 fn test_is_merged_check_performance() {
     let repo = setup_test_repo();
 

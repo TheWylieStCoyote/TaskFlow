@@ -1,21 +1,22 @@
 //! Date format parsing tests.
 
-use chrono::{Datelike, NaiveDate, Utc, Weekday};
+use chrono::{Datelike, NaiveDate, Weekday};
 
 use super::super::date::{next_weekday, parse_date_with_reference};
 use super::super::parse_quick_add;
+use crate::domain::today;
 
 #[test]
 fn test_parse_quick_add_due_today() {
     let parsed = parse_quick_add("Task due:today");
     assert_eq!(parsed.title, "Task");
-    assert_eq!(parsed.due_date, Some(Utc::now().date_naive()));
+    assert_eq!(parsed.due_date, Some(today()));
 }
 
 #[test]
 fn test_parse_quick_add_due_tomorrow() {
     let parsed = parse_quick_add("Task due:tomorrow");
-    let expected = Utc::now().date_naive() + chrono::Duration::days(1);
+    let expected = today() + chrono::Duration::days(1);
     assert_eq!(parsed.due_date, Some(expected));
 }
 
@@ -31,7 +32,7 @@ fn test_parse_quick_add_due_iso_format() {
 #[test]
 fn test_parse_quick_add_due_month_day() {
     let parsed = parse_quick_add("Task due:12/25");
-    let year = Utc::now().date_naive().year();
+    let year = today().year();
     assert_eq!(
         parsed.due_date,
         Some(NaiveDate::from_ymd_opt(year, 12, 25).unwrap())
@@ -40,7 +41,7 @@ fn test_parse_quick_add_due_month_day() {
 
 #[test]
 fn test_parse_weekday_monday() {
-    let today = Utc::now().date_naive();
+    let today = today();
     let next_monday = next_weekday(today, Weekday::Mon);
     assert_eq!(next_monday.weekday(), Weekday::Mon);
     assert!(next_monday > today || next_monday == today + chrono::Duration::days(7));
@@ -58,7 +59,7 @@ fn test_parse_quick_add_weekday() {
 #[test]
 fn test_parse_date_month_day_dash_format() {
     let parsed = parse_quick_add("Task due:12-25");
-    let year = Utc::now().date_naive().year();
+    let year = today().year();
     assert_eq!(
         parsed.due_date,
         Some(NaiveDate::from_ymd_opt(year, 12, 25).unwrap())
@@ -68,10 +69,10 @@ fn test_parse_date_month_day_dash_format() {
 #[test]
 fn test_parse_date_abbreviations() {
     let parsed = parse_quick_add("Task due:tod");
-    assert_eq!(parsed.due_date, Some(Utc::now().date_naive()));
+    assert_eq!(parsed.due_date, Some(today()));
 
     let parsed2 = parse_quick_add("Task due:tom");
-    let tomorrow = Utc::now().date_naive() + chrono::Duration::days(1);
+    let tomorrow = today() + chrono::Duration::days(1);
     assert_eq!(parsed2.due_date, Some(tomorrow));
 }
 
@@ -143,7 +144,7 @@ fn test_plain_weekday_parsing() {
 fn test_quick_add_with_smart_dates() {
     // Test that quick add works with new smart date formats
     let parsed = parse_quick_add("Meeting due:tomorrow");
-    let tomorrow = Utc::now().date_naive() + chrono::Duration::days(1);
+    let tomorrow = today() + chrono::Duration::days(1);
     assert_eq!(parsed.due_date, Some(tomorrow));
 
     // Test with "next week" - contains space so use due:nextweek

@@ -681,6 +681,7 @@ mod comprehensive_export_import_tests {
     // ========================================================================
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_csv_export_performance_1000_tasks() {
         let tasks: Vec<Task> = (0..1000).map(create_comprehensive_task).collect();
 
@@ -695,6 +696,7 @@ mod comprehensive_export_import_tests {
     }
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_ics_export_performance_1000_tasks() {
         let tasks: Vec<Task> = (0..1000).map(create_comprehensive_task).collect();
 
@@ -709,6 +711,7 @@ mod comprehensive_export_import_tests {
     }
 
     #[test]
+    #[cfg_attr(tarpaulin, ignore)] // wall-clock bound; meaningless under coverage instrumentation
     fn test_dot_export_performance_1000_tasks() {
         let tasks: HashMap<TaskId, Task> = (0..1000)
             .map(create_comprehensive_task)

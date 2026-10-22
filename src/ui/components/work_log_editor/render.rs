@@ -1,5 +1,6 @@
 //! Work log editor rendering methods.
 
+use crate::domain::text::{byte_offset, char_len};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -139,11 +140,13 @@ impl WorkLogEditor<'_> {
 
             if is_cursor_line {
                 // Show cursor position
-                let cursor_col = self.cursor_col.min(line_text.len());
-                let before_cursor = &line_text[..cursor_col];
+                // cursor_col is a character index; convert to a byte offset before slicing.
+                let cursor_col = self.cursor_col.min(char_len(line_text));
+                let cursor_byte = byte_offset(line_text, cursor_col);
+                let before_cursor = &line_text[..cursor_byte];
                 let cursor_char = line_text.chars().nth(cursor_col).unwrap_or(' ');
-                let after_cursor = if cursor_col < line_text.len() {
-                    &line_text[cursor_col + cursor_char.len_utf8()..]
+                let after_cursor = if cursor_byte < line_text.len() {
+                    &line_text[cursor_byte + cursor_char.len_utf8()..]
                 } else {
                     ""
                 };

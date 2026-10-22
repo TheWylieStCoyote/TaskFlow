@@ -8,9 +8,9 @@ use crate::app::{
     parse_quick_add, update, Message, Model, NavigationMessage, SystemMessage, TaskMessage,
     TimeMessage, UndoAction, ViewId,
 };
+use crate::domain::today;
 use crate::domain::{Priority, Task, TaskStatus};
 use crate::storage::BackendType;
-use chrono::Utc;
 use tempfile::TempDir;
 
 // ============================================================================
@@ -308,7 +308,7 @@ fn test_workflow_daily_task_management() {
     let task = harness.selected_task().expect("task should be selected");
     assert_eq!(task.priority, Priority::High);
     assert!(task.tags.contains(&"123".to_string()));
-    assert_eq!(task.due_date, Some(Utc::now().date_naive()));
+    assert_eq!(task.due_date, Some(today()));
 
     // 5. Start time tracking
     harness.start_tracking();

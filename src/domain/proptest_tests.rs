@@ -9,6 +9,7 @@ use super::{
     Filter, Priority, Recurrence, SavedFilterId, SortField, SortOrder, SortSpec, TagFilterMode,
     Task, TaskId, TaskStatus, TimeEntry,
 };
+use crate::domain::today;
 
 // =============================================================================
 // Arbitrary implementations for domain types
@@ -181,9 +182,8 @@ proptest! {
         title in arb_task_title(),
         day_offset in 1i64..1000,
     ) {
-        use chrono::Utc;
 
-        let past_date = Utc::now().date_naive() - chrono::Duration::days(day_offset);
+        let past_date = today() - chrono::Duration::days(day_offset);
         let task = Task::new(&title)
             .with_due_date(past_date)
             .with_status(TaskStatus::Done);

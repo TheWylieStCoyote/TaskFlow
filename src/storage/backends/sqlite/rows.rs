@@ -7,6 +7,7 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use tracing::warn;
 
+use crate::domain::today;
 use crate::domain::{
     Goal, GoalId, GoalStatus, Habit, HabitFrequency, HabitId, KeyResult, KeyResultId,
     KeyResultStatus, Priority, Project, ProjectId, ProjectStatus, Task, TaskId, TaskStatus,
@@ -98,7 +99,13 @@ pub(crate) fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         scheduled_date: parse_optional_date(scheduled_date),
         completed_at: parse_optional_datetime(completed_at),
         recurrence: recurrence_json.and_then(|s| serde_json::from_str(&s).ok()),
-        recurrence_options: crate::domain::RecurrenceOptions::default(),
+        recurrence_options: row
+            .get::<_, Option<String>>("recurrence_options")
+            .ok()
+            .flatten()
+            .map_or_else(Default::default, |s| {
+                parse_json(&s, "task.recurrence_options")
+            }),
         estimated_minutes: row.get("estimated_minutes")?,
         actual_minutes: row.get::<_, i32>("actual_minutes")? as u32,
         sort_order: row.get("sort_order").ok().flatten(),
@@ -211,7 +218,7 @@ pub(crate) fn habit_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Habit>
         name: row.get("name")?,
         description: row.get("description")?,
         frequency: serde_json::from_str(&frequency_json).unwrap_or(HabitFrequency::Daily),
-        start_date: parse_date(&start_date).unwrap_or_else(|| Utc::now().date_naive()),
+        start_date: parse_date(&start_date).unwrap_or_else(today),
         end_date: parse_optional_date(end_date),
         check_ins: std::collections::HashMap::new(), // Populated separately
         color: row.get("color")?,

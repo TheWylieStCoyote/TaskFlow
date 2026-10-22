@@ -289,7 +289,7 @@ impl EveningReview<'_> {
 
         // Sort projects by time (descending)
         let mut sorted: Vec<_> = by_project.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|a| std::cmp::Reverse(a.1));
 
         for (project_id, minutes) in sorted.iter().take(8) {
             let project_name = project_id

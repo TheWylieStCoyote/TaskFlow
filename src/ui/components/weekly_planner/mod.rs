@@ -7,7 +7,7 @@ mod render;
 #[cfg(test)]
 mod tests;
 
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -18,6 +18,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 use crate::domain::Task;
 
 /// Parameters for rendering a day column in the weekly planner.
@@ -46,7 +47,7 @@ impl<'a> WeeklyPlanner<'a> {
 
     /// Get the start of the current week (Monday).
     pub(crate) fn week_start() -> NaiveDate {
-        let today = Utc::now().date_naive();
+        let today = today();
         today - chrono::Duration::days(today.weekday().num_days_from_monday().into())
     }
 
@@ -65,7 +66,7 @@ impl Widget for WeeklyPlanner<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let theme = self.theme;
         let week_start = Self::week_start();
-        let today = Utc::now().date_naive();
+        let today = today();
 
         // Days of the week
         let days: Vec<(NaiveDate, &str)> = vec![

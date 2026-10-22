@@ -259,6 +259,29 @@ impl SqliteBackendInner {
         Ok(())
     }
 
+    /// Add the `snooze_until` and `recurrence_options` columns to `tasks`.
+    ///
+    /// Older databases predate both fields; without the columns, snoozes were
+    /// silently dropped and recurrence options reset to defaults on every load.
+    pub(crate) fn migrate_add_snooze_and_recurrence_options(&self) -> StorageResult<()> {
+        let conn = self.conn()?;
+
+        if conn
+            .prepare("SELECT snooze_until FROM tasks LIMIT 1")
+            .is_err()
+        {
+            conn.execute("ALTER TABLE tasks ADD COLUMN snooze_until TEXT", [])?;
+        }
+        if conn
+            .prepare("SELECT recurrence_options FROM tasks LIMIT 1")
+            .is_err()
+        {
+            conn.execute("ALTER TABLE tasks ADD COLUMN recurrence_options TEXT", [])?;
+        }
+
+        Ok(())
+    }
+
     /// Sync task tags to the junction table.
     ///
     /// Removes old tags and inserts new ones for the given task.

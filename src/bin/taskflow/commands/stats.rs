@@ -6,11 +6,12 @@ use taskflow::domain::TaskStatus;
 
 use crate::cli::Cli;
 use crate::load_model_for_cli;
+use taskflow::domain::{today, LocalDate};
 
 /// Show quick productivity statistics
 pub fn show_stats(cli: &Cli) -> anyhow::Result<()> {
     let model = load_model_for_cli(cli)?;
-    let today = Utc::now().date_naive();
+    let today = today();
     let now = Utc::now();
     let week_ago = today - Duration::days(7);
 
@@ -46,7 +47,7 @@ pub fn show_stats(cli: &Cli) -> anyhow::Result<()> {
     let completed_today = model
         .tasks
         .values()
-        .filter(|t| t.completed_at.is_some_and(|c| c.date_naive() == today))
+        .filter(|t| t.completed_at.is_some_and(|c| c.local_date() == today))
         .count();
 
     // Overdue count
@@ -60,14 +61,14 @@ pub fn show_stats(cli: &Cli) -> anyhow::Result<()> {
     let completed_this_week = model
         .tasks
         .values()
-        .filter(|t| t.completed_at.is_some_and(|c| c.date_naive() >= week_ago))
+        .filter(|t| t.completed_at.is_some_and(|c| c.local_date() >= week_ago))
         .count();
 
     // Time tracked today
     let time_today_mins: i64 = model
         .time_entries
         .values()
-        .filter(|e| e.started_at.date_naive() == today)
+        .filter(|e| e.started_at.local_date() == today)
         .map(|e| {
             if let Some(ended) = e.ended_at {
                 (ended - e.started_at).num_minutes()
@@ -82,7 +83,7 @@ pub fn show_stats(cli: &Cli) -> anyhow::Result<()> {
     let time_week_mins: i64 = model
         .time_entries
         .values()
-        .filter(|e| e.started_at.date_naive() >= week_ago)
+        .filter(|e| e.started_at.local_date() >= week_ago)
         .map(|e| {
             if let Some(ended) = e.ended_at {
                 (ended - e.started_at).num_minutes()

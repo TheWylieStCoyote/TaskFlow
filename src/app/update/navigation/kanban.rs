@@ -51,13 +51,11 @@ pub fn handle_kanban_navigation(model: &mut Model, msg: NavigationMessage) {
                 }
             }
         }
-        NavigationMessage::KanbanSelectColumn(column) => {
-            if column < 4 {
-                model.view_selection.kanban_column = column;
-                model.view_selection.kanban_task_index = 0; // Reset task selection
-                model.view_selection.kanban_scroll_offsets[column] = 0; // Reset scroll
-                model.selected_index = 0;
-            }
+        NavigationMessage::KanbanSelectColumn(column) if column < 4 => {
+            model.view_selection.kanban_column = column;
+            model.view_selection.kanban_task_index = 0; // Reset task selection
+            model.view_selection.kanban_scroll_offsets[column] = 0; // Reset scroll
+            model.selected_index = 0;
         }
         _ => {}
     }

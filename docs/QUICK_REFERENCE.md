@@ -74,6 +74,7 @@ Fix bug #backend !high due:tomorrow @Work
 |-----|--------|
 | `t` | Start/stop timer |
 | `L` | Time log |
+| `Alt+t` | Edit estimate |
 | `f` | Focus mode |
 | `F` | Full-screen focus |
 | `Q` | Add to focus queue |

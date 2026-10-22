@@ -3,6 +3,7 @@
 use chrono::{NaiveTime, Utc};
 
 use crate::app::{Model, UiMessage, UndoAction};
+use crate::domain::LocalDate;
 use crate::ui::TimeLogMode;
 
 /// Handle time log editor messages
@@ -85,7 +86,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                             match model.time_log.mode {
                                 TimeLogMode::EditStart => {
                                     // Update start time, keeping the same date
-                                    let date = entry.started_at.date_naive();
+                                    let date = entry.started_at.local_date();
                                     if let Some(new_dt) =
                                         date.and_time(time).and_local_timezone(Utc).single()
                                     {
@@ -101,7 +102,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                                 }
                                 TimeLogMode::EditEnd => {
                                     // Update end time, keeping the same date
-                                    let date = entry.started_at.date_naive();
+                                    let date = entry.started_at.local_date();
                                     if let Some(new_dt) =
                                         date.and_time(time).and_local_timezone(Utc).single()
                                     {
@@ -153,38 +154,36 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                 model.alerts.status_message = Some("Added 30-minute time entry".to_string());
             }
         }
-        UiMessage::TimeLogDelete => {
-            if model.time_log.mode == TimeLogMode::ConfirmDelete {
-                if let Some(task_id) = model.selected_task_id() {
-                    let entries = model.time_entries_for_task(&task_id);
-                    if let Some(entry) = entries.get(model.time_log.selected) {
-                        let entry_id = entry.id;
+        UiMessage::TimeLogDelete if model.time_log.mode == TimeLogMode::ConfirmDelete => {
+            if let Some(task_id) = model.selected_task_id() {
+                let entries = model.time_entries_for_task(&task_id);
+                if let Some(entry) = entries.get(model.time_log.selected) {
+                    let entry_id = entry.id;
 
-                        // Can't delete if it's the active entry
-                        if model.active_time_entry.as_ref() == Some(&entry_id) {
-                            model.alerts.status_message =
-                                Some("Cannot delete running time entry".to_string());
-                            model.time_log.mode = TimeLogMode::Browse;
-                            return;
+                    // Can't delete if it's the active entry
+                    if model.active_time_entry.as_ref() == Some(&entry_id) {
+                        model.alerts.status_message =
+                            Some("Cannot delete running time entry".to_string());
+                        model.time_log.mode = TimeLogMode::Browse;
+                        return;
+                    }
+
+                    if let Some(removed) = model.time_entries.remove(&entry_id) {
+                        model
+                            .undo_stack
+                            .push(UndoAction::TimeEntryDeleted(Box::new(removed)));
+                        model.delete_time_entry(&entry_id);
+
+                        // Adjust selection
+                        let remaining = model.time_entries_for_task(&task_id);
+                        if model.time_log.selected >= remaining.len() && !remaining.is_empty() {
+                            model.time_log.selected = remaining.len() - 1;
                         }
-
-                        if let Some(removed) = model.time_entries.remove(&entry_id) {
-                            model
-                                .undo_stack
-                                .push(UndoAction::TimeEntryDeleted(Box::new(removed)));
-                            model.delete_time_entry(&entry_id);
-
-                            // Adjust selection
-                            let remaining = model.time_entries_for_task(&task_id);
-                            if model.time_log.selected >= remaining.len() && !remaining.is_empty() {
-                                model.time_log.selected = remaining.len() - 1;
-                            }
-                            model.alerts.status_message = Some("Time entry deleted".to_string());
-                        }
+                        model.alerts.status_message = Some("Time entry deleted".to_string());
                     }
                 }
-                model.time_log.mode = TimeLogMode::Browse;
             }
+            model.time_log.mode = TimeLogMode::Browse;
         }
         _ => {}
     }

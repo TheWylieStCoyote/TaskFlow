@@ -1,6 +1,7 @@
 //! Timeline view navigation handlers.
 
 use crate::app::{Model, NavigationMessage, TimelineZoom, ViewId};
+use crate::domain::today;
 
 /// Handle timeline-specific navigation messages.
 pub fn handle_timeline_navigation(model: &mut Model, msg: NavigationMessage) {
@@ -26,7 +27,7 @@ pub fn handle_timeline_navigation(model: &mut Model, msg: NavigationMessage) {
             }
         }
         NavigationMessage::TimelineGoToday => {
-            let today = chrono::Utc::now().date_naive();
+            let today = today();
             model.timeline_state.viewport_start = today - chrono::Duration::days(7);
         }
         NavigationMessage::TimelineUp => {

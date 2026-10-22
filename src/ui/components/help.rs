@@ -31,18 +31,25 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
     ("Habits", "n new, Space check-in, e edit"),
     ("Network", "h/l/j/k navigate nodes"),
     ("Focus", "[/] chain nav, t timer, f exit"),
+    ("Duplicats", "D dismiss, M merge, r refresh"),
+    ("Macros", "ctrl+q N record/stop, @N play"),
 ];
 
 /// Help popup widget that displays keybindings dynamically
 pub struct HelpPopup<'a> {
     keybindings: &'a Keybindings,
     theme: &'a Theme,
+    scroll: u16,
 }
 
 impl<'a> HelpPopup<'a> {
     #[must_use]
-    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme) -> Self {
-        Self { keybindings, theme }
+    pub const fn new(keybindings: &'a Keybindings, theme: &'a Theme, scroll: u16) -> Self {
+        Self {
+            keybindings,
+            theme,
+            scroll,
+        }
     }
 }
 
@@ -102,11 +109,18 @@ impl Widget for HelpPopup<'_> {
             ]));
         }
 
-        let paragraph = Paragraph::new(help_lines)
+        // Slice lines manually — Paragraph::scroll() does not work reliably with Wrap.
+        // Clamp so the user can never scroll past the last line into a blank popup.
+        let content_height = area.height.saturating_sub(2) as usize; // minus borders
+        let max_scroll = help_lines.len().saturating_sub(content_height);
+        let scroll = (self.scroll as usize).min(max_scroll);
+        let visible_lines: Vec<Line<'_>> = help_lines.into_iter().skip(scroll).collect();
+
+        let paragraph = Paragraph::new(visible_lines)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(" Help (press ? or Esc to close) ")
+                    .title(" Help (j/k scroll · any other key to close) ")
                     .title_alignment(Alignment::Center)
                     .border_style(Style::default().fg(theme.colors.warning.to_color())),
             )
@@ -158,8 +172,10 @@ fn format_key_part(key: &str) -> String {
 /// Calculate centered rect for popup using percentages
 #[must_use]
 pub const fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_width = r.width * percent_x / 100;
-    let popup_height = r.height * percent_y / 100;
+    // Widen before multiplying: u16 * u16 overflows for terminals wider than ~819
+    // columns at 80%.
+    let popup_width = (r.width as u32 * percent_x as u32 / 100) as u16;
+    let popup_height = (r.height as u32 * percent_y as u32 / 100) as u16;
     let popup_x = (r.width - popup_width) / 2;
     let popup_y = (r.height - popup_height) / 2;
 
@@ -169,7 +185,7 @@ pub const fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 /// Calculate centered rect with fixed height (for input dialogs)
 #[must_use]
 pub fn centered_rect_fixed_height(percent_x: u16, height: u16, r: Rect) -> Rect {
-    let popup_width = r.width * percent_x / 100;
+    let popup_width = (u32::from(r.width) * u32::from(percent_x) / 100) as u16;
     let popup_height = height.min(r.height); // Don't exceed screen height
     let popup_x = (r.width - popup_width) / 2;
     let popup_y = (r.height.saturating_sub(popup_height)) / 2;
@@ -231,7 +247,7 @@ mod tests {
     fn test_help_popup_renders_title() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 30);
         let content = buffer_content(&buffer);
 
@@ -242,7 +258,7 @@ mod tests {
     fn test_help_popup_renders_categories() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 
@@ -261,7 +277,7 @@ mod tests {
     fn test_help_popup_renders_keybindings() {
         let keybindings = Keybindings::default();
         let theme = test_theme();
-        let popup = HelpPopup::new(&keybindings, &theme);
+        let popup = HelpPopup::new(&keybindings, &theme, 0);
         let buffer = render_widget(popup, 60, 80);
         let content = buffer_content(&buffer);
 

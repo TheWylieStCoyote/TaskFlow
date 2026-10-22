@@ -1,11 +1,12 @@
 //! Navigation tests.
 
-use chrono::{Datelike, Duration, Utc};
+use chrono::{Datelike, Duration};
 
 use crate::app::{update::update, Message, Model, NavigationMessage, ViewId};
 use crate::ui::ReportPanel;
 
 use super::create_test_model_with_tasks;
+use crate::domain::today;
 
 #[test]
 fn test_navigation_up() {
@@ -201,7 +202,7 @@ fn test_timeline_go_today() {
     let mut model = Model::new().with_sample_data();
     model.current_view = ViewId::Timeline;
     // Move viewport far into the past
-    model.timeline_state.viewport_start = Utc::now().date_naive() - Duration::days(100);
+    model.timeline_state.viewport_start = today() - Duration::days(100);
 
     update(
         &mut model,
@@ -209,7 +210,7 @@ fn test_timeline_go_today() {
     );
 
     // Should reset viewport to near today (today - 7 days per implementation)
-    let today = Utc::now().date_naive();
+    let today = today();
     let expected_start = today - Duration::days(7);
     assert_eq!(model.timeline_state.viewport_start, expected_start);
 }
@@ -422,7 +423,7 @@ fn test_weekly_planner_down_with_tasks() {
     model.view_selection.weekly_planner_task_index = 0;
 
     // Add tasks due on day 0 of the week (should be current week's Monday)
-    let today = Utc::now().date_naive();
+    let today = today();
     let days_since_monday = today.weekday().num_days_from_monday();
     let monday = today - Duration::days(i64::from(days_since_monday));
 

@@ -209,8 +209,7 @@ pub fn branch_exists(repo_path: &Path, branch: &str) -> bool {
             branch,
         ])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Check if the given path is inside a git repository.
@@ -219,8 +218,7 @@ pub fn is_git_repo(path: &Path) -> bool {
     Command::new("git")
         .args(["-C", &path.to_string_lossy(), "rev-parse", "--git-dir"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Get the root directory of the git repository.

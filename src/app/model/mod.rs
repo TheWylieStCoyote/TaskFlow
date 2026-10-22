@@ -72,7 +72,7 @@ pub use view_queries::extract_git_location;
 
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 
 use crate::domain::{
     CalendarEvent, CalendarEventId, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Priority,
@@ -215,6 +215,8 @@ pub struct Model {
     pub show_sidebar: bool,
     /// Whether help overlay is visible
     pub show_help: bool,
+    /// Scroll offset for the help overlay
+    pub help_scroll: u16,
     /// Whether focus mode is active (single-task view)
     pub focus_mode: bool,
     /// Current terminal dimensions (width, height)
@@ -257,6 +259,9 @@ pub struct Model {
     // Macro recording/playback state
     /// Keyboard macro recording and playback state
     pub macro_state: MacroState,
+    /// First key of a multi-key chord awaiting its second key (e.g. `@` before
+    /// a macro slot digit). See `Keybindings::is_chord_prefix`.
+    pub pending_chord: Option<String>,
 
     // Task templates
     /// Task template manager
@@ -423,6 +428,7 @@ impl Model {
             filtering: FilterState::default(),
             show_sidebar: true,
             show_help: false,
+            help_scroll: 0,
             focus_mode: false,
             terminal_size: (80, 24),
             focus_pane: FocusPane::default(),
@@ -437,6 +443,7 @@ impl Model {
             undo_stack: UndoStack::new(),
             calendar_state: CalendarState::default(),
             macro_state: MacroState::new(),
+            pending_chord: None,
             template_manager: TemplateManager::new(),
             template_picker: TemplatePickerState::default(),
             pomodoro: PomodoroState::default(),
@@ -578,7 +585,7 @@ impl Model {
     /// Returns true if any incomplete task on the given day is overdue.
     #[must_use]
     pub fn has_overdue_on_day(&self, date: NaiveDate) -> bool {
-        let today = Utc::now().date_naive();
+        let today = today();
         date < today
             && self
                 .tasks
@@ -597,7 +604,7 @@ impl Model {
             .get(task_id)
             .map(|ids| ids.iter().filter_map(|id| self.work_logs.get(id)).collect())
             .unwrap_or_default();
-        logs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        logs.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         logs
     }
 
@@ -791,8 +798,8 @@ impl Model {
                 .filter(|id| self.tasks.get(id).is_some_and(|t| t.status.is_complete()))
                 .count();
             let total = kr.linked_task_ids.len();
-            if total > 0 {
-                return (completed * 100 / total) as u8;
+            if let Some(pct) = (completed * 100).checked_div(total) {
+                return pct as u8;
             }
         }
         0
@@ -864,6 +871,7 @@ impl Model {
 
 // Re-export UndoAction for use in submodules
 pub(crate) use super::UndoAction;
+use crate::domain::today;
 
 #[cfg(test)]
 mod tests;

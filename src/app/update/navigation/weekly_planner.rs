@@ -32,12 +32,10 @@ pub fn handle_weekly_planner_navigation(model: &mut Model, msg: NavigationMessag
                 model.view_selection.weekly_planner_task_index += 1;
             }
         }
-        NavigationMessage::WeeklyPlannerSelectDay(day) => {
-            if day < 7 {
-                model.view_selection.weekly_planner_day = day;
-                model.view_selection.weekly_planner_task_index = 0; // Reset task selection
-                model.selected_index = 0;
-            }
+        NavigationMessage::WeeklyPlannerSelectDay(day) if day < 7 => {
+            model.view_selection.weekly_planner_day = day;
+            model.view_selection.weekly_planner_task_index = 0; // Reset task selection
+            model.selected_index = 0;
         }
         _ => {}
     }

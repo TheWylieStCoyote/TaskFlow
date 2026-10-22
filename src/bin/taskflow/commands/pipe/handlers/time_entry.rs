@@ -41,7 +41,7 @@ fn list_time_entries(model: &Model, filters: &Option<FilterParams>) -> HandlerRe
     }
 
     // Sort by start time (newest first)
-    entries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    entries.sort_by_key(|a| std::cmp::Reverse(a.started_at));
 
     let total = entries.len();
     let offset = filters.as_ref().and_then(|f| f.offset).unwrap_or(0);

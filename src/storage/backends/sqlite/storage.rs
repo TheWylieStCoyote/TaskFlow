@@ -112,46 +112,9 @@ impl SqliteBackend {
         )?;
         Ok(())
     }
-}
 
-impl StorageBackend for SqliteBackend {
-    fn initialize(&mut self) -> StorageResult<()> {
-        if let Some(parent) = self.inner.path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| StorageError::io(parent, e))?;
-        }
-        self.inner.conn = Some(Connection::open(&self.inner.path)?);
-        self.inner.create_tables()?;
-        // Run migrations (all are idempotent)
-        self.inner.migrate_tags_to_junction_table()?;
-        self.inner.migrate_add_estimation_multiplier()?;
-        self.inner.migrate_add_scheduled_time()
-    }
-
-    fn flush(&mut self) -> StorageResult<()> {
-        // SQLite auto-commits, no explicit flush needed
-        Ok(())
-    }
-
-    fn export_all(&self) -> StorageResult<ExportData> {
-        Ok(ExportData {
-            tasks: self.list_tasks()?.into_iter().map(|t| (t.id, t)).collect(),
-            projects: self.list_projects()?,
-            tags: self.list_tags()?,
-            time_entries: self.list_all_time_entries()?,
-            work_logs: self.list_work_logs()?,
-            habits: self.list_habits()?,
-            goals: self.list_goals()?,
-            key_results: self.list_key_results()?,
-            version: 1,
-            pomodoro_session: self.get_pomodoro_value("session")?,
-            pomodoro_config: self.get_pomodoro_value("config")?,
-            pomodoro_stats: self.get_pomodoro_value("stats")?,
-            saved_filters: self.list_saved_filters()?,
-            audit_logs: Vec::new(),
-        })
-    }
-
-    fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
+    /// Body of [`StorageBackend::import_all`]; the caller wraps it in a transaction.
+    fn import_all_inner(&mut self, data: &ExportData) -> StorageResult<()> {
         let conn = self.inner.conn()?;
 
         // Clear existing data (habits cascade to habit_check_ins, goals cascade to key_results)
@@ -198,6 +161,70 @@ impl StorageBackend for SqliteBackend {
         }
 
         Ok(())
+    }
+}
+
+impl StorageBackend for SqliteBackend {
+    fn initialize(&mut self) -> StorageResult<()> {
+        if let Some(parent) = self.inner.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| StorageError::io(parent, e))?;
+        }
+        let conn = Connection::open(&self.inner.path)?;
+        // Without this pragma SQLite ignores every `ON DELETE CASCADE` in the schema.
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        // WAL + NORMAL keeps durability across process crashes while avoiding a
+        // full fsync on every single-row autocommit (~10ms each on spinning disks).
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        self.inner.conn = Some(conn);
+        self.inner.create_tables()?;
+        // Run migrations (all are idempotent)
+        self.inner.migrate_tags_to_junction_table()?;
+        self.inner.migrate_add_estimation_multiplier()?;
+        self.inner.migrate_add_scheduled_time()?;
+        self.inner.migrate_add_snooze_and_recurrence_options()
+    }
+
+    fn flush(&mut self) -> StorageResult<()> {
+        // SQLite auto-commits, no explicit flush needed
+        Ok(())
+    }
+
+    fn export_all(&self) -> StorageResult<ExportData> {
+        Ok(ExportData {
+            tasks: self.list_tasks()?.into_iter().map(|t| (t.id, t)).collect(),
+            projects: self.list_projects()?,
+            tags: self.list_tags()?,
+            time_entries: self.list_all_time_entries()?,
+            work_logs: self.list_work_logs()?,
+            habits: self.list_habits()?,
+            goals: self.list_goals()?,
+            key_results: self.list_key_results()?,
+            version: 1,
+            pomodoro_session: self.get_pomodoro_value("session")?,
+            pomodoro_config: self.get_pomodoro_value("config")?,
+            pomodoro_stats: self.get_pomodoro_value("stats")?,
+            saved_filters: self.list_saved_filters()?,
+            audit_logs: Vec::new(),
+        })
+    }
+
+    fn import_all(&mut self, data: &ExportData) -> StorageResult<()> {
+        // Run the whole replace-everything import in one transaction so a failure
+        // part-way through rolls back instead of leaving an emptied database.
+        self.inner.conn()?.execute_batch("BEGIN IMMEDIATE")?;
+        match self.import_all_inner(data) {
+            Ok(()) => {
+                self.inner.conn()?.execute_batch("COMMIT")?;
+                Ok(())
+            }
+            Err(e) => {
+                if let Ok(conn) = self.inner.conn() {
+                    let _ = conn.execute_batch("ROLLBACK");
+                }
+                Err(e)
+            }
+        }
     }
 
     fn backend_type(&self) -> &'static str {

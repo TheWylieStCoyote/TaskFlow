@@ -54,13 +54,16 @@ notify-rust = { version = "4", optional = true }
 # HTTP client for CalDAV sync (optional)
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 
+[lints.rust]
+# cargo-tarpaulin passes --cfg=tarpaulin; timing-sensitive tests key off it.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin)"] }
+
 [features]
 desktop-notifications = ["notify-rust"]
 caldav-sync = ["reqwest"]
 
 [dev-dependencies]
 tempfile = "3.13"
-pretty_assertions = "1.4"
 proptest = "1.5"
 criterion = { version = "0.5", features = ["html_reports"] }
 insta = { version = "1.41", features = ["json", "yaml"] }

@@ -1,6 +1,7 @@
 //! Tests for task module.
 
 use super::*;
+use crate::domain::today;
 use chrono::NaiveDate;
 
 #[test]
@@ -90,7 +91,7 @@ fn test_task_is_overdue_completed() {
 
 #[test]
 fn test_task_is_due_today() {
-    let today = Utc::now().date_naive();
+    let today = today();
     let task = Task::new("Test").with_due_date(today);
     assert!(task.is_due_today());
 
@@ -251,7 +252,7 @@ fn test_task_not_snoozed_by_default() {
 #[test]
 fn test_task_snooze_until_future_date() {
     let mut task = Task::new("Test");
-    let future = Utc::now().date_naive() + chrono::Duration::days(7);
+    let future = today() + chrono::Duration::days(7);
     task.snooze_until_date(future);
 
     assert!(task.is_snoozed());
@@ -261,7 +262,7 @@ fn test_task_snooze_until_future_date() {
 #[test]
 fn test_task_snooze_until_past_date_not_snoozed() {
     let mut task = Task::new("Test");
-    let past = Utc::now().date_naive() - chrono::Duration::days(1);
+    let past = today() - chrono::Duration::days(1);
     task.snooze_until_date(past);
 
     // Snooze date is set, but is_snoozed returns false for past dates
@@ -272,7 +273,7 @@ fn test_task_snooze_until_past_date_not_snoozed() {
 #[test]
 fn test_task_snooze_until_today_not_snoozed() {
     let mut task = Task::new("Test");
-    let today = Utc::now().date_naive();
+    let today = today();
     task.snooze_until_date(today);
 
     // Today is not > today, so not snoozed
@@ -282,7 +283,7 @@ fn test_task_snooze_until_today_not_snoozed() {
 #[test]
 fn test_task_clear_snooze() {
     let mut task = Task::new("Test");
-    let future = Utc::now().date_naive() + chrono::Duration::days(7);
+    let future = today() + chrono::Duration::days(7);
     task.snooze_until_date(future);
     assert!(task.is_snoozed());
 
@@ -299,7 +300,7 @@ fn test_snooze_updates_updated_at() {
     // Small delay to ensure time difference
     std::thread::sleep(std::time::Duration::from_millis(10));
 
-    let future = Utc::now().date_naive() + chrono::Duration::days(1);
+    let future = today() + chrono::Duration::days(1);
     task.snooze_until_date(future);
 
     assert!(task.updated_at > original_updated);
@@ -308,7 +309,7 @@ fn test_snooze_updates_updated_at() {
 #[test]
 fn test_clear_snooze_updates_updated_at() {
     let mut task = Task::new("Test");
-    let future = Utc::now().date_naive() + chrono::Duration::days(1);
+    let future = today() + chrono::Duration::days(1);
     task.snooze_until_date(future);
     let after_snooze = task.updated_at;
 

@@ -8,7 +8,7 @@ mod render;
 #[cfg(test)]
 mod tests;
 
-use chrono::{Datelike, Duration, Local, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
@@ -18,6 +18,7 @@ use ratatui::{
 
 use crate::app::Model;
 use crate::config::Theme;
+use crate::domain::today;
 
 /// Number of weeks to forecast
 pub(crate) const FORECAST_WEEKS: usize = 8;
@@ -46,7 +47,7 @@ impl<'a> Forecast<'a> {
 
     /// Calculate workload per week (task count and estimated minutes)
     pub(crate) fn get_weekly_workload(&self) -> Vec<(NaiveDate, usize, u32)> {
-        let today = Local::now().date_naive();
+        let today = today();
         let current_week_start = Self::week_start(today);
 
         let mut weeks: Vec<(NaiveDate, usize, u32)> = (0..FORECAST_WEEKS)
@@ -75,7 +76,7 @@ impl<'a> Forecast<'a> {
 
     /// Calculate workload per day for the next 7 days (task count and estimated minutes)
     pub(crate) fn get_daily_workload(&self) -> Vec<(NaiveDate, usize, u32)> {
-        let today = Local::now().date_naive();
+        let today = today();
 
         let mut days: Vec<(NaiveDate, usize, u32)> = (0..7)
             .map(|i| {

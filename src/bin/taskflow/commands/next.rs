@@ -1,11 +1,10 @@
 //! Next command - show the next task to work on.
 
-use chrono::Utc;
-
 use taskflow::domain::{Priority, Task};
 
 use crate::cli::Cli;
 use crate::load_model_for_cli;
+use taskflow::domain::today;
 
 /// Show the next task to work on.
 ///
@@ -16,7 +15,7 @@ use crate::load_model_for_cli;
 /// 4. Highest priority task with earliest due date
 pub fn next_task(cli: &Cli) -> anyhow::Result<()> {
     let model = load_model_for_cli(cli)?;
-    let today = Utc::now().date_naive();
+    let today = today();
 
     // Helper: check if task has incomplete dependencies (blocked)
     let is_blocked = |task: &Task| -> bool {

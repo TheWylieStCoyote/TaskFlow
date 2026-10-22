@@ -1,8 +1,9 @@
 //! Tests for Model query methods (tasks_for_day, contexts, sidebar, etc.)
 
 use crate::app::model::Model;
+use crate::domain::today;
 use crate::domain::{Habit, Task};
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 
 fn date(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -184,7 +185,7 @@ fn test_has_overdue_on_day_no_tasks() {
 fn test_has_overdue_on_day_future_day_not_overdue() {
     let model = Model::new();
     // Future dates can't be overdue
-    let future = Utc::now().date_naive() + chrono::TimeDelta::days(10);
+    let future = today() + chrono::TimeDelta::days(10);
     assert!(!model.has_overdue_on_day(future));
 }
 

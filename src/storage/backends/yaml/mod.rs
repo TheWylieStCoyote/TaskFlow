@@ -8,6 +8,7 @@ mod storage;
 #[cfg(test)]
 mod tests;
 
+use crate::storage::atomic_write;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -62,7 +63,7 @@ impl YamlBackend {
         let content = serde_yaml::to_string(&self.data)
             .map_err(|e| StorageError::serialization(e.to_string()))?;
 
-        fs::write(&self.path, content).map_err(|e| StorageError::io(&self.path, e))?;
+        atomic_write(&self.path, content)?;
 
         self.dirty = false;
         Ok(())

@@ -4,9 +4,10 @@
 //! displayed on the dashboard, including completion rates, time tracking,
 //! and estimation accuracy.
 
-use chrono::{Datelike, Utc};
+use chrono::Datelike;
 
 use crate::app::Model;
+use crate::domain::{today, LocalDate};
 use crate::domain::{Priority, TaskStatus, TimeEntry};
 
 /// Statistics calculator for the dashboard
@@ -64,7 +65,7 @@ impl<'a> DashboardStats<'a> {
     /// Get count of overdue tasks
     #[must_use]
     pub fn overdue_count(&self) -> usize {
-        let today = Utc::now().date_naive();
+        let today = today();
         self.model
             .tasks
             .values()
@@ -101,28 +102,28 @@ impl<'a> DashboardStats<'a> {
     /// Get tasks created this week
     #[must_use]
     pub fn tasks_this_week(&self) -> usize {
-        let today = Utc::now().date_naive();
+        let today = today();
         let week_start =
             today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
 
         self.model
             .tasks
             .values()
-            .filter(|t| t.created_at.date_naive() >= week_start)
+            .filter(|t| t.created_at.local_date() >= week_start)
             .count()
     }
 
     /// Get tasks completed this week
     #[must_use]
     pub fn completed_this_week(&self) -> usize {
-        let today = Utc::now().date_naive();
+        let today = today();
         let week_start =
             today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
 
         self.model
             .tasks
             .values()
-            .filter(|t| t.completed_at.is_some_and(|d| d.date_naive() >= week_start))
+            .filter(|t| t.completed_at.is_some_and(|d| d.local_date() >= week_start))
             .count()
     }
 

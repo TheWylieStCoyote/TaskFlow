@@ -1,6 +1,6 @@
 //! Query methods for daily review data.
 
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 
 use crate::domain::Task;
 
@@ -8,7 +8,7 @@ use super::DailyReview;
 
 impl DailyReview<'_> {
     pub(crate) fn today() -> NaiveDate {
-        Utc::now().date_naive()
+        crate::domain::today()
     }
 
     /// Get overdue tasks

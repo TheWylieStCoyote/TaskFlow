@@ -662,6 +662,7 @@ pub fn handle_submit_input(model: &mut Model) {
                     model.filtering.sort.clone(),
                 );
                 let filter_id = saved_filter.id.clone();
+                model.sync_saved_filter(&saved_filter);
                 model.saved_filters.insert(filter_id.clone(), saved_filter);
                 model.active_saved_filter = Some(filter_id);
                 model.storage.dirty = true;

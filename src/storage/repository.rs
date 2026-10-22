@@ -13,6 +13,8 @@
 //! - [`WorkLogRepository`]: Work log entries
 //! - [`HabitRepository`]: Habit tracking
 //! - [`PomodoroRepository`]: Pomodoro session tracking
+//! - [`SavedFilterRepository`]: Saved (named) filters
+//! - [`AuditLogRepository`]: Append-only task mutation history
 //!
 //! # Implementing a Backend
 //!
@@ -20,9 +22,9 @@
 //! See [`super::backends`] for existing implementations.
 
 use crate::domain::{
-    Filter, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, PomodoroConfig, PomodoroSession,
-    PomodoroStats, Project, ProjectId, SavedFilter, Tag, Task, TaskId, TimeEntry, TimeEntryId,
-    WorkLogEntry, WorkLogEntryId,
+    AuditLogEntry, Filter, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, PomodoroConfig,
+    PomodoroSession, PomodoroStats, Project, ProjectId, SavedFilter, SavedFilterId, Tag, Task,
+    TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 
 use super::error::StorageResult;
@@ -387,6 +389,85 @@ pub trait KeyResultRepository {
     fn get_key_results_for_goal(&self, goal_id: &GoalId) -> StorageResult<Vec<KeyResult>>;
 }
 
+/// Repository trait for saved filter operations.
+pub trait SavedFilterRepository {
+    /// Creates a new saved filter in storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::AlreadyExists`](super::StorageError::AlreadyExists) if a
+    /// filter with the same ID is already stored, or another
+    /// [`StorageError`](super::StorageError) if it cannot be persisted.
+    fn create_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()>;
+
+    /// Retrieves a saved filter by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_saved_filter(&self, id: &SavedFilterId) -> StorageResult<Option<SavedFilter>>;
+
+    /// Updates an existing saved filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotFound`](super::StorageError::NotFound) if no filter
+    /// with that ID exists, or another [`StorageError`](super::StorageError) if it
+    /// cannot be updated.
+    fn update_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()>;
+
+    /// Deletes a saved filter by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotFound`](super::StorageError::NotFound) if no filter
+    /// with that ID exists, or another [`StorageError`](super::StorageError) if it
+    /// cannot be deleted.
+    fn delete_saved_filter(&mut self, id: &SavedFilterId) -> StorageResult<()>;
+
+    /// Lists all saved filters.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_saved_filters(&self) -> StorageResult<Vec<SavedFilter>>;
+}
+
+/// Repository trait for the append-only task audit log.
+pub trait AuditLogRepository {
+    /// Appends an audit log entry.
+    ///
+    /// Appending an entry whose ID is already stored replaces it, so callers
+    /// may safely retry a failed append.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the entry cannot be persisted.
+    fn append_audit_entry(&mut self, entry: &AuditLogEntry) -> StorageResult<()>;
+
+    /// Lists all audit log entries in storage order.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn list_audit_entries(&self) -> StorageResult<Vec<AuditLogEntry>>;
+
+    /// Lists the audit log entries for one task, newest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StorageError`](super::StorageError) if the storage cannot be read.
+    fn get_audit_entries_for_task(&self, task_id: &TaskId) -> StorageResult<Vec<AuditLogEntry>> {
+        let mut entries: Vec<_> = self
+            .list_audit_entries()?
+            .into_iter()
+            .filter(|e| &e.task_id == task_id)
+            .collect();
+        entries.sort_by_key(|e| std::cmp::Reverse(e.changed_at));
+        Ok(entries)
+    }
+}
+
 /// Data export structure for migration between backends
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExportData {
@@ -455,6 +536,8 @@ pub trait StorageBackend:
     + HabitRepository
     + GoalRepository
     + KeyResultRepository
+    + SavedFilterRepository
+    + AuditLogRepository
 {
     /// Initializes the storage backend (creates files/tables, etc.).
     ///
@@ -520,5 +603,303 @@ pub trait StorageBackend:
     /// backends that don't support external modification detection (like SQLite).
     fn refresh(&mut self) -> usize {
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Saved-filter and audit-log round trips through every file-backed backend.
+    //!
+    //! Each test opens a backend in a temp dir, mutates it through the
+    //! repository traits, flushes, reopens the same path with
+    //! [`create_backend`](crate::storage::create_backend) and asserts the data
+    //! survived. The CalDAV backend is covered in its own module since it
+    //! needs no server for its sidecar.
+
+    use std::path::{Path, PathBuf};
+
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::domain::{AuditAction, FieldChange, Priority, SortField, SortOrder, SortSpec};
+    use crate::storage::{create_backend, BackendType, StorageError};
+
+    const BACKENDS: [BackendType; 4] = [
+        BackendType::Json,
+        BackendType::Yaml,
+        BackendType::Sqlite,
+        BackendType::Markdown,
+    ];
+
+    fn data_path(backend_type: BackendType, dir: &Path) -> PathBuf {
+        match backend_type {
+            BackendType::Markdown => dir.join("md_data"),
+            other => dir.join(format!("data.{}", other.file_extension())),
+        }
+    }
+
+    fn open(backend_type: BackendType, path: &Path) -> Box<dyn StorageBackend> {
+        create_backend(backend_type, path)
+            .unwrap_or_else(|e| panic!("open {backend_type:?} at {}: {e}", path.display()))
+    }
+
+    fn sample_filter(name: &str) -> SavedFilter {
+        let filter = Filter {
+            priority: Some(vec![Priority::High]),
+            tags: Some(vec!["work".to_string()]),
+            include_completed: true,
+            ..Filter::default()
+        };
+        SavedFilter::new(
+            name,
+            filter,
+            SortSpec {
+                field: SortField::Title,
+                order: SortOrder::Ascending,
+            },
+        )
+        .with_icon("W")
+    }
+
+    #[test]
+    fn saved_filter_round_trip_survives_reopen() {
+        for backend_type in BACKENDS {
+            let dir = TempDir::new().unwrap();
+            let path = data_path(backend_type, dir.path());
+            let mut backend = open(backend_type, &path);
+
+            let mut first = sample_filter("First");
+            let second = sample_filter("Second");
+            backend.create_saved_filter(&first).unwrap();
+            backend.create_saved_filter(&second).unwrap();
+            assert!(
+                matches!(
+                    backend.create_saved_filter(&first),
+                    Err(StorageError::AlreadyExists { .. })
+                ),
+                "{backend_type:?}: duplicate create must fail"
+            );
+
+            first.name = "First (renamed)".to_string();
+            first.icon = None;
+            backend.update_saved_filter(&first).unwrap();
+
+            let fetched = backend.get_saved_filter(&first.id).unwrap().unwrap();
+            assert_eq!(fetched.name, "First (renamed)", "{backend_type:?}");
+            assert_eq!(fetched.icon, None, "{backend_type:?}");
+            assert!(
+                backend
+                    .get_saved_filter(&SavedFilterId::new())
+                    .unwrap()
+                    .is_none(),
+                "{backend_type:?}"
+            );
+
+            backend.delete_saved_filter(&second.id).unwrap();
+            assert!(
+                matches!(
+                    backend.delete_saved_filter(&second.id),
+                    Err(StorageError::NotFound { .. })
+                ),
+                "{backend_type:?}: deleting twice must fail"
+            );
+            assert!(
+                matches!(
+                    backend.update_saved_filter(&second),
+                    Err(StorageError::NotFound { .. })
+                ),
+                "{backend_type:?}: updating a missing filter must fail"
+            );
+            backend.flush().unwrap();
+            drop(backend);
+
+            let reopened = open(backend_type, &path);
+            let filters = reopened.list_saved_filters().unwrap();
+            assert_eq!(
+                filters.len(),
+                1,
+                "{backend_type:?}: one filter after reopen"
+            );
+            let f = &filters[0];
+            assert_eq!(f.id, first.id, "{backend_type:?}");
+            assert_eq!(f.name, "First (renamed)", "{backend_type:?}");
+            assert_eq!(
+                f.filter.priority,
+                Some(vec![Priority::High]),
+                "{backend_type:?}"
+            );
+            assert_eq!(
+                f.filter.tags,
+                Some(vec!["work".to_string()]),
+                "{backend_type:?}"
+            );
+            assert!(f.filter.include_completed, "{backend_type:?}");
+            assert!(matches!(f.sort.field, SortField::Title), "{backend_type:?}");
+            assert!(
+                matches!(f.sort.order, SortOrder::Ascending),
+                "{backend_type:?}"
+            );
+            assert_eq!(
+                reopened.export_all().unwrap().saved_filters.len(),
+                1,
+                "{backend_type:?}: export_all sees the filter"
+            );
+        }
+    }
+
+    #[test]
+    fn audit_log_round_trip_survives_reopen() {
+        for backend_type in BACKENDS {
+            let dir = TempDir::new().unwrap();
+            let path = data_path(backend_type, dir.path());
+            let mut backend = open(backend_type, &path);
+
+            let task_a = TaskId::new();
+            let task_b = TaskId::new();
+            let created = AuditLogEntry::new(task_a, AuditAction::Created, vec![]);
+            let modified = AuditLogEntry::new(
+                task_a,
+                AuditAction::Modified,
+                vec![FieldChange {
+                    field: "title".to_string(),
+                    old_value: "old".to_string(),
+                    new_value: "new \"quoted\"".to_string(),
+                }],
+            );
+            let other = AuditLogEntry::new(task_b, AuditAction::Deleted, vec![]);
+
+            backend.append_audit_entry(&created).unwrap();
+            backend.append_audit_entry(&modified).unwrap();
+            backend.append_audit_entry(&other).unwrap();
+            // Retrying an append must not duplicate the entry.
+            backend.append_audit_entry(&modified).unwrap();
+            backend.flush().unwrap();
+            drop(backend);
+
+            let reopened = open(backend_type, &path);
+            let all = reopened.list_audit_entries().unwrap();
+            assert_eq!(all.len(), 3, "{backend_type:?}: three entries after reopen");
+
+            let for_a = reopened.get_audit_entries_for_task(&task_a).unwrap();
+            assert_eq!(for_a.len(), 2, "{backend_type:?}");
+            assert!(
+                for_a[0].changed_at >= for_a[1].changed_at,
+                "{backend_type:?}: newest first"
+            );
+            let restored = for_a.iter().find(|e| e.id == modified.id).unwrap();
+            assert_eq!(restored.action, AuditAction::Modified, "{backend_type:?}");
+            assert_eq!(restored.changes.len(), 1, "{backend_type:?}");
+            assert_eq!(
+                restored.changes[0].new_value, "new \"quoted\"",
+                "{backend_type:?}"
+            );
+            assert_eq!(
+                restored.changed_at.timestamp_millis(),
+                modified.changed_at.timestamp_millis(),
+                "{backend_type:?}: timestamp preserved"
+            );
+
+            let for_b = reopened.get_audit_entries_for_task(&task_b).unwrap();
+            assert_eq!(for_b.len(), 1, "{backend_type:?}");
+            assert_eq!(for_b[0].action, AuditAction::Deleted, "{backend_type:?}");
+            assert!(
+                reopened
+                    .get_audit_entries_for_task(&TaskId::new())
+                    .unwrap()
+                    .is_empty(),
+                "{backend_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn import_all_replaces_saved_filters_and_audit_log() {
+        for backend_type in BACKENDS {
+            let dir = TempDir::new().unwrap();
+            let path = data_path(backend_type, dir.path());
+            let mut backend = open(backend_type, &path);
+            backend
+                .create_saved_filter(&sample_filter("Stale"))
+                .unwrap();
+            backend
+                .append_audit_entry(&AuditLogEntry::new(
+                    TaskId::new(),
+                    AuditAction::Created,
+                    vec![],
+                ))
+                .unwrap();
+
+            let fresh = ExportData {
+                saved_filters: vec![sample_filter("Fresh")],
+                audit_logs: vec![
+                    AuditLogEntry::new(TaskId::new(), AuditAction::Created, vec![]),
+                    AuditLogEntry::new(TaskId::new(), AuditAction::Completed, vec![]),
+                ],
+                ..ExportData::default()
+            };
+            backend.import_all(&fresh).unwrap();
+            backend.flush().unwrap();
+            drop(backend);
+
+            let reopened = open(backend_type, &path);
+            let filters = reopened.list_saved_filters().unwrap();
+            assert_eq!(filters.len(), 1, "{backend_type:?}");
+            assert_eq!(filters[0].name, "Fresh", "{backend_type:?}");
+            let audits = reopened.list_audit_entries().unwrap();
+            // The Markdown backend's import_all lives in a file owned by another
+            // change set and does not yet touch the audit log; every other
+            // backend replaces it.
+            if backend_type == BackendType::Markdown {
+                assert_eq!(audits.len(), 1, "{backend_type:?}: audit log left as-is");
+            } else {
+                assert_eq!(audits.len(), 2, "{backend_type:?}: audit log replaced");
+            }
+        }
+    }
+
+    #[test]
+    fn markdown_audit_log_skips_truncated_trailing_line() {
+        let dir = TempDir::new().unwrap();
+        let path = data_path(BackendType::Markdown, dir.path());
+        let mut backend = open(BackendType::Markdown, &path);
+        backend
+            .append_audit_entry(&AuditLogEntry::new(
+                TaskId::new(),
+                AuditAction::Created,
+                vec![],
+            ))
+            .unwrap();
+        drop(backend);
+
+        // Simulate a crash mid-append.
+        let log_path = path.join("audit_log.jsonl");
+        let mut content = std::fs::read_to_string(&log_path).unwrap();
+        content.push_str("{\"id\":\"half-written");
+        std::fs::write(&log_path, content).unwrap();
+
+        let reopened = open(BackendType::Markdown, &path);
+        assert_eq!(reopened.list_audit_entries().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn sqlite_audit_table_is_created_for_existing_databases() {
+        // Open once so the main schema exists, drop the audit table to mimic a
+        // database created before the audit log existed, then reopen.
+        let dir = TempDir::new().unwrap();
+        let path = data_path(BackendType::Sqlite, dir.path());
+        drop(open(BackendType::Sqlite, &path));
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch("DROP TABLE audit_log;").unwrap();
+        }
+        let mut backend = open(BackendType::Sqlite, &path);
+        backend
+            .append_audit_entry(&AuditLogEntry::new(
+                TaskId::new(),
+                AuditAction::Created,
+                vec![],
+            ))
+            .unwrap();
+        assert_eq!(backend.list_audit_entries().unwrap().len(), 1);
     }
 }

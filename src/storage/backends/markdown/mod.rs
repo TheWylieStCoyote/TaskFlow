@@ -15,12 +15,14 @@
 //!   time_entries.yaml
 //! ```
 
+mod audit_log_repo;
 mod cache;
 mod file_io;
 mod goal_repo;
 mod habit_repo;
 mod key_result_repo;
 mod project_repo;
+mod saved_filter_repo;
 mod storage;
 mod tag_repo;
 mod task_repo;

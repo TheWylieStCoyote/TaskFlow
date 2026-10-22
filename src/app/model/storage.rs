@@ -6,12 +6,12 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::domain::{
-    Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Project, ProjectId, Task, TaskId,
-    TimeEntry, WorkLogEntry, WorkLogEntryId,
+    AuditLogEntry, Goal, GoalId, Habit, HabitId, KeyResult, KeyResultId, Project, ProjectId,
+    SavedFilter, SavedFilterId, Task, TaskId, TimeEntry, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::{
-    self, BackendType, GoalRepository, HabitRepository, KeyResultRepository, ProjectRepository,
-    WorkLogRepository,
+    self, AuditLogRepository, BackendType, GoalRepository, HabitRepository, KeyResultRepository,
+    ProjectRepository, SavedFilterRepository, WorkLogRepository,
 };
 
 use super::{Model, UndoAction};
@@ -107,13 +107,12 @@ impl Model {
             self.pomodoro.stats = stats;
         }
 
-        // Load saved filters
-        for filter in export_data.saved_filters {
+        // Load saved filters and audit logs through their repositories: the
+        // Markdown and SQLite backends keep the audit log outside `export_all`.
+        for filter in SavedFilterRepository::list_saved_filters(backend.as_ref())? {
             self.saved_filters.insert(filter.id.clone(), filter);
         }
-
-        // Load audit logs
-        for entry in export_data.audit_logs {
+        for entry in AuditLogRepository::list_audit_entries(backend.as_ref())? {
             self.audit_logs.insert(entry.id, entry);
         }
 
@@ -571,8 +570,8 @@ impl Model {
                 } else {
                     crate::domain::AuditAction::Modified
                 };
-                let entry = crate::domain::AuditLogEntry::new(*task_id, action, changes);
-                self.audit_logs.insert(entry.id, entry);
+                let entry = AuditLogEntry::new(*task_id, action, changes);
+                self.record_audit_entry(entry);
             }
             true
         } else {
@@ -641,22 +640,83 @@ impl Model {
         }
     }
 
+    /// Syncs a saved filter to storage.
+    ///
+    /// Creates or updates the saved filter in the storage backend.
+    /// Sets the dirty flag to indicate unsaved changes.
+    /// Does nothing in sample data mode.
+    pub fn sync_saved_filter(&mut self, filter: &SavedFilter) {
+        if self.storage.sample_data_mode {
+            return;
+        }
+        if let Some(ref mut backend) = self.storage.backend {
+            // Try update first, if not found, create
+            if let Err(e) = SavedFilterRepository::update_saved_filter(backend.as_mut(), filter) {
+                if let Err(e2) =
+                    SavedFilterRepository::create_saved_filter(backend.as_mut(), filter)
+                {
+                    warn!(
+                        "Failed to sync saved filter {}: update={}, create={}",
+                        filter.id.0, e, e2
+                    );
+                }
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Deletes a saved filter from storage.
+    ///
+    /// Removes the saved filter from the storage backend.
+    /// Does nothing in sample data mode.
+    pub fn delete_saved_filter_from_storage(&mut self, id: &SavedFilterId) {
+        if self.storage.sample_data_mode {
+            return;
+        }
+        if let Some(ref mut backend) = self.storage.backend {
+            if let Err(e) = SavedFilterRepository::delete_saved_filter(backend.as_mut(), id) {
+                warn!("Failed to delete saved filter {} from storage: {}", id.0, e);
+            }
+            self.storage.dirty = true;
+        }
+    }
+
     // ========================================================================
     // Audit log helpers
     // ========================================================================
 
+    /// Appends an audit log entry to storage.
+    ///
+    /// Sets the dirty flag to indicate unsaved changes.
+    /// Does nothing in sample data mode.
+    pub fn append_audit_entry_to_storage(&mut self, entry: &AuditLogEntry) {
+        if self.storage.sample_data_mode {
+            return;
+        }
+        if let Some(ref mut backend) = self.storage.backend {
+            if let Err(e) = AuditLogRepository::append_audit_entry(backend.as_mut(), entry) {
+                warn!("Failed to persist audit entry {}: {}", entry.id.0, e);
+            }
+            self.storage.dirty = true;
+        }
+    }
+
+    /// Record an audit entry in the model and persist it.
+    fn record_audit_entry(&mut self, entry: AuditLogEntry) {
+        self.append_audit_entry_to_storage(&entry);
+        self.audit_logs.insert(entry.id, entry);
+    }
+
     /// Append a "task created" audit entry.
     pub fn record_task_created(&mut self, task_id: TaskId) {
-        let entry =
-            crate::domain::AuditLogEntry::new(task_id, crate::domain::AuditAction::Created, vec![]);
-        self.audit_logs.insert(entry.id, entry);
+        let entry = AuditLogEntry::new(task_id, crate::domain::AuditAction::Created, vec![]);
+        self.record_audit_entry(entry);
     }
 
     /// Append a "task deleted" audit entry.
     pub fn record_task_deleted(&mut self, task_id: TaskId) {
-        let entry =
-            crate::domain::AuditLogEntry::new(task_id, crate::domain::AuditAction::Deleted, vec![]);
-        self.audit_logs.insert(entry.id, entry);
+        let entry = AuditLogEntry::new(task_id, crate::domain::AuditAction::Deleted, vec![]);
+        self.record_audit_entry(entry);
     }
 
     /// Return audit log entries for a task, sorted newest-first.
@@ -1166,6 +1226,137 @@ mod storage_io_tests {
         assert!(reloaded.key_results.is_empty());
         assert!(reloaded.work_logs.is_empty());
         assert_eq!(reloaded.tasks.len(), 1);
+    }
+
+    // ------------------------------------------------------------------------
+    // saved filters and audit log
+    // ------------------------------------------------------------------------
+
+    fn sample_saved_filter(name: &str) -> SavedFilter {
+        SavedFilter::new(
+            name,
+            crate::domain::Filter {
+                include_completed: true,
+                ..crate::domain::Filter::default()
+            },
+            crate::domain::SortSpec::default(),
+        )
+    }
+
+    #[test]
+    fn test_sync_saved_filter_survives_reload() {
+        let (mut model, _dir, path) = json_model();
+        let mut filter = sample_saved_filter("Inbox");
+        let filter_id = filter.id.clone();
+        model.sync_saved_filter(&filter);
+        model
+            .saved_filters
+            .insert(filter_id.clone(), filter.clone());
+        assert!(model.storage.dirty);
+        model.save().expect("save");
+
+        // Renaming re-syncs as an update rather than a duplicate create.
+        filter.name = "Inbox (renamed)".to_string();
+        model.sync_saved_filter(&filter);
+        model.saved_filters.insert(filter_id.clone(), filter);
+        model.save().expect("save again");
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        assert_eq!(reloaded.saved_filters.len(), 1);
+        let restored = &reloaded.saved_filters[&filter_id];
+        assert_eq!(restored.name, "Inbox (renamed)");
+        assert!(restored.filter.include_completed);
+    }
+
+    #[test]
+    fn test_delete_saved_filter_from_storage_removes_on_reload() {
+        let (mut model, _dir, path) = json_model();
+        let keep = sample_saved_filter("Keep");
+        let drop_me = sample_saved_filter("Drop");
+        let keep_id = keep.id.clone();
+        let drop_id = drop_me.id.clone();
+        model.sync_saved_filter(&keep);
+        model.sync_saved_filter(&drop_me);
+        model.saved_filters.insert(keep_id.clone(), keep);
+        model.saved_filters.insert(drop_id.clone(), drop_me);
+        model.save().unwrap();
+
+        model.saved_filters.remove(&drop_id);
+        model.delete_saved_filter_from_storage(&drop_id);
+        assert!(model.storage.dirty);
+        model.save().unwrap();
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        assert_eq!(reloaded.saved_filters.len(), 1);
+        assert!(reloaded.saved_filters.contains_key(&keep_id));
+        assert!(!reloaded.saved_filters.contains_key(&drop_id));
+    }
+
+    #[test]
+    fn test_audit_entries_are_persisted_and_reloaded() {
+        let (mut model, _dir, path) = json_model();
+        let task = Task::new("Audited");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.sync_task_by_id(&task_id);
+        model.record_task_created(task_id);
+        assert!(model.modify_task_with_undo(&task_id, |t| t.title = "Audited twice".into()));
+        model.record_task_deleted(task_id);
+        assert_eq!(model.audit_logs.len(), 3);
+        model.save().unwrap();
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        assert_eq!(reloaded.audit_logs.len(), 3);
+        let history = reloaded.audit_log_for_task(&task_id);
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[0].action, crate::domain::AuditAction::Deleted);
+        assert_eq!(history[2].action, crate::domain::AuditAction::Created);
+        let modified = history
+            .iter()
+            .find(|e| e.action == crate::domain::AuditAction::Modified)
+            .expect("modified entry");
+        assert_eq!(modified.changes[0].field, "title");
+        assert_eq!(modified.changes[0].new_value, "Audited twice");
+    }
+
+    #[test]
+    fn test_unchanged_modify_records_no_audit_entry() {
+        let (mut model, _dir, _path) = json_model();
+        let task = Task::new("Same");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        assert!(model.modify_task_with_undo(&task_id, |_| {}));
+        assert!(model.audit_logs.is_empty());
+    }
+
+    #[test]
+    fn test_saved_filter_and_audit_sync_skipped_in_sample_mode() {
+        let mut model = Model::new().with_sample_data();
+        model.storage.dirty = false;
+        model.sync_saved_filter(&sample_saved_filter("Sample"));
+        model.delete_saved_filter_from_storage(&SavedFilterId::new());
+        model.record_task_created(TaskId::new());
+        assert!(!model.storage.dirty);
+        assert_eq!(model.audit_logs.len(), 1, "model still records history");
+    }
+
+    #[test]
+    fn test_saved_filter_and_audit_sync_without_backend_stay_clean() {
+        let mut model = Model::new();
+        model.sync_saved_filter(&sample_saved_filter("Nowhere"));
+        model.delete_saved_filter_from_storage(&SavedFilterId::new());
+        model.append_audit_entry_to_storage(&AuditLogEntry::new(
+            TaskId::new(),
+            crate::domain::AuditAction::Created,
+            vec![],
+        ));
+        assert!(!model.storage.dirty);
     }
 
     // ------------------------------------------------------------------------

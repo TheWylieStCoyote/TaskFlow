@@ -5,10 +5,12 @@
 //! [`InMemoryBackend`] trait, a backend automatically gets implementations for
 //! all repository traits.
 
+mod audit_log_repo;
 mod goal_repo;
 mod habit_repo;
 mod key_result_repo;
 mod project_repo;
+mod saved_filter_repo;
 mod tag_repo;
 mod task_repo;
 mod time_entry_repo;

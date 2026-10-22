@@ -6,14 +6,15 @@
 //! CalDAV server instead of re-uploading everything.
 
 use crate::domain::{
-    Filter, Goal, GoalId, GoalStatus, Habit, HabitId, KeyResult, KeyResultId, PomodoroConfig,
-    PomodoroSession, PomodoroStats, Project, ProjectId, Tag, Task, TaskId, TimeEntry, TimeEntryId,
-    WorkLogEntry, WorkLogEntryId,
+    AuditLogEntry, Filter, Goal, GoalId, GoalStatus, Habit, HabitId, KeyResult, KeyResultId,
+    PomodoroConfig, PomodoroSession, PomodoroStats, Project, ProjectId, SavedFilter, SavedFilterId,
+    Tag, Task, TaskId, TimeEntry, TimeEntryId, WorkLogEntry, WorkLogEntryId,
 };
 use crate::storage::{
-    backends::filter_utils::task_matches_filter, ExportData, GoalRepository, HabitRepository,
-    KeyResultRepository, ProjectRepository, StorageBackend, StorageError, StorageResult,
-    TagRepository, TaskRepository, TimeEntryRepository, WorkLogRepository,
+    backends::filter_utils::task_matches_filter, AuditLogRepository, ExportData, GoalRepository,
+    HabitRepository, KeyResultRepository, ProjectRepository, SavedFilterRepository, StorageBackend,
+    StorageError, StorageResult, TagRepository, TaskRepository, TimeEntryRepository,
+    WorkLogRepository,
 };
 
 use super::{client, CalDavBackend};
@@ -429,10 +430,90 @@ impl KeyResultRepository for CalDavBackend {
     }
 }
 
+// ── SavedFilterRepository ─────────────────────────────────────────────────────
+
+impl SavedFilterRepository for CalDavBackend {
+    fn create_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()> {
+        if self.mem.saved_filters.iter().any(|f| f.id == filter.id) {
+            return Err(StorageError::already_exists(
+                "SavedFilter",
+                filter.id.0.clone(),
+            ));
+        }
+        self.mem.saved_filters.push(filter.clone());
+        self.mem_dirty = true;
+        Ok(())
+    }
+
+    fn get_saved_filter(&self, id: &SavedFilterId) -> StorageResult<Option<SavedFilter>> {
+        Ok(self.mem.saved_filters.iter().find(|f| &f.id == id).cloned())
+    }
+
+    fn update_saved_filter(&mut self, filter: &SavedFilter) -> StorageResult<()> {
+        if let Some(existing) = self
+            .mem
+            .saved_filters
+            .iter_mut()
+            .find(|f| f.id == filter.id)
+        {
+            *existing = filter.clone();
+            self.mem_dirty = true;
+            Ok(())
+        } else {
+            Err(StorageError::not_found("SavedFilter", filter.id.0.clone()))
+        }
+    }
+
+    fn delete_saved_filter(&mut self, id: &SavedFilterId) -> StorageResult<()> {
+        let before = self.mem.saved_filters.len();
+        self.mem.saved_filters.retain(|f| &f.id != id);
+        if self.mem.saved_filters.len() == before {
+            return Err(StorageError::not_found("SavedFilter", id.0.clone()));
+        }
+        self.mem_dirty = true;
+        Ok(())
+    }
+
+    fn list_saved_filters(&self) -> StorageResult<Vec<SavedFilter>> {
+        Ok(self.mem.saved_filters.clone())
+    }
+}
+
+// ── AuditLogRepository ────────────────────────────────────────────────────────
+
+impl AuditLogRepository for CalDavBackend {
+    fn append_audit_entry(&mut self, entry: &AuditLogEntry) -> StorageResult<()> {
+        if let Some(existing) = self.mem.audit_logs.iter_mut().find(|e| e.id == entry.id) {
+            *existing = entry.clone();
+        } else {
+            self.mem.audit_logs.push(entry.clone());
+        }
+        self.mem_dirty = true;
+        Ok(())
+    }
+
+    fn list_audit_entries(&self) -> StorageResult<Vec<AuditLogEntry>> {
+        Ok(self.mem.audit_logs.clone())
+    }
+}
+
 // ── StorageBackend ────────────────────────────────────────────────────────────
 
 impl StorageBackend for CalDavBackend {
     fn initialize(&mut self) -> StorageResult<()> {
+        // Local-only data first, so a server outage never hides it.
+        match self.load_sidecar() {
+            Ok(true) => tracing::info!(
+                "CalDAV: loaded local data from {}",
+                self.sidecar_path
+                    .as_deref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default()
+            ),
+            Ok(false) => {}
+            Err(e) => return Err(e),
+        }
+
         match client::fetch_all_vtodos(&self.config) {
             Ok(tasks) => {
                 for task in tasks {
@@ -456,6 +537,12 @@ impl StorageBackend for CalDavBackend {
     fn flush(&mut self) -> StorageResult<()> {
         if !self.mem_dirty && self.deleted_ids.is_empty() {
             return Ok(());
+        }
+
+        // Persist local-only data before talking to the server, so a failed
+        // push never costs the user their projects, time entries, etc.
+        if self.mem_dirty {
+            self.save_sidecar()?;
         }
 
         for task_id in &self.dirty_ids {
@@ -489,6 +576,7 @@ impl StorageBackend for CalDavBackend {
             }
         }
         self.mem = data.clone();
+        self.save_sidecar()?;
         self.mem_dirty = false;
         self.dirty_ids.clear();
         self.deleted_ids.clear();
@@ -501,16 +589,19 @@ impl StorageBackend for CalDavBackend {
 
     fn set_pomodoro_session(&mut self, session: Option<&PomodoroSession>) -> StorageResult<()> {
         self.mem.pomodoro_session = session.cloned();
+        self.mem_dirty = true;
         Ok(())
     }
 
     fn set_pomodoro_config(&mut self, config: &PomodoroConfig) -> StorageResult<()> {
         self.mem.pomodoro_config = Some(config.clone());
+        self.mem_dirty = true;
         Ok(())
     }
 
     fn set_pomodoro_stats(&mut self, stats: &PomodoroStats) -> StorageResult<()> {
         self.mem.pomodoro_stats = Some(stats.clone());
+        self.mem_dirty = true;
         Ok(())
     }
 

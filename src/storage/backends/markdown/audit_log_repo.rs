@@ -19,7 +19,7 @@ use super::MarkdownBackend;
 pub(crate) const AUDIT_LOG_FILE: &str = "audit_log.jsonl";
 
 impl MarkdownBackend {
-    fn audit_log_path(&self) -> PathBuf {
+    pub(super) fn audit_log_path(&self) -> PathBuf {
         self.base_path.join(AUDIT_LOG_FILE)
     }
 }

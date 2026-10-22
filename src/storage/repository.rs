@@ -846,14 +846,7 @@ mod tests {
             assert_eq!(filters.len(), 1, "{backend_type:?}");
             assert_eq!(filters[0].name, "Fresh", "{backend_type:?}");
             let audits = reopened.list_audit_entries().unwrap();
-            // The Markdown backend's import_all lives in a file owned by another
-            // change set and does not yet touch the audit log; every other
-            // backend replaces it.
-            if backend_type == BackendType::Markdown {
-                assert_eq!(audits.len(), 1, "{backend_type:?}: audit log left as-is");
-            } else {
-                assert_eq!(audits.len(), 2, "{backend_type:?}: audit log replaced");
-            }
+            assert_eq!(audits.len(), 2, "{backend_type:?}: audit log replaced");
         }
     }
 

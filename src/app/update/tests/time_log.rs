@@ -300,10 +300,13 @@ fn edit_start_is_interpreted_as_local_clock_time() {
     model.time_log.mode = TimeLogMode::EditStart;
     model.time_log.selected = 0;
     model.time_log.buffer = "08:15".to_string();
+    // Entries list newest-first, so the edited entry may move after the
+    // edit; follow it by id rather than by position.
+    let edited_id = model.time_entries_for_task(&task_id)[0].id;
 
     update(&mut model, Message::Ui(UiMessage::TimeLogSubmit));
 
-    let entry = model.time_entries_for_task(&task_id)[0];
+    let entry = &model.time_entries[&edited_id];
     let local = entry.started_at.with_timezone(&chrono::Local);
     assert_eq!(local.format("%H:%M").to_string(), "08:15");
     assert_eq!(

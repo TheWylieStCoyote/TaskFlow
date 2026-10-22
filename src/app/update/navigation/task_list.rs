@@ -26,10 +26,6 @@ pub fn handle_task_list_navigation(model: &mut Model, msg: NavigationMessage) {
                     // Navigate duplicate pairs
                     if model.duplicates_view.selected > 0 {
                         model.duplicates_view.selected -= 1;
-                        // Adjust scroll offset to keep selection visible
-                        if model.duplicates_view.selected < model.duplicates_view.scroll_offset {
-                            model.duplicates_view.scroll_offset = model.duplicates_view.selected;
-                        }
                     }
                 } else if model.selected_index > 0 {
                     model.selected_index -= 1;
@@ -61,15 +57,6 @@ pub fn handle_task_list_navigation(model: &mut Model, msg: NavigationMessage) {
                     let max_index = model.duplicates_view.pairs.len().saturating_sub(1);
                     if model.duplicates_view.selected < max_index {
                         model.duplicates_view.selected += 1;
-                        // Adjust scroll offset to keep selection visible (estimate viewport ~5 rows)
-                        const ESTIMATED_VIEWPORT: usize = 5;
-                        let scroll = model.duplicates_view.scroll_offset;
-                        if model.duplicates_view.selected >= scroll + ESTIMATED_VIEWPORT {
-                            model.duplicates_view.scroll_offset = model
-                                .duplicates_view
-                                .selected
-                                .saturating_sub(ESTIMATED_VIEWPORT - 1);
-                        }
                     }
                 } else if model.selected_index < model.visible_tasks.len().saturating_sub(1) {
                     model.selected_index += 1;

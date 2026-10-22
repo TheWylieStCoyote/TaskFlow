@@ -22,6 +22,7 @@ use crate::app::Model;
 use crate::config::Theme;
 use crate::domain::today;
 use crate::domain::{Priority, Task};
+use crate::ui::primitives::scroll_offset;
 
 /// Eisenhower matrix widget showing tasks in urgency/importance quadrants.
 pub struct Eisenhower<'a> {
@@ -112,96 +113,81 @@ impl Widget for Eisenhower<'_> {
         // Render quadrants (0=TL, 1=TR, 2=BL, 3=BR)
         let selected_quadrant = self.model.view_selection.eisenhower_quadrant;
         let selected_task_index = self.model.view_selection.eisenhower_task_index;
-        let scroll_offsets = self.model.view_selection.eisenhower_scroll_offsets;
+        let selection_in = |quadrant: usize| {
+            if selected_quadrant == quadrant {
+                Some(selected_task_index)
+            } else {
+                None
+            }
+        };
 
         // Top-left: Urgent + Important (DO FIRST)
         self.render_quadrant(
             top_cols[0],
             buf,
-            0,
             "🔥 DO FIRST",
             "Urgent & Important",
             &urgent_important,
             theme.colors.danger.to_color(),
             selected_quadrant == 0,
-            if selected_quadrant == 0 {
-                Some(selected_task_index)
-            } else {
-                None
-            },
-            scroll_offsets[0],
+            selection_in(0),
         );
 
         // Top-right: Not Urgent + Important (SCHEDULE)
         self.render_quadrant(
             top_cols[1],
             buf,
-            1,
             "📅 SCHEDULE",
             "Important, Not Urgent",
             &not_urgent_important,
             theme.colors.accent.to_color(),
             selected_quadrant == 1,
-            if selected_quadrant == 1 {
-                Some(selected_task_index)
-            } else {
-                None
-            },
-            scroll_offsets[1],
+            selection_in(1),
         );
 
         // Bottom-left: Urgent + Not Important (DELEGATE)
         self.render_quadrant(
             bottom_cols[0],
             buf,
-            2,
             "👋 DELEGATE",
             "Urgent, Not Important",
             &urgent_not_important,
             theme.colors.warning.to_color(),
             selected_quadrant == 2,
-            if selected_quadrant == 2 {
-                Some(selected_task_index)
-            } else {
-                None
-            },
-            scroll_offsets[2],
+            selection_in(2),
         );
 
         // Bottom-right: Not Urgent + Not Important (ELIMINATE)
         self.render_quadrant(
             bottom_cols[1],
             buf,
-            3,
             "🗑️  ELIMINATE",
             "Not Urgent or Important",
             &not_urgent_not_important,
             theme.colors.muted.to_color(),
             selected_quadrant == 3,
-            if selected_quadrant == 3 {
-                Some(selected_task_index)
-            } else {
-                None
-            },
-            scroll_offsets[3],
+            selection_in(3),
         );
     }
 }
 
 impl Eisenhower<'_> {
+    /// Render one quadrant.
+    ///
+    /// The quadrant scrolls only to keep `selected_task_index` visible; the
+    /// offset is derived from the real task-area height every frame, so it
+    /// follows terminal resizes without any stored state.
     #[allow(clippy::too_many_arguments)]
     fn render_quadrant(
         &self,
         area: Rect,
         buf: &mut Buffer,
-        _quadrant_index: usize,
         title: &str,
         subtitle: &str,
         tasks: &[&Task],
         title_color: Color,
         is_selected: bool,
         selected_task_index: Option<usize>,
-        scroll_offset: usize,
     ) {
         let theme = self.theme;
 
@@ -249,10 +235,14 @@ impl Eisenhower<'_> {
             return;
         }
 
-        // Calculate viewport and apply scroll offset
+        // Scroll from the real viewport so the selection is always on screen
         let total_tasks = tasks.len();
         let viewport_height = tasks_area.height as usize;
-        let scroll_offset = scroll_offset.min(total_tasks.saturating_sub(viewport_height));
+        let scroll_offset = scroll_offset(
+            selected_task_index.unwrap_or(0),
+            total_tasks,
+            viewport_height,
+        );
 
         // Create list items for visible tasks only
         let items: Vec<ListItem<'_>> = tasks
@@ -406,5 +396,93 @@ mod tests {
 
         task.priority = Priority::Urgent;
         assert!(Eisenhower::is_important(&task));
+    }
+}
+
+#[cfg(test)]
+mod scrolling_tests {
+    use super::*;
+    use crate::ui::test_utils::{buffer_content, render_widget};
+
+    /// Model with `count` urgent + important tasks titled `Item NN`
+    /// (quadrant 0, DO FIRST), quadrant 0 selected.
+    fn model_with_items(count: usize) -> Model {
+        let mut model = Model::new();
+        let mut ids = Vec::new();
+        for i in 0..count {
+            let mut task = Task::new(format!("Item {i:02}"));
+            task.priority = Priority::High;
+            task.due_date = Some(today() - chrono::Duration::days(1));
+            ids.push(task.id);
+            model.tasks.insert(task.id, task);
+        }
+        model.visible_tasks = ids;
+        model.view_selection.eisenhower_quadrant = 0;
+        model
+    }
+
+    fn render(model: &Model, width: u16, height: u16) -> (String, Buffer) {
+        let theme = Theme::default();
+        let buffer = render_widget(Eisenhower::new(model, &theme), width, height);
+        (buffer_content(&buffer), buffer)
+    }
+
+    /// True when some cell carries the selection background.
+    fn has_selection_highlight(buffer: &Buffer) -> bool {
+        let bg = Theme::default().colors.accent_secondary.to_color();
+        buffer.content.iter().any(|cell| cell.bg == bg)
+    }
+
+    #[test]
+    fn test_selection_visible_at_first_middle_and_last_for_two_heights() {
+        for height in [24u16, 50] {
+            let mut model = model_with_items(60);
+            for selected in [0usize, 30, 59] {
+                model.view_selection.eisenhower_task_index = selected;
+                let (content, buffer) = render(&model, 120, height);
+                assert!(
+                    content.contains(&format!("Item {selected:02}")),
+                    "item {selected} must be visible at height {height}:\n{content}"
+                );
+                assert!(has_selection_highlight(&buffer));
+            }
+        }
+    }
+
+    #[test]
+    fn test_taller_terminal_shows_more_items_without_blank_space() {
+        let mut model = model_with_items(60);
+        model.view_selection.eisenhower_task_index = 59;
+        let (short, _) = render(&model, 120, 24);
+        let (tall, _) = render(&model, 120, 50);
+        let items = |s: &str| s.matches("Item ").count();
+        // Quadrant = half the height, minus borders (2) and subtitle (1)
+        assert_eq!(items(&short), 9);
+        assert_eq!(items(&tall), 22);
+    }
+
+    #[test]
+    fn test_short_list_never_scrolls() {
+        let mut model = model_with_items(3);
+        model.view_selection.eisenhower_task_index = 2;
+        let (content, _) = render(&model, 120, 30);
+        assert!(content.contains("Item 00"));
+        assert!(content.contains("Item 02"));
+        assert!(!content.contains("▲"), "no scrollbar for a list that fits");
+    }
+
+    #[test]
+    fn test_tiny_terminal_keeps_selection_visible_without_panic() {
+        let mut model = model_with_items(60);
+        model.view_selection.eisenhower_task_index = 30;
+        let (content, buffer) = render(&model, 40, 12);
+        assert!(
+            content.contains("Item 30"),
+            "selected item visible at 40x12:\n{content}"
+        );
+        assert!(has_selection_highlight(&buffer));
+        // Degenerate sizes must not panic either
+        let _ = render(&model, 40, 4);
+        let _ = render(&model, 1, 1);
     }
 }

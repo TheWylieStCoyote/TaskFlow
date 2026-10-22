@@ -20,7 +20,6 @@ pub fn handle_view_navigation(model: &mut Model, msg: NavigationMessage) {
             model.duplicates_view.pairs =
                 find_all_duplicates(&model.tasks, model.duplicates_view.threshold);
             model.duplicates_view.selected = 0;
-            model.duplicates_view.scroll_offset = 0;
         }
 
         // Special handling for Reports view - ensure cache is populated

@@ -105,6 +105,53 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_commas_quotes_and_newlines_through_import() {
+        use crate::storage::{import_from_csv, ImportOptions};
+        use std::io::Cursor;
+
+        let mut task = Task::new("Fix \"quoted\", comma\nand newline");
+        task.description = Some(
+            "Line 1, with comma\nLine 2 says \"\"hi\"\" twice\n\nLast line after a blank"
+                .to_string(),
+        );
+        task.tags = vec!["alpha".to_string(), "beta".to_string()];
+        let plain = Task::new("Plain");
+
+        let mut buffer = Vec::new();
+        export_to_csv(&[task.clone(), plain.clone()], &mut buffer).unwrap();
+        let result = import_from_csv(Cursor::new(buffer), &ImportOptions::default()).unwrap();
+
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.imported.len(), 2);
+        let back = &result.imported[0];
+        assert_eq!(back.id, task.id);
+        assert_eq!(back.title, task.title);
+        assert_eq!(back.description, task.description);
+        assert_eq!(back.tags, task.tags);
+        assert_eq!(result.imported[1].id, plain.id);
+        assert_eq!(result.imported[1].title, "Plain");
+        assert_eq!(result.imported[1].description, None);
+    }
+
+    #[test]
+    fn round_trips_a_title_that_is_only_quotes_and_an_empty_description() {
+        use crate::storage::{import_from_csv, ImportOptions};
+        use std::io::Cursor;
+
+        let mut task = Task::new("\"\"");
+        task.description = Some(String::new());
+
+        let mut buffer = Vec::new();
+        export_to_csv(&[task.clone()], &mut buffer).unwrap();
+        let result = import_from_csv(Cursor::new(buffer), &ImportOptions::default()).unwrap();
+
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.imported[0].title, "\"\"");
+        // An empty description exports as an empty field and imports as None.
+        assert_eq!(result.imported[0].description, None);
+    }
+
+    #[test]
     fn test_export_csv_basic() {
         let tasks = vec![create_test_task("Test Task")];
         let mut buffer = Vec::new();

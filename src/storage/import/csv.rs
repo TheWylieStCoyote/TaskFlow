@@ -31,62 +31,56 @@ use super::types::{ImportError, ImportOptions, ImportResult};
 ///
 /// Columns are matched by header name, so unknown columns are ignored.
 ///
+/// Records follow RFC 4180: a field wrapped in double quotes may contain
+/// commas, line breaks and `""` for a literal quote; records end with LF or
+/// CRLF. A leading UTF-8 byte order mark is ignored.
+///
 /// # Errors
 ///
-/// Returns a [`StorageError`] if the file cannot be read.
+/// Returns a [`StorageError`] if the file cannot be read, is empty, or has
+/// an unusable header row.
 pub fn import_from_csv<R: BufRead>(
-    reader: R,
+    mut reader: R,
     options: &ImportOptions,
 ) -> StorageResult<ImportResult> {
     let mut result = ImportResult::default();
-    let mut lines = reader.lines();
+
+    let mut input = String::new();
+    reader
+        .read_to_string(&mut input)
+        .map_err(|e| StorageError::Deserialization {
+            message: format!("Failed to read CSV: {e}"),
+        })?;
+    let input = input.strip_prefix('\u{feff}').unwrap_or(&input);
+
+    let mut records = read_csv_records(input).into_iter();
 
     // Parse header
-    let header_line = lines
+    let header = records
         .next()
         .ok_or_else(|| StorageError::Deserialization {
             message: "Empty CSV file".to_string(),
-        })?
-        .map_err(|e| StorageError::Deserialization {
-            message: format!("Failed to read header: {e}"),
         })?;
-
-    let headers: Vec<&str> = parse_csv_row(&header_line);
+    let headers: Vec<&str> = header.fields.iter().map(String::as_str).collect();
 
     // Validate headers before processing
     validate_csv_headers(&headers)?;
 
     let column_map = build_column_map(&headers);
 
-    // Process data rows
-    for (line_num, line_result) in lines.enumerate() {
-        let line_num = line_num + 2; // 1-based, after header
-
-        let line = match line_result {
-            Ok(l) => l,
-            Err(e) => {
-                result.errors.push(ImportError {
-                    line: line_num,
-                    message: format!("Failed to read line: {e}"),
-                    content: None,
-                });
-                continue;
-            }
-        };
-
-        if line.trim().is_empty() {
+    // Process data records (a record may span several lines)
+    for record in records {
+        if record.raw.trim().is_empty() {
             continue;
         }
 
-        let fields: Vec<&str> = parse_csv_row(&line);
-
-        match parse_csv_task(&fields, &column_map, options.validate) {
+        match parse_csv_task(&record.fields, &column_map, options.validate) {
             Ok(task) => result.imported.push(task),
             Err(e) => {
                 result.errors.push(ImportError {
-                    line: line_num,
+                    line: record.line,
                     message: e,
-                    content: Some(line),
+                    content: Some(record.raw),
                 });
             }
         }
@@ -139,55 +133,119 @@ fn validate_csv_headers(headers: &[&str]) -> StorageResult<()> {
     Ok(())
 }
 
-/// Parse a single CSV row, handling quoted fields
-fn parse_csv_row(line: &str) -> Vec<&str> {
-    let mut fields = Vec::new();
-    let mut current_start = 0;
-    let mut in_quotes = false;
-    let bytes = line.as_bytes();
-
-    for (i, &byte) in bytes.iter().enumerate() {
-        match byte {
-            b'"' => {
-                // Check for escaped quote
-                if in_quotes && i + 1 < bytes.len() && bytes[i + 1] == b'"' {
-                    continue;
-                }
-                in_quotes = !in_quotes;
-            }
-            b',' if !in_quotes => {
-                fields.push(unescape_csv_field(&line[current_start..i]));
-                current_start = i + 1;
-            }
-            _ => {}
-        }
-    }
-
-    // Add final field
-    fields.push(unescape_csv_field(&line[current_start..]));
-
-    fields
+/// One CSV record: the 1-based line it starts on, its raw text and its fields.
+struct CsvRecord {
+    line: usize,
+    raw: String,
+    fields: Vec<String>,
 }
 
-/// Unescape a CSV field (remove surrounding quotes, unescape internal quotes)
-fn unescape_csv_field(s: &str) -> &str {
-    let trimmed = s.trim();
-    if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
-        &trimmed[1..trimmed.len() - 1]
+/// Split `input` into RFC 4180 records.
+///
+/// Fields are separated by commas and records by LF or CRLF. A field wrapped
+/// in double quotes may contain commas, line breaks and `""` for a literal
+/// quote; its content is kept verbatim. Unquoted fields are trimmed.
+fn read_csv_records(input: &str) -> Vec<CsvRecord> {
+    let mut records = Vec::new();
+    let mut chars = input.chars().peekable();
+    let mut line = 1;
+
+    while chars.peek().is_some() {
+        let start_line = line;
+        let mut raw = String::new();
+        let mut fields = Vec::new();
+        let mut field = String::new();
+        // The current field was opened with a quote (so it is not trimmed).
+        let mut quoted = false;
+        let mut in_quotes = false;
+
+        loop {
+            let Some(c) = chars.next() else {
+                // End of input ends the last record.
+                fields.push(finish_field(field, quoted));
+                break;
+            };
+
+            if in_quotes {
+                raw.push(c);
+                match c {
+                    '"' if chars.peek() == Some(&'"') => {
+                        chars.next();
+                        raw.push('"');
+                        field.push('"');
+                    }
+                    '"' => in_quotes = false,
+                    '\n' => {
+                        line += 1;
+                        field.push(c);
+                    }
+                    _ => field.push(c),
+                }
+                continue;
+            }
+
+            match c {
+                '"' if !quoted && field.trim().is_empty() => {
+                    raw.push(c);
+                    field.clear();
+                    quoted = true;
+                    in_quotes = true;
+                }
+                ',' => {
+                    raw.push(c);
+                    fields.push(finish_field(std::mem::take(&mut field), quoted));
+                    quoted = false;
+                }
+                '\r' | '\n' => {
+                    if c == '\r' && chars.peek() == Some(&'\n') {
+                        chars.next();
+                    }
+                    line += 1;
+                    fields.push(finish_field(field, quoted));
+                    break;
+                }
+                _ => {
+                    raw.push(c);
+                    // Whitespace after a closing quote is not part of the field.
+                    if !(quoted && c.is_whitespace()) {
+                        field.push(c);
+                    }
+                }
+            }
+        }
+
+        records.push(CsvRecord {
+            line: start_line,
+            raw,
+            fields,
+        });
+    }
+
+    records
+}
+
+/// Finish a field: quoted content is kept as written, unquoted is trimmed.
+fn finish_field(field: String, quoted: bool) -> String {
+    if quoted {
+        field
     } else {
-        trimmed
+        field.trim().to_string()
     }
 }
 
 /// Parse a CSV row into a Task
 fn parse_csv_task(
-    fields: &[&str],
+    fields: &[String],
     column_map: &HashMap<String, usize>,
     validate: bool,
 ) -> Result<Task, String> {
     // Get field by column name
-    let get_field =
-        |name: &str| -> Option<&str> { column_map.get(name).and_then(|&i| fields.get(i).copied()) };
+    let get_field = |name: &str| -> Option<&str> {
+        column_map
+            .get(name)
+            .and_then(|&i| fields.get(i))
+            .map(String::as_str)
+    };
 
     // Title is required
     let title = get_field("title")
@@ -250,10 +308,10 @@ fn parse_csv_task(
         .and_then(|s| Uuid::parse_str(s).ok())
         .map(crate::domain::ProjectId);
 
-    // Parse description
+    // Parse description (the record reader has already unescaped quotes)
     let description = get_field("description")
         .filter(|s| !s.is_empty())
-        .map(|s| s.replace("\"\"", "\""));
+        .map(str::to_string);
 
     // Parse created timestamp
     let created_at = get_field("created")
@@ -450,18 +508,115 @@ mod tests {
         assert_eq!(result.imported[4].priority, Priority::Urgent);
     }
 
+    /// Fields of a single-record input.
+    fn fields_of(input: &str) -> Vec<String> {
+        let mut records = read_csv_records(input);
+        assert_eq!(records.len(), 1, "expected one record in {input:?}");
+        records.remove(0).fields
+    }
+
     #[test]
     fn test_parse_csv_row_simple() {
-        let row = "a,b,c";
-        let fields: Vec<&str> = parse_csv_row(row);
-        assert_eq!(fields, vec!["a", "b", "c"]);
+        assert_eq!(fields_of("a,b,c"), ["a", "b", "c"]);
     }
 
     #[test]
     fn test_parse_csv_row_quoted() {
-        let row = "\"a,b\",c,\"d\"";
-        let fields: Vec<&str> = parse_csv_row(row);
-        assert_eq!(fields, vec!["a,b", "c", "d"]);
+        assert_eq!(fields_of("\"a,b\",c,\"d\""), ["a,b", "c", "d"]);
+    }
+
+    #[test]
+    fn test_read_csv_records_quoted_newlines_and_doubled_quotes() {
+        let input = "Title,Description\n\"Line 1\nLine 2\",\"He said \"\"hi\"\"\"\nNext,plain\n";
+        let records = read_csv_records(input);
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].fields, ["Title", "Description"]);
+        assert_eq!(records[1].fields, ["Line 1\nLine 2", "He said \"hi\""]);
+        assert_eq!(records[1].line, 2);
+        assert_eq!(records[2].fields, ["Next", "plain"]);
+        assert_eq!(
+            records[2].line, 4,
+            "line numbers count the embedded newline"
+        );
+        assert_eq!(
+            records[1].raw, "\"Line 1\nLine 2\",\"He said \"\"hi\"\"\"",
+            "raw keeps the record as written"
+        );
+    }
+
+    #[test]
+    fn test_read_csv_records_line_endings_and_edges() {
+        // CRLF and LF both end a record; the last record needs no newline.
+        let records = read_csv_records("a,b\r\nc,d\ne,f");
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[1].fields, ["c", "d"]);
+        assert_eq!(records[2].fields, ["e", "f"]);
+        assert_eq!(records[2].line, 3);
+
+        // Empty fields, trailing comma and whitespace handling.
+        assert_eq!(fields_of("a,,c,"), ["a", "", "c", ""]);
+        assert_eq!(fields_of("  a , \" b \" ,c "), ["a", " b ", "c"]);
+        assert_eq!(fields_of("\"\""), [""]);
+        assert_eq!(fields_of("\"\"\"\""), ["\""]);
+
+        // A blank line is a record with one empty field.
+        let records = read_csv_records("a\n\nb\n");
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[1].fields, [""]);
+        assert!(records[1].raw.is_empty());
+    }
+
+    #[test]
+    fn test_import_csv_crlf_line_endings() {
+        let csv = "Title,Status\r\nA,todo\r\nB,done\r\n";
+        let result = import_from_csv(Cursor::new(csv), &ImportOptions::default()).unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.imported.len(), 2);
+        assert_eq!(result.imported[0].title, "A");
+        assert_eq!(result.imported[1].status, TaskStatus::Done);
+    }
+
+    #[test]
+    fn test_import_csv_quoted_newline_and_quotes_in_fields() {
+        let csv = "Title,Description\n\"Say \"\"hi\"\"\",\"First line\nSecond, line\"\n";
+        let result = import_from_csv(Cursor::new(csv), &ImportOptions::default()).unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.imported.len(), 1);
+        assert_eq!(result.imported[0].title, "Say \"hi\"");
+        assert_eq!(
+            result.imported[0].description.as_deref(),
+            Some("First line\nSecond, line")
+        );
+    }
+
+    #[test]
+    fn test_import_csv_error_line_numbers_span_multiline_records() {
+        let csv = "Title,Description\n\"A\nspans\ntwo lines\",x\n,missing title\n";
+        let result = import_from_csv(Cursor::new(csv), &ImportOptions::default()).unwrap();
+        assert_eq!(result.imported.len(), 1);
+        assert_eq!(result.errors.len(), 1);
+        assert_eq!(result.errors[0].line, 5);
+        assert_eq!(result.errors[0].content.as_deref(), Some(",missing title"));
+    }
+
+    #[test]
+    fn test_import_csv_skips_blank_lines_and_bom() {
+        let csv = "\u{feff}Title,Status\nA,todo\n\n   \nB,done\n";
+        let result = import_from_csv(Cursor::new(csv), &ImportOptions::default()).unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        assert_eq!(result.imported.len(), 2);
+        assert_eq!(result.imported[1].title, "B");
+    }
+
+    #[test]
+    fn test_import_csv_quoted_header_names() {
+        let csv = "\"Title\",\"Due Date\"\nA,2025-01-02\n";
+        let result = import_from_csv(Cursor::new(csv), &ImportOptions::default()).unwrap();
+        assert_eq!(result.imported.len(), 1);
+        assert_eq!(
+            result.imported[0].due_date,
+            NaiveDate::from_ymd_opt(2025, 1, 2)
+        );
     }
 
     // Header validation tests

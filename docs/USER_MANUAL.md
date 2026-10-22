@@ -274,7 +274,7 @@ Priority  Status  Title                      Tags         Due Date
 - `↻` - Recurring task
 - `[B]` - Has blocking dependencies
 - `▶` - Has subtasks
-- `⏱` - Time is being tracked
+- `●` (red) - Time is being tracked; the footer shows the running `⏱` timer
 
 ### Footer / Status Bar
 

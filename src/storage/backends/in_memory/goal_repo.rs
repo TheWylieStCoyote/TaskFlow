@@ -35,6 +35,9 @@ impl<B: InMemoryBackend> GoalRepository for B {
         if self.data().goals.len() == len_before {
             return Err(StorageError::not_found("Goal", id.to_string()));
         }
+        // Key results belong to their goal: remove them too, as the SQLite
+        // (ON DELETE CASCADE) and Markdown backends do.
+        self.data_mut().key_results.retain(|kr| &kr.goal_id != id);
         self.mark_dirty();
         Ok(())
     }
@@ -230,5 +233,37 @@ mod tests {
         done.complete();
         backend.update_goal(&done).unwrap();
         assert!(backend.list_active_goals().unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_goal_removes_its_key_results_only() {
+        use crate::domain::KeyResult;
+        use crate::storage::repository::KeyResultRepository;
+
+        let mut backend = backend();
+        let goal = Goal::new("Ship");
+        let other = Goal::new("Keep");
+        backend.create_goal(&goal).unwrap();
+        backend.create_goal(&other).unwrap();
+        let kr_a = KeyResult::new(goal.id, "A");
+        let kr_b = KeyResult::new(goal.id, "B");
+        let kr_other = KeyResult::new(other.id, "Other");
+        for kr in [&kr_a, &kr_b, &kr_other] {
+            backend.create_key_result(kr).unwrap();
+        }
+
+        backend.delete_goal(&goal.id).unwrap();
+
+        assert_eq!(backend.get_key_result(&kr_a.id).unwrap(), None);
+        assert_eq!(backend.get_key_result(&kr_b.id).unwrap(), None);
+        assert_eq!(
+            backend.get_key_result(&kr_other.id).unwrap().map(|k| k.id),
+            Some(kr_other.id),
+            "key results of other goals are untouched"
+        );
+        assert!(backend
+            .get_key_results_for_goal(&goal.id)
+            .unwrap()
+            .is_empty());
     }
 }

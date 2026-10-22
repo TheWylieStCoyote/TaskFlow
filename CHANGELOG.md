@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Report windows spanned N+1 days**: "last 7 days" covered eight calendar dates (the 7-day Daily chart showed eight bars); every report window now covers exactly N dates ending today
 - **Time log used UTC**: entries are displayed and edited in local time; an end time before the start rolls to the next day
 - Evening review counted a running timer as zero; `taskflow stats` ignored manually corrected durations
+- **Goal deletion orphaned key results** in the JSON, YAML and CalDAV backends; they now cascade like SQLite and Markdown
 - **Doc Tests**: Converted ignored documentation tests to runnable examples
 - **Snapshot Tests**: Replaced environment-sensitive snapshots with assertion-based tests
 - **Clippy Warnings**: Resolved all linter warnings for cleaner codebase

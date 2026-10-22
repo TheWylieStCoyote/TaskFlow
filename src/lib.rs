@@ -16,6 +16,8 @@
 #![allow(clippy::missing_panics_doc)] // Internal functions with known-valid inputs
 #![allow(clippy::comparison_chain)] // if-else chains often clearer than match on Ordering
 #![allow(clippy::format_push_string)] // Minor perf, readability preferred
+#![allow(unknown_lints)] // Lints below may be newer than the local toolchain
+#![allow(clippy::assert_is_empty)] // `assert!(v.is_empty())` reads better than `assert_eq!(v, [] as [T; 0])`
 
 //! # `TaskFlow`
 //!

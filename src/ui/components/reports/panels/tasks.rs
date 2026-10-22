@@ -23,6 +23,7 @@ use crate::domain::text::truncate_chars;
 
 use super::super::ReportsView;
 use super::time::{render_empty_note, titled_block};
+use crate::ui::primitives::scroll_offset;
 
 /// Fixed column widths (including one leading space each).
 const COL_INDEX: u16 = 4;
@@ -213,27 +214,9 @@ fn format_row(
     line
 }
 
-/// First visible row so that `selected` is centred once the table overflows.
-fn scroll_offset(selected: usize, total: usize, visible: usize) -> usize {
-    if total <= visible {
-        return 0;
-    }
-    let max_offset = total - visible;
-    selected.saturating_sub(visible / 2).min(max_offset)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn scroll_offset_centres_selection_and_clamps() {
-        assert_eq!(scroll_offset(0, 5, 10), 0, "fits: never scroll");
-        assert_eq!(scroll_offset(0, 50, 10), 0);
-        assert_eq!(scroll_offset(4, 50, 10), 0, "still in the first page");
-        assert_eq!(scroll_offset(25, 50, 10), 20, "centred");
-        assert_eq!(scroll_offset(49, 50, 10), 40, "clamped at the end");
-    }
 
     #[test]
     fn columns_drop_project_on_narrow_tables() {

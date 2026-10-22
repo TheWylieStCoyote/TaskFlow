@@ -12,6 +12,10 @@ pub fn handle_timeline_navigation(model: &mut Model, msg: NavigationMessage) {
         return;
     }
 
+    // The drawn task set may have shrunk (filter change, completion) since
+    // the index was last moved; snap it back before moving from it.
+    model.clamp_timeline_selection();
+
     match msg {
         NavigationMessage::TimelineScrollLeft => {
             model.timeline_state.viewport_start -= chrono::Duration::days(7);
@@ -39,7 +43,7 @@ pub fn handle_timeline_navigation(model: &mut Model, msg: NavigationMessage) {
             }
         }
         NavigationMessage::TimelineDown => {
-            let max_index = model.visible_tasks.len().saturating_sub(1);
+            let max_index = model.timeline_tasks().len().saturating_sub(1);
             if model.timeline_state.selected_task_index < max_index {
                 model.timeline_state.selected_task_index += 1;
             }

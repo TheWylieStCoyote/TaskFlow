@@ -21,6 +21,7 @@
 //! - `import_export` - Import/export and reports
 //! - `cascade` - Cascade completion (parent/child)
 //! - `time_tracking` - Time entry management and cleanup
+//! - `timeline_nav` - Timeline selection bounds and ordering
 //! - `habit` - Habit tracking operations
 //! - `goal` - Goal and key result CRUD
 
@@ -50,6 +51,7 @@ mod task_crud;
 mod templates;
 mod time_log;
 mod time_tracking;
+mod timeline_nav;
 mod ui;
 mod undo_redo;
 

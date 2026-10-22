@@ -656,7 +656,8 @@ mod scrolling {
 
     #[test]
     fn test_selection_past_end_does_not_panic() {
-        // TimelineDown bounds by visible_tasks, which can exceed the dated set
+        // The index is only clamped on the next navigation message, so the
+        // renderer must still cope with one past the drawn set.
         let mut model = model_with_tasks(10);
         model.timeline_state.selected_task_index = 99;
         let content = render(&model, 80, 24);

@@ -19,16 +19,11 @@ pub fn handle_ui_views(model: &mut Model, msg: UiMessage) {
             model.timeline_state.show_dependencies = !model.timeline_state.show_dependencies;
         }
         UiMessage::TimelineViewSelected => {
-            // Get timeline tasks (filtered and sorted same as timeline widget)
-            let timeline_tasks: Vec<_> = model
-                .visible_tasks
-                .iter()
-                .filter_map(|id| model.tasks.get(id))
-                .filter(|t| t.scheduled_date.is_some() || t.due_date.is_some())
-                .collect();
-
-            if let Some(task) = timeline_tasks.get(model.timeline_state.selected_task_index) {
-                enter_focus_for_task(model, task.id);
+            // Same subset and order the timeline widget draws, so the
+            // highlighted row and the opened task agree.
+            let timeline_tasks = model.timeline_task_ids();
+            if let Some(&task_id) = timeline_tasks.get(model.timeline_state.selected_task_index) {
+                enter_focus_for_task(model, task_id);
             }
         }
         UiMessage::KanbanViewSelected => {

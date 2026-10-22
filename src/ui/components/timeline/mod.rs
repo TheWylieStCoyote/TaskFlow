@@ -36,38 +36,9 @@ impl<'a> Timeline<'a> {
         Self { model, theme }
     }
 
-    /// Get tasks with at least one date, sorted by start date.
+    /// Tasks the timeline draws, in row order (see [`Model::timeline_tasks`]).
     pub(crate) fn timeline_tasks(&self) -> Vec<&Task> {
-        use crate::domain::Priority;
-
-        let mut tasks: Vec<_> = self
-            .model
-            .visible_tasks
-            .iter()
-            .filter_map(|id| self.model.tasks.get(id))
-            .filter(|t| t.scheduled_date.is_some() || t.due_date.is_some())
-            .collect();
-
-        // Priority ordering (higher number = higher priority for sorting)
-        let priority_order = |p: &Priority| match p {
-            Priority::Urgent => 4,
-            Priority::High => 3,
-            Priority::Medium => 2,
-            Priority::Low => 1,
-            Priority::None => 0,
-        };
-
-        // Sort by start date (scheduled or due), then by priority (descending), then by title
-        tasks.sort_by(|a, b| {
-            let a_start = a.scheduled_date.or(a.due_date);
-            let b_start = b.scheduled_date.or(b.due_date);
-            a_start
-                .cmp(&b_start)
-                .then_with(|| priority_order(&b.priority).cmp(&priority_order(&a.priority)))
-                .then_with(|| a.title.cmp(&b.title))
-        });
-
-        tasks
+        self.model.timeline_tasks()
     }
 
     /// Compute the date span for a task.

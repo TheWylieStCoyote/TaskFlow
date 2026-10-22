@@ -53,6 +53,7 @@ mod layout_cache;
 mod sample_data;
 mod storage;
 mod time_tracking;
+mod timeline;
 mod types;
 mod view_queries;
 

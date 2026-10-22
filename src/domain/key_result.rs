@@ -524,4 +524,193 @@ mod tests {
         let id2 = KeyResultId::new();
         assert_ne!(id1, id2);
     }
+
+    const ALL_STATUSES: [KeyResultStatus; 4] = [
+        KeyResultStatus::NotStarted,
+        KeyResultStatus::InProgress,
+        KeyResultStatus::AtRisk,
+        KeyResultStatus::Completed,
+    ];
+
+    #[test]
+    fn test_key_result_status_display() {
+        assert_eq!(KeyResultStatus::NotStarted.to_string(), "Not Started");
+        assert_eq!(KeyResultStatus::InProgress.to_string(), "In Progress");
+        assert_eq!(KeyResultStatus::AtRisk.to_string(), "At Risk");
+        assert_eq!(KeyResultStatus::Completed.to_string(), "Completed");
+    }
+
+    #[test]
+    fn test_key_result_status_as_str() {
+        assert_eq!(KeyResultStatus::NotStarted.as_str(), "not_started");
+        assert_eq!(KeyResultStatus::InProgress.as_str(), "in_progress");
+        assert_eq!(KeyResultStatus::AtRisk.as_str(), "at_risk");
+        assert_eq!(KeyResultStatus::Completed.as_str(), "completed");
+    }
+
+    #[test]
+    fn test_key_result_status_from_str_lossy() {
+        for status in ALL_STATUSES {
+            assert_eq!(KeyResultStatus::from_str_lossy(status.as_str()), status);
+        }
+        assert_eq!(
+            KeyResultStatus::from_str_lossy(""),
+            KeyResultStatus::NotStarted
+        );
+        assert_eq!(
+            KeyResultStatus::from_str_lossy("done"),
+            KeyResultStatus::NotStarted
+        );
+        assert_eq!(
+            KeyResultStatus::from_str_lossy("AT_RISK"),
+            KeyResultStatus::NotStarted
+        );
+    }
+
+    #[test]
+    fn test_key_result_status_predicates_and_default() {
+        assert_eq!(KeyResultStatus::default(), KeyResultStatus::NotStarted);
+
+        assert!(!KeyResultStatus::NotStarted.is_in_progress());
+        assert!(KeyResultStatus::InProgress.is_in_progress());
+        assert!(KeyResultStatus::AtRisk.is_in_progress());
+        assert!(!KeyResultStatus::Completed.is_in_progress());
+
+        for status in ALL_STATUSES {
+            assert_eq!(
+                status.is_complete(),
+                status == KeyResultStatus::Completed,
+                "{status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_key_result_status_serde_roundtrip() {
+        for status in ALL_STATUSES {
+            let json = serde_json::to_string(&status).unwrap();
+            let back: KeyResultStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, status, "roundtrip of {json}");
+        }
+        assert_eq!(
+            serde_json::to_string(&KeyResultStatus::AtRisk).unwrap(),
+            "\"atrisk\""
+        );
+    }
+
+    #[test]
+    fn test_key_result_is_complete_and_complete() {
+        let mut kr = KeyResult::new(GoalId::new(), "Ship");
+        assert!(!kr.is_complete());
+
+        kr.complete();
+        assert!(kr.is_complete());
+        assert_eq!(kr.status, KeyResultStatus::Completed);
+        assert!(kr.updated_at >= kr.created_at);
+
+        let at_risk = KeyResult::new(GoalId::new(), "Risky").with_status(KeyResultStatus::AtRisk);
+        assert!(!at_risk.is_complete());
+        assert_eq!(at_risk.status, KeyResultStatus::AtRisk);
+    }
+
+    #[test]
+    fn test_key_result_builders_and_display() {
+        let goal_id = GoalId::new();
+        let kr = KeyResult::new(goal_id, "Reduce churn").with_description("Monthly churn below 2%");
+        assert_eq!(kr.description.as_deref(), Some("Monthly churn below 2%"));
+        assert_eq!(kr.goal_id, goal_id);
+        assert_eq!(kr.to_string(), "Reduce churn");
+        assert_eq!(format!("{kr}"), "Reduce churn");
+        assert!(kr.linked_project_ids.is_empty());
+        assert!(kr.linked_task_ids.is_empty());
+        assert!(kr.manual_progress.is_none());
+        assert!(kr.unit.is_none());
+    }
+
+    #[test]
+    fn test_key_result_id_display_is_uuid() {
+        let id = KeyResultId::new();
+        assert_eq!(id.to_string(), id.0.to_string());
+        assert_eq!(id.to_string().len(), 36);
+        assert_ne!(KeyResultId::default(), KeyResultId::default());
+    }
+
+    #[test]
+    fn test_key_result_progress_percent_without_target_is_zero() {
+        let kr = KeyResult::new(GoalId::new(), "No target").with_current_value(5.0);
+        assert_eq!(kr.progress_percent(), 0);
+
+        let manual = KeyResult::new(GoalId::new(), "Manual").with_manual_progress(60);
+        assert_eq!(manual.progress_percent(), 60);
+
+        let partial = KeyResult::new(GoalId::new(), "Partial")
+            .with_target(3.0, None)
+            .with_current_value(1.0);
+        assert_eq!(partial.progress_percent(), 33);
+    }
+
+    #[test]
+    fn test_key_result_formatted_progress_fallbacks() {
+        let none = KeyResult::new(GoalId::new(), "Nothing");
+        assert_eq!(none.formatted_progress(), "No target set");
+
+        let mut linked = KeyResult::new(GoalId::new(), "Linked");
+        linked.link_task(TaskId::new());
+        linked.link_task(TaskId::new());
+        assert_eq!(linked.formatted_progress(), "2 linked tasks");
+
+        // A numeric target wins over linked tasks and trims the missing unit.
+        let numeric = linked.with_target(100.0, None).with_current_value(45.0);
+        assert_eq!(numeric.formatted_progress(), "45/100");
+
+        let decimal_no_unit = KeyResult::new(GoalId::new(), "Decimal")
+            .with_target(2.5, None)
+            .with_current_value(1.0);
+        assert_eq!(decimal_no_unit.formatted_progress(), "1.0/2.5");
+    }
+
+    #[test]
+    fn test_key_result_set_value_without_target_never_completes() {
+        let mut kr = KeyResult::new(GoalId::new(), "Open ended");
+
+        kr.set_value(0.0);
+        assert_eq!(kr.status, KeyResultStatus::NotStarted);
+
+        kr.set_value(5.0);
+        assert_eq!(kr.status, KeyResultStatus::InProgress);
+        assert!((kr.current_value - 5.0).abs() < f64::EPSILON);
+        assert!(!kr.is_complete());
+    }
+
+    #[test]
+    fn test_key_result_set_value_keeps_at_risk_until_target_reached() {
+        let mut kr = KeyResult::new(GoalId::new(), "Risky")
+            .with_target(100.0, None)
+            .with_status(KeyResultStatus::AtRisk);
+
+        kr.set_value(50.0);
+        assert_eq!(kr.status, KeyResultStatus::AtRisk);
+
+        kr.set_value(150.0);
+        assert_eq!(kr.status, KeyResultStatus::Completed);
+        assert_eq!(kr.progress_percent(), 100);
+    }
+
+    #[test]
+    fn test_key_result_unlink_unknown_ids_is_noop() {
+        let mut kr = KeyResult::new(GoalId::new(), "Links");
+        let task_id = TaskId::new();
+        let project_id = ProjectId::new();
+        kr.link_task(task_id);
+        kr.link_project(project_id);
+
+        kr.unlink_task(&TaskId::new());
+        kr.unlink_project(&ProjectId::new());
+        assert_eq!(kr.linked_task_ids, vec![task_id]);
+        assert_eq!(kr.linked_project_ids, vec![project_id]);
+
+        // Linking the same project twice does not duplicate it.
+        kr.link_project(project_id);
+        assert_eq!(kr.linked_project_ids.len(), 1);
+    }
 }

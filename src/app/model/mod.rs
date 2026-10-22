@@ -875,3 +875,85 @@ use crate::domain::today;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod report_cache_tests {
+    use super::Model;
+    use crate::domain::{Task, TaskStatus};
+    use chrono::{Duration, Utc};
+
+    fn model_with_history() -> Model {
+        let mut model = Model::new();
+        for days_ago in [1, 45, 75] {
+            let mut task = Task::new(format!("Done {days_ago} days ago"));
+            task.status = TaskStatus::Done;
+            task.completed_at = Some(Utc::now() - Duration::days(days_ago));
+            model.tasks.insert(task.id, task);
+        }
+        model
+    }
+
+    #[test]
+    fn test_ensure_report_cache_populated_fills_all_windows() {
+        let mut model = model_with_history();
+        assert!(model.report_cache.report_30d.is_none());
+        assert!(model.report_cache.report_60d.is_none());
+        assert!(model.report_cache.report_90d.is_none());
+
+        model.ensure_report_cache_populated();
+
+        let r30 = model.report_cache.report_30d.as_ref().expect("30d report");
+        let r60 = model.report_cache.report_60d.as_ref().expect("60d report");
+        let r90 = model.report_cache.report_90d.as_ref().expect("90d report");
+        let span = |cfg: &crate::domain::analytics::ReportConfig| {
+            (cfg.end_date - cfg.start_date).num_days()
+        };
+        assert_eq!(span(&r30.config), 30);
+        assert_eq!(span(&r60.config), 60);
+        assert_eq!(span(&r90.config), 90);
+    }
+
+    #[test]
+    fn test_ensure_report_cache_populated_only_fills_missing_windows() {
+        let mut model = model_with_history();
+        model.ensure_report_cache_populated();
+        let original_30 = model.report_cache.report_30d.take().expect("30d");
+        let marker_60 = model.report_cache.report_60d.clone().expect("60d");
+
+        // Change the data; only the missing 30d report should be regenerated
+        let mut extra = Task::new("Extra completion");
+        extra.status = TaskStatus::Done;
+        extra.completed_at = Some(Utc::now() - Duration::days(50));
+        model.tasks.insert(extra.id, extra);
+
+        model.ensure_report_cache_populated();
+
+        let regenerated_30 = model.report_cache.report_30d.as_ref().expect("30d");
+        assert_eq!(
+            regenerated_30.config.start_date,
+            original_30.config.start_date
+        );
+        let kept_60 = model.report_cache.report_60d.as_ref().expect("60d");
+        assert_eq!(
+            kept_60.status_breakdown.done, marker_60.status_breakdown.done,
+            "cached 60d report must not be regenerated"
+        );
+        assert!(model.report_cache.report_90d.is_some());
+    }
+
+    #[test]
+    fn test_invalidate_report_cache_clears_everything() {
+        let mut model = model_with_history();
+        model.ensure_report_cache_populated();
+
+        model.invalidate_report_cache();
+
+        assert!(model.report_cache.report_30d.is_none());
+        assert!(model.report_cache.report_60d.is_none());
+        assert!(model.report_cache.report_90d.is_none());
+
+        // Repopulating after invalidation works again
+        model.ensure_report_cache_populated();
+        assert!(model.report_cache.report_30d.is_some());
+    }
+}

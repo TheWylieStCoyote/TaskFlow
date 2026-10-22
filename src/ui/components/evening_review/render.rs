@@ -657,3 +657,279 @@ fn format_duration(minutes: u32) -> String {
         format!("{mins}m")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::{today, Project, Task, TaskStatus, TimeEntry};
+    use crate::ui::test_utils::{buffer_content, render_widget};
+    use chrono::{Datelike, Duration, Local, TimeZone, Utc};
+
+    fn render_phase(model: &Model, phase: EveningReviewPhase, selected: usize) -> String {
+        let theme = Theme::default();
+        let widget = EveningReview::with_state(model, &theme, phase, selected);
+        buffer_content(&render_widget(widget, 90, 30))
+    }
+
+    /// A finished entry that started at local noon today, so that it counts as
+    /// "today" regardless of the wall clock when the test runs.
+    fn entry_today(task_id: crate::domain::TaskId, minutes: u32) -> TimeEntry {
+        let date = today();
+        let start = Local
+            .with_ymd_and_hms(date.year(), date.month(), date.day(), 12, 0, 0)
+            .single()
+            .expect("valid local time")
+            .with_timezone(&Utc);
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = start;
+        entry.ended_at = Some(start + Duration::minutes(i64::from(minutes)));
+        entry.duration_minutes = Some(minutes);
+        entry
+    }
+
+    #[test]
+    fn test_format_duration_variants() {
+        assert_eq!(format_duration(0), "0m");
+        assert_eq!(format_duration(25), "25m");
+        assert_eq!(format_duration(60), "1h");
+        assert_eq!(format_duration(120), "2h");
+        assert_eq!(format_duration(95), "1h 35m");
+    }
+
+    #[test]
+    fn test_time_review_without_entries_shows_placeholder() {
+        let model = Model::new();
+        let content = render_phase(&model, EveningReviewPhase::TimeReview, 0);
+        assert!(content.contains("No time tracked today"));
+        assert!(!content.contains("By Project"));
+    }
+
+    #[test]
+    fn test_time_review_groups_time_by_project() {
+        let mut model = Model::new();
+        let project = Project::new("Client work");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+
+        let mut in_project = Task::new("Billable");
+        in_project.project_id = Some(project_id);
+        let no_project = Task::new("Admin");
+        let in_project_id = in_project.id;
+        let no_project_id = no_project.id;
+        model.tasks.insert(in_project_id, in_project);
+        model.tasks.insert(no_project_id, no_project);
+
+        for entry in [
+            entry_today(in_project_id, 60),
+            entry_today(in_project_id, 30),
+            entry_today(no_project_id, 30),
+        ] {
+            model.time_entries.insert(entry.id, entry);
+        }
+
+        let content = render_phase(&model, EveningReviewPhase::TimeReview, 0);
+
+        assert!(content.contains("Total time: 2h"));
+        assert!(content.contains("By Project:"));
+        assert!(content.contains("Client work"));
+        assert!(content.contains("1h 30m"));
+        assert!(content.contains("( 75.0%)"));
+        assert!(content.contains("(No Project)"));
+        assert!(content.contains("( 25.0%)"));
+    }
+
+    #[test]
+    fn test_time_review_entry_for_deleted_task_counts_as_no_project() {
+        let mut model = Model::new();
+        let orphan = entry_today(crate::domain::TaskId::new(), 45);
+        model.time_entries.insert(orphan.id, orphan);
+
+        let content = render_phase(&model, EveningReviewPhase::TimeReview, 0);
+
+        assert!(content.contains("Total time: 45m"));
+        assert!(content.contains("(No Project)"));
+        assert!(content.contains("(100.0%)"));
+    }
+
+    #[test]
+    fn test_time_review_shows_at_most_eight_projects() {
+        let mut model = Model::new();
+        for i in 0..10 {
+            let project = Project::new(format!("Project {i:02}"));
+            let mut task = Task::new(format!("Task {i}"));
+            task.project_id = Some(project.id);
+            let entry = entry_today(task.id, 10 * (i + 1));
+            model.projects.insert(project.id, project);
+            model.tasks.insert(task.id, task);
+            model.time_entries.insert(entry.id, entry);
+        }
+
+        let content = render_phase(&model, EveningReviewPhase::TimeReview, 0);
+
+        // Largest first; the two smallest (Project 00 and 01) are cut off
+        assert!(content.contains("Project 09"));
+        assert!(content.contains("Project 02"));
+        assert!(!content.contains("Project 01"));
+        assert!(!content.contains("Project 00"));
+    }
+
+    #[test]
+    fn test_incomplete_tasks_list_marks_due_scheduled_and_other_dates() {
+        let mut model = Model::new();
+        let mut due_today = Task::new("Due today task");
+        due_today.due_date = Some(today());
+        let mut scheduled = Task::new("Scheduled task");
+        scheduled.scheduled_date = Some(today());
+        let mut scheduled_due_later = Task::new("Scheduled due later");
+        scheduled_due_later.scheduled_date = Some(today());
+        scheduled_due_later.due_date = Some(today() + Duration::days(4));
+        model.tasks.insert(due_today.id, due_today);
+        model.tasks.insert(scheduled.id, scheduled);
+        model
+            .tasks
+            .insert(scheduled_due_later.id, scheduled_due_later);
+
+        let content = render_phase(&model, EveningReviewPhase::IncompleteTasks, 1);
+
+        assert!(content.contains("! Due today task (due)"));
+        assert!(content.contains("~ Scheduled task (scheduled)"));
+        let later = (today() + Duration::days(4)).format("%b %d").to_string();
+        assert!(content.contains(&format!("~ Scheduled due later (due {later}) (scheduled)")));
+        assert!(content.contains("> "), "selection marker rendered");
+        assert!(content.contains("[r] Reschedule"));
+        assert!(content.contains("[s] Snooze"));
+        assert!(content.contains("[x] Complete"));
+    }
+
+    #[test]
+    fn test_incomplete_tasks_selection_clamps_to_last_item() {
+        let mut model = Model::new();
+        let mut due_today = Task::new("Only one");
+        due_today.due_date = Some(today());
+        model.tasks.insert(due_today.id, due_today);
+
+        let content = render_phase(&model, EveningReviewPhase::IncompleteTasks, 9);
+        assert!(content.contains("> "));
+        assert!(content.contains("Only one"));
+    }
+
+    #[test]
+    fn test_incomplete_tasks_phase_when_everything_is_done() {
+        let model = Model::new();
+        let content = render_phase(&model, EveningReviewPhase::IncompleteTasks, 0);
+        assert!(content.contains("All tasks completed! Nothing left to handle."));
+    }
+
+    #[test]
+    fn test_completed_today_lists_tasks_with_time() {
+        let mut model = Model::new();
+        let mut done = Task::new("Finished with time");
+        done.status = TaskStatus::Done;
+        done.completed_at = Some(Utc::now());
+        done.actual_minutes = 75;
+        let mut quick = Task::new("Finished quickly");
+        quick.status = TaskStatus::Done;
+        quick.completed_at = Some(Utc::now());
+        model.tasks.insert(done.id, done);
+        model.tasks.insert(quick.id, quick);
+
+        let content = render_phase(&model, EveningReviewPhase::CompletedToday, 0);
+
+        assert!(content.contains("[x] Finished with time (1h 15m)"));
+        assert!(content.contains("[x] Finished quickly"));
+    }
+
+    #[test]
+    fn test_completed_today_empty_message() {
+        let model = Model::new();
+        let content = render_phase(&model, EveningReviewPhase::CompletedToday, 0);
+        assert!(content.contains("No tasks completed today"));
+    }
+
+    #[test]
+    fn test_tomorrow_preview_indicators() {
+        let mut model = Model::new();
+        let tomorrow = today() + Duration::days(1);
+        let mut due = Task::new("Due tomorrow");
+        due.due_date = Some(tomorrow);
+        let mut scheduled = Task::new("Scheduled tomorrow");
+        scheduled.scheduled_date = Some(tomorrow);
+        let mut both = Task::new("Both tomorrow");
+        both.due_date = Some(tomorrow);
+        both.scheduled_date = Some(tomorrow);
+        model.tasks.insert(due.id, due);
+        model.tasks.insert(scheduled.id, scheduled);
+        model.tasks.insert(both.id, both);
+
+        let content = render_phase(&model, EveningReviewPhase::TomorrowPreview, 0);
+
+        assert!(content.contains("3 task(s) for tomorrow:"));
+        assert!(content.contains("!  Due tomorrow"));
+        assert!(content.contains("~  Scheduled tomorrow"));
+        assert!(content.contains("!~ Both tomorrow"));
+    }
+
+    #[test]
+    fn test_tomorrow_preview_empty_message() {
+        let model = Model::new();
+        let content = render_phase(&model, EveningReviewPhase::TomorrowPreview, 0);
+        assert!(content.contains("No tasks scheduled for tomorrow!"));
+        assert!(content.contains("Enjoy your free schedule."));
+    }
+
+    #[test]
+    fn test_welcome_and_summary_reflect_completion_rate() {
+        let mut model = Model::new();
+        let mut done = Task::new("Done");
+        done.status = TaskStatus::Done;
+        done.completed_at = Some(Utc::now());
+        model.tasks.insert(done.id, done);
+
+        let welcome = render_phase(&model, EveningReviewPhase::Welcome, 0);
+        assert!(welcome.contains("Great day! You crushed it!"));
+        assert!(welcome.contains("Completed: 1 tasks"));
+        assert!(welcome.contains("Completion: 100%"));
+
+        let summary = render_phase(&model, EveningReviewPhase::Summary, 0);
+        assert!(summary.contains("Day Complete!"));
+        assert!(summary.contains("Outstanding work today!"));
+        assert!(summary.contains("Press [Esc] to close"));
+
+        // Add an open task to drop the rate to 50%
+        let mut open = Task::new("Open");
+        open.due_date = Some(today());
+        model.tasks.insert(open.id, open);
+        let welcome = render_phase(&model, EveningReviewPhase::Welcome, 0);
+        assert!(welcome.contains("Good progress today!"));
+        let summary = render_phase(&model, EveningReviewPhase::Summary, 0);
+        assert!(summary.contains("Good progress! Tomorrow is a new day."));
+
+        // Two more open tasks: 25%
+        for i in 0..2 {
+            let mut open = Task::new(format!("Open {i}"));
+            open.due_date = Some(today());
+            model.tasks.insert(open.id, open);
+        }
+        let welcome = render_phase(&model, EveningReviewPhase::Welcome, 0);
+        assert!(welcome.contains("Let's wrap up your day."));
+        let summary = render_phase(&model, EveningReviewPhase::Summary, 0);
+        assert!(summary.contains("Every day is a fresh start. Rest well!"));
+    }
+
+    #[test]
+    fn test_footer_help_varies_by_phase() {
+        let model = Model::new();
+        let welcome = render_phase(&model, EveningReviewPhase::Welcome, 0);
+        assert!(welcome.contains("[->] Start  [Esc] Exit"));
+        assert!(welcome.contains("Step 1/6"));
+
+        let incomplete = render_phase(&model, EveningReviewPhase::IncompleteTasks, 0);
+        assert!(incomplete.contains("[r]eschedule  [s]nooze  [x] Done"));
+
+        let summary = render_phase(&model, EveningReviewPhase::Summary, 0);
+        assert!(summary.contains("[<-] Back  [Esc] Exit"));
+        assert!(summary.contains("Step 6/6"));
+    }
+}

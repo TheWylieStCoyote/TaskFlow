@@ -354,3 +354,375 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::render_popups;
+    use crate::app::Model;
+    use crate::config::Theme;
+    use crate::domain::{today, Habit, SavedFilter, Task, TimeEntry, WorkLogEntry};
+    use crate::storage::{ImportFormat, ImportResult};
+    use crate::ui::components::{InputMode, InputTarget};
+    use crate::ui::WorkLogMode;
+    use chrono::Duration;
+    use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+    fn render(model: &Model) -> String {
+        let backend = TestBackend::new(120, 40);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let theme = Theme::default();
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, 120, 40);
+                render_popups(model, frame, area, &theme);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut content = String::new();
+        for y in 0..buffer.area.height {
+            for x in 0..buffer.area.width {
+                content.push(
+                    buffer
+                        .cell((x, y))
+                        .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' ')),
+                );
+            }
+            content.push('\n');
+        }
+        content
+    }
+
+    fn model_with_task() -> (Model, crate::domain::TaskId) {
+        let mut model = Model::new();
+        let task = Task::new("Popup task");
+        let id = task.id;
+        model.tasks.insert(id, task);
+        model.refresh_visible_tasks();
+        model.selected_index = 0;
+        (model, id)
+    }
+
+    #[test]
+    fn test_no_popups_renders_blank_frame() {
+        let model = Model::new();
+        let content = render(&model);
+        assert!(content.trim().is_empty());
+    }
+
+    #[test]
+    fn test_help_popup() {
+        let mut model = Model::new();
+        model.show_help = true;
+        let content = render(&model);
+        assert!(content.contains("Help (j/k scroll"));
+    }
+
+    #[test]
+    fn test_input_dialog_titles_follow_target() {
+        let (mut model, id) = model_with_task();
+        model.input.mode = InputMode::Editing;
+        model.input.buffer = "typed text".to_string();
+        // Cursor at the end so the cursor glyph does not replace a character
+        model.input.cursor = model.input.buffer.len();
+
+        let cases: Vec<(InputTarget, &str)> = vec![
+            (InputTarget::Task, "New Task"),
+            (InputTarget::Subtask(id), "New Subtask"),
+            (InputTarget::EditTask(id), "Edit Task"),
+            (InputTarget::EditDueDate(id), "Due Date (YYYY-MM-DD"),
+            (InputTarget::EditScheduledDate(id), "Scheduled Date"),
+            (InputTarget::EditScheduledTime(id), "Time Block"),
+            (InputTarget::EditTags(id), "Tags (comma-separated)"),
+            (
+                InputTarget::EditDescription(id),
+                "Description (empty to clear)",
+            ),
+            (InputTarget::EditEstimate(id), "Time Estimate"),
+            (InputTarget::Project, "New Project"),
+            (
+                InputTarget::EditProject(crate::domain::ProjectId::new()),
+                "Rename Project",
+            ),
+            (InputTarget::Search, "Search (Ctrl+L to clear)"),
+            (InputTarget::MoveToProject(id), "Move to Project"),
+            (InputTarget::FilterByTag, "Filter by Tag"),
+            (InputTarget::BulkMoveToProject, "Move Selected to Project"),
+            (InputTarget::BulkSetStatus, "Set Status for Selected"),
+            (InputTarget::BulkSetPriority, "Set Priority for Selected"),
+            (InputTarget::BulkAddTags, "Tags for Selected"),
+            (InputTarget::BulkSetDueDate, "Due Date for Selected"),
+            (InputTarget::BulkSnooze, "Snooze Selected Until"),
+            (InputTarget::EditDependencies(id), "Blocked by"),
+            (InputTarget::EditRecurrence(id), "Recurrence (d[N]"),
+            (InputTarget::LinkTask(id), "Link to next task"),
+            (
+                InputTarget::ImportFilePath(ImportFormat::Csv),
+                "Import CSV: Enter file path",
+            ),
+            (
+                InputTarget::ImportFilePath(ImportFormat::Ics),
+                "Import ICS: Enter file path",
+            ),
+            (InputTarget::SavedFilterName, "Save Filter As"),
+            (InputTarget::SnoozeTask(id), "Snooze Until (YYYY-MM-DD)"),
+            (InputTarget::NewHabit, "New Habit"),
+            (
+                InputTarget::EditHabit(crate::domain::HabitId::new()),
+                "Edit Habit",
+            ),
+            (InputTarget::GoalName, "New Goal"),
+            (
+                InputTarget::EditGoalName(crate::domain::GoalId::new()),
+                "Edit Goal",
+            ),
+            (
+                InputTarget::KeyResultName(crate::domain::GoalId::new()),
+                "New Key Result",
+            ),
+        ];
+
+        for (target, title) in cases {
+            model.input.target = target.clone();
+            let content = render(&model);
+            assert!(content.contains(title), "{target:?} should show {title:?}");
+            assert!(
+                content.contains("typed text"),
+                "{target:?} shows the buffer"
+            );
+        }
+    }
+
+    #[test]
+    fn test_quick_capture_uses_dedicated_dialog() {
+        let mut model = Model::new();
+        model.input.mode = InputMode::Editing;
+        model.input.target = InputTarget::QuickCapture;
+        model.input.buffer = "capture me".to_string();
+        model.input.cursor = model.input.buffer.len();
+        let content = render(&model);
+        assert!(content.contains("Quick Capture"));
+        assert!(content.contains("capture me▌"));
+        assert!(content.contains("#tag"), "syntax hints are shown");
+    }
+
+    #[test]
+    fn test_delete_confirmation_names_selected_task() {
+        let (mut model, _) = model_with_task();
+        model.show_confirm_delete = true;
+        let content = render(&model);
+        assert!(content.contains("Delete Task"));
+        assert!(content.contains("Delete \"Popup task\"?"));
+    }
+
+    #[test]
+    fn test_delete_confirmation_without_task_uses_fallback() {
+        let mut model = Model::new();
+        model.show_confirm_delete = true;
+        let content = render(&model);
+        assert!(content.contains("Delete \"this task\"?"));
+    }
+
+    #[test]
+    fn test_generate_config_prompt() {
+        let mut model = Model::new();
+        model.show_generate_config_prompt = true;
+        let content = render(&model);
+        assert!(content.contains("Generate Config"));
+        assert!(content.contains("No config file found. Generate default config?"));
+    }
+
+    #[test]
+    fn test_import_preview_counts() {
+        let mut model = Model::new();
+        model.import.show_preview = true;
+        model.import.pending = Some(ImportResult {
+            imported: vec![Task::new("A"), Task::new("B")],
+            imported_events: vec![],
+            skipped: vec![],
+            errors: vec![],
+        });
+        let content = render(&model);
+        assert!(content.contains("Import Preview"));
+        assert!(content.contains("Tasks to import: 2"));
+        assert!(content.contains("Skipped: 0"));
+        assert!(content.contains("Errors: 0"));
+    }
+
+    #[test]
+    fn test_import_preview_without_pending_result_is_hidden() {
+        let mut model = Model::new();
+        model.import.show_preview = true;
+        model.import.pending = None;
+        let content = render(&model);
+        assert!(!content.contains("Import Preview"));
+    }
+
+    #[test]
+    fn test_template_picker() {
+        let mut model = Model::new();
+        model.template_picker.visible = true;
+        let content = render(&model);
+        assert!(content.contains("New Task from Template"));
+    }
+
+    #[test]
+    fn test_saved_filter_picker_lists_filters() {
+        let mut model = Model::new();
+        let filter = SavedFilter::new(
+            "Weekend chores",
+            model.filtering.filter.clone(),
+            model.filtering.sort.clone(),
+        );
+        model.active_saved_filter = Some(filter.id.clone());
+        model.saved_filters.insert(filter.id.clone(), filter);
+        model.saved_filter_picker.visible = true;
+        let content = render(&model);
+        assert!(content.contains("Saved Filters"));
+        assert!(content.contains("Weekend chores"));
+    }
+
+    #[test]
+    fn test_keybindings_editor() {
+        let mut model = Model::new();
+        model.keybindings_editor.visible = true;
+        let content = render(&model);
+        assert!(content.contains("Keybindings"));
+    }
+
+    #[test]
+    fn test_time_log_editor_requires_selected_task() {
+        let (mut model, id) = model_with_task();
+        model.time_log.visible = true;
+        let mut entry = TimeEntry::start(id);
+        entry.stop();
+        model.time_entries.insert(entry.id, entry);
+        model.refresh_visible_tasks();
+        assert!(render(&model).contains("Time Log"));
+
+        let mut empty = Model::new();
+        empty.time_log.visible = true;
+        assert!(!render(&empty).contains("Time Log"));
+    }
+
+    #[test]
+    fn test_work_log_editor_modes_and_search_filter() {
+        let (mut model, id) = model_with_task();
+        let keep = WorkLogEntry::new(id, "Keep this entry");
+        let drop = WorkLogEntry::new(id, "Drop this one");
+        model.work_logs.insert(keep.id, keep);
+        model.work_logs.insert(drop.id, drop);
+        model.refresh_visible_tasks();
+        model.work_log_editor.visible = true;
+
+        for (mode, title) in [
+            (WorkLogMode::Browse, "Work Log (a=add"),
+            (WorkLogMode::View, "View Entry"),
+            (WorkLogMode::ConfirmDelete, "Confirm Delete"),
+            (WorkLogMode::Add, "Add Entry"),
+            (WorkLogMode::Edit, "Edit Entry"),
+            (WorkLogMode::Search, "Search Work Log"),
+        ] {
+            model.work_log_editor.mode = mode;
+            let content = render(&model);
+            assert!(content.contains(title), "{mode:?} should show {title:?}");
+        }
+
+        model.work_log_editor.mode = WorkLogMode::Browse;
+        model.work_log_editor.search_query = "keep".to_string();
+        let content = render(&model);
+        assert!(content.contains("Keep this entry"));
+        assert!(!content.contains("Drop this one"));
+
+        let mut empty = Model::new();
+        empty.work_log_editor.visible = true;
+        assert!(!render(&empty).contains("Work Log"));
+    }
+
+    #[test]
+    fn test_description_editor() {
+        let mut model = Model::new();
+        model.description_editor.visible = true;
+        model.description_editor.buffer = vec!["first line of text".to_string()];
+        let content = render(&model);
+        assert!(content.contains("Edit Description"));
+        assert!(content.contains("first line of text"));
+    }
+
+    #[test]
+    fn test_overdue_alert_lists_tasks_unless_config_prompt_shown() {
+        let mut model = Model::new();
+        let mut late = Task::new("Very late task");
+        late.due_date = Some(today() - Duration::days(2));
+        model.tasks.insert(late.id, late);
+        model.refresh_visible_tasks();
+        model.alerts.show_overdue = true;
+
+        let content = render(&model);
+        assert!(content.contains("Overdue Tasks"));
+        assert!(content.contains("Very late task"));
+
+        model.show_generate_config_prompt = true;
+        let content = render(&model);
+        assert!(!content.contains("Overdue Tasks"));
+        assert!(content.contains("Generate Config"));
+    }
+
+    #[test]
+    fn test_storage_error_alert_requires_message() {
+        let mut model = Model::new();
+        model.alerts.show_storage_error = true;
+        model.alerts.storage_error = Some("could not read tasks.json".to_string());
+        let content = render(&model);
+        assert!(content.contains("Storage Error"));
+        assert!(content.contains("could not read tasks.json"));
+
+        model.alerts.storage_error = None;
+        assert!(!render(&model).contains("Storage Error"));
+    }
+
+    #[test]
+    fn test_review_overlays() {
+        let mut model = Model::new();
+        model.daily_review.visible = true;
+        assert!(render(&model).contains("Daily Review (1/5)"));
+        model.daily_review.visible = false;
+
+        model.weekly_review.visible = true;
+        assert!(render(&model).contains("Weekly Review (1/6)"));
+        model.weekly_review.visible = false;
+
+        model.evening_review.visible = true;
+        assert!(render(&model).contains("Evening Review (1/6)"));
+    }
+
+    #[test]
+    fn test_habit_analytics_popup() {
+        let mut model = Model::new();
+        let habit = Habit::new("Morning run");
+        model.habits.insert(habit.id, habit);
+        model.refresh_visible_habits();
+        model.habit_view.show_analytics = true;
+        let content = render(&model);
+        assert!(content.contains("Morning run - Analytics"));
+    }
+
+    #[test]
+    fn test_task_detail_modal() {
+        let (mut model, _) = model_with_task();
+        model.task_detail.visible = true;
+        let content = render(&model);
+        assert!(content.contains("Task Details"));
+        assert!(content.contains("Popup task"));
+    }
+
+    #[test]
+    fn test_command_palette_shows_query() {
+        let mut model = Model::new();
+        model.command_palette.visible = true;
+        model.command_palette.query = "undo".to_string();
+        model.command_palette.cursor = 4;
+        let content = render(&model);
+        assert!(content.contains("Command Palette"));
+        assert!(content.contains("undo"));
+    }
+}

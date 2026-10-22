@@ -874,3 +874,359 @@ mod tests {
         assert!(model.storage.backend.is_none());
     }
 }
+
+#[cfg(test)]
+mod storage_io_tests {
+    use super::*;
+    use crate::domain::{Goal, Habit, KeyResult, Project, Task, TimeEntry, WorkLogEntry};
+    use tempfile::TempDir;
+
+    fn json_model() -> (Model, TempDir, PathBuf) {
+        let dir = TempDir::new().expect("temp dir");
+        let path = dir.path().join("data.json");
+        let model = Model::new()
+            .with_storage(BackendType::Json, path.clone())
+            .expect("storage");
+        (model, dir, path)
+    }
+
+    // ------------------------------------------------------------------------
+    // with_storage
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn test_with_storage_rejects_corrupt_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("broken.json");
+        std::fs::write(&path, "{ this is not json").unwrap();
+
+        let result = Model::new().with_storage(BackendType::Json, path);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_with_storage_round_trips_all_entities() {
+        let (mut model, _dir, path) = json_model();
+
+        let project = Project::new("Persisted project");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        model.sync_project_by_id(&project_id);
+
+        let mut task = Task::new("Persisted task");
+        task.project_id = Some(project_id);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.sync_task_by_id(&task_id);
+
+        let running = TimeEntry::start(task_id);
+        let running_id = running.id;
+        model.sync_time_entry(&running);
+        model.time_entries.insert(running_id, running);
+        model.active_time_entry = Some(running_id);
+
+        let mut finished = TimeEntry::start(task_id);
+        finished.stop();
+        let finished_id = finished.id;
+        model.sync_time_entry(&finished);
+        model.time_entries.insert(finished_id, finished);
+
+        let log = WorkLogEntry::new(task_id, "Persisted log");
+        let log_id = log.id;
+        model.sync_work_log(&log);
+        model.work_logs.insert(log_id, log);
+
+        let habit = Habit::new("Persisted habit");
+        let habit_id = habit.id;
+        model.habits.insert(habit_id, habit);
+        model.sync_habit_by_id(&habit_id);
+
+        let goal = Goal::new("Persisted goal");
+        let goal_id = goal.id;
+        model.goals.insert(goal_id, goal);
+        model.sync_goal_by_id(&goal_id);
+
+        let kr = KeyResult::new(goal_id, "Persisted KR");
+        let kr_id = kr.id;
+        model.key_results.insert(kr_id, kr);
+        model.sync_key_result_by_id(&kr_id);
+
+        assert!(model.storage.dirty);
+        model.save().expect("save");
+        assert!(!model.storage.dirty);
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path.clone())
+            .expect("reload");
+
+        assert_eq!(reloaded.tasks[&task_id].title, "Persisted task");
+        assert_eq!(reloaded.tasks[&task_id].project_id, Some(project_id));
+        assert_eq!(reloaded.projects[&project_id].name, "Persisted project");
+        assert_eq!(reloaded.time_entries.len(), 2);
+        assert_eq!(reloaded.active_time_entry, Some(running_id));
+        assert_eq!(reloaded.work_logs[&log_id].content, "Persisted log");
+        assert_eq!(reloaded.habits[&habit_id].name, "Persisted habit");
+        assert_eq!(reloaded.visible_habits, vec![habit_id]);
+        assert_eq!(reloaded.goals[&goal_id].name, "Persisted goal");
+        assert_eq!(reloaded.visible_goals, vec![goal_id]);
+        assert_eq!(reloaded.key_results[&kr_id].goal_id, goal_id);
+        assert_eq!(reloaded.storage.data_path, Some(path));
+        assert!(reloaded.has_storage());
+        assert_eq!(reloaded.visible_tasks, vec![task_id]);
+    }
+
+    #[test]
+    fn test_with_storage_discards_pomodoro_session_for_missing_task() {
+        let (mut model, _dir, path) = json_model();
+        let task = Task::new("Pomodoro task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.sync_task_by_id(&task_id);
+        model.pomodoro.session = Some(crate::domain::PomodoroSession::new(
+            task_id,
+            &model.pomodoro.config,
+            4,
+        ));
+        model.save().expect("save");
+
+        // Delete the task from storage but leave the session behind
+        model.delete_task_from_storage(&task_id);
+        model.save().expect("save again");
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        assert!(reloaded.tasks.is_empty());
+        assert!(reloaded.pomodoro.session.is_none());
+    }
+
+    #[test]
+    fn test_with_storage_restores_pomodoro_session_for_existing_task() {
+        let (mut model, _dir, path) = json_model();
+        let task = Task::new("Pomodoro task");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.sync_task_by_id(&task_id);
+        model.pomodoro.session = Some(crate::domain::PomodoroSession::new(
+            task_id,
+            &model.pomodoro.config,
+            4,
+        ));
+        model.save().expect("save");
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        let session = reloaded.pomodoro.session.expect("session restored");
+        assert_eq!(session.task_id, task_id);
+    }
+
+    // ------------------------------------------------------------------------
+    // sync_* with and without a backend
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn test_sync_without_backend_leaves_model_clean() {
+        let mut model = Model::new();
+        let task = Task::new("T");
+        let project = Project::new("P");
+        let habit = Habit::new("H");
+        let goal = Goal::new("G");
+        let kr = KeyResult::new(goal.id, "K");
+        let log = WorkLogEntry::new(task.id, "L");
+        let entry = TimeEntry::start(task.id);
+
+        model.sync_task(&task);
+        model.sync_project(&project);
+        model.sync_habit(&habit);
+        model.sync_goal(&goal);
+        model.sync_key_result(&kr);
+        model.sync_work_log(&log);
+        model.sync_time_entry(&entry);
+        model.delete_task_from_storage(&task.id);
+        model.delete_habit_from_storage(&habit.id);
+        model.delete_goal_from_storage(&goal.id);
+        model.delete_key_result_from_storage(&kr.id);
+        model.delete_work_log_from_storage(&log.id);
+
+        assert!(!model.storage.dirty);
+    }
+
+    #[test]
+    fn test_sync_by_id_for_missing_entities_does_not_touch_storage() {
+        let (mut model, _dir, _) = json_model();
+        assert!(!model.storage.dirty);
+
+        model.sync_task_by_id(&TaskId::new());
+        model.sync_project_by_id(&ProjectId::new());
+        model.sync_habit_by_id(&HabitId::new());
+        model.sync_goal_by_id(&GoalId::new());
+        model.sync_key_result_by_id(&KeyResultId::new());
+
+        assert!(!model.storage.dirty, "nothing to sync, nothing dirtied");
+    }
+
+    #[test]
+    fn test_sync_by_id_for_present_entities_marks_dirty() {
+        let (mut model, _dir, _) = json_model();
+        let habit = Habit::new("H");
+        let habit_id = habit.id;
+        model.habits.insert(habit_id, habit);
+        model.sync_habit_by_id(&habit_id);
+        assert!(model.storage.dirty);
+
+        model.storage.dirty = false;
+        let goal = Goal::new("G");
+        let goal_id = goal.id;
+        model.goals.insert(goal_id, goal);
+        model.sync_goal_by_id(&goal_id);
+        assert!(model.storage.dirty);
+
+        model.storage.dirty = false;
+        let kr = KeyResult::new(goal_id, "K");
+        let kr_id = kr.id;
+        model.key_results.insert(kr_id, kr);
+        model.sync_key_result_by_id(&kr_id);
+        assert!(model.storage.dirty);
+    }
+
+    #[test]
+    fn test_sync_in_sample_data_mode_is_skipped() {
+        let mut model = Model::new().with_sample_data();
+        model.storage.dirty = false;
+        let task = Task::new("Sample");
+        let goal = Goal::new("G");
+        let kr = KeyResult::new(goal.id, "K");
+        let habit = Habit::new("H");
+        let log = WorkLogEntry::new(task.id, "L");
+
+        model.sync_task(&task);
+        model.sync_task_by_id(&task.id);
+        model.sync_project(&Project::new("P"));
+        model.sync_project_by_id(&ProjectId::new());
+        model.sync_habit(&habit);
+        model.sync_habit_by_id(&habit.id);
+        model.sync_goal(&goal);
+        model.sync_goal_by_id(&goal.id);
+        model.sync_key_result(&kr);
+        model.sync_key_result_by_id(&kr.id);
+        model.sync_work_log(&log);
+        model.sync_time_entry(&TimeEntry::start(task.id));
+        model.delete_task_from_storage(&task.id);
+        model.delete_habit_from_storage(&habit.id);
+        model.delete_goal_from_storage(&goal.id);
+        model.delete_key_result_from_storage(&kr.id);
+        model.delete_work_log_from_storage(&log.id);
+        assert!(model.save().is_ok());
+
+        assert!(!model.storage.dirty);
+    }
+
+    #[test]
+    fn test_delete_from_storage_removes_entities_on_reload() {
+        let (mut model, _dir, path) = json_model();
+        let habit = Habit::new("H");
+        let habit_id = habit.id;
+        model.habits.insert(habit_id, habit);
+        model.sync_habit_by_id(&habit_id);
+
+        let goal = Goal::new("G");
+        let goal_id = goal.id;
+        model.goals.insert(goal_id, goal);
+        model.sync_goal_by_id(&goal_id);
+
+        let kr = KeyResult::new(goal_id, "K");
+        let kr_id = kr.id;
+        model.key_results.insert(kr_id, kr);
+        model.sync_key_result_by_id(&kr_id);
+
+        let task = Task::new("T");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.sync_task_by_id(&task_id);
+        let log = WorkLogEntry::new(task_id, "L");
+        let log_id = log.id;
+        model.sync_work_log(&log);
+        model.work_logs.insert(log_id, log);
+        model.save().unwrap();
+
+        model.delete_habit_from_storage(&habit_id);
+        model.delete_key_result_from_storage(&kr_id);
+        model.delete_goal_from_storage(&goal_id);
+        model.delete_work_log_from_storage(&log_id);
+        assert!(model.storage.dirty);
+        model.save().unwrap();
+
+        let reloaded = Model::new()
+            .with_storage(BackendType::Json, path)
+            .expect("reload");
+        assert!(reloaded.habits.is_empty());
+        assert!(reloaded.goals.is_empty());
+        assert!(reloaded.key_results.is_empty());
+        assert!(reloaded.work_logs.is_empty());
+        assert_eq!(reloaded.tasks.len(), 1);
+    }
+
+    // ------------------------------------------------------------------------
+    // refresh_storage
+    // ------------------------------------------------------------------------
+
+    #[test]
+    fn test_refresh_storage_without_backend_reports_zero() {
+        let mut model = Model::new();
+        assert_eq!(model.refresh_storage(), 0);
+    }
+
+    #[test]
+    fn test_refresh_storage_json_backend_has_no_external_detection() {
+        let (mut model, _dir, _) = json_model();
+        let task = Task::new("T");
+        model.tasks.insert(task.id, task);
+        assert_eq!(model.refresh_storage(), 0);
+        assert_eq!(model.tasks.len(), 1, "model untouched when nothing changed");
+    }
+
+    #[test]
+    fn test_refresh_storage_markdown_reloads_after_external_change() {
+        let dir = TempDir::new().unwrap();
+        let mut model = Model::new()
+            .with_storage(BackendType::Markdown, dir.path().to_path_buf())
+            .expect("markdown storage");
+
+        let keep = Task::new("Kept task");
+        let keep_id = keep.id;
+        let gone = Task::new("Removed externally");
+        let gone_id = gone.id;
+        model.tasks.insert(keep_id, keep);
+        model.tasks.insert(gone_id, gone);
+        model.sync_task_by_id(&keep_id);
+        model.sync_task_by_id(&gone_id);
+        let project = Project::new("Proj");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        model.sync_project_by_id(&project_id);
+        model.save().expect("save");
+        model.refresh_visible_tasks();
+        assert_eq!(model.visible_tasks.len(), 2);
+
+        // Simulate an external edit: remove one task file and one project file
+        let task_file = dir.path().join("tasks").join(format!("{}.md", gone_id.0));
+        assert!(task_file.exists(), "task file written by markdown backend");
+        std::fs::remove_file(&task_file).unwrap();
+        let project_file = dir
+            .path()
+            .join("projects")
+            .join(format!("{}.md", project_id.0));
+        assert!(project_file.exists());
+        std::fs::remove_file(&project_file).unwrap();
+
+        let changes = model.refresh_storage();
+
+        assert_eq!(changes, 2);
+        assert_eq!(model.tasks.len(), 1);
+        assert!(model.tasks.contains_key(&keep_id));
+        assert!(model.projects.is_empty());
+        assert_eq!(model.visible_tasks, vec![keep_id]);
+    }
+}

@@ -427,3 +427,322 @@ fn test_daily_review_down_scheduled_phase() {
     // Should stay at 0 if only 1 scheduled task
     assert!(model.daily_review.selected <= 1);
 }
+
+// ============================================================================
+// Remaining review handler branches
+// ============================================================================
+
+mod remaining_branches {
+    use crate::app::{update::update, Message, Model, UiMessage};
+    use crate::domain::{today, Project, Task, TaskStatus, TimeEntry};
+    use crate::ui::{DailyReviewPhase, EveningReviewPhase, WeeklyReviewPhase};
+    use chrono::{Duration, Utc};
+
+    fn ui(model: &mut Model, msg: UiMessage) {
+        update(model, Message::Ui(msg));
+    }
+
+    fn model_with_today_tasks(count: usize) -> (Model, Vec<crate::domain::TaskId>) {
+        let mut model = Model::new();
+        let mut ids = Vec::new();
+        for i in 0..count {
+            let mut task = Task::new(format!("Due today {i}"));
+            task.due_date = Some(today());
+            ids.push(task.id);
+            model.tasks.insert(task.id, task);
+        }
+        model.refresh_visible_tasks();
+        (model, ids)
+    }
+
+    // ---- Daily review ----
+
+    #[test]
+    fn test_daily_review_down_in_welcome_phase_does_not_move() {
+        let (mut model, _) = model_with_today_tasks(3);
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::Welcome;
+        ui(&mut model, UiMessage::DailyReviewDown);
+        assert_eq!(model.daily_review.selected, 0);
+    }
+
+    #[test]
+    fn test_daily_review_down_stops_at_last_task() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::TodayTasks;
+        ui(&mut model, UiMessage::DailyReviewDown);
+        ui(&mut model, UiMessage::DailyReviewDown);
+        ui(&mut model, UiMessage::DailyReviewDown);
+        assert_eq!(model.daily_review.selected, 1);
+    }
+
+    #[test]
+    fn test_daily_review_complete_last_item_adjusts_selection() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::TodayTasks;
+        model.daily_review.selected = 1;
+
+        ui(&mut model, UiMessage::DailyReviewComplete);
+
+        let completed = model
+            .tasks
+            .values()
+            .filter(|t| t.status.is_complete())
+            .count();
+        assert_eq!(completed, 1);
+        assert_eq!(model.daily_review.selected, 0);
+        assert_eq!(
+            model.alerts.status_message.as_deref(),
+            Some("Task completed!")
+        );
+    }
+
+    #[test]
+    fn test_daily_review_complete_with_nothing_selected_is_noop() {
+        let mut model = Model::new();
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::OverdueTasks;
+        ui(&mut model, UiMessage::DailyReviewComplete);
+        assert!(model.alerts.status_message.is_none());
+        assert!(model.undo_stack.is_empty());
+    }
+
+    #[test]
+    fn test_daily_review_complete_in_welcome_phase_is_noop() {
+        let (mut model, _) = model_with_today_tasks(1);
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::Welcome;
+        ui(&mut model, UiMessage::DailyReviewComplete);
+        assert!(model.tasks.values().all(|t| !t.status.is_complete()));
+    }
+
+    #[test]
+    fn test_daily_review_complete_scheduled_phase() {
+        let mut model = Model::new();
+        let mut task = Task::new("Scheduled only");
+        task.scheduled_date = Some(today());
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+        model.refresh_visible_tasks();
+        model.daily_review.visible = true;
+        model.daily_review.phase = DailyReviewPhase::ScheduledTasks;
+
+        ui(&mut model, UiMessage::DailyReviewComplete);
+
+        assert!(model.tasks[&task_id].status.is_complete());
+    }
+
+    // ---- Weekly review ----
+
+    #[test]
+    fn test_weekly_review_down_welcome_phase_does_not_move() {
+        let (mut model, _) = model_with_today_tasks(3);
+        model.weekly_review.visible = true;
+        model.weekly_review.phase = WeeklyReviewPhase::Welcome;
+        ui(&mut model, UiMessage::WeeklyReviewDown);
+        assert_eq!(model.weekly_review.selected, 0);
+    }
+
+    #[test]
+    fn test_weekly_review_down_stale_projects_counts_only_stale() {
+        let mut model = Model::new();
+        let stale = Project::new("Stale");
+        let fresh = Project::new("Fresh");
+        let empty = Project::new("Empty");
+        let stale_id = stale.id;
+        let fresh_id = fresh.id;
+        model.projects.insert(stale_id, stale);
+        model.projects.insert(fresh_id, fresh);
+        model.projects.insert(empty.id, empty);
+
+        let mut old_task = Task::new("Old work");
+        old_task.project_id = Some(stale_id);
+        old_task.updated_at = Utc::now() - Duration::days(30);
+        model.tasks.insert(old_task.id, old_task);
+
+        let mut recent_task = Task::new("Recent work");
+        recent_task.project_id = Some(fresh_id);
+        model.tasks.insert(recent_task.id, recent_task);
+        model.refresh_visible_tasks();
+
+        model.weekly_review.visible = true;
+        model.weekly_review.phase = WeeklyReviewPhase::StaleProjects;
+
+        ui(&mut model, UiMessage::WeeklyReviewDown);
+        assert_eq!(model.weekly_review.selected, 0, "only one stale project");
+    }
+
+    #[test]
+    fn test_weekly_review_down_completed_phase_moves_through_recent_completions() {
+        let mut model = Model::new();
+        for i in 0..2 {
+            let mut done = Task::new(format!("Done {i}"));
+            done.status = TaskStatus::Done;
+            done.completed_at = Some(Utc::now() - Duration::days(1));
+            model.tasks.insert(done.id, done);
+        }
+        let mut old = Task::new("Old completion");
+        old.status = TaskStatus::Done;
+        old.completed_at = Some(Utc::now() - Duration::days(30));
+        model.tasks.insert(old.id, old);
+        model.refresh_visible_tasks();
+        model.weekly_review.visible = true;
+        model.weekly_review.phase = WeeklyReviewPhase::CompletedTasks;
+
+        ui(&mut model, UiMessage::WeeklyReviewDown);
+        ui(&mut model, UiMessage::WeeklyReviewDown);
+        assert_eq!(model.weekly_review.selected, 1);
+    }
+
+    // ---- Evening review ----
+
+    fn add_time_entry_today(model: &mut Model, task_id: crate::domain::TaskId) {
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = Utc::now();
+        entry.ended_at = Some(Utc::now());
+        entry.duration_minutes = Some(30);
+        model.time_entries.insert(entry.id, entry);
+    }
+
+    #[test]
+    fn test_evening_review_next_enters_time_review_with_entries() {
+        let (mut model, ids) = model_with_today_tasks(1);
+        add_time_entry_today(&mut model, ids[0]);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::TomorrowPreview;
+        model.evening_review.selected = 3;
+
+        ui(&mut model, UiMessage::EveningReviewNext);
+
+        assert_eq!(model.evening_review.phase, EveningReviewPhase::TimeReview);
+        assert_eq!(model.evening_review.selected, 0);
+    }
+
+    #[test]
+    fn test_evening_review_prev_enters_time_review_with_entries() {
+        let (mut model, ids) = model_with_today_tasks(1);
+        add_time_entry_today(&mut model, ids[0]);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::Summary;
+
+        ui(&mut model, UiMessage::EveningReviewPrev);
+
+        assert_eq!(model.evening_review.phase, EveningReviewPhase::TimeReview);
+    }
+
+    #[test]
+    fn test_evening_review_down_outside_incomplete_phase_does_not_move() {
+        let (mut model, _) = model_with_today_tasks(3);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::CompletedToday;
+        ui(&mut model, UiMessage::EveningReviewDown);
+        assert_eq!(model.evening_review.selected, 0);
+    }
+
+    #[test]
+    fn test_evening_review_down_stops_at_last_incomplete_task() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::IncompleteTasks;
+        for _ in 0..4 {
+            ui(&mut model, UiMessage::EveningReviewDown);
+        }
+        assert_eq!(model.evening_review.selected, 1);
+    }
+
+    #[test]
+    fn test_evening_review_actions_outside_incomplete_phase_are_noops() {
+        let (mut model, ids) = model_with_today_tasks(1);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::Welcome;
+
+        ui(&mut model, UiMessage::EveningReviewReschedule);
+        ui(&mut model, UiMessage::EveningReviewSnooze);
+        ui(&mut model, UiMessage::EveningReviewComplete);
+
+        let task = &model.tasks[&ids[0]];
+        assert!(task.scheduled_date.is_none());
+        assert!(task.snooze_until.is_none());
+        assert!(!task.status.is_complete());
+        assert!(model.alerts.status_message.is_none());
+    }
+
+    #[test]
+    fn test_evening_review_reschedule_last_item_adjusts_selection() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::IncompleteTasks;
+        model.evening_review.selected = 1;
+
+        ui(&mut model, UiMessage::EveningReviewReschedule);
+
+        let tomorrow = today() + Duration::days(1);
+        let rescheduled = model
+            .tasks
+            .values()
+            .filter(|t| t.scheduled_date == Some(tomorrow))
+            .count();
+        assert_eq!(rescheduled, 1);
+        assert_eq!(model.evening_review.selected, 0);
+    }
+
+    #[test]
+    fn test_evening_review_snooze_last_item_adjusts_selection() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::IncompleteTasks;
+        model.evening_review.selected = 1;
+
+        ui(&mut model, UiMessage::EveningReviewSnooze);
+
+        let tomorrow = today() + Duration::days(1);
+        let snoozed = model
+            .tasks
+            .values()
+            .filter(|t| t.snooze_until == Some(tomorrow))
+            .count();
+        assert_eq!(snoozed, 1);
+        assert_eq!(model.evening_review.selected, 0);
+        assert_eq!(
+            model.alerts.status_message.as_deref(),
+            Some("Task snoozed until tomorrow")
+        );
+    }
+
+    #[test]
+    fn test_evening_review_complete_last_item_adjusts_selection() {
+        let (mut model, _) = model_with_today_tasks(2);
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::IncompleteTasks;
+        model.evening_review.selected = 1;
+
+        ui(&mut model, UiMessage::EveningReviewComplete);
+
+        assert_eq!(
+            model
+                .tasks
+                .values()
+                .filter(|t| t.status.is_complete())
+                .count(),
+            1
+        );
+        assert_eq!(model.evening_review.selected, 0);
+    }
+
+    #[test]
+    fn test_evening_review_actions_with_empty_list_are_noops() {
+        let mut model = Model::new();
+        model.evening_review.visible = true;
+        model.evening_review.phase = EveningReviewPhase::IncompleteTasks;
+
+        ui(&mut model, UiMessage::EveningReviewReschedule);
+        ui(&mut model, UiMessage::EveningReviewSnooze);
+        ui(&mut model, UiMessage::EveningReviewComplete);
+        ui(&mut model, UiMessage::EveningReviewDown);
+
+        assert!(model.alerts.status_message.is_none());
+        assert_eq!(model.evening_review.selected, 0);
+    }
+}

@@ -181,3 +181,88 @@ impl<W: Widget> Widget for SuccessModal<'_, W> {
         self.content.render(inner, buf);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::test_utils::{buffer_content, render_widget};
+    use ratatui::widgets::Paragraph;
+
+    fn content_of<W: Widget>(widget: W) -> String {
+        buffer_content(&render_widget(widget, 40, 7))
+    }
+
+    #[test]
+    fn test_panel_modal_renders_title_and_content() {
+        let theme = Theme::default();
+        let modal = PanelModal::new("Panel Title", Paragraph::new("panel body"), &theme);
+        let content = content_of(modal);
+        assert!(content.contains("Panel Title"));
+        assert!(content.contains("panel body"));
+    }
+
+    #[test]
+    fn test_accent_modal_renders_title_and_content() {
+        let theme = Theme::default();
+        let modal = AccentModal::new("Accent Title", Paragraph::new("accent body"), &theme);
+        let content = content_of(modal);
+        assert!(content.contains("Accent Title"));
+        assert!(content.contains("accent body"));
+    }
+
+    #[test]
+    fn test_warning_modal_renders_title_and_content() {
+        let theme = Theme::default();
+        let modal = WarningModal::new("Careful", Paragraph::new("warning body"), &theme);
+        let content = content_of(modal);
+        assert!(content.contains("Careful"));
+        assert!(content.contains("warning body"));
+    }
+
+    #[test]
+    fn test_danger_modal_renders_title_and_content() {
+        let theme = Theme::default();
+        let modal = DangerModal::new("Delete?", Paragraph::new("danger body"), &theme);
+        let content = content_of(modal);
+        assert!(content.contains("Delete?"));
+        assert!(content.contains("danger body"));
+    }
+
+    #[test]
+    fn test_success_modal_renders_title_and_content() {
+        let theme = Theme::default();
+        let modal = SuccessModal::new("Saved", Paragraph::new("success body"), &theme);
+        let content = content_of(modal);
+        assert!(content.contains("Saved"));
+        assert!(content.contains("success body"));
+    }
+
+    #[test]
+    fn test_modal_clears_background_before_drawing() {
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 30, 5);
+        let mut buf = Buffer::empty(area);
+        // Pre-fill with junk that must disappear under the modal
+        for y in 0..area.height {
+            buf.set_string(
+                0,
+                y,
+                "##############################",
+                ratatui::style::Style::default(),
+            );
+        }
+        PanelModal::new("T", Paragraph::new("inner"), &theme).render(area, &mut buf);
+        let content = buffer_content(&buf);
+        assert!(!content.contains("####"), "background was cleared");
+        assert!(content.contains("inner"));
+    }
+
+    #[test]
+    fn test_modal_content_is_inset_by_border() {
+        let theme = Theme::default();
+        let buf = render_widget(DangerModal::new("B", Paragraph::new("x"), &theme), 10, 3);
+        // Content lands on the middle row, one cell in from the border
+        let symbol = buf.cell((1, 1)).map(|c| c.symbol().to_string());
+        assert_eq!(symbol.as_deref(), Some("x"));
+    }
+}

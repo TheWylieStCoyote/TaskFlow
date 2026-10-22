@@ -54,10 +54,20 @@ fn threshold_for_count(base_ms: u128, count: usize) -> u128 {
         1.0
     };
     let computed = (base_ms as f64 * ratio * log_factor).ceil() as u128;
-    // Coverage instrumentation slows everything down several-fold; these are
-    // regression guards against algorithmic blowups, not micro-benchmarks.
-    let slowdown: u128 = if cfg!(tarpaulin) { 5 } else { 1 };
-    computed.max(MIN_THRESHOLD_MS) * slowdown
+    computed.max(MIN_THRESHOLD_MS) * SLOWDOWN
+}
+
+/// Coverage instrumentation slows everything down several-fold; these tests
+/// are regression guards against algorithmic blowups, not micro-benchmarks.
+const SLOWDOWN: u128 = if cfg!(tarpaulin) { 5 } else { 1 };
+
+/// Assert that `elapsed_ms` is under `budget_ms`, scaled by [`SLOWDOWN`].
+fn assert_within_budget(elapsed_ms: u128, budget_ms: u128, what: &str) {
+    let budget = budget_ms * SLOWDOWN;
+    assert!(
+        elapsed_ms < budget,
+        "{what} took {elapsed_ms}ms, expected < {budget}ms"
+    );
 }
 
 /// Create a model with n tasks having varied properties.
@@ -818,10 +828,7 @@ mod deep_hierarchy {
             "Depth 5, Width 3 hierarchy ({} tasks): {elapsed}ms",
             model.tasks.len()
         );
-        assert!(
-            elapsed < 100,
-            "Hierarchy refresh took {elapsed}ms, expected < 100ms"
-        );
+        assert_within_budget(elapsed, 100, "Hierarchy refresh");
     }
 
     #[test]
@@ -846,10 +853,7 @@ mod deep_hierarchy {
             "Depth 10, Width 2 hierarchy ({} tasks): {elapsed}ms",
             model.tasks.len()
         );
-        assert!(
-            elapsed < 200,
-            "Deep hierarchy refresh took {elapsed}ms, expected < 200ms"
-        );
+        assert_within_budget(elapsed, 200, "Deep hierarchy refresh");
     }
 
     #[test]
@@ -864,10 +868,7 @@ mod deep_hierarchy {
         let elapsed = start.elapsed().as_millis();
 
         println!("Linear chain (100 tasks): {elapsed}ms");
-        assert!(
-            elapsed < 50,
-            "Linear chain refresh took {elapsed}ms, expected < 50ms"
-        );
+        assert_within_budget(elapsed, 50, "Linear chain refresh");
     }
 
     #[test]
@@ -883,10 +884,7 @@ mod deep_hierarchy {
 
         println!("Linear chain (500 tasks): {elapsed}ms");
         // Allow generous threshold for debug builds (release is much faster)
-        assert!(
-            elapsed < 500,
-            "Linear chain refresh took {elapsed}ms, expected < 500ms"
-        );
+        assert_within_budget(elapsed, 500, "Linear chain refresh");
     }
 
     #[test]
@@ -903,10 +901,7 @@ mod deep_hierarchy {
 
         println!("Linear chain (1000 tasks): {elapsed}ms");
         // Allow generous threshold for debug builds (release is much faster)
-        assert!(
-            elapsed < 1000,
-            "Linear chain refresh took {elapsed}ms, expected < 1000ms"
-        );
+        assert_within_budget(elapsed, 1000, "Linear chain refresh");
     }
 
     #[test]
@@ -930,10 +925,7 @@ mod deep_hierarchy {
             "Wide hierarchy (depth 2, width 100, {} tasks): {elapsed}ms",
             model.tasks.len()
         );
-        assert!(
-            elapsed < 500,
-            "Wide hierarchy refresh took {elapsed}ms, expected < 500ms"
-        );
+        assert_within_budget(elapsed, 500, "Wide hierarchy refresh");
     }
 
     #[test]
@@ -962,10 +954,7 @@ mod deep_hierarchy {
             model.tasks.len(),
             model.visible_tasks.len()
         );
-        assert!(
-            elapsed < 100,
-            "Filtered hierarchy refresh took {elapsed}ms, expected < 100ms"
-        );
+        assert_within_budget(elapsed, 100, "Filtered hierarchy refresh");
 
         // About 2/3 of tasks should be visible
         let expected_visible = model.tasks.len() * 2 / 3;
@@ -1010,14 +999,8 @@ mod storage_stress {
 
         println!("JSON backend 1000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
         assert_eq!(tasks.len(), 1000);
-        assert!(
-            create_elapsed < 2000,
-            "Create took {create_elapsed}ms, expected < 2000ms"
-        );
-        assert!(
-            list_elapsed < 500,
-            "List took {list_elapsed}ms, expected < 500ms"
-        );
+        assert_within_budget(create_elapsed, 2000, "Create");
+        assert_within_budget(list_elapsed, 500, "List");
     }
 
     #[test]
@@ -1041,14 +1024,8 @@ mod storage_stress {
 
         println!("SQLite backend 1000 tasks - create: {create_elapsed}ms, list: {list_elapsed}ms");
         assert_eq!(tasks.len(), 1000);
-        assert!(
-            create_elapsed < 5000,
-            "Create took {create_elapsed}ms, expected < 5000ms"
-        );
-        assert!(
-            list_elapsed < 500,
-            "List took {list_elapsed}ms, expected < 500ms"
-        );
+        assert_within_budget(create_elapsed, 5000, "Create");
+        assert_within_budget(list_elapsed, 500, "List");
     }
 
     #[test]
@@ -1135,10 +1112,7 @@ mod storage_stress {
             "Filtered query (1000 tasks): {elapsed}ms, found {} tasks",
             filtered.len()
         );
-        assert!(
-            elapsed < 200,
-            "Filtered query took {elapsed}ms, expected < 200ms"
-        );
+        assert_within_budget(elapsed, 200, "Filtered query");
         // High + Urgent = 2/5 of tasks = 400
         assert!(
             filtered.len() > 350 && filtered.len() < 450,

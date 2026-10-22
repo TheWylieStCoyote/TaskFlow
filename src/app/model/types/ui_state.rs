@@ -188,6 +188,53 @@ pub struct TaskDetailState {
     pub scroll: usize,
 }
 
+/// Reporting window for the Reports → Time panel.
+///
+/// Cycled with `w` in the Reports view. Each window maps onto one of the
+/// cached analytics reports (`report_7d`, `report_30d`, `report_90d`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TimeWindow {
+    /// Last 7 days
+    Days7,
+    /// Last 30 days (default)
+    #[default]
+    Days30,
+    /// Last 90 days
+    Days90,
+}
+
+impl TimeWindow {
+    /// Cycle to the next window size (7 → 30 → 90 → 7).
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Days7 => Self::Days30,
+            Self::Days30 => Self::Days90,
+            Self::Days90 => Self::Days7,
+        }
+    }
+
+    /// Number of days in this window.
+    #[must_use]
+    pub const fn days(self) -> i64 {
+        match self {
+            Self::Days7 => 7,
+            Self::Days30 => 30,
+            Self::Days90 => 90,
+        }
+    }
+
+    /// Display label, e.g. `"30 days"`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Days7 => "7 days",
+            Self::Days30 => "30 days",
+            Self::Days90 => "90 days",
+        }
+    }
+}
+
 /// State for duplicate detection view.
 #[derive(Debug, Clone)]
 pub struct DuplicatesViewState {
@@ -288,6 +335,27 @@ mod tests {
 
         state.selected.insert(TaskId::new());
         assert!(state.has_selection());
+    }
+
+    #[test]
+    fn test_time_window_defaults_to_30_days() {
+        assert_eq!(TimeWindow::default(), TimeWindow::Days30);
+        assert_eq!(TimeWindow::default().days(), 30);
+        assert_eq!(TimeWindow::default().label(), "30 days");
+    }
+
+    #[test]
+    fn test_time_window_cycles_through_all_sizes() {
+        let mut window = TimeWindow::Days7;
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            seen.push(window.days());
+            window = window.next();
+        }
+        assert_eq!(seen, vec![7, 30, 90]);
+        assert_eq!(window, TimeWindow::Days7, "cycle wraps back to 7 days");
+        assert_eq!(TimeWindow::Days7.label(), "7 days");
+        assert_eq!(TimeWindow::Days90.label(), "90 days");
     }
 
     #[test]

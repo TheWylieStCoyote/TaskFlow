@@ -4,9 +4,13 @@
 //! displayed on the dashboard, including completion rates, time tracking,
 //! and estimation accuracy.
 
-use chrono::Datelike;
+use std::borrow::Cow;
 
+use chrono::{Datelike, NaiveDate};
+
+use crate::app::analytics::AnalyticsEngine;
 use crate::app::Model;
+use crate::domain::analytics::{ReportConfig, TimeAnalytics};
 use crate::domain::{today, LocalDate};
 use crate::domain::{Priority, TaskStatus, TimeEntry};
 
@@ -20,6 +24,53 @@ impl<'a> DashboardStats<'a> {
     #[must_use]
     pub const fn new(model: &'a Model) -> Self {
         Self { model }
+    }
+
+    /// Minutes tracked by entries that started on or after `from` (local date).
+    ///
+    /// Sums `calculated_duration_minutes`, so a running entry counts its live
+    /// elapsed time and manual overrides are honoured.
+    fn minutes_tracked_since(&self, from: NaiveDate) -> u32 {
+        self.model
+            .time_entries
+            .values()
+            .filter(|e| e.started_at.local_date() >= from)
+            .map(TimeEntry::calculated_duration_minutes)
+            .sum()
+    }
+
+    /// Minutes tracked by entries that started today (local date).
+    #[must_use]
+    pub fn minutes_tracked_today(&self) -> u32 {
+        self.minutes_tracked_since(today())
+    }
+
+    /// Minutes tracked this week, Monday through today (local dates).
+    #[must_use]
+    pub fn minutes_tracked_this_week(&self) -> u32 {
+        let today = today();
+        let week_start =
+            today - chrono::Duration::days(i64::from(today.weekday().num_days_from_monday()));
+        self.minutes_tracked_since(week_start)
+    }
+
+    /// Time analytics for the last 30 days.
+    ///
+    /// Borrows the cached 30-day report when the Reports view has generated
+    /// one; otherwise computes just the time breakdown on the fly (cheaper
+    /// than a full report, and the dashboard may be shown before the cache
+    /// is populated).
+    #[must_use]
+    pub fn time_analytics_30d(&self) -> Cow<'a, TimeAnalytics> {
+        if let Some(report) = &self.model.report_cache.report_30d {
+            Cow::Borrowed(&report.time_analytics)
+        } else {
+            let config = ReportConfig::last_n_days(30);
+            Cow::Owned(
+                AnalyticsEngine::new(self.model)
+                    .compute_time_analytics(config.start_date, config.end_date),
+            )
+        }
     }
 
     /// Calculate completion rate as percentage
@@ -177,11 +228,5 @@ impl<'a> DashboardStats<'a> {
 /// Format minutes as hours and minutes
 #[must_use]
 pub fn format_duration(minutes: u32) -> String {
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    if hours > 0 {
-        format!("{hours}h {mins}m")
-    } else {
-        format!("{mins}m")
-    }
+    crate::domain::format_minutes(minutes)
 }

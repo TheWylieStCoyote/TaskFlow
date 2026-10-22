@@ -4,11 +4,11 @@
 //! - Time tracking analytics (by project, day of week, hour)
 //! - Burndown charts for projects
 
-use chrono::{Datelike, NaiveDate, Timelike};
-use std::collections::HashMap;
+use chrono::{Datelike, Local, NaiveDate, Timelike};
+use std::collections::{HashMap, HashSet};
 
-use crate::domain::analytics::{BurnChart, TimeAnalytics, TimeSeriesPoint};
-use crate::domain::{ProjectId, Task};
+use crate::domain::analytics::{BurnChart, TaskTimeInfo, TimeAnalytics, TimeSeriesPoint};
+use crate::domain::{ProjectId, Task, TaskId};
 
 use super::AnalyticsEngine;
 use crate::domain::LocalDate;
@@ -23,60 +23,95 @@ impl AnalyticsEngine<'_> {
     #[must_use]
     pub fn compute_time_analytics(&self, start: NaiveDate, end: NaiveDate) -> TimeAnalytics {
         let mut analytics = TimeAnalytics::default();
+        let mut tasks_with_entries: HashSet<TaskId> = HashSet::new();
 
-        for task in self.model.tasks.values() {
-            // Use actual_minutes from task if available
-            if task.actual_minutes > 0 {
-                // Attribute to completion date or created date
-                let date = task.completed_at.unwrap_or(task.created_at).local_date();
-
-                if date >= start && date <= end {
-                    let minutes = task.actual_minutes;
-                    analytics.total_minutes += minutes;
-
-                    // By project
-                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
-
-                    // By day of week
-                    let dow = date.weekday().num_days_from_monday() as usize;
-                    analytics.by_day_of_week[dow] += minutes;
-
-                    // By hour (use a default of noon if we don't have precise time)
-                    let hour = task.completed_at.map_or(12, |c| c.time().hour()) as usize;
-                    analytics.by_hour[hour] += minutes;
-                }
+        // Time entries are the source of truth, bucketed by local start date/hour.
+        for entry in self.model.time_entries.values() {
+            tasks_with_entries.insert(entry.task_id);
+            let local_start = entry.started_at.with_timezone(&Local);
+            let entry_date = local_start.date_naive();
+            if entry_date < start || entry_date > end {
+                continue;
             }
+            let minutes = entry.calculated_duration_minutes();
+            analytics.entry_count += 1;
+            let task = self.model.tasks.get(&entry.task_id);
+            Self::add_time_bucket(
+                &mut analytics,
+                task,
+                entry.task_id,
+                entry_date,
+                local_start.hour() as usize,
+                minutes,
+                true,
+            );
         }
 
-        // Also count from time entries if available
-        for entry in self.model.time_entries.values() {
-            let entry_date = entry.started_at.local_date();
-            if entry_date >= start && entry_date <= end {
-                let minutes = entry.calculated_duration_minutes();
-                analytics.total_minutes += minutes;
-
-                // Find the task to get project ID
-                if let Some(task) = self.model.tasks.get(&entry.task_id) {
-                    *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
-                }
-
-                // By day of week
-                let dow = entry_date.weekday().num_days_from_monday() as usize;
-                analytics.by_day_of_week[dow] += minutes;
-
-                // By hour
-                let hour = entry.started_at.time().hour() as usize;
-                analytics.by_hour[hour] += minutes;
+        // Legacy/imported data: a task total with no entries behind it is
+        // counted once, at its completion (or creation) date, at noon.
+        for task in self.model.tasks.values() {
+            if task.actual_minutes == 0 || tasks_with_entries.contains(&task.id) {
+                continue;
             }
+            let date = task.completed_at.unwrap_or(task.created_at).local_date();
+            if date < start || date > end {
+                continue;
+            }
+            let hour = task
+                .completed_at
+                .map_or(12, |c| c.with_timezone(&Local).hour()) as usize;
+            Self::add_time_bucket(
+                &mut analytics,
+                Some(task),
+                task.id,
+                date,
+                hour,
+                task.actual_minutes,
+                false,
+            );
         }
 
         analytics
     }
 
-    /// Compute burndown charts for all projects.
-    ///
-    /// Generates burndown charts showing scope vs completion over time
-    /// for the global task set and each individual project.
+    #[allow(clippy::too_many_arguments)]
+    fn add_time_bucket(
+        analytics: &mut TimeAnalytics,
+        task: Option<&Task>,
+        task_id: TaskId,
+        date: NaiveDate,
+        hour: usize,
+        minutes: u32,
+        from_entry: bool,
+    ) {
+        analytics.total_minutes += minutes;
+        *analytics.by_task.entry(task_id).or_insert(0) += minutes;
+        let info = analytics
+            .task_info
+            .entry(task_id)
+            .or_insert_with(|| TaskTimeInfo {
+                title: task.map_or_else(|| "(deleted task)".to_string(), |t| t.title.clone()),
+                project_id: task.and_then(|t| t.project_id),
+                entries: 0,
+            });
+        if from_entry {
+            info.entries += 1;
+        }
+        *analytics.by_day.entry(date).or_insert(0) += minutes;
+        let dow = date.weekday().num_days_from_monday() as usize;
+        analytics.by_day_of_week[dow] += minutes;
+        analytics.by_hour[hour.min(23)] += minutes;
+        if let Some(task) = task {
+            *analytics.by_project.entry(task.project_id).or_insert(0) += minutes;
+            for tag in &task.tags {
+                *analytics.by_tag.entry(tag.clone()).or_insert(0) += minutes;
+            }
+        } else {
+            // Orphaned entry (task deleted): still real time, no project.
+            *analytics.by_project.entry(None).or_insert(0) += minutes;
+        }
+    }
+
     #[must_use]
     pub fn compute_burn_charts(&self, start: NaiveDate, end: NaiveDate) -> Vec<BurnChart> {
         let mut charts = Vec::new();

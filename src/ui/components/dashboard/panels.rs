@@ -18,7 +18,8 @@ use ratatui::{
 };
 
 use crate::config::Theme;
-use crate::domain::{Priority, TaskStatus};
+use crate::domain::text::truncate_chars;
+use crate::domain::{format_hms, Priority, TaskStatus};
 use crate::ui::primitives::panel_block;
 
 use super::stats::{format_duration, DashboardStats};
@@ -111,55 +112,57 @@ impl Dashboard<'_> {
         block.render(area, buf);
 
         let stats = DashboardStats::new(self.model);
-        let total_time = stats.total_time_tracked();
-        let completed_tasks = self
-            .model
-            .tasks
-            .values()
-            .filter(|t| t.status.is_complete())
-            .count();
-        let avg_time = if completed_tasks > 0 {
-            total_time / completed_tasks as u32
-        } else {
-            0
-        };
+        let today_minutes = stats.minutes_tracked_today();
+        let week_minutes = stats.minutes_tracked_this_week();
+        let analytics_30d = stats.time_analytics_30d();
+        let muted = Style::default().fg(theme.colors.muted.to_color());
 
-        let active = self.model.active_time_entry.is_some();
+        // Live timer: task title plus HH:MM:SS, truncated to the panel width.
+        let tracking_span = match self.model.active_tracking() {
+            Some((title, secs)) => {
+                let clock = format_hms(secs);
+                let title_room = (inner.width as usize)
+                    .saturating_sub("Tracking: ● ".len() + clock.len() + 1)
+                    .max(1);
+                Span::styled(
+                    format!("● {clock} {}", truncate_chars(&title, title_room, "…")),
+                    Style::default()
+                        .fg(theme.colors.success.to_color())
+                        .add_modifier(Modifier::BOLD),
+                )
+            }
+            None => Span::styled("○ Idle", muted),
+        };
 
         let lines = [
             Line::from(vec![
+                Span::styled("Today: ", muted),
                 Span::styled(
-                    "Total: ",
-                    Style::default().fg(theme.colors.muted.to_color()),
-                ),
-                Span::styled(
-                    format_duration(total_time),
+                    format_duration(today_minutes),
                     Style::default()
                         .fg(theme.colors.accent.to_color())
                         .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
-                Span::styled(
-                    "Avg/task: ",
-                    Style::default().fg(theme.colors.muted.to_color()),
-                ),
-                Span::styled(format_duration(avg_time), Style::default()),
+                Span::styled("This Week: ", muted),
+                Span::styled(format_duration(week_minutes), Style::default()),
             ]),
             Line::from(vec![
+                Span::styled("Last 30 days: ", muted),
                 Span::styled(
-                    "Tracking: ",
-                    Style::default().fg(theme.colors.muted.to_color()),
-                ),
-                Span::styled(
-                    if active { "● Active" } else { "○ Idle" },
-                    Style::default().fg(if active {
-                        theme.colors.success.to_color()
-                    } else {
-                        theme.colors.muted.to_color()
-                    }),
+                    format_duration(analytics_30d.total_minutes),
+                    Style::default(),
                 ),
             ]),
+            Line::from(vec![
+                Span::styled("Avg/active day (30d): ", muted),
+                Span::styled(
+                    format_duration(analytics_30d.avg_minutes_per_active_day()),
+                    Style::default(),
+                ),
+            ]),
+            Line::from(vec![Span::styled("Tracking: ", muted), tracking_span]),
         ];
 
         for (i, line) in lines.iter().enumerate() {

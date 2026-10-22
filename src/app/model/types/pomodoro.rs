@@ -18,4 +18,7 @@ pub struct PomodoroState {
     pub focus_queue: Vec<TaskId>,
     /// Full-screen mode hides header/footer for minimal distraction
     pub full_screen: bool,
+    /// Task whose timer the current Pomodoro work phase started, so that
+    /// breaks and session end stop only the timer the session owns.
+    pub timed_task: Option<TaskId>,
 }

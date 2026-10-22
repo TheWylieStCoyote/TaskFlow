@@ -128,9 +128,7 @@ fn create_time_entry(model: &mut Model, data: Option<&serde_json::Value>) -> Han
         duration_minutes,
     };
 
-    let entry_id = entry.id;
-    model.time_entries.insert(entry_id, entry.clone());
-    model.sync_time_entry(&entry);
+    model.add_time_entry(entry.clone());
 
     serde_json::to_value(&entry).map_err(PipeError::serialization)
 }
@@ -185,7 +183,7 @@ fn update_time_entry(
     }
 
     let updated_entry = entry.clone();
-    model.sync_time_entry(&updated_entry);
+    model.upsert_time_entry(updated_entry.clone());
 
     serde_json::to_value(&updated_entry).map_err(PipeError::serialization)
 }
@@ -198,10 +196,12 @@ fn delete_time_entry(model: &mut Model, id: Option<&str>) -> HandlerResult {
 
     let entry_id = TimeEntryId(uuid);
 
-    model
-        .time_entries
-        .remove(&entry_id)
-        .ok_or_else(|| PipeError::new("NOT_FOUND", format!("Time entry not found: {id}")))?;
+    if !model.time_entries.contains_key(&entry_id) {
+        return Err(PipeError::new(
+            "NOT_FOUND",
+            format!("Time entry not found: {id}"),
+        ));
+    }
 
     model.delete_time_entry(&entry_id);
 

@@ -13,7 +13,7 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
     // Write header
     writeln!(
         writer,
-        "ID,Title,Status,Priority,Due Date,Scheduled Date,Start Time,End Time,Tags,Project ID,Description,Created,Completed"
+        "ID,Title,Status,Priority,Due Date,Scheduled Date,Start Time,End Time,Tags,Project ID,Description,Created,Completed,Estimated Minutes,Actual Minutes"
     )?;
 
     for task in tasks {
@@ -50,10 +50,15 @@ pub fn export_to_csv<W: Write>(tasks: &[Task], writer: &mut W) -> std::io::Resul
             .completed_at
             .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_default();
+        let estimated = task
+            .estimated_minutes
+            .map(|m| m.to_string())
+            .unwrap_or_default();
+        let actual = task.actual_minutes;
 
         writeln!(
             writer,
-            "{id},{title},{status},{priority},{due_date},{scheduled_date},{start_time},{end_time},{tags},{project_id},{description},{created},{completed}"
+            "{id},{title},{status},{priority},{due_date},{scheduled_date},{start_time},{end_time},{tags},{project_id},{description},{created},{completed},{estimated},{actual}"
         )?;
     }
 
@@ -149,6 +154,26 @@ mod tests {
         let result = String::from_utf8(buffer).unwrap();
 
         assert!(result.contains("high"));
+    }
+
+    #[test]
+    fn test_export_csv_time_columns() {
+        let mut timed = create_test_task("Timed").with_estimated_minutes(90);
+        timed.actual_minutes = 75;
+        let untimed = create_test_task("Untimed");
+
+        let mut buffer = Vec::new();
+        export_to_csv(&[timed, untimed], &mut buffer).unwrap();
+        let result = String::from_utf8(buffer).unwrap();
+        let lines: Vec<_> = result.lines().collect();
+
+        assert!(lines[0].ends_with(",Created,Completed,Estimated Minutes,Actual Minutes"));
+        assert!(lines[1].ends_with(",90,75"), "{}", lines[1]);
+        // No estimate is a blank cell; untracked time is 0.
+        assert!(lines[2].ends_with(",,0"), "{}", lines[2]);
+        for line in &lines {
+            assert_eq!(line.matches(',').count(), 14, "{line}");
+        }
     }
 
     #[test]

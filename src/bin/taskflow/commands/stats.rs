@@ -96,14 +96,7 @@ pub(crate) fn compute_stats(model: &Model, today: NaiveDate, now: DateTime<Utc>)
         .time_entries
         .values()
         .filter(|e| e.started_at.local_date() == today)
-        .map(|e| {
-            if let Some(ended) = e.ended_at {
-                (ended - e.started_at).num_minutes()
-            } else {
-                // Running timer
-                (now - e.started_at).num_minutes()
-            }
-        })
+        .map(|e| entry_minutes(e, now))
         .sum();
 
     // Time tracked this week
@@ -111,13 +104,7 @@ pub(crate) fn compute_stats(model: &Model, today: NaiveDate, now: DateTime<Utc>)
         .time_entries
         .values()
         .filter(|e| e.started_at.local_date() >= week_ago)
-        .map(|e| {
-            if let Some(ended) = e.ended_at {
-                (ended - e.started_at).num_minutes()
-            } else {
-                (now - e.started_at).num_minutes()
-            }
-        })
+        .map(|e| entry_minutes(e, now))
         .sum();
 
     // Habit streaks (if any)
@@ -144,6 +131,16 @@ pub(crate) fn compute_stats(model: &Model, today: NaiveDate, now: DateTime<Utc>)
         active_habits,
         habits_due_today,
         habits_completed_today,
+    }
+}
+
+/// Minutes for an entry: a manual/stopped duration as stored, or the time
+/// elapsed up to `now` for a running timer.
+fn entry_minutes(entry: &taskflow::domain::TimeEntry, now: DateTime<Utc>) -> i64 {
+    if entry.is_running() && entry.duration_minutes.is_none() {
+        (now - entry.started_at).num_minutes().max(0)
+    } else {
+        i64::from(entry.calculated_duration_minutes())
     }
 }
 
@@ -230,16 +227,7 @@ pub(crate) fn render_stats(stats: &Stats) -> String {
 
 /// Format minutes as "Xh Ym" or "Xm"
 pub(crate) fn format_duration(minutes: i64) -> String {
-    if minutes <= 0 {
-        return "0m".to_string();
-    }
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    if hours > 0 {
-        format!("{hours}h {mins}m")
-    } else {
-        format!("{mins}m")
-    }
+    taskflow::domain::duration::format_minutes_i64(minutes)
 }
 
 #[cfg(test)]
@@ -420,7 +408,7 @@ mod tests {
         assert_eq!(format_duration(0), "0m");
         assert_eq!(format_duration(-5), "0m");
         assert_eq!(format_duration(45), "45m");
-        assert_eq!(format_duration(60), "1h 0m");
+        assert_eq!(format_duration(60), "1h");
         assert_eq!(format_duration(135), "2h 15m");
     }
 
@@ -433,5 +421,24 @@ mod tests {
             add_task(model, Task::new("Closed").with_status(TaskStatus::Done));
         });
         show_stats(&yaml_cli(&data)).expect("stats succeeds");
+    }
+
+    #[test]
+    fn entry_minutes_honours_manual_duration_and_running_timers() {
+        use super::entry_minutes;
+        use chrono::{Duration, Utc};
+        use taskflow::domain::{Task, TimeEntry};
+        let task = Task::new("t");
+        let now = Utc::now();
+
+        let mut manual = TimeEntry::start(task.id);
+        manual.started_at = now - Duration::hours(3);
+        manual.ended_at = Some(now - Duration::hours(1));
+        manual.duration_minutes = Some(25); // corrected by hand
+        assert_eq!(entry_minutes(&manual, now), 25);
+
+        let mut running = TimeEntry::start(task.id);
+        running.started_at = now - Duration::minutes(12);
+        assert_eq!(entry_minutes(&running, now), 12);
     }
 }

@@ -8,6 +8,7 @@ mod list;
 mod next;
 pub mod pipe;
 mod stats;
+mod time;
 mod today;
 
 pub use add::quick_add_task;
@@ -18,4 +19,5 @@ pub use list::list_tasks;
 pub use next::next_task;
 pub use pipe::run_pipe;
 pub use stats::show_stats;
+pub use time::show_time;
 pub use today::today_tasks;

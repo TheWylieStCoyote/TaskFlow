@@ -274,7 +274,7 @@ Priority  Status  Title                      Tags         Due Date
 - `↻` - Recurring task
 - `[B]` - Has blocking dependencies
 - `▶` - Has subtasks
-- `⏱` - Time is being tracked
+- `●` (red) - Time is being tracked; the footer shows the running `⏱` timer
 
 ### Footer / Status Bar
 
@@ -741,7 +741,7 @@ Track how long you spend on tasks with the built-in timer.
 #### Start Tracking
 1. Select a task
 2. Press `t` to start the timer
-3. A `⏱` appears next to the task
+3. A red `●` appears next to the task in the list
 4. The footer shows elapsed time
 
 #### Stop Tracking
@@ -761,30 +761,62 @@ View and edit all time entries for a task:
 1. Select a task
 2. Press `L` to open the time log
 
-The editor shows:
+Entries are grouped by day (newest day first) with a per-day total, and the
+footer sums the whole log. A running entry shows `now` as its end, its live
+elapsed time and a red `●`:
+
 ```
-┌─────────────────────────────────────────┐
-│ Time Log - Fix login bug                │
-├─────────────────────────────────────────┤
-│ Dec 15, 2025                            │
-│   09:30 - 11:15  (1h 45m)              │
-│   14:00 - 15:30  (1h 30m)              │
-│                                         │
-│ Dec 14, 2025                            │
-│   10:00 - 12:30  (2h 30m)              │
-├─────────────────────────────────────────┤
-│ Total: 5h 45m                           │
-└─────────────────────────────────────────┘
+┌ Time Log · a add · s/e start/end · n note · t date · +/- 5m · d delete · Esc ┐
+│ Tue 2026-10-21 ······································ 2h 15m │
+│   09:30 – 11:15   1h 45m   standup prep                     │
+│ ● 14:00 – now     30m                                       │
+│ Mon 2026-10-20 ······································ 3h 30m │
+│   08:15 – 11:45   3h 30m                                    │
+│ Total: 5h 45m · 3 entries                                   │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+`j`/`k` move over entries only; day headers are skipped and the list scrolls
+to keep the selection visible.
 
 #### Time Log Actions
 | Key | Action |
 |-----|--------|
-| `a` | Add new time entry |
-| `e` | Edit selected entry |
-| `d` | Delete selected entry |
+| `a` | Add an entry (opens the prompt below) |
+| `s` | Edit the selected entry's start time (`HH:MM`) |
+| `e` | Edit the end time (`HH:MM`; an end before the start rolls to the next day) |
+| `n` | Edit the entry's note |
+| `t` | Move the entry to another date (`YYYY-MM-DD`, `today`, `yesterday`, `-N`) |
+| `+` / `-` | Lengthen / shorten the entry by 5 minutes (adjusts the end; not on a running entry) |
+| `d` | Delete the selected entry (asks `y`/`n`) |
 | `j`/`k` | Navigate entries |
-| `Esc` | Close log |
+| `Esc` | Close the log, or cancel an open prompt |
+
+Every edit is undoable with `u`, and the task's total time is recomputed immediately.
+
+#### Adding an Entry
+`a` opens a one-line prompt prefilled with today's date. Enter saves:
+
+```
+[date] START[-END | +DURATION] [note]
+```
+
+- **date** (optional): `YYYY-MM-DD`, `today`, `yesterday`, or `-N` for N days ago; defaults to today
+- **START**, **END**: local clock times such as `09:00`, `9:00`, `2:30pm`
+- **DURATION**: `1h30m`, `90m`, `1.5h`, `2h`
+- an END before START rolls over to the next day
+- everything after the time is kept as the entry's note
+
+Examples:
+
+```
+09:00-10:30 standup
+-1 14:00 +45m review
+2026-10-20 08:15-09:00
+yesterday 23:00-01:00 night shift
+```
+
+A parse error is shown in the status bar and the prompt stays open so you can fix it.
 
 ### Pomodoro Timer
 
@@ -796,9 +828,15 @@ The Pomodoro Technique helps maintain focus through timed work sessions.
 3. **Repeat**: After 4 cycles, take a long break (15 minutes)
 
 #### Start a Pomodoro Session
-1. Select a task (optional)
-2. Press `F5` to start
-3. The timer appears in the header/footer
+1. Select a task (required; the session is attached to it)
+2. Press `F5` to start (TaskFlow switches into focus mode)
+3. The timer appears in the footer
+
+Work phases are recorded as time entries on the task, so Pomodoro time
+shows up in the time log, the Dashboard and the Reports → Time panel.
+Breaks and pauses are not recorded. If a timer is already running on the
+task it keeps running; a timer you move to a different task by hand is
+left alone when the session ends.
 
 #### Timer Display
 ```
@@ -815,18 +853,13 @@ The Pomodoro Technique helps maintain focus through timed work sessions.
 | `F6` | Pause/Resume |
 | `F7` | Skip current phase |
 | `F8` | Stop session |
-| `+` | Increase cycle goal |
-| `-` | Decrease cycle goal |
+| `+` / `-` | Increase / decrease the cycle goal (in focus mode, while a session runs) |
 
 #### Configuration
-Customize timings in `~/.config/taskflow/config.toml`:
-```toml
-[pomodoro]
-work_minutes = 25
-short_break_minutes = 5
-long_break_minutes = 15
-cycles_before_long_break = 4
-```
+Timings are stored alongside your tasks in the data file (not in
+`config.toml`) under `pomodoro_config`, and default to 25/5/15 minutes with
+a long break every 4 cycles. See the README's "Pomodoro Configuration"
+section for the exact keys.
 
 ### Focus Mode
 
@@ -857,9 +890,13 @@ Access the Dashboard from the sidebar to see at-a-glance statistics:
 ├─────────────────────┬─────────────────────┬────────────────────┤
 │   Completion        │   Time Tracking     │    This Week       │
 │   ────────────      │   ─────────────     │    ──────────      │
-│   Total: 47         │   Tracked: 12h 30m  │    Created: 8      │
-│   Done: 23 (49%)    │   Avg/task: 32m     │    Completed: 12   │
-│   Overdue: 3        │   Currently: —      │    Active: 24      │
+│   Total: 47         │   Today: 1h 20m     │    Created: 8      │
+│   Done: 23 (49%)    │   This Week: 6h 5m  │    Completed: 12   │
+│   Overdue: 3        │   Last 30 days: 31h │    Active: 24      │
+│                     │   Avg/active day    │                    │
+│                     │     (30d): 1h 45m   │                    │
+│                     │   Tracking: ● 00:12:│                    │
+│                     │     34 Write report │                    │
 ├─────────────────────┴─────────────────────┴────────────────────┤
 │                    Status Distribution                         │
 │   ─────────────────────────────────────────────────────────    │
@@ -877,13 +914,19 @@ Access the Dashboard from the sidebar to see at-a-glance statistics:
 
 ![Dashboard](../screenshots/svg/dashboard.svg)
 
+The **Time Tracking** panel sums your time entries directly:
+
+- **Today** and **This Week** (Monday to today) use the local date of each entry's start
+- **Last 30 days** and **Avg/active day (30d)** come from the same 30-day analytics the Reports view uses; an "active day" is any day with tracked time
+- **Tracking** shows the running task's title with a live `HH:MM:SS` clock, or `○ Idle`
+
 ### Reports View
 
 Access detailed analytics from the sidebar → Reports.
 
 ![Reports view](../screenshots/svg/reports.svg)
 
-The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`):
+The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`; `w` cycles the Time panel's window):
 
 #### Overview Panel
 Summary statistics:
@@ -908,11 +951,38 @@ Tag usage statistics:
 Tags are sorted by count, with alphabetical sorting for equal counts.
 
 #### Time Panel
-Time tracking analysis:
-- Total time tracked
-- Time per project
-- Peak productivity hours
-- Most productive day of week
+Time tracking analysis over a selectable window. The title shows the current
+window, e.g. `Time (last 30 days)  [w] window`; press `w` to cycle
+7 → 30 → 90 days. The three reports are cached, so switching is instant.
+
+- **Stat boxes**: Total (the window), Today, This Week (Monday to today),
+  Avg/active day, and Tracking (running task title with a live `HH:MM:SS`
+  clock, or `idle`). Today and This Week are summed straight from your time
+  entries and do not change with the window.
+- **By Project**: the top 8 projects as horizontal bars, each labelled with the
+  project name (or "No project") and showing hours with one decimal plus its
+  share of the window total, e.g. `2.5h  41%`.
+- **Daily**: with the 7-day window, one bar per day labelled with the weekday
+  and date; with 30 or 90 days, a sparkline with the first and last dates and
+  the busiest day (`max 3h 20m on Oct 14`).
+- **By Hour**: 24 local-hour columns (labelled every third hour) with the peak
+  hour in the title.
+- **Top Tasks**: the five tasks with the most tracked time in the window.
+- **Minutes by Day of Week**: shown when the terminal is tall enough.
+
+On short terminals the lower sections are dropped first; the stat boxes and
+By Project / Daily rows are kept as long as there is room.
+
+#### Tasks Panel
+Every task with tracked time in the selected window, as a table sorted by
+time: `#`, Task, Project, Entries, Time and Share of the window total. The
+window is the same 7/30/90-day choice as the Time panel (`w` cycles it).
+
+- `j`/`k` or the arrow keys move the selection; `PgUp`/`PgDn` (or `Ctrl+u`/
+  `Ctrl+d`) jump ten rows; `g`/`G` go to the first/last task.
+- The footer shows the window total and which rows are visible, e.g.
+  `Total 12h 30m · showing 1–18 of 42`.
+- Deleted tasks still count and appear as `(deleted task)`.
 
 #### Insights Panel
 Productivity patterns:
@@ -937,10 +1007,15 @@ Press `Ctrl+p` to export a report as Markdown (`.md` file).
 Press `Ctrl+h` to export a formatted HTML report.
 
 Both formats include:
-- Summary statistics
-- Charts and graphs (ASCII in MD, visual in HTML)
-- Task breakdown
-- Time tracking summary
+- Overview, status and priority breakdowns
+- Velocity and productivity insights (streaks, best day, peak hour)
+- A **Time Tracking** section: total and active days, time per project
+  with its share, a per-day bar chart over the report window, peak hour
+  and best weekday (shown when any time was tracked)
+- Top tags and project progress
+
+For the same numbers in the shell, see `taskflow time` under
+[CLI Options](#cli-options).
 
 ---
 
@@ -1249,9 +1324,45 @@ Subcommands:
     add <TASK>          Quick add a task from the command line
     list                List tasks (without launching TUI)
     done <QUERY>        Mark a task as done by searching for it
+    today               List today's tasks
+    next                Show the next task to work on
+    stats               Show quick productivity statistics
+    time                Report tracked time by project, day, task or tag
     git-todos           Extract TODO/FIXME comments from git repository
     completion <SHELL>  Generate shell completions (bash, zsh, fish)
 ```
+
+**`taskflow time`** (alias `tt`) reports tracked time for a window:
+
+```bash
+taskflow time                      # today, plus a this-week total (default)
+taskflow time --week               # Monday through today
+taskflow time --days 30            # the last 30 days
+taskflow time --from 2026-01-05 --to 2026-01-09
+taskflow time --project backend    # one project, matched by name (case-insensitive)
+taskflow time --week --by day      # breakdown: project (default), day, task or tag
+taskflow time --days 7 --json      # machine-readable output
+```
+
+The text report prints the window and total, a proportional bar per row
+with its time and share of the total, and a `Tracking now:` line when a
+timer is running:
+
+```
+Time Tracked: This week (2026-10-19 to 2026-10-22)
+========================================
+  Total:        6h 15m (9 entries)
+  Tracking now: Write docs 00:12:34
+
+By project
+----------------------------------------
+  Backend       ████████████████████    4h 10m   66.7%
+  Docs          ██████████              2h 05m   33.3%
+```
+
+`--json` emits `window {from, to}`, `total_minutes`, `by_project`,
+`by_day`, `by_task` and `by_tag` arrays (each row with `minutes` and
+`percent`), and `tracking` (`{task_id, title, elapsed_seconds}` or `null`).
 
 **Examples:**
 ```bash
@@ -1273,6 +1384,10 @@ taskflow list --tags bug,urgent --limit 10
 
 # Mark a task as done
 taskflow done "Review PR"
+
+# Tracked time this week, per project; the last 7 days as JSON
+taskflow time --week
+taskflow time --days 7 --by day --json
 
 # Extract TODOs from code (see Git Integration section)
 taskflow git-todos --dry-run
@@ -1628,7 +1743,7 @@ Use `--data <path>` to specify a custom location.
 3. Import CSV: `I`
 
 #### Q: The timer kept running while I was away
-**A:** This is by design—the timer persists across restarts. Open the time log (`L`) and edit the entry to fix incorrect times.
+**A:** This is by design—the timer persists across restarts. Open the time log (`L`), select the entry and press `e` to correct its end time; the task's total updates immediately.
 
 #### Q: Can I use TaskFlow over SSH?
 **A:** Yes! TaskFlow works in any terminal, including remote sessions. Make sure your SSH connection supports UTF-8.

@@ -55,7 +55,7 @@
 //! - [`ProductivityInsights`] analyzes when you're most effective
 
 use chrono::{Datelike, NaiveDate, Weekday};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::{ProjectId, TaskId};
 use crate::domain::today;
@@ -185,17 +185,55 @@ impl BurnChart {
     }
 }
 
-/// Time analytics showing when tasks are completed.
+/// What is known about a task that has tracked time in the window.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TaskTimeInfo {
+    /// Task title at report time (`(deleted task)` when the task is gone)
+    pub title: String,
+    /// Project the task belongs to
+    pub project_id: Option<ProjectId>,
+    /// Number of time entries inside the window
+    pub entries: usize,
+}
+
+/// One row of a per-task time table, most time first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskTimeRow {
+    pub task_id: TaskId,
+    pub title: String,
+    pub project_id: Option<ProjectId>,
+    pub minutes: u32,
+    pub entries: usize,
+    /// Share of the window total, in percent
+    pub share: f64,
+}
+
+/// Time tracked within a reporting window, broken down several ways.
+///
+/// Every bucket is derived from time entries (bucketed by the entry's local
+/// start date and hour). Tasks that carry an `actual_minutes` total but have
+/// no entries at all (imported or legacy data) are counted once, at their
+/// completion date, so nothing is double counted.
 #[derive(Debug, Clone, Default)]
 pub struct TimeAnalytics {
-    /// Minutes tracked per project
+    /// Minutes tracked per project (`None` = no project)
     pub by_project: HashMap<Option<ProjectId>, u32>,
+    /// Minutes tracked per task
+    pub by_task: HashMap<TaskId, u32>,
+    /// Title, project and entry count for every task in `by_task`
+    pub task_info: HashMap<TaskId, TaskTimeInfo>,
+    /// Minutes tracked per tag (a multi-tagged entry counts toward each tag)
+    pub by_tag: HashMap<String, u32>,
+    /// Minutes tracked per calendar day, ordered oldest first
+    pub by_day: BTreeMap<NaiveDate, u32>,
     /// Minutes tracked per day of week (0 = Monday, 6 = Sunday)
     pub by_day_of_week: [u32; 7],
-    /// Minutes tracked per hour of day (0-23)
+    /// Minutes tracked per local hour of day (0-23)
     pub by_hour: [u32; 24],
     /// Total tracked time in minutes
     pub total_minutes: u32,
+    /// Number of time entries that fell inside the window
+    pub entry_count: usize,
 }
 
 /// Maps array index to weekday (0 = Monday, 6 = Sunday).
@@ -236,6 +274,99 @@ impl TimeAnalytics {
     #[must_use]
     pub fn total_hours(&self) -> f64 {
         f64::from(self.total_minutes) / 60.0
+    }
+
+    /// Number of distinct days with any tracked time.
+    #[must_use]
+    pub fn active_days(&self) -> usize {
+        self.by_day.values().filter(|&&m| m > 0).count()
+    }
+
+    /// Average minutes per day that had tracked time (0 when none).
+    #[must_use]
+    pub fn avg_minutes_per_active_day(&self) -> u32 {
+        let days = self.active_days();
+        if days == 0 {
+            0
+        } else {
+            self.total_minutes / days as u32
+        }
+    }
+
+    /// Projects sorted by minutes descending, then by key for stability.
+    #[must_use]
+    pub fn projects_by_minutes(&self) -> Vec<(Option<ProjectId>, u32)> {
+        let mut v: Vec<_> = self.by_project.iter().map(|(k, &m)| (*k, m)).collect();
+        v.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| a.0.map(|p| p.0).cmp(&b.0.map(|p| p.0)))
+        });
+        v
+    }
+
+    /// Tags sorted by minutes descending, then alphabetically.
+    #[must_use]
+    pub fn tags_by_minutes(&self) -> Vec<(String, u32)> {
+        let mut v: Vec<_> = self.by_tag.iter().map(|(k, &m)| (k.clone(), m)).collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        v
+    }
+
+    /// Per-task rows (title, project, entries, minutes, share), most time
+    /// first; ties break on title then id so the order is stable.
+    #[must_use]
+    pub fn task_rows(&self) -> Vec<TaskTimeRow> {
+        let total = self.total_minutes;
+        let mut rows: Vec<TaskTimeRow> = self
+            .by_task
+            .iter()
+            .filter(|(_, &m)| m > 0)
+            .map(|(&task_id, &minutes)| {
+                let info = self.task_info.get(&task_id);
+                TaskTimeRow {
+                    task_id,
+                    title: info.map_or_else(|| "(deleted task)".to_string(), |i| i.title.clone()),
+                    project_id: info.and_then(|i| i.project_id),
+                    minutes,
+                    entries: info.map_or(0, |i| i.entries),
+                    share: if total == 0 {
+                        0.0
+                    } else {
+                        f64::from(minutes) / f64::from(total) * 100.0
+                    },
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| {
+            b.minutes
+                .cmp(&a.minutes)
+                .then_with(|| a.title.cmp(&b.title))
+                .then_with(|| a.task_id.0.cmp(&b.task_id.0))
+        });
+        rows
+    }
+
+    /// Tasks sorted by minutes descending.
+    #[must_use]
+    pub fn tasks_by_minutes(&self) -> Vec<(TaskId, u32)> {
+        let mut v: Vec<_> = self.by_task.iter().map(|(k, &m)| (*k, m)).collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0 .0.cmp(&b.0 .0)));
+        v
+    }
+
+    /// Minutes per day for every date in `start..=end`, zero-filled.
+    #[must_use]
+    pub fn daily_series(&self, start: NaiveDate, end: NaiveDate) -> Vec<(NaiveDate, u32)> {
+        let mut out = Vec::new();
+        let mut d = start;
+        while d <= end {
+            out.push((d, self.by_day.get(&d).copied().unwrap_or(0)));
+            d = match d.succ_opt() {
+                Some(n) => n,
+                None => break,
+            };
+        }
+        out
     }
 }
 
@@ -369,11 +500,14 @@ pub struct ReportConfig {
 }
 
 impl ReportConfig {
-    /// Create a report config for the last N days.
+    /// Create a report config covering the last `days` calendar days,
+    /// today included: `last_n_days(7)` spans seven dates ending today.
+    ///
+    /// `days` below 1 is treated as 1 (today only).
     #[must_use]
     pub fn last_n_days(days: i64) -> Self {
         let end = today();
-        let start = end - chrono::Duration::days(days);
+        let start = end - chrono::Duration::days(days.max(1) - 1);
         Self {
             start_date: start,
             end_date: end,
@@ -746,9 +880,15 @@ mod tests {
         assert!(config.include_tags);
         assert!(config.project_filter.is_none());
         assert!(config.task_filter.is_none());
-        // Should span 7 days
+        // Seven calendar dates, today included: six days between the ends.
         let days = (config.end_date - config.start_date).num_days();
-        assert_eq!(days, 7);
+        assert_eq!(days, 6);
+        assert_eq!(config.end_date, today());
+        // Degenerate inputs collapse to today only.
+        let one = ReportConfig::last_n_days(1);
+        assert_eq!(one.start_date, one.end_date);
+        let zero = ReportConfig::last_n_days(0);
+        assert_eq!(zero.start_date, zero.end_date);
     }
 
     #[test]

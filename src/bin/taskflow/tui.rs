@@ -196,7 +196,11 @@ fn run_app(
     let git_check_interval = Duration::from_secs(60); // Check every 60 seconds
 
     loop {
-        // Draw UI
+        // Draw UI. This runs on every pass, and `event::poll` below returns
+        // after at most 100ms when idle, so live readouts (the footer and
+        // dashboard task timer, the Pomodoro clock) refresh several times a
+        // second without any extra tick message; ratatui only writes the
+        // cells that changed.
         terminal.draw(|frame| view(model, frame, theme))?;
 
         // Check if quitting

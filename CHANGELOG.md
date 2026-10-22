@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)
+- **Reports → Time panel**: selectable 7/30/90-day window (`w`), Today / This Week / Avg per active day / live Tracking stats, time by project with hours and share, daily series (bars or sparkline), local hour-of-day chart, top tasks
+- **Reports → Tasks panel**: every task with tracked time in the selected window as a scrollable table (task, project, entries, time, share; `j`/`k`, `g`/`G`, PgUp/PgDn); the exported Markdown/HTML reports list the top 25 tasks the same way
+- **Dashboard Time Tracking tile**: Today, This Week, Last 30 days, average per active day and the running timer; **footer** shows a live `⏱ HH:MM:SS` readout for the running task
+- **Time log editor**: entries grouped by local day with day and grand totals; `a` opens a real add prompt (`[date] START[-END | +DURATION] [note]`); `n` edits the note, `t` moves an entry to another date, `+`/`-` nudge its length by 5 minutes
+- **`taskflow time` (`tt`)**: time report for today, this week, the last N days or a date range, by project, day, task or tag, with ASCII bars or `--json`
+- **Exports**: CSV gains `Estimated Minutes` / `Actual Minutes` columns (also read on import); Markdown and HTML reports gain a Time Tracking section with per-project and per-day tables
 - **Pipe Interface**: Scripting integration via `taskflow pipe` command for stdin/stdout interaction
   - Full CRUD operations for all entity types (tasks, projects, time entries, work logs, habits, goals, key results, tags)
   - JSON request/response protocol for programmatic access
@@ -43,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Time totals counted twice**: Reports → Time, Insights and the Markdown/HTML reports added each task's cached total on top of its time entries; focus mode added the live session twice
+- **Stale task totals**: `actual_minutes` was only recomputed when a timer stopped; adding, editing or deleting time log entries, undo and the pipe API now recompute it and refresh caches
+- **Report windows spanned N+1 days**: "last 7 days" covered eight calendar dates (the 7-day Daily chart showed eight bars); every report window now covers exactly N dates ending today
+- **Time log used UTC**: entries are displayed and edited in local time; an end time before the start rolls to the next day
+- Evening review counted a running timer as zero; `taskflow stats` ignored manually corrected durations
 - **Doc Tests**: Converted ignored documentation tests to runnable examples
 - **Snapshot Tests**: Replaced environment-sensitive snapshots with assertion-based tests
 - **Clippy Warnings**: Resolved all linter warnings for cleaner codebase

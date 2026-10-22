@@ -466,7 +466,10 @@ impl TaskDetail<'_> {
         // Show last 5 entries
         for entry in entries.iter().take(5) {
             let duration = entry.calculated_duration_minutes();
-            let date = entry.started_at.format("%m/%d %H:%M");
+            let date = entry
+                .started_at
+                .with_timezone(&chrono::Local)
+                .format("%m/%d %H:%M");
             let is_running = entry.ended_at.is_none();
 
             let status = if is_running {
@@ -604,13 +607,7 @@ impl TaskDetail<'_> {
 
 /// Format duration in minutes as a human-readable string.
 fn format_duration(minutes: u32) -> String {
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    match (hours, mins) {
-        (0, m) => format!("{m}m"),
-        (h, 0) => format!("{h}h"),
-        (h, m) => format!("{h}h {m}m"),
-    }
+    crate::domain::format_minutes(minutes)
 }
 
 #[cfg(test)]

@@ -22,7 +22,8 @@ use taskflow::storage::BackendType;
 use cli::{parse_date, parse_priorities, parse_statuses, Cli, Commands, GitCommands, ListFilters};
 use commands::{
     extract_git_todos, git_check_merged, git_commits, git_link, git_status, git_sync, git_unlink,
-    list_tasks, mark_task_done, next_task, quick_add_task, run_pipe, show_stats, today_tasks,
+    list_tasks, mark_task_done, next_task, quick_add_task, run_pipe, show_stats, show_time,
+    today_tasks,
 };
 use tui::run_tui;
 
@@ -174,6 +175,9 @@ fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Stats) => {
             return show_stats(&cli);
+        }
+        Some(Commands::Time(args)) => {
+            return show_time(&cli, args);
         }
         Some(Commands::Pipe { format }) => {
             return run_pipe(&cli, format);

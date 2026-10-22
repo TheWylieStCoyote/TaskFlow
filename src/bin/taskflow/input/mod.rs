@@ -117,6 +117,13 @@ pub fn handle_key_event(
             KeyCode::Esc => return Message::Ui(UiMessage::ToggleFocusMode),
             KeyCode::Char(']') => return Message::Ui(UiMessage::ChainNext),
             KeyCode::Char('[') => return Message::Ui(UiMessage::ChainPrev),
+            // Adjust the Pomodoro cycle goal while a session is running.
+            KeyCode::Char('+') | KeyCode::Char('=') if model.pomodoro.session.is_some() => {
+                return Message::Pomodoro(taskflow::app::PomodoroMessage::IncrementGoal);
+            }
+            KeyCode::Char('-') if model.pomodoro.session.is_some() => {
+                return Message::Pomodoro(taskflow::app::PomodoroMessage::DecrementGoal);
+            }
             _ => {}
         }
     }

@@ -216,7 +216,7 @@ fn test_dashboard_status_counts() {
 #[test]
 fn test_dashboard_format_duration() {
     assert_eq!(format_duration(30), "30m");
-    assert_eq!(format_duration(60), "1h 0m");
+    assert_eq!(format_duration(60), "1h");
     assert_eq!(format_duration(90), "1h 30m");
     assert_eq!(format_duration(125), "2h 5m");
 }
@@ -410,6 +410,138 @@ fn test_dashboard_overdue_count_no_overdue() {
     assert_eq!(stats.overdue_count(), 0);
 }
 
+mod time_panel {
+    use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc};
+
+    use super::*;
+    use crate::domain::{today, Project, Task, TaskId, TimeEntry};
+
+    fn entry_on(task_id: TaskId, date: NaiveDate, hour: u32, minutes: u32) -> TimeEntry {
+        let naive = date.and_hms_opt(hour, 0, 0).expect("valid time");
+        let started = Local
+            .from_local_datetime(&naive)
+            .earliest()
+            .expect("valid local time")
+            .with_timezone(&Utc);
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at = started;
+        entry.ended_at = Some(started + Duration::minutes(i64::from(minutes)));
+        entry.duration_minutes = Some(minutes);
+        entry
+    }
+
+    /// 45m today, 2h three days ago, 30m twenty days ago, 1h forty days ago.
+    fn time_model() -> (Model, TaskId) {
+        let mut model = Model::new();
+        let project = Project::new("Alpha");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        let mut task = Task::new("Deep work session");
+        task.project_id = Some(project_id);
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let today = today();
+        model.add_time_entry(entry_on(task_id, today, 12, 45));
+        model.add_time_entry(entry_on(task_id, today - Duration::days(3), 9, 120));
+        model.add_time_entry(entry_on(task_id, today - Duration::days(20), 15, 30));
+        model.add_time_entry(entry_on(task_id, today - Duration::days(40), 10, 60));
+        (model, task_id)
+    }
+
+    fn render(model: &Model) -> String {
+        let theme = Theme::default();
+        buffer_content(&render_widget(Dashboard::new(model, &theme), 100, 30))
+    }
+
+    #[test]
+    fn stats_sum_today_and_this_week_from_entries() {
+        let (model, _) = time_model();
+        let stats = DashboardStats::new(&model);
+        assert_eq!(stats.minutes_tracked_today(), 45);
+
+        let today = today();
+        let week_start = today - Duration::days(i64::from(today.weekday().num_days_from_monday()));
+        let expected_week = 45
+            + if today - Duration::days(3) >= week_start {
+                120
+            } else {
+                0
+            };
+        assert_eq!(stats.minutes_tracked_this_week(), expected_week);
+        assert_eq!(stats.total_time_tracked(), 255, "all entries, any age");
+    }
+
+    #[test]
+    fn thirty_day_analytics_match_with_and_without_cache() {
+        let (mut model, _) = time_model();
+        let uncached = DashboardStats::new(&model).time_analytics_30d();
+        assert_eq!(uncached.total_minutes, 195, "40-day-old entry excluded");
+        assert_eq!(uncached.active_days(), 3);
+        assert_eq!(uncached.avg_minutes_per_active_day(), 65);
+        drop(uncached);
+
+        model.ensure_report_cache_populated();
+        let cached = DashboardStats::new(&model).time_analytics_30d();
+        assert!(matches!(cached, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(cached.total_minutes, 195);
+    }
+
+    #[test]
+    fn tile_shows_today_week_month_average_and_idle() {
+        let (model, _) = time_model();
+        let content = render(&model);
+
+        assert!(content.contains("Today: 45m"), "{content}");
+        assert!(content.contains("This Week: "), "{content}");
+        assert!(content.contains("Last 30 days: 3h 15m"), "{content}");
+        assert!(content.contains("Avg/active day (30d): 1h 5m"), "{content}");
+        assert!(content.contains("Tracking: ○ Idle"), "{content}");
+        assert!(!content.contains("Avg/task"), "misleading stat removed");
+    }
+
+    #[test]
+    fn tile_shows_running_timer_with_task_title() {
+        let (mut model, task_id) = time_model();
+        model.start_time_tracking(task_id);
+        let content = render(&model);
+
+        assert!(
+            content.contains("Tracking: ● 00:0"),
+            "live clock:\n{content}"
+        );
+        assert!(content.contains("Deep work session"), "{content}");
+        assert!(
+            !content.contains("Tracking: ○ Idle"),
+            "(the Focus Sessions tile has its own idle marker)"
+        );
+    }
+
+    #[test]
+    fn tile_with_no_entries_shows_zeros() {
+        let model = Model::new();
+        let content = render(&model);
+        assert!(content.contains("Today: 0m"));
+        assert!(content.contains("Last 30 days: 0m"));
+        assert!(content.contains("Avg/active day (30d): 0m"));
+        assert!(content.contains("○ Idle"));
+    }
+
+    #[test]
+    fn long_running_title_is_truncated_to_the_tile() {
+        let (mut model, task_id) = time_model();
+        model.tasks.get_mut(&task_id).expect("task").title =
+            "A very long task title that cannot possibly fit in the time tracking tile".into();
+        model.start_time_tracking(task_id);
+        let theme = Theme::default();
+        let content = buffer_content(&render_widget(Dashboard::new(&model, &theme), 60, 30));
+        // 28 inner columns: "Tracking: ● 00:00:00 " leaves room for "A ve…"
+        assert!(content.contains("Tracking: ● 00:0"), "{content}");
+        assert!(content.contains("A ve…"), "{content}");
+        assert!(!content.contains("tracking tile"), "{content}");
+    }
+}
+
 #[test]
 fn test_dashboard_total_time_tracked_with_entries() {
     use crate::domain::{TimeEntry, TimeEntryId};
@@ -571,8 +703,8 @@ fn test_dashboard_format_duration_zero() {
 
 #[test]
 fn test_dashboard_format_duration_hours_only() {
-    assert_eq!(format_duration(120), "2h 0m");
-    assert_eq!(format_duration(180), "3h 0m");
+    assert_eq!(format_duration(120), "2h");
+    assert_eq!(format_duration(180), "3h");
 }
 
 // =====================================================================

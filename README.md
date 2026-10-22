@@ -107,6 +107,13 @@ cargo run -- --backend markdown --data ~/tasks/
 
 # Run with demo data
 cargo run -- --demo
+
+# Work from the shell without the TUI
+taskflow add "Write release notes #docs due:friday"
+taskflow list --view today
+taskflow stats
+taskflow time --week --by project     # tracked time: --today, --week, --days N,
+taskflow time --days 30 --json        # --from/--to, --project, --by day|task|tag
 ```
 
 ## Usage
@@ -353,7 +360,7 @@ Tasks can have one of five priority levels:
 The Dashboard provides an overview of your task statistics:
 
 - **Completion Panel**: Overall completion rate, overdue count, and completion by priority
-- **Time Tracking Panel**: Total time tracked, average time per task, current tracking status
+- **Time Tracking Panel**: Time tracked today, this week (Monday to today) and over the last 30 days, average per active day, and the running timer (task title with a live `HH:MM:SS` clock, or `○ Idle`)
 - **Projects Panel**: Per-project completion percentages
 - **Status Distribution**: Bar chart showing task counts by status (Todo, In Progress, Blocked, Done, Cancelled)
 - **This Week Panel**: Tasks created and completed this week, active tasks count
@@ -611,7 +618,9 @@ TaskFlow can export tasks to external formats for use with other tools:
 ### CSV Export (`Ctrl+e`)
 
 Exports all tasks to a CSV file with columns:
-- ID, Title, Status, Priority, Due Date, Tags, Project ID, Description, Created, Completed
+- ID, Title, Status, Priority, Due Date, Scheduled Date, Start Time, End Time, Tags, Project ID, Description, Created, Completed, Estimated Minutes, Actual Minutes
+
+The two time columns round-trip through CSV import (`Estimated Minutes`/`estimated_minutes` and `Actual Minutes`/`actual_minutes` are both accepted).
 
 CSV files can be opened in spreadsheet applications like Excel, Google Sheets, or LibreOffice Calc.
 

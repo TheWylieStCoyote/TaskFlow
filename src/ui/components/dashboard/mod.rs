@@ -53,7 +53,7 @@ impl Widget for Dashboard<'_> {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(6), // Completion
-                Constraint::Length(6), // Time Tracking
+                Constraint::Length(7), // Time Tracking (5 stat lines)
                 Constraint::Min(5),    // Projects
             ])
             .split(columns[0]);

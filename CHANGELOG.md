@@ -52,6 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Time totals counted twice**: Reports → Time, Insights and the Markdown/HTML reports added each task's cached total on top of its time entries; focus mode added the live session twice
 - **Stale task totals**: `actual_minutes` was only recomputed when a timer stopped; adding, editing or deleting time log entries, undo and the pipe API now recompute it and refresh caches
+- **Report windows spanned N+1 days**: "last 7 days" covered eight calendar dates (the 7-day Daily chart showed eight bars); every report window now covers exactly N dates ending today
 - **Time log used UTC**: entries are displayed and edited in local time; an end time before the start rolls to the next day
 - Evening review counted a running timer as zero; `taskflow stats` ignored manually corrected durations
 - **Doc Tests**: Converted ignored documentation tests to runnable examples

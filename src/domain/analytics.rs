@@ -500,11 +500,14 @@ pub struct ReportConfig {
 }
 
 impl ReportConfig {
-    /// Create a report config for the last N days.
+    /// Create a report config covering the last `days` calendar days,
+    /// today included: `last_n_days(7)` spans seven dates ending today.
+    ///
+    /// `days` below 1 is treated as 1 (today only).
     #[must_use]
     pub fn last_n_days(days: i64) -> Self {
         let end = today();
-        let start = end - chrono::Duration::days(days);
+        let start = end - chrono::Duration::days(days.max(1) - 1);
         Self {
             start_date: start,
             end_date: end,
@@ -877,9 +880,15 @@ mod tests {
         assert!(config.include_tags);
         assert!(config.project_filter.is_none());
         assert!(config.task_filter.is_none());
-        // Should span 7 days
+        // Seven calendar dates, today included: six days between the ends.
         let days = (config.end_date - config.start_date).num_days();
-        assert_eq!(days, 7);
+        assert_eq!(days, 6);
+        assert_eq!(config.end_date, today());
+        // Degenerate inputs collapse to today only.
+        let one = ReportConfig::last_n_days(1);
+        assert_eq!(one.start_date, one.end_date);
+        let zero = ReportConfig::last_n_days(0);
+        assert_eq!(zero.start_date, zero.end_date);
     }
 
     #[test]

@@ -390,7 +390,8 @@ mod time_panel {
         let content = render_time(&model, 100, 40);
 
         let today = today();
-        assert!(content.contains(&(today - Duration::days(90)).format("%b %d").to_string()));
+        // 90 dates ending today: the first label is 89 days back.
+        assert!(content.contains(&(today - Duration::days(89)).format("%b %d").to_string()));
         assert!(content.contains(&today.format("%b %d").to_string()));
         assert!(content.contains("max 2h on "));
         assert!(

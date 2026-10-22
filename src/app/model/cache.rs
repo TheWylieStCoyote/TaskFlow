@@ -410,11 +410,12 @@ mod tests {
         };
         assert_eq!(
             cache.report_for_window(TimeWindow::Days30).map(span),
-            Some(30)
+            Some(29),
+            "30 calendar dates, today included"
         );
         assert_eq!(
             cache.report_for_window(TimeWindow::Days90).map(span),
-            Some(90)
+            Some(89)
         );
 
         cache.clear();

@@ -955,10 +955,11 @@ mod report_cache_tests {
         let span = |cfg: &crate::domain::analytics::ReportConfig| {
             (cfg.end_date - cfg.start_date).num_days()
         };
-        assert_eq!(span(&r7.config), 7);
-        assert_eq!(span(&r30.config), 30);
-        assert_eq!(span(&r60.config), 60);
-        assert_eq!(span(&r90.config), 90);
+        // N calendar dates ending today => N-1 days between the ends.
+        assert_eq!(span(&r7.config), 6);
+        assert_eq!(span(&r30.config), 29);
+        assert_eq!(span(&r60.config), 59);
+        assert_eq!(span(&r90.config), 89);
     }
 
     #[test]
@@ -987,6 +988,8 @@ mod report_cache_tests {
                 .expect("every window has a cached report");
             assert_eq!(
                 (report.config.end_date - report.config.start_date).num_days(),
+                window.days() - 1,
+                "the window covers exactly {} dates",
                 window.days()
             );
         }

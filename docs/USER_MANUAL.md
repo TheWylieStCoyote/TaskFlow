@@ -44,6 +44,7 @@ Whether you're managing personal todos, tracking work projects, or organizing co
 - **Multiple backends** - Store data as JSON, YAML, SQLite, or Markdown
 - **Customizable** - Themes, keybindings, and settings via config files
 - **Import/Export** - CSV and iCalendar format support
+- **Scripting** - `taskflow pipe` JSON interface (JSON/YAML/CSV output) plus `add`, `list`, `done`, `time` and more from the shell
 
 ### System Requirements
 
@@ -222,19 +223,28 @@ The top bar displays:
 
 The left panel contains:
 
-**Views Section**
+**Views Section** (in sidebar order)
 - All Tasks - Every task regardless of status
 - Today - Tasks due today
 - Upcoming - Tasks with future due dates
 - Overdue - Tasks past their due date
+- Scheduled - Tasks with scheduled dates
 - Calendar - Monthly calendar view
 - Dashboard - Statistics overview
 - Reports - Detailed analytics
-- Scheduled - Tasks with scheduled dates
+- Habits - Habit tracker
+- Goals - OKR goals and key results
 - Blocked - Tasks waiting on dependencies
 - Untagged - Tasks without tags
 - No Project - Unassigned tasks
-- Recent - Recently modified tasks
+- Recent - Tasks modified in the last 7 days
+- Kanban, Eisenhower, Weekly Planner, Timeline - Board, matrix, week and Gantt layouts
+- Snoozed - Tasks hidden until their snooze date
+- Heatmap, Forecast, Network, Burndown - Completion heatmap, workload forecast, dependency graph, burndown chart
+- Duplicates - Likely duplicate task pairs
+- Git TODOs - Tasks extracted from code comments
+
+There are no number-key shortcuts for views; use the sidebar (`h`, `j`/`k`, `Enter`) or `Alt+g` for Git TODOs.
 
 **Projects Section**
 - Lists all your projects
@@ -294,7 +304,7 @@ TaskFlow uses popups for:
 - **Template picker** - Quick task creation
 - **Time log editor** - Managing time entries
 
-Press `Esc` to close any dialog without saving.
+Press `Esc` to close any dialog without saving. `Esc` also leaves focus mode and, in the specialised views, returns focus to the sidebar; it never quits TaskFlow (use `q`).
 
 ---
 
@@ -446,10 +456,14 @@ For operations on multiple tasks:
 1. Press `v` to enter multi-select mode
 2. Navigate and press `Space` to toggle selection on each task
 3. Selected tasks show a `●` indicator
-4. Perform bulk operations:
-   - `d` - Delete all selected
-   - `m` - Move all to a project
+4. Perform bulk operations on every selected task:
+   - `p` - Set priority
+   - `T` - Add tags
+   - `D` - Set due date
+   - `z` - Snooze until a date
 5. Press `v` or `Ctrl+v` to exit multi-select
+
+Bulk delete, bulk move-to-project and bulk set-status exist as actions but have no default key: run them from the command palette (`:`) or bind keys in the keybindings editor (`Ctrl+k`). While in multi-select mode, `d`, `m` and `x` still act on the highlighted task only.
 
 **Quick Select All:**
 - Press `V` to select all visible tasks at once
@@ -468,12 +482,14 @@ Create tasks quickly from predefined templates:
 |----------|----------|------|-----|
 | Bug Fix | High | #bug | - |
 | Feature | Medium | #feature | - |
-| Review | Medium | - | Tomorrow |
+| Review | Medium | #review | Tomorrow |
 | Meeting Notes | Low | #meeting | - |
 | Daily Task | Low | - | Today |
 | Weekly Task | Low | - | +7 days |
-| Urgent | Urgent | #urgent | Today |
+| Urgent | Urgent | - | Today |
 | Research | Low | #research | - |
+
+Bug Fix, Feature, Meeting Notes and Research also pre-fill a structured description. You can add your own templates under `[[custom_templates]]` in `config.toml` (see [Customization](#10-customization)).
 
 ---
 
@@ -577,8 +593,8 @@ Block a task until others are complete:
 #### Set Dependencies
 1. Select the task to block
 2. Press `B`
-3. Enter the IDs of blocking tasks (comma-separated)
-4. Press `Enter`
+3. Enter the list numbers of the blocking tasks as shown in the current task list (e.g. `2, 5`; any non-digit separator works)
+4. Press `Enter` (an empty entry clears the dependencies; a task cannot depend on itself)
 
 Blocked tasks show `[!]` status and cannot be completed until blockers are done.
 
@@ -608,12 +624,13 @@ Set up tasks that repeat automatically:
 #### Configure Recurrence
 1. Select a task
 2. Press `R`
-3. Choose pattern:
-   - `d` - Daily
-   - `w` - Weekly (same day of week)
-   - `m` - Monthly (same day of month)
+3. Enter a pattern:
+   - `d` - Daily (`d3` = every 3 days)
+   - `w` - Weekly (`w2` = every 2 weeks)
+   - `m` - Monthly on today's day of month (`m15` = on the 15th)
    - `y` - Yearly (same date)
-   - `0` - Clear recurrence
+   - `0` or `n` - Clear recurrence
+   - Optionally append `end=YYYY-MM-DD` and/or `max=N` to stop after a date or a number of occurrences, e.g. `w2 end=2026-12-31`
 
 Recurring tasks show `↻` indicator.
 
@@ -645,6 +662,14 @@ Access views from the sidebar (`h` to focus, `j`/`k` to navigate, `Enter` to sel
 | Untagged | Tasks without any tags |
 | No Project | Tasks not assigned to a project |
 | Recent | Tasks modified in last 7 days |
+| Habits / Goals | Habit tracker; OKR goals with key results |
+| Kanban / Eisenhower / Weekly Planner / Timeline | Board by status; urgent/important matrix; day columns; Gantt-style bars |
+| Snoozed | Tasks hidden until their snooze date |
+| Heatmap / Forecast / Network / Burndown | Completion heatmap; workload projection; dependency graph; burndown chart (`w` window, `o` mode, `+` scope creep) |
+| Duplicates | Likely duplicate pairs (`D` dismiss, `M` merge, `r` refresh) |
+| Git TODOs | Tasks extracted from code comments (`r` rescans) |
+
+In every specialised view `Esc` returns focus to the sidebar and `Enter` opens the selected task.
 
 ### Calendar View
 
@@ -671,11 +696,13 @@ The calendar provides a monthly overview:
 #### Calendar Navigation
 | Key | Action |
 |-----|--------|
-| `h`/`l` or `←`/`→` | Previous/next day |
+| `h`/`l` or `←`/`→` | Previous/next day (`l` on a day with tasks opens its task list instead) |
 | `j`/`k` or `↓`/`↑` | Previous/next week |
 | `<`/`>` | Previous/next month |
-| `Enter` | Focus task list for selected day |
-| `Esc` | Return focus to calendar grid |
+| `Tab` | Switch focus between the grid and the day's task list |
+| `Enter` | Open the task list for the selected day (grid) / open focus mode on the task (list) |
+| `h` or `←` (in the task list) | Back to the calendar grid |
+| `Esc` | Return focus to the sidebar |
 
 ![Calendar view](../screenshots/svg/calendar.svg)
 
@@ -689,7 +716,7 @@ The calendar provides a monthly overview:
 The task list filters to show matching tasks.
 
 #### Search Behavior
-- Searches task titles and descriptions
+- Searches task titles and tags
 - Case-insensitive matching
 - Partial word matches
 
@@ -713,11 +740,11 @@ Press `Ctrl+t` to remove the filter.
 #### Change Sort Field
 Press `s` to cycle through:
 ```
-Created → Updated → Due Date → Priority → Title → Status
+Created → Priority → Due Date → Title → Status → Updated
 ```
 
 #### Toggle Sort Order
-Press `S` to switch between:
+Press `Ctrl+o` to switch between:
 - Ascending (A→Z, oldest first, lowest priority first)
 - Descending (Z→A, newest first, highest priority first)
 
@@ -926,7 +953,7 @@ Access detailed analytics from the sidebar → Reports.
 
 ![Reports view](../screenshots/svg/reports.svg)
 
-The Reports view has multiple panels (navigate with `Tab`/`Shift+Tab`; `w` cycles the Time panel's window):
+The Reports view has eight panels, in order Overview, Velocity, Tags, Time, Tasks, Focus, Insights and Estimation (navigate with `Tab`/`Shift+Tab`; `w` cycles the Time/Tasks window; `Esc` returns to the sidebar):
 
 #### Overview Panel
 Summary statistics:
@@ -983,6 +1010,11 @@ window is the same 7/30/90-day choice as the Time panel (`w` cycles it).
 - The footer shows the window total and which rows are visible, e.g.
   `Total 12h 30m · showing 1–18 of 42`.
 - Deleted tasks still count and appear as `(deleted task)`.
+
+#### Focus Panel
+Pomodoro statistics: cycles today, total cycles, total focus time, current
+and longest streak, average minutes per cycle, and a "Last 7 Days" bar chart
+of cycles per day.
 
 #### Insights Panel
 Productivity patterns:
@@ -1071,14 +1103,15 @@ taskflow --backend markdown --data ~/tasks/
 
 ### Data Location
 
-Default locations by platform:
+Default locations by platform (the file is `tasks.<ext>` for the chosen backend):
 - **Linux**: `~/.local/share/taskflow/`
-- **macOS**: `~/Library/Application Support/taskflow/`
-- **Windows**: `%APPDATA%\taskflow\`
+- **macOS**: `~/Library/Application Support/com.taskflow.taskflow/`
+- **Windows**: `%APPDATA%\taskflow\taskflow\data\`
 
-Configuration is always in:
-- **Linux/macOS**: `~/.config/taskflow/`
-- **Windows**: `%APPDATA%\taskflow\config\`
+Configuration is in:
+- **Linux**: `~/.config/taskflow/`
+- **macOS**: `~/Library/Application Support/com.taskflow.taskflow/`
+- **Windows**: `%APPDATA%\taskflow\taskflow\config\`
 
 ### Import
 
@@ -1088,14 +1121,16 @@ Configuration is always in:
 3. Review the import preview
 4. Confirm import
 
-CSV format expected:
+CSV format expected (headers are case-insensitive; only a title column is required):
 ```csv
-title,status,priority,due_date,tags
+title,status,priority,due date,tags
 "Buy groceries",todo,low,2025-01-15,"errands,personal"
 ```
 
+Recognised columns: `title` (or `name`, `task`, `summary`), `id`, `status`, `priority`, `due date` (or `duedate`, `due`), `tags` (comma- or semicolon-separated), `project id` (or `project`), `description`, `created`, `completed`, `estimated minutes` (or `estimated_minutes`, `estimate`), `actual minutes` (or `actual_minutes`, `actual`). This matches what `Ctrl+e` exports, so exports round-trip. A preview lists what will be imported; `Enter`/`y` confirms, `Esc`/`n` cancels.
+
 #### Import iCalendar (ICS)
-1. Press `Alt+I`
+1. Press `Alt+i`
 2. Enter the file path
 3. Review and confirm
 
@@ -1152,24 +1187,31 @@ auto_save_interval = 300            # Seconds between auto-saves (0 = disabled)
 # Theme
 theme = "default"                   # Theme name
 
-# Pomodoro settings
-[pomodoro]
-work_minutes = 25
-short_break_minutes = 5
-long_break_minutes = 15
-cycles_before_long_break = 4
+# What to show when the database is empty on first run: "empty" or "demo"
+first_run_mode = "empty"
+
+# Extra entries for the template picker (Ctrl+n)
+[[custom_templates]]
+name = "Incident"                   # shown in the picker
+title = "Incident: "                # pre-filled task title
+priority = "urgent"                 # none, low, medium, high, urgent
+tags = ["ops", "incident"]
+description = "Impact:\n\nTimeline:"
+due_days = 0                        # 0 = today, 1 = tomorrow; omit for no due date
 ```
+
+Pomodoro durations are not in `config.toml`; they live in the data file under `pomodoro_config` (see the README's "Pomodoro Configuration").
 
 ### Keybindings Editor
 
 Customize any keybinding:
 
 1. Press `Ctrl+k` to open the keybindings editor
-2. Navigate to the action you want to change
+2. Navigate to the action you want to change (`j`/`k`)
 3. Press `Enter` to edit
-4. Press the new key combination
-5. Press `Enter` to confirm
-6. Press `Ctrl+s` to save changes
+4. Press the new key combination; it is applied immediately (`Esc` cancels)
+5. Press `s` to save to `keybindings.toml`
+6. Press `Esc` to close the editor
 
 #### Reset Keybindings
 - Reset single binding: Select and press `r`
@@ -1181,20 +1223,25 @@ Keybindings are stored in `~/.config/taskflow/keybindings.toml`:
 
 ```toml
 [bindings]
+# key = "action" (snake_case action names; one action per key)
 # Navigation
-move_down = "j"
-move_up = "k"
-focus_sidebar = "h"
-focus_list = "l"
+j = "move_down"
+k = "move_up"
+h = "focus_sidebar"
+l = "focus_task_list"
 
 # Task actions
-toggle_complete = "x"
-create_task = "a"
-delete_task = "d"
-edit_title = "e"
+x = "toggle_complete"
+a = "create_task"
+d = "delete_task"
+e = "edit_task"
+"ctrl+s" = "save"
+"@1" = "play_macro1"   # two-character chords: prefix key, then the second key
 
 # Add your customizations here
 ```
+
+Key names follow the help popup: single characters (`j`, `G`, `?`), named keys (`enter`, `tab`, `f5`, `pageup`), and `ctrl+`/`alt+` prefixes (`ctrl+s`, `alt+d`). Use the uppercase letter for shifted letters (`G`), and `shift+` only for non-letter keys (`shift+tab`). The full action list is shown in the keybindings editor (`Ctrl+k`).
 
 ### Themes & Colors
 
@@ -1307,30 +1354,58 @@ TaskFlow maintains a history of your actions:
 - Time tracking operations
 - Moving tasks between projects
 
-**History limit:** 50 actions (configurable)
+**History limit:** 50 actions (fixed)
 
 ### CLI Options
 
 ```bash
 taskflow [OPTIONS] [COMMAND]
 
-Options:
-    --data <PATH>       Path to data file/directory
-    --backend <TYPE>    Storage backend (json, yaml, sqlite, markdown)
-    --demo              Load sample data for exploration
-    --debug             Enable debug logging (writes to taskflow.log)
+Options (global, usable before any subcommand):
+    -d, --data <PATH>        Path to data file/directory
+    -b, --backend <TYPE>     Storage backend: json (default), yaml, sqlite, markdown
+        --demo               Use sample data instead of the stored data
+        --debug              Enable logging to taskflow.log in the current directory
+        --log-level <LEVEL>  trace, debug, info, warn, error (default info; debug when --debug is set)
+    -V, --version / -h, --help
 
-Subcommands:
-    add <TASK>          Quick add a task from the command line
-    list                List tasks (without launching TUI)
-    done <QUERY>        Mark a task as done by searching for it
-    today               List today's tasks
-    next                Show the next task to work on
-    stats               Show quick productivity statistics
-    time                Report tracked time by project, day, task or tag
-    git-todos           Extract TODO/FIXME comments from git repository
-    completion <SHELL>  Generate shell completions (bash, zsh, fish)
+Subcommands (alias in brackets):
+    add <TASK...>        [a]  Quick add a task using quick-add syntax
+    list                 [ls] List tasks without launching the TUI
+    done <QUERY...>      [d]  Mark the task whose title matches QUERY as done
+    today                [t]  List today's tasks (list --view today)
+    next                 [n]  Show the next task to work on (highest-priority incomplete task)
+    stats                [s]  Show quick productivity statistics
+    time                 [tt] Report tracked time by project, day, task or tag
+    git-todos            [gt] Extract TODO/FIXME comments from a git repository
+    git <SUBCOMMAND>     [g]  Link tasks to branches, auto-complete on merge
+    pipe                 [p]  Scripting interface (stdin JSON -> stdout JSON/YAML/CSV)
+    completion <SHELL>        Generate shell completions (bash, zsh, fish, elvish, powershell)
 ```
+
+**`taskflow list`** flags:
+
+```
+    -v, --view <VIEW>          all (default), today, overdue, upcoming, blocked, untagged, no-project, scheduled
+    -c, --completed            Include completed tasks
+    -n, --limit <N>            Maximum tasks shown (default 20)
+    -p, --project <NAME>       Project name, case-insensitive substring
+    -t, --tags <A,B>           Require all of these tags (--tags-any: any of them)
+        --priority <P,...>     none, low, medium, high, urgent
+        --status <S,...>       todo, in-progress, blocked, done, cancelled
+    -s, --search <TEXT>        Case-insensitive match on title and tags
+        --sort <FIELD>         due-date (default), priority, title, created;  --reverse flips it
+        --due-before <DATE>    YYYY-MM-DD, today, tomorrow, yesterday, +Nd / -Nd
+        --due-after <DATE>
+        --estimate-min <MIN> / --estimate-max <MIN>
+    -f, --filter <EXPR>        Filter DSL expression; overrides the other filters
+```
+
+**`taskflow done`** takes `-p, --project <NAME>` and `-t, --tags <A,B>` to narrow the search.
+
+**`taskflow git-todos`** takes `-r, --repo <PATH>` (default `.`), `-p, --patterns <A,B>` (default `TODO,FIXME`), `-P, --project <NAME>`, `-t, --tags <A,B>`, `--priority <P>` (default `medium`) and `--dry-run`.
+
+**`taskflow git`** subcommands: `link <TASK> [--branch <NAME>]`, `unlink <TASK>`, `commits <TASK> [-l, --limit <N>]` (default 10), `status`, `sync [--dry-run]`, `check-merged [--dry-run]`. `<TASK>` is a title search.
 
 **`taskflow time`** (alias `tt`) reports tracked time for a window:
 
@@ -1430,7 +1505,8 @@ taskflow git-todos --priority high
 
 **TUI View:**
 - Navigate to "Git TODOs" in the sidebar to view all extracted TODOs
-- Or press `Alt+G` to jump directly to the Git TODOs view
+- Or press `Alt+g` to jump directly to the Git TODOs view
+- Press `r` in the view to rescan the repository, `O` to open the selected TODO's file in `$EDITOR`
 - Tasks are grouped by source file with line numbers
 - Tasks are filtered by the `git-todo` tag
 
@@ -1471,33 +1547,44 @@ TaskFlow includes three review workflows for planning and reflection:
 
 #### Daily Review (`Alt+d`)
 
-Morning planning workflow:
-1. **Overdue Tasks**: Review and reschedule or complete overdue items
-2. **Today's Tasks**: See what's scheduled for today
-3. **Quick Capture**: Add any new tasks that come to mind
+Morning planning workflow, in five phases:
+1. **Welcome**: today's summary
+2. **Overdue Tasks**: complete overdue items with `x`
+3. **Today's Tasks**: what is due today
+4. **Scheduled Tasks**: what is scheduled for today
+5. **Summary**
 
 #### Weekly Review (`Alt+w`)
 
-Weekly planning workflow:
-1. **Last Week**: Review completed tasks from the past week
-2. **This Week**: Plan tasks for the current week
-3. **Upcoming**: Look ahead at future deadlines
+Weekly planning workflow, in six phases:
+1. **Welcome**
+2. **Completed Tasks**: what you finished this week
+3. **Overdue Tasks**
+4. **Upcoming Week**: deadlines ahead
+5. **Stale Projects**: projects with no recent activity
+6. **Summary**
+
+The weekly review is read-only (no complete/reschedule keys).
 
 #### Evening Review (`Alt+e`)
 
-End-of-day reflection workflow:
-1. **Today's Progress**: Review what was accomplished
-2. **Incomplete Tasks**: Decide what to carry forward
-3. **Tomorrow Planning**: Set priorities for the next day
+End-of-day reflection workflow, in six phases:
+1. **Welcome**: day summary and completion stats
+2. **Completed Today**
+3. **Incomplete Tasks**: carry forward with `r` (reschedule to tomorrow), `s` (snooze) or `x` (complete)
+4. **Tomorrow Preview**: due and scheduled tasks
+5. **Time Review**: today's tracked time (skipped when empty)
+6. **Summary**
 
 **Navigation in Reviews:**
 | Key | Action |
 |-----|--------|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
-| `Enter` / `l` | Next phase |
-| `h` | Previous phase |
-| `x` / `Space` | Complete task |
+| `Enter` / `l` / `→` | Next phase |
+| `h` / `←` | Previous phase |
+| `x` / `Space` | Complete task (daily and evening review) |
+| `r` / `s` | Reschedule to tomorrow / snooze (evening review) |
 | `Esc` / `q` | Exit review |
 
 ### Focus Queue
@@ -1509,32 +1596,260 @@ Build a queue of tasks for focused work sessions:
 | `f` | Toggle focus mode (single task view) |
 | `F` | Toggle full-screen focus mode |
 | `Q` | Add current task to focus queue |
-| `Alt+Q` | Clear the focus queue |
-| `Alt+J` | Advance to next task in queue |
+| `[` / `]` | Previous / next task in a chain (in focus mode) |
+| `+` / `-` | Adjust the Pomodoro cycle goal (in focus mode, while a session runs) |
+| *(no default key)* | Clear focus queue / Next in focus queue: run from the command palette (`:`) or bind them with `Ctrl+k` |
 
 **Workflow:**
 1. Navigate through your tasks and press `Q` to add important ones to the queue
 2. Press `F` to enter full-screen focus mode
 3. Work on the current task
-4. Press `Alt+J` to advance to the next queued task
-5. Press `Esc` to exit focus mode
+4. Run "Next in focus queue" from the command palette (or your own binding) to advance
+5. Press `Esc` or `f` to exit focus mode
 
 ### Pipe Interface
 
-TaskFlow supports JSON input/output for scripting and external tool integration:
+`taskflow pipe` is a line-oriented scripting interface. Each line on stdin is
+one JSON request; each request gets one response on stdout. Changes are saved
+to the data file when stdin closes.
 
 ```bash
-# Pipe JSON commands to TaskFlow
-echo '{"command": "add", "title": "New task"}' | taskflow pipe
+# One request
+echo '{"operation":"list","entity":"task"}' | taskflow pipe
 
-# Get task list as JSON
-taskflow pipe --list
-
-# Filter and export
-taskflow pipe --filter "status:todo AND priority:high"
+# Several requests, YAML output, a specific data file
+printf '%s\n' \
+  '{"operation":"create","entity":"task","data":{"title":"Buy milk"}}' \
+  '{"operation":"list","entity":"task","filters":{"search":"milk"}}' \
+  | taskflow --data ~/tasks.json pipe --format yaml
 ```
 
-See `taskflow pipe --help` for full documentation.
+`taskflow pipe` (alias `p`) takes one option, `-f, --format <json|yaml|csv>`
+(default `json`; an unknown value falls back to JSON). The global `--data`,
+`--backend`, `--demo`, `--debug` and `--log-level` options apply as usual.
+
+#### Request
+
+```json
+{
+  "operation": "list",
+  "entity": "task",
+  "id": "<uuid>",
+  "data": { ... },
+  "filters": { ... }
+}
+```
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `operation` | yes | `list`, `get`, `create`, `update`, `delete`, `export`, `import` |
+| `entity` | yes | `task`, `project`, `time_entry`, `work_log`, `habit`, `goal`, `key_result`, `tag`, `saved_filter` (always required, even for `export`/`import`, which ignore it) |
+| `id` | `get`, `update`, `delete` | The entity's UUID (for `tag`, the tag name) |
+| `data` | `create`, `update`, `import` | Fields to set (see per-entity tables) |
+| `filters` | `list` (optional) | See **Filters** |
+
+`saved_filter` is accepted by the parser but every operation on it answers
+`NOT_IMPLEMENTED`. `tag` supports `list` and `get` only (tags are derived from
+tasks and habits). `export` and `import` are top-level operations; sending them
+with an entity's own handler is not possible, so the `entity` value is
+irrelevant for them.
+
+#### Response
+
+```json
+{
+  "success": true,
+  "data": { ... },
+  "metadata": { "total": 42, "offset": 0, "limit": 100 }
+}
+```
+
+- `data` is the created/updated/fetched entity, `{"deleted": "<id>"}` for
+  `delete`, or for `list` an object with the entity array (`tasks`,
+  `projects`, `time_entries`, `work_logs`, `habits`, `goals`, `key_results`
+  or `tags`) plus `total`, `offset` and `limit`.
+- `metadata` is present only when `data` carries `total`/`offset`/`limit`
+  (i.e. for `list`).
+- Errors look like `{"success": false, "error": {"code": "...", "message": "..."}}`
+  (an optional `details` field may be present). CSV output falls back to JSON
+  for errors and for anything that is not a list.
+
+| Error code | When |
+|------------|------|
+| `PARSE_ERROR` | The line is not valid JSON, or has an unknown `operation`/`entity` or a missing required field |
+| `IO_ERROR` | stdin could not be read |
+| `MISSING_ID` | `get`/`update`/`delete` without `id` |
+| `INVALID_ID` | `id` (or a referenced `task_id`/`goal_id`) is not a UUID |
+| `NOT_FOUND` | No entity with that id, or a referenced task/goal/tag does not exist |
+| `MISSING_DATA` | `create`/`update`/`import` without `data`, or a required field (`title`, `name`, `task_id`, `goal_id`, `content`) is missing |
+| `INVALID_DATA` | `data` has the wrong shape (e.g. `tags` is not an array) |
+| `INVALID_OPERATION` | `create`/`update`/`delete` on `tag`; `export`/`import` routed to an entity handler |
+| `NOT_IMPLEMENTED` | Any operation on `saved_filter` |
+| `SERIALIZE_ERROR` / `SERIALIZATION_ERROR` | The response could not be encoded (CSV columns could not be determined, etc.) |
+
+#### Filters (`list`)
+
+All fields are optional. Unknown fields are ignored.
+
+| Field | Type | Applies to | Meaning |
+|-------|------|-----------|---------|
+| `project_id` | string | task | Only tasks in this project (UUID) |
+| `project_id` | string | time_entry, work_log | **Task** UUID (the field is reused as the task filter) |
+| `project_id` | string | key_result | **Goal** UUID |
+| `tags` | [string] | task, habit | Case-insensitive tag match |
+| `tags_mode` | `"all"` (default) or `"any"` | task, habit | Require every tag, or at least one |
+| `status` | [string] | task, project, goal | Task: `todo`, `in_progress`, `blocked`, `done`, `cancelled`. Project/goal: `active`, `on_hold`, `completed`, `archived` |
+| `priority` | [string] | task | `none`, `low`, `medium`, `high`, `urgent` |
+| `search` | string | task, project, goal, key_result, habit, work_log, tag | Case-insensitive substring of title/name (+ description; tasks also match tags; work logs match content) |
+| `due_before`, `due_after` | `YYYY-MM-DD` | task | Inclusive due-date bounds |
+| `include_completed` | bool (default `false`) | task, goal, habit | Include done/cancelled tasks, completed/archived goals, archived habits |
+| `sort_by` | string | task, tag | Task: `due_date`, `priority` (highest first), `title`, `created`, `updated`. Tag: `name` or `count` |
+| `sort_order` | `"asc"` (default) or `"desc"` | task, tag | Reverse the sort |
+| `limit` | number (default 100) | all | Page size |
+| `offset` | number (default 0) | all | Items to skip |
+
+Projects, goals, key results and habits are sorted by name when any filter
+object is given; time entries newest-first; work logs newest-first; tags by
+count descending unless `sort_by` is set.
+
+#### Entities
+
+Each `create` accepts the fields below; `update` accepts the same names (and
+sometimes more, noted per entity) and only changes the fields present. For
+`update`, sending `null` clears an optional field. Unknown fields are ignored.
+Dates are `YYYY-MM-DD`; timestamps are RFC 3339 (`2026-10-22T09:00:00Z`).
+
+**task** -- `title` (required), `description`, `status`, `priority`,
+`project_id`, `tags` (array), `due_date`, `scheduled_date`,
+`estimated_minutes`, `dependencies` (array of task UUIDs). Setting `status` to
+`done`/`cancelled` stamps `completed_at`.
+
+```bash
+echo '{"operation":"create","entity":"task","data":{"title":"Buy milk","priority":"high","tags":["shopping"],"due_date":"2026-10-25","estimated_minutes":15}}' | taskflow pipe
+```
+```json
+{
+  "success": true,
+  "data": {
+    "id": "3635e628-3b32-4ceb-815e-3e2efa180a38",
+    "title": "Buy milk",
+    "status": "todo",
+    "priority": "high",
+    "tags": ["shopping"],
+    "due_date": "2026-10-25",
+    "scheduled_date": null,
+    "estimated_minutes": 15,
+    "actual_minutes": 0,
+    "project_id": null,
+    "dependencies": [],
+    "description": null,
+    "created_at": "2026-10-22T10:00:30Z",
+    "updated_at": "2026-10-22T10:00:30Z",
+    "completed_at": null
+  }
+}
+```
+(The real response also carries `parent_task_id`, `next_task_id`,
+`recurrence`, `recurrence_options`, `snooze_until`, `sort_order` and
+`custom_fields`.)
+
+**project** -- `name` (required), `description`, `status`, `parent_id`,
+`color` (hex string).
+
+```bash
+echo '{"operation":"create","entity":"project","data":{"name":"Backend","color":"#3498db"}}' | taskflow pipe
+```
+
+**time_entry** -- `task_id` (required, task must exist), `started_at`
+(defaults to now), `ended_at`, `duration_minutes`, `description`. `update`
+accepts `started_at`, `ended_at`, `duration_minutes` and `description` (not
+`task_id`). The task's `actual_minutes` is recomputed.
+
+```bash
+echo '{"operation":"create","entity":"time_entry","data":{"task_id":"3635e628-3b32-4ceb-815e-3e2efa180a38","started_at":"2026-10-22T09:00:00Z","ended_at":"2026-10-22T09:45:00Z","duration_minutes":45,"description":"standup prep"}}' | taskflow pipe
+```
+
+**work_log** -- `task_id` (required, task must exist) and `content`
+(required). `update` changes `content` only.
+
+```bash
+echo '{"operation":"create","entity":"work_log","data":{"task_id":"3635e628-3b32-4ceb-815e-3e2efa180a38","content":"Talked to the vendor"}}' | taskflow pipe
+```
+
+**habit** -- `name` (required), `description`, `frequency` (`daily`,
+`weekly` = Mon/Wed/Fri, or `every_N_days`, e.g. `every_3_days`);
+`target_count` is accepted but ignored. `update` additionally accepts
+`archived` (bool), `start_date`, `end_date`, `color` and `tags`.
+
+```bash
+echo '{"operation":"create","entity":"habit","data":{"name":"Stretch","frequency":"daily"}}' | taskflow pipe
+```
+
+**goal** -- `name` (required), `description`, `target_date` (stored as
+`due_date`). `update` accepts `name`, `description`, `status`, `start_date`,
+`due_date`, `quarter` (`{"year": 2026, "quarter": "Q4"}`), `manual_progress`
+(0-100), `color`, `icon`. Deleting a goal also deletes its key results and
+reports `deleted_key_results`.
+
+```bash
+echo '{"operation":"create","entity":"goal","data":{"name":"Ship v1","target_date":"2026-12-31"}}' | taskflow pipe
+```
+
+**key_result** -- `goal_id` (required, goal must exist), `name` (required),
+`target_value` (default 100), `current_value`, `unit`. `update` accepts
+`name`, `description`, `target_value`, `current_value`, `unit`,
+`manual_progress`.
+
+```bash
+echo '{"operation":"create","entity":"key_result","data":{"goal_id":"8115659c-8d76-4182-8bfd-6e4b47a50527","name":"Close 20 issues","target_value":20,"unit":"issues"}}' | taskflow pipe
+```
+
+**tag** -- read-only. `list` returns `{name, task_count, habit_count,
+total_count}` rows; `get` takes the tag name as `id` and also returns
+`task_ids` and `habit_ids`.
+
+```bash
+echo '{"operation":"get","entity":"tag","id":"shopping"}' | taskflow pipe
+```
+
+#### Export and import
+
+`export` returns the whole data set as one object with `version`, `tasks`
+(keyed by id), `projects`, `tags`, `time_entries`, `work_logs`, `habits`,
+`goals`, `key_results`, `saved_filters`, `audit_logs`, `pomodoro_config`,
+`pomodoro_stats` and `pomodoro_session`. `import` takes that object as `data`
+and merges it: entities whose id already exists are skipped, and the response
+lists how many of each kind were added.
+
+```bash
+echo '{"operation":"export","entity":"task"}' | taskflow pipe > backup.json
+jq -c '{operation:"import",entity:"task",data:.data}' backup.json | taskflow --data new.json pipe
+```
+
+#### Output formats
+
+- `json` (default): pretty-printed, one object per request.
+- `yaml`: the same structure as YAML.
+- `csv`: for `list` responses only, a header row plus one row per entity;
+  arrays are joined with `;`, nested objects are embedded as JSON, and an empty
+  list prints nothing. Columns per entity:
+
+| Entity | CSV columns |
+|--------|-------------|
+| tasks | `id,title,status,priority,project_id,due_date,scheduled_date,tags,estimated_minutes,created_at,completed_at` |
+| projects | `id,name,status,description,parent_id,color,created_at` |
+| time_entries | `id,task_id,description,started_at,ended_at,duration_minutes` |
+| work_logs | `id,task_id,content,created_at,updated_at` |
+| habits | `id,name,frequency,start_date,archived,tags` |
+| goals | `id,name,status,description,start_date,due_date,manual_progress` |
+| key_results | `id,goal_id,name,target_value,current_value,unit,status` |
+| tags | `name,task_count,habit_count,total_count` |
+
+```bash
+echo '{"operation":"list","entity":"task"}' | taskflow pipe --format csv
+# id,title,status,priority,project_id,due_date,scheduled_date,tags,estimated_minutes,created_at,completed_at
+# 3635e628-...,Buy milk,todo,high,,2026-10-25,,shopping,15,2026-10-22T10:00:30Z,
+```
 
 ---
 
@@ -1554,7 +1869,8 @@ See `taskflow pipe --help` for full documentation.
 | `h` / `←` | Focus sidebar |
 | `l` / `→` | Focus task list |
 | `Enter` | Select/confirm |
-| `Esc` | Cancel/close |
+| `Esc` | Cancel/close; leave focus mode; back to sidebar in specialised views |
+| `:` / `Alt+p` | Command palette |
 
 #### Task Operations
 | Key | Action |
@@ -1573,6 +1889,15 @@ See `taskflow pipe --help` for full documentation.
 | `m` | Move to project |
 | `B` | Edit dependencies |
 | `R` | Set recurrence |
+| `S` / `Alt+s` | Edit scheduled date / time block |
+| `N` | Multi-line description editor |
+| `Y` | Duplicate task |
+| `]` / `[` / `M` | Reschedule tomorrow / next week / next Monday |
+| `z` / `Z` | Snooze / clear snooze |
+| `Alt+a` | Quick capture |
+| `Ctrl+↑` / `Ctrl+↓` | Move task up / down |
+| `Alt+l` / `Alt+u` | Link to next task in chain / unlink |
+| `O` | Open Git TODO source in editor |
 
 #### Project Operations
 | Key | Action |
@@ -1586,6 +1911,8 @@ See `taskflow pipe --help` for full documentation.
 |-----|--------|
 | `t` | Toggle time tracking |
 | `L` | Open time log |
+| `W` | Open work log |
+| `Alt+t` | Edit estimate |
 
 #### Pomodoro
 | Key | Action |
@@ -1594,6 +1921,7 @@ See `taskflow pipe --help` for full documentation.
 | `F6` | Pause/Resume |
 | `F7` | Skip phase |
 | `F8` | Stop Pomodoro |
+| `+` / `-` | Adjust cycle goal (focus mode) |
 
 #### Search & Filter
 | Key | Action |
@@ -1603,7 +1931,7 @@ See `taskflow pipe --help` for full documentation.
 | `#` | Filter by tag |
 | `Ctrl+t` | Clear tag filter |
 | `s` | Cycle sort field |
-| `S` | Toggle sort order |
+| `Ctrl+o` | Toggle sort order |
 
 #### View Controls
 | Key | Action |
@@ -1613,13 +1941,15 @@ See `taskflow pipe --help` for full documentation.
 | `f` | Toggle focus mode |
 | `F` | Toggle full-screen focus |
 | `Q` | Add to focus queue |
-| `Alt+Q` | Clear focus queue |
-| `Alt+J` | Advance focus queue |
 | `Alt+d` | Daily Review |
 | `Alt+w` | Weekly Review |
 | `Alt+e` | Evening Review |
 | `Alt+g` | Git TODOs view |
 | `?` | Show help |
+| `Tab` / `Shift+Tab` | Reports: next / previous panel |
+| `w` | Reports: cycle time window; Burndown: cycle window |
+| `o` / `+` | Burndown: toggle mode / scope creep |
+| `D` / `M` / `r` | Duplicates view: dismiss / merge / refresh |
 
 #### Multi-Select
 | Key | Action |
@@ -1628,6 +1958,7 @@ See `taskflow pipe --help` for full documentation.
 | `V` | Select all |
 | `Space` | Toggle selection (in mode) |
 | `Ctrl+v` | Clear selection |
+| `p` / `T` / `D` / `z` | Bulk priority / tags / due date / snooze |
 
 #### Export/Import
 | Key | Action |
@@ -1635,7 +1966,7 @@ See `taskflow pipe --help` for full documentation.
 | `Ctrl+e` | Export CSV |
 | `Ctrl+i` | Export ICS |
 | `I` | Import CSV |
-| `Alt+I` | Import ICS |
+| `Alt+i` | Import ICS |
 | `Ctrl+g` | Export chains (DOT) |
 | `Ctrl+m` | Export chains (Mermaid) |
 | `Ctrl+p` | Export report (Markdown) |
@@ -1644,7 +1975,7 @@ See `taskflow pipe --help` for full documentation.
 #### Macros
 | Key | Action |
 |-----|--------|
-| `Ctrl+q` | Start/stop recording |
+| `Ctrl+q` then `0`-`9` | Start (or stop and save) recording into a slot |
 | `@0`-`@9` | Play macro |
 
 #### System
@@ -1655,6 +1986,7 @@ See `taskflow pipe --help` for full documentation.
 | `Ctrl+s` | Save |
 | `Ctrl+k` | Keybindings editor |
 | `Ctrl+n` | Template picker |
+| `Alt+r` | Reload from storage |
 | `q` | Quit |
 
 ### Appendix B: Quick Add Syntax Reference
@@ -1697,7 +2029,6 @@ Fix login bug #bug #security !urgent due:today @Backend
 | `eoy` | End of year |
 | `1st`, `15th`, `22nd` | Day of current month |
 | `2025-01-15` | Specific date (ISO) |
-| `01/15`, `01-15` | Month/Day current year |
 
 ### Appendix D: Troubleshooting & FAQ
 
@@ -1749,9 +2080,9 @@ Use `--data <path>` to specify a custom location.
 **A:** Yes! TaskFlow works in any terminal, including remote sessions. Make sure your SSH connection supports UTF-8.
 
 #### Q: How do I report a bug?
-**A:** Open an issue at: https://github.com/anthropics/claude-code/issues
+**A:** Open an issue at: https://github.com/TheWylieStCoyote/TaskFlow/issues
 
 ---
 
-*Last updated: December 2025*
+*Last updated: October 2026*
 *TaskFlow User Manual v1.0*

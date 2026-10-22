@@ -500,29 +500,12 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             handle_submit_input(model);
         }
         UiMessage::InputChar(c) => {
-            // Check if we're editing time log
-            if model.time_log.visible
-                && matches!(
-                    model.time_log.mode,
-                    crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
-                )
-            {
-                model.time_log.buffer.push(c);
-            } else {
-                model.input.buffer.insert(model.input.cursor, c);
-                model.input.cursor += 1;
-            }
+            // The time log modal has its own TimeLogInputChar/Backspace messages.
+            model.input.buffer.insert(model.input.cursor, c);
+            model.input.cursor += 1;
         }
         UiMessage::InputBackspace => {
-            // Check if we're editing time log
-            if model.time_log.visible
-                && matches!(
-                    model.time_log.mode,
-                    crate::ui::TimeLogMode::EditStart | crate::ui::TimeLogMode::EditEnd
-                )
-            {
-                model.time_log.buffer.pop();
-            } else if model.input.cursor > 0 {
+            if model.input.cursor > 0 {
                 model.input.cursor -= 1;
                 model.input.buffer.remove(model.input.cursor);
             }

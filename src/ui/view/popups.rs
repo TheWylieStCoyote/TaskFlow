@@ -194,8 +194,9 @@ pub(super) fn render_popups(model: &Model, frame: &mut Frame<'_>, area: Rect, th
     if model.time_log.visible {
         if let Some(task_id) = model.visible_tasks.get(model.selected_index) {
             let entries = model.time_entries_for_task(task_id);
-            // Height: min 5, max 15 depending on entries
-            let height = (entries.len() as u16 + 4).clamp(5, 15);
+            // Height follows the grouped rows (day headers + entries + footer),
+            // capped so the list scrolls instead of overflowing the screen.
+            let height = TimeLogEditor::preferred_height(&entries).min(20);
             let editor_area = centered_rect_fixed_height(70, height, area);
             frame.render_widget(
                 TimeLogEditor::new(

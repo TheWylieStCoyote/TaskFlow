@@ -126,51 +126,7 @@ fn format_duration_input(minutes: u32) -> String {
 /// Parse a duration string (e.g., "1h30m", "90m", "1.5h", "2h") into minutes.
 /// Returns None if the input is empty or invalid.
 fn parse_duration_input(input: &str) -> Option<u32> {
-    let input = input.trim().to_lowercase();
-    if input.is_empty() {
-        return None;
-    }
-
-    // Try parsing as plain number (assume minutes)
-    if let Ok(mins) = input.parse::<u32>() {
-        return Some(mins);
-    }
-
-    // Try parsing as decimal hours (e.g., "1.5h")
-    if let Some(hours_str) = input.strip_suffix('h') {
-        if let Ok(hours) = hours_str.parse::<f64>() {
-            return Some((hours * 60.0).round() as u32);
-        }
-    }
-
-    // Try parsing as minutes only (e.g., "90m")
-    if let Some(mins_str) = input.strip_suffix('m') {
-        if !mins_str.contains('h') {
-            if let Ok(mins) = mins_str.parse::<u32>() {
-                return Some(mins);
-            }
-        }
-    }
-
-    // Try parsing as hours and minutes (e.g., "1h30m" or "1h 30m")
-    let input = input.replace(' ', "");
-    if let Some(h_pos) = input.find('h') {
-        let hours_str = &input[..h_pos];
-        let rest = &input[h_pos + 1..];
-
-        if let Ok(hours) = hours_str.parse::<u32>() {
-            let mins = if rest.is_empty() {
-                0
-            } else if let Some(mins_str) = rest.strip_suffix('m') {
-                mins_str.parse::<u32>().unwrap_or(0)
-            } else {
-                rest.parse::<u32>().unwrap_or(0)
-            };
-            return Some(hours * 60 + mins);
-        }
-    }
-
-    None
+    crate::domain::duration::parse_minutes(input)
 }
 
 /// Parse a single time string into a NaiveTime.
@@ -772,7 +728,12 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::TimeLogCancel
         | UiMessage::TimeLogSubmit
         | UiMessage::TimeLogAddEntry
-        | UiMessage::TimeLogDelete => {
+        | UiMessage::TimeLogDelete
+        | UiMessage::TimeLogEditNote
+        | UiMessage::TimeLogEditDate
+        | UiMessage::TimeLogNudge(_)
+        | UiMessage::TimeLogInputChar(_)
+        | UiMessage::TimeLogInputBackspace => {
             handle_ui_time_log(model, msg);
         }
         // Work log editor - delegated to helper

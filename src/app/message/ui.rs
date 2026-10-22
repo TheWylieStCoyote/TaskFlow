@@ -228,12 +228,22 @@ pub enum UiMessage {
     TimeLogConfirmDelete,
     /// Cancel time log operation
     TimeLogCancel,
-    /// Submit time log edit
+    /// Submit the current time log prompt (edit or add)
     TimeLogSubmit,
-    /// Add new time entry for selected task
+    /// Open the add-entry prompt (`[date] START[-END | +DURATION] [note]`)
     TimeLogAddEntry,
     /// Delete the selected time entry
     TimeLogDelete,
+    /// Start editing the selected entry's description
+    TimeLogEditNote,
+    /// Start moving the selected entry to another date
+    TimeLogEditDate,
+    /// Nudge the selected entry's duration by this many minutes (±5)
+    TimeLogNudge(i32),
+    /// Type a character into the time log prompt
+    TimeLogInputChar(char),
+    /// Delete the last character of the time log prompt
+    TimeLogInputBackspace,
 
     // Work log editor
     /// Show the work log editor for selected task

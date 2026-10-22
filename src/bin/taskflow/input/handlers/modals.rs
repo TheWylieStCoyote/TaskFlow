@@ -70,13 +70,13 @@ pub fn handle_keybindings_editor(key: event::KeyEvent, model: &Model) -> Message
 /// Handle time log editor input
 pub fn handle_time_log(key: event::KeyEvent, model: &Model) -> Message {
     match model.time_log.mode {
-        TimeLogMode::EditStart | TimeLogMode::EditEnd => {
-            // Editing time - handle character input
+        mode if mode.is_text_input() => {
+            // Prompt open (start/end/note/date/add) - handle character input
             match key.code {
                 KeyCode::Esc => Message::Ui(UiMessage::TimeLogCancel),
                 KeyCode::Enter => Message::Ui(UiMessage::TimeLogSubmit),
-                KeyCode::Backspace => Message::Ui(UiMessage::InputBackspace),
-                KeyCode::Char(c) => Message::Ui(UiMessage::InputChar(c)),
+                KeyCode::Backspace => Message::Ui(UiMessage::TimeLogInputBackspace),
+                KeyCode::Char(c) => Message::Ui(UiMessage::TimeLogInputChar(c)),
                 _ => Message::None,
             }
         }
@@ -90,14 +90,18 @@ pub fn handle_time_log(key: event::KeyEvent, model: &Model) -> Message {
                 _ => Message::None,
             }
         }
-        TimeLogMode::Browse => {
-            // Normal time log navigation
+        _ => {
+            // Browse: navigation and entry actions
             match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => Message::Ui(UiMessage::HideTimeLog),
                 KeyCode::Up | KeyCode::Char('k') => Message::Ui(UiMessage::TimeLogUp),
                 KeyCode::Down | KeyCode::Char('j') => Message::Ui(UiMessage::TimeLogDown),
                 KeyCode::Char('s') => Message::Ui(UiMessage::TimeLogEditStart),
                 KeyCode::Char('e') => Message::Ui(UiMessage::TimeLogEditEnd),
+                KeyCode::Char('n') => Message::Ui(UiMessage::TimeLogEditNote),
+                KeyCode::Char('t') => Message::Ui(UiMessage::TimeLogEditDate),
+                KeyCode::Char('+') | KeyCode::Char('=') => Message::Ui(UiMessage::TimeLogNudge(5)),
+                KeyCode::Char('-') | KeyCode::Char('_') => Message::Ui(UiMessage::TimeLogNudge(-5)),
                 KeyCode::Char('d') => Message::Ui(UiMessage::TimeLogConfirmDelete),
                 KeyCode::Char('a') => Message::Ui(UiMessage::TimeLogAddEntry),
                 _ => Message::None,
@@ -451,9 +455,15 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn time_log_edit_modes_take_text_input() {
+    fn time_log_prompt_modes_take_text_input() {
         let mut model = Model::new();
-        for mode in [TimeLogMode::EditStart, TimeLogMode::EditEnd] {
+        for mode in [
+            TimeLogMode::EditStart,
+            TimeLogMode::EditEnd,
+            TimeLogMode::EditNote,
+            TimeLogMode::EditDate,
+            TimeLogMode::Add,
+        ] {
             model.time_log.mode = mode;
             assert!(matches!(
                 handle_time_log(key(KeyCode::Esc), &model),
@@ -465,12 +475,19 @@ mod tests {
             ));
             assert!(matches!(
                 handle_time_log(key(KeyCode::Backspace), &model),
-                Message::Ui(UiMessage::InputBackspace)
+                Message::Ui(UiMessage::TimeLogInputBackspace)
             ));
             assert!(matches!(
                 handle_time_log(ch('7'), &model),
-                Message::Ui(UiMessage::InputChar('7'))
+                Message::Ui(UiMessage::TimeLogInputChar('7'))
             ));
+            // Action keys are plain text while a prompt is open
+            for c in ['s', 'e', 'n', 't', 'd', 'a', '+', '-', 'j', 'k', 'q'] {
+                assert!(matches!(
+                    handle_time_log(ch(c), &model),
+                    Message::Ui(UiMessage::TimeLogInputChar(x)) if x == c
+                ));
+            }
             assert!(matches!(
                 handle_time_log(key(KeyCode::Tab), &model),
                 Message::None
@@ -527,6 +544,26 @@ mod tests {
             handle_time_log(ch('e'), &model),
             Message::Ui(UiMessage::TimeLogEditEnd)
         ));
+        assert!(matches!(
+            handle_time_log(ch('n'), &model),
+            Message::Ui(UiMessage::TimeLogEditNote)
+        ));
+        assert!(matches!(
+            handle_time_log(ch('t'), &model),
+            Message::Ui(UiMessage::TimeLogEditDate)
+        ));
+        for k in [ch('+'), ch('=')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogNudge(5))
+            ));
+        }
+        for k in [ch('-'), ch('_')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogNudge(-5))
+            ));
+        }
         assert!(matches!(
             handle_time_log(ch('d'), &model),
             Message::Ui(UiMessage::TimeLogConfirmDelete)

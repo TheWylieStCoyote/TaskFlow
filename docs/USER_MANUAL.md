@@ -741,7 +741,7 @@ Track how long you spend on tasks with the built-in timer.
 #### Start Tracking
 1. Select a task
 2. Press `t` to start the timer
-3. A `⏱` appears next to the task
+3. A red `●` appears next to the task in the list
 4. The footer shows elapsed time
 
 #### Stop Tracking
@@ -761,30 +761,62 @@ View and edit all time entries for a task:
 1. Select a task
 2. Press `L` to open the time log
 
-The editor shows:
+Entries are grouped by day (newest day first) with a per-day total, and the
+footer sums the whole log. A running entry shows `now` as its end, its live
+elapsed time and a red `●`:
+
 ```
-┌─────────────────────────────────────────┐
-│ Time Log - Fix login bug                │
-├─────────────────────────────────────────┤
-│ Dec 15, 2025                            │
-│   09:30 - 11:15  (1h 45m)              │
-│   14:00 - 15:30  (1h 30m)              │
-│                                         │
-│ Dec 14, 2025                            │
-│   10:00 - 12:30  (2h 30m)              │
-├─────────────────────────────────────────┤
-│ Total: 5h 45m                           │
-└─────────────────────────────────────────┘
+┌ Time Log · a add · s/e start/end · n note · t date · +/- 5m · d delete · Esc ┐
+│ Tue 2026-10-21 ······································ 2h 15m │
+│   09:30 – 11:15   1h 45m   standup prep                     │
+│ ● 14:00 – now     30m                                       │
+│ Mon 2026-10-20 ······································ 3h 30m │
+│   08:15 – 11:45   3h 30m                                    │
+│ Total: 5h 45m · 3 entries                                   │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+`j`/`k` move over entries only; day headers are skipped and the list scrolls
+to keep the selection visible.
 
 #### Time Log Actions
 | Key | Action |
 |-----|--------|
-| `a` | Add new time entry |
-| `e` | Edit selected entry |
-| `d` | Delete selected entry |
+| `a` | Add an entry (opens the prompt below) |
+| `s` | Edit the selected entry's start time (`HH:MM`) |
+| `e` | Edit the end time (`HH:MM`; an end before the start rolls to the next day) |
+| `n` | Edit the entry's note |
+| `t` | Move the entry to another date (`YYYY-MM-DD`, `today`, `yesterday`, `-N`) |
+| `+` / `-` | Lengthen / shorten the entry by 5 minutes (adjusts the end; not on a running entry) |
+| `d` | Delete the selected entry (asks `y`/`n`) |
 | `j`/`k` | Navigate entries |
-| `Esc` | Close log |
+| `Esc` | Close the log, or cancel an open prompt |
+
+Every edit is undoable with `u`, and the task's total time is recomputed immediately.
+
+#### Adding an Entry
+`a` opens a one-line prompt prefilled with today's date. Enter saves:
+
+```
+[date] START[-END | +DURATION] [note]
+```
+
+- **date** (optional): `YYYY-MM-DD`, `today`, `yesterday`, or `-N` for N days ago; defaults to today
+- **START**, **END**: local clock times such as `09:00`, `9:00`, `2:30pm`
+- **DURATION**: `1h30m`, `90m`, `1.5h`, `2h`
+- an END before START rolls over to the next day
+- everything after the time is kept as the entry's note
+
+Examples:
+
+```
+09:00-10:30 standup
+-1 14:00 +45m review
+2026-10-20 08:15-09:00
+yesterday 23:00-01:00 night shift
+```
+
+A parse error is shown in the status bar and the prompt stays open so you can fix it.
 
 ### Pomodoro Timer
 

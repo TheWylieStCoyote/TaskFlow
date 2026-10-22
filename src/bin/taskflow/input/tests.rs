@@ -781,3 +781,36 @@ fn custom_keybindings_are_honoured() {
         Message::System(SystemMessage::Save)
     ));
 }
+
+#[test]
+fn focus_mode_plus_minus_adjust_pomodoro_goal_only_during_a_session() {
+    use taskflow::app::PomodoroMessage;
+    use taskflow::domain::{PomodoroConfig, PomodoroSession, TaskId};
+
+    let mut model = Model::new();
+    model.focus_mode = true;
+
+    // No session: the keys fall through to normal handling (not a Pomodoro message).
+    assert!(!matches!(
+        dispatch(&mut model, ch('+')),
+        Message::Pomodoro(PomodoroMessage::IncrementGoal)
+    ));
+
+    model.pomodoro.session = Some(PomodoroSession::new(
+        TaskId::new(),
+        &PomodoroConfig::default(),
+        4,
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('+')),
+        Message::Pomodoro(PomodoroMessage::IncrementGoal)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('=')),
+        Message::Pomodoro(PomodoroMessage::IncrementGoal)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('-')),
+        Message::Pomodoro(PomodoroMessage::DecrementGoal)
+    ));
+}

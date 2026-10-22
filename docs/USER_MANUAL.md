@@ -796,9 +796,15 @@ The Pomodoro Technique helps maintain focus through timed work sessions.
 3. **Repeat**: After 4 cycles, take a long break (15 minutes)
 
 #### Start a Pomodoro Session
-1. Select a task (optional)
-2. Press `F5` to start
-3. The timer appears in the header/footer
+1. Select a task (required; the session is attached to it)
+2. Press `F5` to start (TaskFlow switches into focus mode)
+3. The timer appears in the footer
+
+Work phases are recorded as time entries on the task, so Pomodoro time
+shows up in the time log, the Dashboard and the Reports → Time panel.
+Breaks and pauses are not recorded. If a timer is already running on the
+task it keeps running; a timer you move to a different task by hand is
+left alone when the session ends.
 
 #### Timer Display
 ```
@@ -815,18 +821,13 @@ The Pomodoro Technique helps maintain focus through timed work sessions.
 | `F6` | Pause/Resume |
 | `F7` | Skip current phase |
 | `F8` | Stop session |
-| `+` | Increase cycle goal |
-| `-` | Decrease cycle goal |
+| `+` / `-` | Increase / decrease the cycle goal (in focus mode, while a session runs) |
 
 #### Configuration
-Customize timings in `~/.config/taskflow/config.toml`:
-```toml
-[pomodoro]
-work_minutes = 25
-short_break_minutes = 5
-long_break_minutes = 15
-cycles_before_long_break = 4
-```
+Timings are stored alongside your tasks in the data file (not in
+`config.toml`) under `pomodoro_config`, and default to 25/5/15 minutes with
+a long break every 4 cycles. See the README's "Pomodoro Configuration"
+section for the exact keys.
 
 ### Focus Mode
 
@@ -1628,7 +1629,7 @@ Use `--data <path>` to specify a custom location.
 3. Import CSV: `I`
 
 #### Q: The timer kept running while I was away
-**A:** This is by design—the timer persists across restarts. Open the time log (`L`) and edit the entry to fix incorrect times.
+**A:** This is by design—the timer persists across restarts. Open the time log (`L`), select the entry and press `e` to correct its end time; the task's total updates immediately.
 
 #### Q: Can I use TaskFlow over SSH?
 **A:** Yes! TaskFlow works in any terminal, including remote sessions. Make sure your SSH connection supports UTF-8.

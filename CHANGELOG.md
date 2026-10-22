@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Time tracking foundation**: one shared duration formatter (`2h`, `1h 30m`), `TimeAnalytics` breakdowns by project, task, tag, day and local hour, and Pomodoro work phases recorded as time entries on the task (`+`/`-` adjust the cycle goal in focus mode)
 - **Pipe Interface**: Scripting integration via `taskflow pipe` command for stdin/stdout interaction
   - Full CRUD operations for all entity types (tasks, projects, time entries, work logs, habits, goals, key results, tags)
   - JSON request/response protocol for programmatic access
@@ -43,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Time totals counted twice**: Reports → Time, Insights and the Markdown/HTML reports added each task's cached total on top of its time entries; focus mode added the live session twice
+- **Stale task totals**: `actual_minutes` was only recomputed when a timer stopped; adding, editing or deleting time log entries, undo and the pipe API now recompute it and refresh caches
+- **Time log used UTC**: entries are displayed and edited in local time; an end time before the start rolls to the next day
+- Evening review counted a running timer as zero; `taskflow stats` ignored manually corrected durations
 - **Doc Tests**: Converted ignored documentation tests to runnable examples
 - **Snapshot Tests**: Replaced environment-sensitive snapshots with assertion-based tests
 - **Clippy Warnings**: Resolved all linter warnings for cleaner codebase

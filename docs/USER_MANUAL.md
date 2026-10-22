@@ -1350,6 +1350,7 @@ TaskFlow maintains a history of your actions:
 **Undoable actions include:**
 - Creating/deleting tasks
 - Editing task properties
+- Snoozing a task or clearing its snooze (single task, bulk, and evening review)
 - Creating/deleting projects
 - Time tracking operations
 - Moving tasks between projects

@@ -1,6 +1,6 @@
 //! Time tracking methods for the Model.
 
-use crate::domain::{TaskId, TimeEntry, TimeEntryId};
+use crate::domain::{time_entry_display_order, TaskId, TimeEntry, TimeEntryId};
 
 use super::Model;
 
@@ -149,7 +149,9 @@ impl Model {
             .sum()
     }
 
-    /// Returns all time entries for a task, sorted by start time (newest first).
+    /// Returns all time entries for a task in display order: days newest
+    /// first, and within a day in chronological order (see
+    /// [`time_entry_display_order`]).
     ///
     /// Uses cached task→entry index for O(k) lookup where k = entries for task.
     #[must_use]
@@ -164,7 +166,7 @@ impl Model {
                     .collect()
             })
             .unwrap_or_default();
-        entries.sort_by_key(|a| std::cmp::Reverse(a.started_at));
+        entries.sort_by(|a, b| time_entry_display_order(a, b));
         entries
     }
 

@@ -2,7 +2,8 @@
 //!
 //! A modal popup for viewing and editing the time entries of a task. Entries
 //! are grouped by local calendar day (newest day first) under a header that
-//! carries the day's total, and a footer sums the whole log.
+//! carries the day's total; within a day they run in time order, and a footer
+//! sums the whole log.
 //!
 //! ```text
 //! Tue 2026-10-21 ·························· 2h 15m
@@ -32,7 +33,7 @@ use ratatui::{
 };
 
 use crate::config::Theme;
-use crate::domain::{format_minutes, LocalDate, TimeEntry, TimeEntryId};
+use crate::domain::{format_minutes, time_entry_display_order, LocalDate, TimeEntry, TimeEntryId};
 
 /// Mode for time log editor
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -58,25 +59,29 @@ impl TimeLogMode {
     }
 }
 
-/// The entries of one local calendar day, newest first.
+/// The entries of one local calendar day, in chronological order.
 #[derive(Debug)]
 pub struct DayGroup<'a> {
     /// Local calendar date of the group
     pub date: NaiveDate,
     /// Sum of the group's entry durations (running entries count their elapsed time)
     pub total_minutes: u32,
-    /// `(index into the original entry list, entry)` pairs, newest first
+    /// `(index into the original entry list, entry)` pairs, oldest first
     pub entries: Vec<(usize, &'a TimeEntry)>,
 }
 
-/// Group entries by their local start date, newest day first.
+/// Group entries by their local start date, newest day first; within a day
+/// entries run in chronological order.
 ///
-/// Each entry keeps its index in `entries` so that the caller's selection
-/// index (which counts entries only, never headers) stays meaningful.
+/// Sorting uses [`time_entry_display_order`], the same order as
+/// `Model::time_entries_for_task`, so a list that already came from the
+/// model keeps its positions. Each entry keeps its index in `entries` so that
+/// the caller's selection index (which counts entries only, never headers)
+/// stays meaningful.
 #[must_use]
 pub fn group_by_day<'a>(entries: &[&'a TimeEntry]) -> Vec<DayGroup<'a>> {
     let mut indexed: Vec<(usize, &'a TimeEntry)> = entries.iter().copied().enumerate().collect();
-    indexed.sort_by_key(|(_, e)| std::cmp::Reverse(e.started_at));
+    indexed.sort_by(|(_, a), (_, b)| time_entry_display_order(a, b));
 
     let mut groups: Vec<DayGroup<'a>> = Vec::new();
     for (idx, entry) in indexed {
@@ -510,12 +515,12 @@ mod tests {
         let a = entry_on(0, 9, 30, 105); // today
         let b = entry_on(0, 14, 0, 30); // today
         let c = entry_on(1, 8, 15, 210); // yesterday
-        let groups = group_by_day(&[&c, &a, &b]);
+        let groups = group_by_day(&[&c, &b, &a]);
 
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].date, today());
         assert_eq!(groups[0].total_minutes, 135);
-        // newest first within the day, indices refer to the input order
+        // chronological within the day, indices refer to the input order
         assert_eq!(
             groups[0]
                 .entries
@@ -527,6 +532,33 @@ mod tests {
         assert_eq!(groups[1].date, today() - Duration::days(1));
         assert_eq!(groups[1].total_minutes, 210);
         assert_eq!(groups[1].entries[0].0, 0);
+    }
+
+    #[test]
+    fn group_by_day_keeps_model_order_so_indices_are_positions() {
+        // Already in display order (days newest first, chronological within a
+        // day): grouping must not move anything, so the selection index that
+        // indexes the model's list also indexes the rendered rows.
+        let a = entry_on(0, 9, 0, 30);
+        let b = entry_on(0, 14, 0, 30);
+        let c = entry_on(1, 8, 0, 30);
+        let d = entry_on(1, 17, 0, 30);
+        let groups = group_by_day(&[&a, &b, &c, &d]);
+
+        let positions: Vec<Vec<usize>> = groups
+            .iter()
+            .map(|g| g.entries.iter().map(|(i, _)| *i).collect())
+            .collect();
+        assert_eq!(positions, vec![vec![0, 1], vec![2, 3]]);
+
+        let rendered = render(&[&a, &b, &c, &d], 0, TimeLogMode::Browse, "");
+        let nine = rendered.find("09:00 – 09:30").unwrap();
+        let fourteen = rendered.find("14:00 – 14:30").unwrap();
+        let eight = rendered.find("08:00 – 08:30").unwrap();
+        let seventeen = rendered.find("17:00 – 17:30").unwrap();
+        assert!(nine < fourteen, "today reads in time order");
+        assert!(fourteen < eight, "today before yesterday");
+        assert!(eight < seventeen, "yesterday reads in time order");
     }
 
     #[test]

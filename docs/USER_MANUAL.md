@@ -789,8 +789,8 @@ View and edit all time entries for a task:
 2. Press `L` to open the time log
 
 Entries are grouped by day (newest day first) with a per-day total, and the
-footer sums the whole log. A running entry shows `now` as its end, its live
-elapsed time and a red `●`:
+footer sums the whole log. Within a day, entries run in time order. A running
+entry shows `now` as its end, its live elapsed time and a red `●`:
 
 ```
 ┌ Time Log · a add · s/e start/end · n note · t date · +/- 5m · d delete · Esc ┐

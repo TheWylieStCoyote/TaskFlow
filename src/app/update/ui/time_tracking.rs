@@ -184,8 +184,9 @@ fn close_prompt(model: &mut Model) {
     model.time_log.buffer.clear();
 }
 
-/// Move the cursor onto `entry_id` (entries are sorted newest first, so an
-/// edited start time can change an entry's position).
+/// Move the cursor onto `entry_id` (entries are listed by day, newest day
+/// first and chronological within a day, so an edited start time or date can
+/// change an entry's position).
 fn select_entry(model: &mut Model, task_id: &TaskId, entry_id: TimeEntryId) {
     if let Some(pos) = model
         .time_entries_for_task(task_id)

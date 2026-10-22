@@ -2,11 +2,13 @@
 //!
 //! Time entries record how much time is spent on individual tasks.
 
+use std::cmp::{Ordering, Reverse};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::TaskId;
+use super::{LocalDate, TaskId};
 
 /// Unique identifier for time entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -131,9 +133,93 @@ impl TimeEntry {
     }
 }
 
+/// The order time entries are listed in: days newest first, and within a
+/// day entries in chronological order.
+///
+/// Days are local calendar dates of `started_at`. Equal start times fall back
+/// to the entry id so the order is deterministic. The model's per-task entry
+/// list and the time log editor's day grouping both sort with this, so an
+/// index into one is valid in the other.
+///
+/// ```
+/// use taskflow::domain::{time_entry_display_order, Task, TimeEntry};
+/// use chrono::Duration;
+///
+/// let task = Task::new("Ordering");
+/// let mut later = TimeEntry::start(task.id);
+/// let mut earlier = later.clone();
+/// earlier.started_at -= Duration::minutes(5);
+/// // Same day: the earlier entry comes first.
+/// assert!(time_entry_display_order(&earlier, &later).is_lt());
+/// later.started_at -= Duration::days(1);
+/// // A newer day comes first regardless of the clock time.
+/// assert!(time_entry_display_order(&earlier, &later).is_lt());
+/// ```
+#[must_use]
+pub fn time_entry_display_order(a: &TimeEntry, b: &TimeEntry) -> Ordering {
+    let key = |e: &TimeEntry| (Reverse(e.started_at.local_date()), e.started_at, e.id.0);
+    key(a).cmp(&key(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{Duration, Local, TimeZone};
+
+    /// A stopped entry starting at `h:m` local on today minus `days_ago`.
+    fn entry_on(task_id: TaskId, days_ago: i64, h: u32, m: u32) -> TimeEntry {
+        let date = crate::domain::today() - Duration::days(days_ago);
+        let started_at = Local
+            .from_local_datetime(&date.and_hms_opt(h, m, 0).unwrap())
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut e = TimeEntry::start(task_id);
+        e.started_at = started_at;
+        e.ended_at = Some(started_at + Duration::minutes(30));
+        e.duration_minutes = Some(30);
+        e
+    }
+
+    #[test]
+    fn display_order_is_days_newest_first_then_chronological() {
+        let task_id = TaskId::new();
+        let today_early = entry_on(task_id, 0, 9, 0);
+        let today_late = entry_on(task_id, 0, 14, 0);
+        let yesterday_late = entry_on(task_id, 1, 23, 30);
+        let yesterday_early = entry_on(task_id, 1, 8, 0);
+
+        let mut entries = [&yesterday_late, &today_late, &yesterday_early, &today_early];
+        entries.sort_by(|a, b| time_entry_display_order(a, b));
+        let ids: Vec<_> = entries.iter().map(|e| e.id).collect();
+        assert_eq!(
+            ids,
+            vec![
+                today_early.id,
+                today_late.id,
+                yesterday_early.id,
+                yesterday_late.id
+            ]
+        );
+    }
+
+    #[test]
+    fn display_order_breaks_equal_starts_by_id() {
+        let task_id = TaskId::new();
+        let a = entry_on(task_id, 0, 9, 0);
+        let mut b = a.clone();
+        b.id = TimeEntryId::new();
+        assert_eq!(time_entry_display_order(&a, &a), Ordering::Equal);
+        assert_eq!(
+            time_entry_display_order(&a, &b),
+            a.id.0.cmp(&b.id.0),
+            "ties fall back to the id"
+        );
+        assert_eq!(
+            time_entry_display_order(&a, &b),
+            time_entry_display_order(&b, &a).reverse()
+        );
+    }
 
     #[test]
     fn test_time_entry_start() {

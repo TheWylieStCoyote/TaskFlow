@@ -15,25 +15,17 @@ fn create_model_with_time_entries() -> Model {
     model.tasks.insert(task_id, task);
     model.selected_index = 0;
 
-    // Create some time entries
-    let now = Utc::now();
-    let entry1 = {
+    // Two stopped hour-long entries today, 09:00 and 11:00 local. Fixed clock
+    // times keep both on the same local day whatever time the tests run, so
+    // the list order (chronological within the day) is 09:00 then 11:00.
+    for h in [9, 11] {
+        let started_at = local_dt(today(), h, 0);
         let mut e = TimeEntry::start(task_id);
-        e.started_at = now - Duration::hours(3);
-        e.ended_at = Some(now - Duration::hours(2));
+        e.started_at = started_at;
+        e.ended_at = Some(started_at + Duration::hours(1));
         e.duration_minutes = Some(60);
-        e
-    };
-    model.time_entries.insert(entry1.id, entry1);
-
-    let entry2 = {
-        let mut e = TimeEntry::start(task_id);
-        e.started_at = now - Duration::hours(1);
-        e.ended_at = Some(now);
-        e.duration_minutes = Some(60);
-        e
-    };
-    model.time_entries.insert(entry2.id, entry2);
+        model.time_entries.insert(e.id, e);
+    }
 
     // Refresh after all data is inserted so caches are populated
     model.refresh_visible_tasks();
@@ -300,8 +292,8 @@ fn edit_start_is_interpreted_as_local_clock_time() {
     model.time_log.mode = TimeLogMode::EditStart;
     model.time_log.selected = 0;
     model.time_log.buffer = "08:15".to_string();
-    // Entries list newest-first, so the edited entry may move after the
-    // edit; follow it by id rather than by position.
+    // Entries are listed chronologically within a day, so the edited entry
+    // may move after the edit; follow it by id rather than by position.
     let edited_id = model.time_entries_for_task(&task_id)[0].id;
 
     update(&mut model, Message::Ui(UiMessage::TimeLogSubmit));
@@ -579,10 +571,43 @@ fn add_can_be_undone() {
 // ---------------------------------------------------------------------------
 
 #[test]
+fn entries_list_days_newest_first_and_within_day_chronological() {
+    // Inserted out of order: today 14:00, today 09:00, yesterday 10:00.
+    let model = model_with_entries(&[(0, 14, 0, 30), (0, 9, 0, 30), (1, 10, 0, 30)]);
+    let task_id = selected_task(&model);
+
+    let entries = model.time_entries_for_task(&task_id);
+    let listed: Vec<(NaiveDate, String)> = entries
+        .iter()
+        .map(|e| (e.started_at.local_date(), local_hm(e.started_at)))
+        .collect();
+    assert_eq!(
+        listed,
+        vec![
+            (today(), "09:00".to_string()),
+            (today(), "14:00".to_string()),
+            (today() - Duration::days(1), "10:00".to_string()),
+        ]
+    );
+
+    // The editor groups the same list without moving anything, so the
+    // selection index means the same entry in both.
+    let groups = crate::ui::group_by_day(&entries);
+    let positions: Vec<Vec<usize>> = groups
+        .iter()
+        .map(|g| g.entries.iter().map(|(i, _)| *i).collect())
+        .collect();
+    assert_eq!(positions, vec![vec![0, 1], vec![2]]);
+    assert_eq!(local_hm(selected_entry(&model).started_at), "09:00");
+}
+
+#[test]
 fn selection_moves_over_entries_only_across_days() {
-    // Three entries on three days: three headers, three entry rows.
+    // Three entries on three days (newest day first): three headers, three
+    // entry rows.
     let mut model = model_with_entries(&[(0, 9, 0, 30), (1, 9, 0, 30), (2, 9, 0, 30)]);
     assert_eq!(model.time_log.selected, 0);
+    assert_eq!(selected_entry(&model).started_at.local_date(), today());
 
     update(&mut model, Message::Ui(UiMessage::TimeLogDown));
     assert_eq!(model.time_log.selected, 1);
@@ -694,18 +719,24 @@ fn edit_date_moves_entry_keeping_clock_times() {
 
 #[test]
 fn edit_date_reselects_moved_entry_after_reordering() {
-    // Two entries today; moving the newer one back a day puts it last.
+    // Two entries today, listed 09:00 then 14:00; moving the first one back
+    // a day puts it under yesterday's header, after today's 14:00 entry.
     let mut model = model_with_entries(&[(0, 9, 0, 30), (0, 14, 0, 30)]);
-    assert_eq!(local_hm(selected_entry(&model).started_at), "14:00");
+    assert_eq!(local_hm(selected_entry(&model).started_at), "09:00");
 
     update(&mut model, Message::Ui(UiMessage::TimeLogEditDate));
     model.time_log.buffer = "yesterday".to_string();
     update(&mut model, Message::Ui(UiMessage::TimeLogSubmit));
 
-    assert_eq!(model.time_log.selected, 1);
+    assert_eq!(model.time_log.selected, 1, "cursor follows the moved entry");
     let entry = selected_entry(&model);
-    assert_eq!(local_hm(entry.started_at), "14:00");
+    assert_eq!(local_hm(entry.started_at), "09:00");
     assert_eq!(entry.started_at.local_date(), today() - Duration::days(1));
+    assert_eq!(
+        local_hm(model.time_entries_for_task(&selected_task(&model))[0].started_at),
+        "14:00",
+        "today's remaining entry now heads the list"
+    );
 }
 
 #[test]

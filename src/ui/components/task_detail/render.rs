@@ -449,11 +449,16 @@ impl TaskDetail<'_> {
         let theme = self.theme;
         let mut lines = Vec::new();
 
-        let entries = self.model.time_entries_for_task(&task.id);
+        let mut entries = self.model.time_entries_for_task(&task.id);
 
         if entries.is_empty() {
             return lines;
         }
+
+        // The model lists entries by day (chronological within a day); the
+        // preview is truncated, so order it most recent first to keep the
+        // latest entries visible.
+        entries.sort_by_key(|e| std::cmp::Reverse(e.started_at));
 
         // Section header
         lines.push(Line::from(Span::styled(
@@ -463,7 +468,7 @@ impl TaskDetail<'_> {
                 .add_modifier(Modifier::BOLD),
         )));
 
-        // Show last 5 entries
+        // Show the 5 most recent entries
         for entry in entries.iter().take(5) {
             let duration = entry.calculated_duration_minutes();
             let date = entry

@@ -1647,14 +1647,16 @@ printf '%s\n' \
 | Field | Required | Meaning |
 |-------|----------|---------|
 | `operation` | yes | `list`, `get`, `create`, `update`, `delete`, `export`, `import` |
-| `entity` | yes | `task`, `project`, `time_entry`, `work_log`, `habit`, `goal`, `key_result`, `tag`, `saved_filter` (always required, even for `export`/`import`, which ignore it) |
+| `entity` | yes | `task`, `project`, `time_entry`, `work_log`, `habit`, `goal`, `key_result`, `tag`, `audit_log`, `saved_filter` (always required, even for `export`/`import`, which ignore it) |
 | `id` | `get`, `update`, `delete` | The entity's UUID (for `tag`, the tag name) |
 | `data` | `create`, `update`, `import` | Fields to set (see per-entity tables) |
 | `filters` | `list` (optional) | See **Filters** |
 
 `saved_filter` is accepted by the parser but every operation on it answers
 `NOT_IMPLEMENTED`. `tag` supports `list` and `get` only (tags are derived from
-tasks and habits). `export` and `import` are top-level operations; sending them
+tasks and habits), and so does `audit_log` (the application appends to it;
+`create`/`update`/`delete` answer `READ_ONLY`). `export` and `import` are
+top-level operations; sending them
 with an entity's own handler is not possible, so the `entity` value is
 irrelevant for them.
 
@@ -1670,8 +1672,8 @@ irrelevant for them.
 
 - `data` is the created/updated/fetched entity, `{"deleted": "<id>"}` for
   `delete`, or for `list` an object with the entity array (`tasks`,
-  `projects`, `time_entries`, `work_logs`, `habits`, `goals`, `key_results`
-  or `tags`) plus `total`, `offset` and `limit`.
+  `projects`, `time_entries`, `work_logs`, `habits`, `goals`, `key_results`,
+  `tags` or `audit_logs`) plus `total`, `offset` and `limit`.
 - `metadata` is present only when `data` carries `total`/`offset`/`limit`
   (i.e. for `list`).
 - Errors look like `{"success": false, "error": {"code": "...", "message": "..."}}`
@@ -1688,6 +1690,7 @@ irrelevant for them.
 | `MISSING_DATA` | `create`/`update`/`import` without `data`, or a required field (`title`, `name`, `task_id`, `goal_id`, `content`) is missing |
 | `INVALID_DATA` | `data` has the wrong shape (e.g. `tags` is not an array) |
 | `INVALID_OPERATION` | `create`/`update`/`delete` on `tag`; `export`/`import` routed to an entity handler |
+| `READ_ONLY` | `create`/`update`/`delete` on `audit_log` |
 | `NOT_IMPLEMENTED` | Any operation on `saved_filter` |
 | `SERIALIZE_ERROR` / `SERIALIZATION_ERROR` | The response could not be encoded (CSV columns could not be determined, etc.) |
 
@@ -1698,23 +1701,26 @@ All fields are optional. Unknown fields are ignored.
 | Field | Type | Applies to | Meaning |
 |-------|------|-----------|---------|
 | `project_id` | string | task | Only tasks in this project (UUID) |
-| `project_id` | string | time_entry, work_log | **Task** UUID (the field is reused as the task filter) |
+| `project_id` | string | time_entry, work_log, audit_log | **Task** UUID (the field is reused as the task filter) |
 | `project_id` | string | key_result | **Goal** UUID |
 | `tags` | [string] | task, habit | Case-insensitive tag match |
 | `tags_mode` | `"all"` (default) or `"any"` | task, habit | Require every tag, or at least one |
-| `status` | [string] | task, project, goal | Task: `todo`, `in_progress`, `blocked`, `done`, `cancelled`. Project/goal: `active`, `on_hold`, `completed`, `archived` |
+| `status` | [string] | task, project, goal, audit_log | Task: `todo`, `in_progress`, `blocked`, `done`, `cancelled`. Project/goal: `active`, `on_hold`, `completed`, `archived`. Audit log: the **action** (`created`, `modified`, `completed`, `uncompleted`, `deleted`; any listed action matches) |
 | `priority` | [string] | task | `none`, `low`, `medium`, `high`, `urgent` |
 | `search` | string | task, project, goal, key_result, habit, work_log, tag | Case-insensitive substring of title/name (+ description; tasks also match tags; work logs match content) |
-| `due_before`, `due_after` | `YYYY-MM-DD` | task | Inclusive due-date bounds |
+| `due_before`, `due_after` | `YYYY-MM-DD` | task, audit_log | Inclusive due-date bounds. Audit log: inclusive bounds on the UTC date of `changed_at` |
 | `include_completed` | bool (default `false`) | task, goal, habit | Include done/cancelled tasks, completed/archived goals, archived habits |
 | `sort_by` | string | task, tag | Task: `due_date`, `priority` (highest first), `title`, `created`, `updated`. Tag: `name` or `count` |
-| `sort_order` | `"asc"` (default) or `"desc"` | task, tag | Reverse the sort |
+| `sort_order` | `"asc"` (default) or `"desc"` | task, tag, audit_log | Reverse the sort |
 | `limit` | number (default 100) | all | Page size |
 | `offset` | number (default 0) | all | Items to skip |
 
 Projects, goals, key results and habits are sorted by name when any filter
 object is given; time entries newest-first; work logs newest-first; tags by
-count descending unless `sort_by` is set.
+count descending unless `sort_by` is set. Audit log entries are returned
+oldest-first (`changed_at`, then id), but `limit` and `offset` page backwards
+from the **newest** entry, so `{"limit": 5}` is the five most recent changes
+in chronological order; `sort_order: "desc"` flips the page to newest-first.
 
 #### Entities
 
@@ -1816,6 +1822,43 @@ total_count}` rows; `get` takes the tag name as `id` and also returns
 echo '{"operation":"get","entity":"tag","id":"shopping"}' | taskflow pipe
 ```
 
+**audit_log** -- read-only. TaskFlow appends an entry whenever a task is
+created, modified, completed, uncompleted or deleted; `create`, `update` and
+`delete` answer `READ_ONLY`. `list` returns `audit_logs` rows oldest-first and
+accepts `project_id` (the **task** UUID), `status` (actions), `due_after` /
+`due_before` (dates of `changed_at`), `limit` / `offset` (counted from the
+newest entry) and `sort_order`. `get` takes the entry UUID as `id`. Each entry
+has `id`, `task_id`, `changed_at`, `action` and `changes`, a list of
+`{field, old_value, new_value}` (empty for `created` and `deleted`). This is
+the same shape `export` puts under `audit_logs`.
+
+```bash
+# The last three changes to one task
+echo '{"operation":"list","entity":"audit_log","filters":{"project_id":"3635e628-3b32-4ceb-815e-3e2efa180a38","limit":3}}' | taskflow pipe
+```
+```json
+{
+  "success": true,
+  "data": {
+    "audit_logs": [
+      {
+        "id": "a8f5c2e1-4b6d-4c7e-9f0a-1b2c3d4e5f60",
+        "task_id": "3635e628-3b32-4ceb-815e-3e2efa180a38",
+        "changed_at": "2026-10-22T10:05:12Z",
+        "action": "modified",
+        "changes": [
+          {"field": "priority", "old_value": "High", "new_value": "Urgent"}
+        ]
+      }
+    ],
+    "total": 1,
+    "offset": 0,
+    "limit": 3
+  },
+  "metadata": {"total": 1, "offset": 0, "limit": 3}
+}
+```
+
 #### Export and import
 
 `export` returns the whole data set as one object with `version`, `tasks`
@@ -1848,6 +1891,7 @@ jq -c '{operation:"import",entity:"task",data:.data}' backup.json | taskflow --d
 | goals | `id,name,status,description,start_date,due_date,manual_progress` |
 | key_results | `id,goal_id,name,target_value,current_value,unit,status` |
 | tags | `name,task_count,habit_count,total_count` |
+| audit_logs | `id,task_id,changed_at,action,changes` (`changes` is flattened to `field: old -> new; field: old -> new`) |
 
 ```bash
 echo '{"operation":"list","entity":"task"}' | taskflow pipe --format csv

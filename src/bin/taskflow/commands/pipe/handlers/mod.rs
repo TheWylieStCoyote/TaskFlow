@@ -2,6 +2,7 @@
 //!
 //! Each handler module implements CRUD operations for a specific entity type.
 
+pub mod audit_log;
 pub mod export;
 pub mod goal;
 pub mod habit;
@@ -38,6 +39,7 @@ pub fn dispatch(model: &mut Model, request: &PipeRequest) -> HandlerResult {
         EntityType::Goal => goal::handle(model, request),
         EntityType::KeyResult => goal::handle_key_result(model, request),
         EntityType::Tag => tag::handle(model, request),
+        EntityType::AuditLog => audit_log::handle(model, request),
         EntityType::SavedFilter => Err(PipeError::new(
             "NOT_IMPLEMENTED",
             "SavedFilter operations are not yet implemented",

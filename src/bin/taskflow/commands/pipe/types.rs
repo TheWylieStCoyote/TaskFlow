@@ -37,6 +37,8 @@ pub enum EntityType {
     KeyResult,
     Tag,
     SavedFilter,
+    /// Task audit log (read-only: `list` and `get`).
+    AuditLog,
 }
 
 /// Operations supported by the pipe interface.

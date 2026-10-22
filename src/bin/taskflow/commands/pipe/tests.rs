@@ -14,8 +14,9 @@ mod pipe_interface_tests {
     use serde_json::json;
     use taskflow::app::Model;
     use taskflow::domain::{
-        today, Filter, GoalStatus, HabitFrequency, Priority, ProjectId, Quarter, SavedFilter,
-        SortSpec, Task, TaskStatus,
+        today, AuditAction, AuditLogEntry, AuditLogEntryId, FieldChange, Filter, GoalStatus,
+        HabitFrequency, Priority, ProjectId, Quarter, SavedFilter, SortSpec, Task, TaskId,
+        TaskStatus,
     };
     use types::*;
     use uuid::Uuid;
@@ -207,6 +208,7 @@ mod pipe_interface_tests {
             "key_result",
             "tag",
             "saved_filter",
+            "audit_log",
         ];
 
         for entity in entities {
@@ -4042,6 +4044,475 @@ mod pipe_interface_tests {
             assert!(resp.success, "{entity:?}: {:?}", resp.error);
             assert_eq!(target.tasks.len(), 1, "{entity:?}");
         }
+    }
+
+    // ========================================================================
+    // AuditLog Handler Tests (read-only entity)
+    // ========================================================================
+
+    /// Insert an audit entry stamped `minutes` minutes after a fixed epoch and
+    /// return its id as a string.
+    fn add_audit_entry(
+        model: &mut Model,
+        task_id: TaskId,
+        action: AuditAction,
+        minutes: i64,
+        changes: Vec<FieldChange>,
+    ) -> String {
+        let mut entry = AuditLogEntry::new(task_id, action, changes);
+        entry.changed_at =
+            Utc.with_ymd_and_hms(2030, 1, 1, 0, 0, 0).unwrap() + Duration::minutes(minutes);
+        let id = entry.id.0.to_string();
+        model.audit_logs.insert(entry.id, entry);
+        id
+    }
+
+    fn change(field: &str, old: &str, new: &str) -> FieldChange {
+        FieldChange {
+            field: field.to_string(),
+            old_value: old.to_string(),
+            new_value: new.to_string(),
+        }
+    }
+
+    /// Two tasks; task A has created -> modified -> completed, task B has
+    /// created -> deleted, interleaved in time. Returns (task_a, task_b, ids in
+    /// chronological order).
+    fn audit_model() -> (Model, TaskId, TaskId, Vec<String>) {
+        let mut model = Model::new();
+        let task_a = TaskId(Uuid::new_v4());
+        let task_b = TaskId(Uuid::new_v4());
+        let ids = vec![
+            add_audit_entry(&mut model, task_a, AuditAction::Created, 0, vec![]),
+            add_audit_entry(&mut model, task_b, AuditAction::Created, 10, vec![]),
+            add_audit_entry(
+                &mut model,
+                task_a,
+                AuditAction::Modified,
+                20,
+                vec![
+                    change("title", "Old", "New"),
+                    change("priority", "Low", "High"),
+                ],
+            ),
+            add_audit_entry(&mut model, task_b, AuditAction::Deleted, 30, vec![]),
+            add_audit_entry(
+                &mut model,
+                task_a,
+                AuditAction::Completed,
+                24 * 60 + 40,
+                vec![change("status", "todo", "done")],
+            ),
+        ];
+        (model, task_a, task_b, ids)
+    }
+
+    fn audit_filters(filters: FilterParams) -> PipeRequest {
+        PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::AuditLog,
+            id: None,
+            data: None,
+            filters: Some(filters),
+        }
+    }
+
+    fn listed_ids(resp: &PipeResponse<serde_json::Value>) -> Vec<String> {
+        resp.data.as_ref().unwrap()["audit_logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["id"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_audit_log_list_empty() {
+        let mut model = Model::new();
+        let req = make_request(Operation::List, EntityType::AuditLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["audit_logs"], json!([]));
+        assert_eq!(data["total"], 0);
+        assert_eq!(data["offset"], 0);
+        assert_eq!(data["limit"], 100);
+    }
+
+    #[test]
+    fn test_audit_log_list_sorted_oldest_first() {
+        let (mut model, _, _, ids) = audit_model();
+        let req = make_request(Operation::List, EntityType::AuditLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(listed_ids(&resp), ids);
+        assert_eq!(resp.metadata.as_ref().unwrap().total, Some(5));
+
+        // Entries keep the export shape: serde-lowercase action, nested changes.
+        let entries = &resp.data.as_ref().unwrap()["audit_logs"];
+        assert_eq!(entries[0]["action"], "created");
+        assert_eq!(entries[0]["changed_at"], "2030-01-01T00:00:00Z");
+        assert_eq!(entries[2]["action"], "modified");
+        assert_eq!(entries[2]["changes"][0]["field"], "title");
+        assert_eq!(entries[2]["changes"][0]["old_value"], "Old");
+        assert_eq!(entries[2]["changes"][0]["new_value"], "New");
+        assert_eq!(entries[2]["changes"][1]["field"], "priority");
+    }
+
+    #[test]
+    fn test_audit_log_list_sort_order_desc() {
+        let (mut model, _, _, ids) = audit_model();
+        let req = audit_filters(FilterParams {
+            sort_order: Some("desc".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        let mut expected = ids;
+        expected.reverse();
+        assert_eq!(listed_ids(&resp), expected);
+    }
+
+    #[test]
+    fn test_audit_log_list_filter_by_task() {
+        let (mut model, task_a, task_b, ids) = audit_model();
+
+        let req = audit_filters(FilterParams {
+            project_id: Some(task_a.0.to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(
+            listed_ids(&resp),
+            vec![ids[0].clone(), ids[2].clone(), ids[4].clone()]
+        );
+        assert_eq!(resp.data.unwrap()["total"], 3);
+
+        let req = audit_filters(FilterParams {
+            project_id: Some(task_b.0.to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp), vec![ids[1].clone(), ids[3].clone()]);
+
+        // A task with no history yields an empty list, not an error.
+        let req = audit_filters(FilterParams {
+            project_id: Some(Uuid::new_v4().to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_audit_log_list_filter_by_action() {
+        let (mut model, _, _, ids) = audit_model();
+
+        let req = audit_filters(FilterParams {
+            status: Some(vec!["created".to_string()]),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(listed_ids(&resp), vec![ids[0].clone(), ids[1].clone()]);
+
+        // Several actions match any of them; matching ignores case.
+        let req = audit_filters(FilterParams {
+            status: Some(vec!["Deleted".to_string(), "COMPLETED".to_string()]),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp), vec![ids[3].clone(), ids[4].clone()]);
+
+        // An unknown action matches nothing.
+        let req = audit_filters(FilterParams {
+            status: Some(vec!["exploded".to_string()]),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 0);
+    }
+
+    #[test]
+    fn test_audit_log_list_filter_by_date() {
+        let (mut model, _, _, ids) = audit_model();
+
+        // Only the completion happened on 2030-01-02.
+        let req = audit_filters(FilterParams {
+            due_after: Some("2030-01-02".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(listed_ids(&resp), vec![ids[4].clone()]);
+
+        let req = audit_filters(FilterParams {
+            due_before: Some("2030-01-01".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp), ids[..4].to_vec());
+
+        // Bounds are inclusive on both ends.
+        let req = audit_filters(FilterParams {
+            due_after: Some("2030-01-01".to_string()),
+            due_before: Some("2030-01-02".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp).len(), 5);
+
+        // An unparsable date is ignored rather than rejected.
+        let req = audit_filters(FilterParams {
+            due_after: Some("yesterday".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(listed_ids(&resp).len(), 5);
+    }
+
+    #[test]
+    fn test_audit_log_list_limit_returns_newest() {
+        let (mut model, _, _, ids) = audit_model();
+
+        let req = audit_filters(FilterParams {
+            limit: Some(2),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        // The two most recent entries, still oldest first within the page.
+        assert_eq!(listed_ids(&resp), vec![ids[3].clone(), ids[4].clone()]);
+        let data = resp.data.unwrap();
+        assert_eq!(data["total"], 5, "total counts before paging");
+        assert_eq!(data["limit"], 2);
+
+        // Offset walks further back from the newest entry.
+        let req = audit_filters(FilterParams {
+            limit: Some(2),
+            offset: Some(2),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp), vec![ids[1].clone(), ids[2].clone()]);
+        assert_eq!(resp.data.unwrap()["offset"], 2);
+
+        // With sort_order desc the same page comes back newest first.
+        let req = audit_filters(FilterParams {
+            limit: Some(2),
+            sort_order: Some("desc".to_string()),
+            ..Default::default()
+        });
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(listed_ids(&resp), vec![ids[4].clone(), ids[3].clone()]);
+    }
+
+    #[test]
+    fn test_audit_log_list_same_timestamp_is_deterministic() {
+        let mut model = Model::new();
+        let task = TaskId(Uuid::new_v4());
+        let mut ids: Vec<String> = (0..4)
+            .map(|_| add_audit_entry(&mut model, task, AuditAction::Modified, 0, vec![]))
+            .collect();
+        ids.sort();
+
+        let req = make_request(Operation::List, EntityType::AuditLog);
+        let first = listed_ids(&super::super::process_request(&mut model, req));
+        assert_eq!(first, ids, "ties break on id ascending");
+
+        for _ in 0..3 {
+            let req = make_request(Operation::List, EntityType::AuditLog);
+            let again = listed_ids(&super::super::process_request(&mut model, req));
+            assert_eq!(again, first);
+        }
+    }
+
+    #[test]
+    fn test_audit_log_get() {
+        let (mut model, task_a, _, ids) = audit_model();
+        let req = make_request_with_id(Operation::Get, EntityType::AuditLog, &ids[2]);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["id"], ids[2]);
+        assert_eq!(data["task_id"], task_a.0.to_string());
+        assert_eq!(data["action"], "modified");
+        assert_eq!(data["changed_at"], "2030-01-01T00:20:00Z");
+        assert_eq!(data["changes"].as_array().unwrap().len(), 2);
+        assert!(resp.metadata.is_none(), "get carries no list metadata");
+    }
+
+    #[test]
+    fn test_audit_log_get_not_found() {
+        let (mut model, _, _, _) = audit_model();
+        let missing = Uuid::new_v4().to_string();
+        let req = make_request_with_id(Operation::Get, EntityType::AuditLog, &missing);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(!resp.success);
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, "NOT_FOUND");
+        assert!(err.message.contains(&missing), "{}", err.message);
+    }
+
+    #[test]
+    fn test_audit_log_get_invalid_and_missing_id() {
+        let mut model = Model::new();
+
+        let req = make_request_with_id(Operation::Get, EntityType::AuditLog, "not-a-uuid");
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.error.unwrap().code, "INVALID_ID");
+
+        let req = make_request(Operation::Get, EntityType::AuditLog);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.error.unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_audit_log_write_operations_are_read_only() {
+        let (mut model, task_a, _, ids) = audit_model();
+        let before = model.audit_logs.len();
+
+        let requests = vec![
+            make_request_with_data(
+                Operation::Create,
+                EntityType::AuditLog,
+                json!({"task_id": task_a.0.to_string(), "action": "created"}),
+            ),
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::AuditLog,
+                &ids[0],
+                json!({"action": "deleted"}),
+            ),
+            make_request_with_id(Operation::Delete, EntityType::AuditLog, &ids[0]),
+        ];
+        for req in requests {
+            let op = req.operation;
+            let resp = super::super::process_request(&mut model, req);
+            assert!(!resp.success, "{op:?} must fail");
+            let err = resp.error.unwrap();
+            assert_eq!(err.code, "READ_ONLY", "{op:?}");
+            assert_eq!(
+                err.message,
+                "audit_log is append-only and written by the application"
+            );
+        }
+
+        assert_eq!(model.audit_logs.len(), before, "nothing was written");
+        assert_eq!(
+            model.audit_logs[&AuditLogEntryId(Uuid::parse_str(&ids[0]).unwrap())].action,
+            AuditAction::Created
+        );
+
+        // Export/import still answer like every other entity handler.
+        let req = make_request(Operation::Import, EntityType::AuditLog);
+        let err = handlers::audit_log::handle(&mut model, &req).unwrap_err();
+        assert_eq!(err.code, "INVALID_OPERATION");
+    }
+
+    #[test]
+    fn test_audit_log_csv_output() {
+        let (mut model, task_a, task_b, ids) = audit_model();
+        let req = make_request(Operation::List, EntityType::AuditLog);
+        let resp = super::super::process_request(&mut model, req);
+        let out = format::serialize_response(&resp, OutputFormat::Csv).unwrap();
+
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 6, "header plus one row per entry: {out}");
+        assert_eq!(lines[0], "id,task_id,changed_at,action,changes");
+        assert_eq!(
+            lines[1],
+            format!("{},{},2030-01-01T00:00:00Z,created,", ids[0], task_a.0)
+        );
+        assert_eq!(
+            lines[2],
+            format!("{},{},2030-01-01T00:10:00Z,created,", ids[1], task_b.0)
+        );
+        // Field changes are flattened to `field: old -> new; ...`.
+        assert_eq!(
+            lines[3],
+            format!(
+                "{},{},2030-01-01T00:20:00Z,modified,title: Old -> New; priority: Low -> High",
+                ids[2], task_a.0
+            )
+        );
+        assert_eq!(
+            lines[4],
+            format!("{},{},2030-01-01T00:30:00Z,deleted,", ids[3], task_b.0)
+        );
+        assert_eq!(
+            lines[5],
+            format!(
+                "{},{},2030-01-02T00:40:00Z,completed,status: todo -> done",
+                ids[4], task_a.0
+            )
+        );
+    }
+
+    #[test]
+    fn test_audit_log_csv_quotes_changes_with_commas() {
+        let mut model = Model::new();
+        let task = TaskId(Uuid::new_v4());
+        add_audit_entry(
+            &mut model,
+            task,
+            AuditAction::Modified,
+            0,
+            vec![change("tags", "a, b", "a, b, c")],
+        );
+        let req = make_request(Operation::List, EntityType::AuditLog);
+        let resp = super::super::process_request(&mut model, req);
+        let out = format::serialize_response(&resp, OutputFormat::Csv).unwrap();
+        assert!(
+            out.lines()
+                .nth(1)
+                .unwrap()
+                .ends_with(",modified,\"tags: a, b -> a, b, c\""),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn test_audit_log_run_pipe_loop_list() {
+        let (mut model, task_a, _, ids) = audit_model();
+        let out = run_loop(
+            &mut model,
+            concat!(
+                r#"{"operation":"list","entity":"audit_log"}"#,
+                "\n",
+                r#"{"operation":"list","entity":"audit_log","filters":{"status":["completed"],"limit":1}}"#,
+                "\n",
+                r#"{"operation":"create","entity":"audit_log","data":{}}"#,
+                "\n"
+            ),
+            OutputFormat::Json,
+        );
+        let responses = json_stream(&out);
+        assert_eq!(responses.len(), 3, "{out}");
+
+        assert_eq!(responses[0]["success"], true);
+        assert_eq!(responses[0]["data"]["total"], 5);
+        assert_eq!(responses[0]["metadata"]["total"], 5);
+        assert_eq!(
+            responses[0]["data"]["audit_logs"].as_array().unwrap().len(),
+            5
+        );
+        assert_eq!(responses[0]["data"]["audit_logs"][0]["id"], ids[0]);
+
+        assert_eq!(responses[1]["success"], true);
+        assert_eq!(responses[1]["data"]["total"], 1);
+        assert_eq!(responses[1]["data"]["audit_logs"][0]["id"], ids[4]);
+        assert_eq!(
+            responses[1]["data"]["audit_logs"][0]["task_id"],
+            task_a.0.to_string()
+        );
+
+        assert_eq!(responses[2]["success"], false);
+        assert_eq!(responses[2]["error"]["code"], "READ_ONLY");
     }
 
     // ========================================================================

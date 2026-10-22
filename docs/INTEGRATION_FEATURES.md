@@ -29,7 +29,7 @@ Analysis of external integration features for TaskFlow, including imports, notif
 - Location: `src/bin/taskflow/commands/pipe/`
 - JSON stdin/stdout protocol
 - Operations: list, get, create, update, delete, export, import
-- Entities: task, project, time_entry, work_log, habit, goal, tag
+- Entities: task, project, time_entry, work_log, habit, goal, key_result, tag, audit_log (read-only)
 
 ---
 

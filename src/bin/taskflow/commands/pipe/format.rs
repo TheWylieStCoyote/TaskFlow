@@ -50,6 +50,7 @@ fn serialize_csv<T: Serialize>(response: &PipeResponse<T>) -> Result<String, Pip
             "goals",
             "key_results",
             "tags",
+            "audit_logs",
         ];
 
         for field in list_fields {
@@ -123,6 +124,7 @@ fn array_to_csv(array: &[serde_json::Value], entity_type: &str) -> Result<String
             "status",
         ],
         "tags" => vec!["name", "task_count", "habit_count", "total_count"],
+        "audit_logs" => vec!["id", "task_id", "changed_at", "action", "changes"],
         _ => {
             // Auto-detect columns from first object
             if let Some(first) = array.first().and_then(|v| v.as_object()) {
@@ -146,13 +148,47 @@ fn array_to_csv(array: &[serde_json::Value], entity_type: &str) -> Result<String
     for item in array {
         let row: Vec<String> = columns
             .iter()
-            .map(|col| item.get(*col).map(format_csv_value).unwrap_or_default())
+            .map(|col| {
+                item.get(*col)
+                    .map(|value| format_csv_cell(entity_type, col, value))
+                    .unwrap_or_default()
+            })
             .collect();
         csv.push_str(&row.join(","));
         csv.push('\n');
     }
 
     Ok(csv)
+}
+
+/// Format one cell, applying entity-specific flattening where the generic
+/// rendering would be unreadable.
+fn format_csv_cell(entity_type: &str, column: &str, value: &serde_json::Value) -> String {
+    match (entity_type, column) {
+        ("audit_logs", "changes") => format_field_changes(value),
+        _ => format_csv_value(value),
+    }
+}
+
+/// Flatten an audit entry's `changes` array to `field: old -> new; ...`.
+///
+/// Items that are not field-change objects fall back to their JSON text so
+/// malformed data still produces a cell.
+fn format_field_changes(value: &serde_json::Value) -> String {
+    let Some(changes) = value.as_array() else {
+        return format_csv_value(value);
+    };
+    let items: Vec<String> = changes
+        .iter()
+        .map(|change| {
+            let text = |key: &str| change.get(key).and_then(|v| v.as_str());
+            match (text("field"), text("old_value"), text("new_value")) {
+                (Some(field), Some(old), Some(new)) => format!("{field}: {old} -> {new}"),
+                _ => change.to_string(),
+            }
+        })
+        .collect();
+    escape_csv_string(&items.join("; "))
 }
 
 /// Format a JSON value for CSV output.

@@ -265,3 +265,533 @@ pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use taskflow::app::GoalMessage;
+    use taskflow::domain::{Goal, GoalId, Habit, HabitId, Task};
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ch(c: char) -> KeyEvent {
+        key(KeyCode::Char(c))
+    }
+
+    /// Calendar model pinned to March 2024 with day 15 selected so the
+    /// expectations never depend on the wall clock.
+    fn calendar_model(with_task_on_selected_day: bool) -> Model {
+        let mut model = Model::new();
+        model.calendar_state.year = 2024;
+        model.calendar_state.month = 3;
+        model.calendar_state.selected_day = Some(15);
+        model.calendar_state.focus_task_list = false;
+        if with_task_on_selected_day {
+            let mut task = Task::new("Due mid-March");
+            task.due_date = NaiveDate::from_ymd_opt(2024, 3, 15);
+            model.tasks.insert(task.id, task);
+            model.rebuild_caches();
+            assert_eq!(model.tasks_for_selected_day().len(), 1);
+        }
+        model
+    }
+
+    fn habits_model() -> (Model, HabitId) {
+        let mut model = Model::new();
+        let habit = Habit::new("Stretch");
+        let id = habit.id;
+        model.habits.insert(id, habit);
+        model.refresh_visible_habits();
+        assert_eq!(model.visible_habits, vec![id]);
+        (model, id)
+    }
+
+    fn goals_model() -> (Model, GoalId) {
+        let mut model = Model::new();
+        let goal = Goal::new("Ship v1");
+        let id = goal.id;
+        model.goals.insert(id, goal);
+        model.refresh_visible_goals();
+        assert_eq!(model.visible_goals, vec![id]);
+        (model, id)
+    }
+
+    // ========================================================================
+    // Calendar
+    // ========================================================================
+
+    #[test]
+    fn calendar_esc_returns_focus_to_sidebar() {
+        let mut model = calendar_model(false);
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Esc), &mut model),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+    }
+
+    #[test]
+    fn calendar_tab_toggles_between_grid_and_task_list() {
+        let mut model = calendar_model(false);
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Tab), &mut model),
+            Some(Message::Navigation(
+                NavigationMessage::CalendarFocusTaskList
+            ))
+        ));
+        model.calendar_state.focus_task_list = true;
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Tab), &mut model),
+            Some(Message::Navigation(NavigationMessage::CalendarFocusGrid))
+        ));
+    }
+
+    #[test]
+    fn calendar_task_list_focus_keys() {
+        let mut model = calendar_model(false);
+        model.calendar_state.focus_task_list = true;
+        for k in [ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_calendar_view(k, &mut model),
+                Some(Message::Navigation(NavigationMessage::CalendarFocusGrid))
+            ));
+        }
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Enter), &mut model),
+            Some(Message::Ui(UiMessage::ToggleFocusMode))
+        ));
+        // j/k and others fall through to the global keybindings
+        assert!(handle_calendar_view(ch('j'), &mut model).is_none());
+        assert!(handle_calendar_view(key(KeyCode::Right), &mut model).is_none());
+    }
+
+    #[test]
+    fn calendar_grid_navigates_days() {
+        let mut model = calendar_model(false);
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Left), &mut model),
+            Some(Message::Ui(UiMessage::CalendarPrevDay))
+        ));
+        assert!(matches!(
+            handle_calendar_view(ch('h'), &mut model),
+            Some(Message::Ui(UiMessage::CalendarPrevDay))
+        ));
+        assert!(matches!(
+            handle_calendar_view(key(KeyCode::Right), &mut model),
+            Some(Message::Ui(UiMessage::CalendarNextDay))
+        ));
+        assert!(handle_calendar_view(ch('q'), &mut model).is_none());
+    }
+
+    #[test]
+    fn calendar_grid_l_and_enter_without_tasks() {
+        let mut model = calendar_model(false);
+        // l advances a day when the selected day has no tasks
+        assert!(matches!(
+            handle_calendar_view(ch('l'), &mut model),
+            Some(Message::Ui(UiMessage::CalendarNextDay))
+        ));
+        // Enter stays put
+        assert!(handle_calendar_view(key(KeyCode::Enter), &mut model).is_none());
+    }
+
+    #[test]
+    fn calendar_grid_l_and_enter_with_tasks_focus_task_list() {
+        let mut model = calendar_model(true);
+        for k in [ch('l'), key(KeyCode::Enter)] {
+            assert!(matches!(
+                handle_calendar_view(k, &mut model),
+                Some(Message::Navigation(
+                    NavigationMessage::CalendarFocusTaskList
+                ))
+            ));
+        }
+    }
+
+    // ========================================================================
+    // Duplicates
+    // ========================================================================
+
+    #[test]
+    fn duplicates_view_keys() {
+        assert!(matches!(
+            handle_duplicates_view(ch('D')),
+            Some(Message::Ui(UiMessage::DismissDuplicate))
+        ));
+        assert!(matches!(
+            handle_duplicates_view(ch('M')),
+            Some(Message::Ui(UiMessage::MergeDuplicates))
+        ));
+        assert!(matches!(
+            handle_duplicates_view(ch('r')),
+            Some(Message::Ui(UiMessage::RefreshDuplicates))
+        ));
+        assert!(handle_duplicates_view(ch('d')).is_none());
+        assert!(handle_duplicates_view(key(KeyCode::Esc)).is_none());
+    }
+
+    // ========================================================================
+    // Habits
+    // ========================================================================
+
+    #[test]
+    fn habits_view_navigation_and_actions() {
+        let (model, _) = habits_model();
+        assert!(matches!(
+            handle_habits_view(key(KeyCode::Esc), &model),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_habits_view(k, &model),
+                Some(Message::Ui(UiMessage::HabitUp))
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_habits_view(k, &model),
+                Some(Message::Ui(UiMessage::HabitDown))
+            ));
+        }
+        assert!(matches!(
+            handle_habits_view(ch('n'), &model),
+            Some(Message::Ui(UiMessage::StartCreateHabit))
+        ));
+        assert!(matches!(
+            handle_habits_view(ch('d'), &model),
+            Some(Message::Ui(UiMessage::HabitDelete))
+        ));
+        for k in [ch(' '), ch('x')] {
+            assert!(matches!(
+                handle_habits_view(k, &model),
+                Some(Message::Ui(UiMessage::HabitToggleToday))
+            ));
+        }
+        assert!(matches!(
+            handle_habits_view(ch('a'), &model),
+            Some(Message::Ui(UiMessage::ShowHabitAnalytics))
+        ));
+        assert!(matches!(
+            handle_habits_view(ch('A'), &model),
+            Some(Message::Ui(UiMessage::HabitArchive))
+        ));
+        assert!(matches!(
+            handle_habits_view(ch('H'), &model),
+            Some(Message::Ui(UiMessage::HabitToggleShowArchived))
+        ));
+        assert!(handle_habits_view(ch('q'), &model).is_none());
+        assert!(handle_habits_view(key(KeyCode::Enter), &model).is_none());
+    }
+
+    #[test]
+    fn habits_view_edit_uses_selected_habit_id() {
+        let (model, id) = habits_model();
+        assert!(matches!(
+            handle_habits_view(ch('e'), &model),
+            Some(Message::Ui(UiMessage::StartEditHabit(edit_id))) if edit_id == id
+        ));
+    }
+
+    #[test]
+    fn habits_view_edit_without_habits_is_ignored() {
+        let model = Model::new();
+        assert!(model.visible_habits.is_empty());
+        assert!(handle_habits_view(ch('e'), &model).is_none());
+    }
+
+    // ========================================================================
+    // Goals
+    // ========================================================================
+
+    #[test]
+    fn goals_view_navigation_and_actions() {
+        let (model, _) = goals_model();
+        assert!(matches!(
+            handle_goals_view(key(KeyCode::Esc), &model),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_goals_view(k, &model),
+                Some(Message::Goal(GoalMessage::NavigateUp))
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_goals_view(k, &model),
+                Some(Message::Goal(GoalMessage::NavigateDown))
+            ));
+        }
+        assert!(matches!(
+            handle_goals_view(ch('n'), &model),
+            Some(Message::Ui(UiMessage::StartCreateGoal))
+        ));
+        assert!(matches!(
+            handle_goals_view(ch('N'), &model),
+            Some(Message::Ui(UiMessage::StartCreateKeyResult))
+        ));
+        for k in [key(KeyCode::Enter), ch('l')] {
+            assert!(matches!(
+                handle_goals_view(k, &model),
+                Some(Message::Goal(GoalMessage::NavigateInto))
+            ));
+        }
+        assert!(matches!(
+            handle_goals_view(ch('h'), &model),
+            Some(Message::Goal(GoalMessage::NavigateBack))
+        ));
+        assert!(matches!(
+            handle_goals_view(ch('a'), &model),
+            Some(Message::Goal(GoalMessage::ToggleArchived))
+        ));
+        assert!(handle_goals_view(ch('q'), &model).is_none());
+        assert!(handle_goals_view(key(KeyCode::Tab), &model).is_none());
+    }
+
+    #[test]
+    fn goals_view_edit_and_delete_use_selected_goal_id() {
+        let (model, id) = goals_model();
+        assert!(matches!(
+            handle_goals_view(ch('e'), &model),
+            Some(Message::Ui(UiMessage::StartEditGoal(edit_id))) if edit_id == id
+        ));
+        assert!(matches!(
+            handle_goals_view(ch('d'), &model),
+            Some(Message::Goal(GoalMessage::Delete(del_id))) if del_id == id
+        ));
+    }
+
+    #[test]
+    fn goals_view_edit_and_delete_without_goals_are_ignored() {
+        let model = Model::new();
+        assert!(model.visible_goals.is_empty());
+        assert!(handle_goals_view(ch('e'), &model).is_none());
+        assert!(handle_goals_view(ch('d'), &model).is_none());
+    }
+
+    // ========================================================================
+    // Timeline
+    // ========================================================================
+
+    #[test]
+    fn timeline_view_keys() {
+        assert!(matches!(
+            handle_timeline_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineScrollLeft))
+            ));
+        }
+        for k in [ch('l'), key(KeyCode::Right)] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineScrollRight))
+            ));
+        }
+        for k in [ch('k'), key(KeyCode::Up)] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineUp))
+            ));
+        }
+        for k in [ch('j'), key(KeyCode::Down)] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineDown))
+            ));
+        }
+        for k in [ch('<'), ch(',')] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineZoomOut))
+            ));
+        }
+        for k in [ch('>'), ch('.')] {
+            assert!(matches!(
+                handle_timeline_view(k),
+                Some(Message::Navigation(NavigationMessage::TimelineZoomIn))
+            ));
+        }
+        assert!(matches!(
+            handle_timeline_view(ch('t')),
+            Some(Message::Navigation(NavigationMessage::TimelineGoToday))
+        ));
+        assert!(matches!(
+            handle_timeline_view(ch('d')),
+            Some(Message::Ui(UiMessage::TimelineToggleDependencies))
+        ));
+        assert!(matches!(
+            handle_timeline_view(key(KeyCode::Enter)),
+            Some(Message::Ui(UiMessage::TimelineViewSelected))
+        ));
+        assert!(handle_timeline_view(ch('q')).is_none());
+        assert!(handle_timeline_view(key(KeyCode::Tab)).is_none());
+    }
+
+    // ========================================================================
+    // Kanban / Eisenhower / Weekly planner share the same shape
+    // ========================================================================
+
+    #[test]
+    fn kanban_view_keys() {
+        assert!(matches!(
+            handle_kanban_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_kanban_view(k),
+                Some(Message::Navigation(NavigationMessage::KanbanLeft))
+            ));
+        }
+        for k in [ch('l'), key(KeyCode::Right)] {
+            assert!(matches!(
+                handle_kanban_view(k),
+                Some(Message::Navigation(NavigationMessage::KanbanRight))
+            ));
+        }
+        for k in [ch('k'), key(KeyCode::Up)] {
+            assert!(matches!(
+                handle_kanban_view(k),
+                Some(Message::Navigation(NavigationMessage::KanbanUp))
+            ));
+        }
+        for k in [ch('j'), key(KeyCode::Down)] {
+            assert!(matches!(
+                handle_kanban_view(k),
+                Some(Message::Navigation(NavigationMessage::KanbanDown))
+            ));
+        }
+        assert!(matches!(
+            handle_kanban_view(key(KeyCode::Enter)),
+            Some(Message::Ui(UiMessage::KanbanViewSelected))
+        ));
+        assert!(handle_kanban_view(ch('x')).is_none());
+    }
+
+    #[test]
+    fn eisenhower_view_keys() {
+        assert!(matches!(
+            handle_eisenhower_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_eisenhower_view(k),
+                Some(Message::Navigation(NavigationMessage::EisenhowerLeft))
+            ));
+        }
+        for k in [ch('l'), key(KeyCode::Right)] {
+            assert!(matches!(
+                handle_eisenhower_view(k),
+                Some(Message::Navigation(NavigationMessage::EisenhowerRight))
+            ));
+        }
+        for k in [ch('k'), key(KeyCode::Up)] {
+            assert!(matches!(
+                handle_eisenhower_view(k),
+                Some(Message::Navigation(NavigationMessage::EisenhowerUp))
+            ));
+        }
+        for k in [ch('j'), key(KeyCode::Down)] {
+            assert!(matches!(
+                handle_eisenhower_view(k),
+                Some(Message::Navigation(NavigationMessage::EisenhowerDown))
+            ));
+        }
+        assert!(matches!(
+            handle_eisenhower_view(key(KeyCode::Enter)),
+            Some(Message::Ui(UiMessage::EisenhowerViewSelected))
+        ));
+        assert!(handle_eisenhower_view(ch('x')).is_none());
+    }
+
+    #[test]
+    fn weekly_planner_view_keys() {
+        assert!(matches!(
+            handle_weekly_planner_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_weekly_planner_view(k),
+                Some(Message::Navigation(NavigationMessage::WeeklyPlannerLeft))
+            ));
+        }
+        for k in [ch('l'), key(KeyCode::Right)] {
+            assert!(matches!(
+                handle_weekly_planner_view(k),
+                Some(Message::Navigation(NavigationMessage::WeeklyPlannerRight))
+            ));
+        }
+        for k in [ch('k'), key(KeyCode::Up)] {
+            assert!(matches!(
+                handle_weekly_planner_view(k),
+                Some(Message::Navigation(NavigationMessage::WeeklyPlannerUp))
+            ));
+        }
+        for k in [ch('j'), key(KeyCode::Down)] {
+            assert!(matches!(
+                handle_weekly_planner_view(k),
+                Some(Message::Navigation(NavigationMessage::WeeklyPlannerDown))
+            ));
+        }
+        assert!(matches!(
+            handle_weekly_planner_view(key(KeyCode::Enter)),
+            Some(Message::Ui(UiMessage::WeeklyPlannerViewSelected))
+        ));
+        assert!(handle_weekly_planner_view(ch('x')).is_none());
+    }
+
+    // ========================================================================
+    // Reports / Network
+    // ========================================================================
+
+    #[test]
+    fn reports_view_keys() {
+        assert!(matches!(
+            handle_reports_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        assert!(matches!(
+            handle_reports_view(key(KeyCode::Tab)),
+            Some(Message::Navigation(NavigationMessage::ReportsNextPanel))
+        ));
+        assert!(matches!(
+            handle_reports_view(key(KeyCode::BackTab)),
+            Some(Message::Navigation(NavigationMessage::ReportsPrevPanel))
+        ));
+        assert!(handle_reports_view(ch('j')).is_none());
+    }
+
+    #[test]
+    fn network_view_keys() {
+        assert!(matches!(
+            handle_network_view(key(KeyCode::Esc)),
+            Some(Message::Navigation(NavigationMessage::FocusSidebar))
+        ));
+        for k in [ch('k'), key(KeyCode::Up), ch('h'), key(KeyCode::Left)] {
+            assert!(matches!(
+                handle_network_view(k),
+                Some(Message::Navigation(NavigationMessage::NetworkUp))
+            ));
+        }
+        for k in [ch('j'), key(KeyCode::Down), ch('l'), key(KeyCode::Right)] {
+            assert!(matches!(
+                handle_network_view(k),
+                Some(Message::Navigation(NavigationMessage::NetworkDown))
+            ));
+        }
+        assert!(matches!(
+            handle_network_view(key(KeyCode::Enter)),
+            Some(Message::Ui(UiMessage::NetworkViewSelected))
+        ));
+        assert!(handle_network_view(ch('x')).is_none());
+    }
+}

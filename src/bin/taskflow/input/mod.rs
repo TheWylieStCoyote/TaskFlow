@@ -7,6 +7,9 @@ mod handlers;
 mod mouse;
 mod util;
 
+#[cfg(test)]
+mod tests;
+
 use crossterm::event::{self, KeyCode};
 
 use taskflow::app::{Message, Model, SystemMessage, UiMessage};

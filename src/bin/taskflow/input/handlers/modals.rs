@@ -289,3 +289,734 @@ pub fn handle_macro_slot(key: event::KeyEvent, model: &mut Model) -> Message {
     }
     Message::None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyEvent;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ch(c: char) -> KeyEvent {
+        key(KeyCode::Char(c))
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    // ========================================================================
+    // Template picker
+    // ========================================================================
+
+    #[test]
+    fn template_picker_esc_and_enter() {
+        let mut model = Model::new();
+        model.template_picker.selected = 2;
+        assert!(matches!(
+            handle_template_picker(key(KeyCode::Esc), &mut model),
+            Message::Ui(UiMessage::HideTemplates)
+        ));
+        assert!(matches!(
+            handle_template_picker(key(KeyCode::Enter), &mut model),
+            Message::Ui(UiMessage::SelectTemplate(2))
+        ));
+    }
+
+    #[test]
+    fn template_picker_moves_selection_within_bounds() {
+        let mut model = Model::new();
+        let count = model.template_manager.len();
+        assert!(count >= 2, "default templates expected");
+
+        // Up at the top stays at 0
+        assert!(matches!(
+            handle_template_picker(ch('k'), &mut model),
+            Message::None
+        ));
+        assert_eq!(model.template_picker.selected, 0);
+
+        // Down moves one at a time until the last template
+        assert!(matches!(
+            handle_template_picker(ch('j'), &mut model),
+            Message::None
+        ));
+        assert_eq!(model.template_picker.selected, 1);
+        assert!(matches!(
+            handle_template_picker(key(KeyCode::Up), &mut model),
+            Message::None
+        ));
+        assert_eq!(model.template_picker.selected, 0);
+
+        for _ in 0..count + 3 {
+            handle_template_picker(key(KeyCode::Down), &mut model);
+        }
+        assert_eq!(model.template_picker.selected, count - 1);
+    }
+
+    #[test]
+    fn template_picker_digit_selects_or_ignores() {
+        let mut model = Model::new();
+        let count = model.template_manager.len();
+        assert!(count < 9, "test assumes fewer than nine default templates");
+        assert!(matches!(
+            handle_template_picker(ch('0'), &mut model),
+            Message::Ui(UiMessage::SelectTemplate(0))
+        ));
+        assert!(matches!(
+            handle_template_picker(ch('1'), &mut model),
+            Message::Ui(UiMessage::SelectTemplate(1))
+        ));
+        assert!(matches!(
+            handle_template_picker(ch('9'), &mut model),
+            Message::None
+        ));
+        assert!(matches!(
+            handle_template_picker(ch('x'), &mut model),
+            Message::None
+        ));
+        assert!(matches!(
+            handle_template_picker(key(KeyCode::Tab), &mut model),
+            Message::None
+        ));
+    }
+
+    // ========================================================================
+    // Keybindings editor
+    // ========================================================================
+
+    #[test]
+    fn keybindings_editor_capturing_applies_key_string() {
+        let mut model = Model::new();
+        model.keybindings_editor.capturing = true;
+        assert!(matches!(
+            handle_keybindings_editor(key(KeyCode::Esc), &model),
+            Message::Ui(UiMessage::CancelEditKeybinding)
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(ctrl('s'), &model),
+            Message::Ui(UiMessage::ApplyKeybinding(k)) if k == "ctrl+s"
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(key(KeyCode::F(5)), &model),
+            Message::Ui(UiMessage::ApplyKeybinding(k)) if k == "f5"
+        ));
+    }
+
+    #[test]
+    fn keybindings_editor_navigation() {
+        let model = Model::new();
+        assert!(matches!(
+            handle_keybindings_editor(key(KeyCode::Esc), &model),
+            Message::Ui(UiMessage::HideKeybindingsEditor)
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(key(KeyCode::Enter), &model),
+            Message::Ui(UiMessage::StartEditKeybinding)
+        ));
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_keybindings_editor(k, &model),
+                Message::Ui(UiMessage::KeybindingsUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_keybindings_editor(k, &model),
+                Message::Ui(UiMessage::KeybindingsDown)
+            ));
+        }
+        assert!(matches!(
+            handle_keybindings_editor(ch('r'), &model),
+            Message::Ui(UiMessage::ResetKeybinding)
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(ch('R'), &model),
+            Message::Ui(UiMessage::ResetAllKeybindings)
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(ch('s'), &model),
+            Message::Ui(UiMessage::SaveKeybindings)
+        ));
+        assert!(matches!(
+            handle_keybindings_editor(ch('x'), &model),
+            Message::None
+        ));
+    }
+
+    // ========================================================================
+    // Time log
+    // ========================================================================
+
+    #[test]
+    fn time_log_edit_modes_take_text_input() {
+        let mut model = Model::new();
+        for mode in [TimeLogMode::EditStart, TimeLogMode::EditEnd] {
+            model.time_log.mode = mode;
+            assert!(matches!(
+                handle_time_log(key(KeyCode::Esc), &model),
+                Message::Ui(UiMessage::TimeLogCancel)
+            ));
+            assert!(matches!(
+                handle_time_log(key(KeyCode::Enter), &model),
+                Message::Ui(UiMessage::TimeLogSubmit)
+            ));
+            assert!(matches!(
+                handle_time_log(key(KeyCode::Backspace), &model),
+                Message::Ui(UiMessage::InputBackspace)
+            ));
+            assert!(matches!(
+                handle_time_log(ch('7'), &model),
+                Message::Ui(UiMessage::InputChar('7'))
+            ));
+            assert!(matches!(
+                handle_time_log(key(KeyCode::Tab), &model),
+                Message::None
+            ));
+        }
+    }
+
+    #[test]
+    fn time_log_confirm_delete_mode() {
+        let mut model = Model::new();
+        model.time_log.mode = TimeLogMode::ConfirmDelete;
+        for k in [ch('y'), ch('Y')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogDelete)
+            ));
+        }
+        for k in [ch('n'), ch('N'), key(KeyCode::Esc)] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogCancel)
+            ));
+        }
+        assert!(matches!(handle_time_log(ch('j'), &model), Message::None));
+    }
+
+    #[test]
+    fn time_log_browse_mode() {
+        let model = Model::new();
+        assert!(matches!(model.time_log.mode, TimeLogMode::Browse));
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::HideTimeLog)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_time_log(k, &model),
+                Message::Ui(UiMessage::TimeLogDown)
+            ));
+        }
+        assert!(matches!(
+            handle_time_log(ch('s'), &model),
+            Message::Ui(UiMessage::TimeLogEditStart)
+        ));
+        assert!(matches!(
+            handle_time_log(ch('e'), &model),
+            Message::Ui(UiMessage::TimeLogEditEnd)
+        ));
+        assert!(matches!(
+            handle_time_log(ch('d'), &model),
+            Message::Ui(UiMessage::TimeLogConfirmDelete)
+        ));
+        assert!(matches!(
+            handle_time_log(ch('a'), &model),
+            Message::Ui(UiMessage::TimeLogAddEntry)
+        ));
+        assert!(matches!(handle_time_log(ch('x'), &model), Message::None));
+    }
+
+    // ========================================================================
+    // Work log
+    // ========================================================================
+
+    #[test]
+    fn work_log_add_and_edit_modes() {
+        let mut model = Model::new();
+        for mode in [WorkLogMode::Add, WorkLogMode::Edit] {
+            model.work_log_editor.mode = mode;
+            assert!(matches!(
+                handle_work_log(ctrl('s'), &model),
+                Message::Ui(UiMessage::WorkLogSubmit)
+            ));
+            // Plain 's' is ordinary text
+            assert!(matches!(
+                handle_work_log(ch('s'), &model),
+                Message::Ui(UiMessage::WorkLogInputChar('s'))
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Esc), &model),
+                Message::Ui(UiMessage::WorkLogCancel)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Enter), &model),
+                Message::Ui(UiMessage::WorkLogNewline)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Backspace), &model),
+                Message::Ui(UiMessage::WorkLogInputBackspace)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Delete), &model),
+                Message::Ui(UiMessage::WorkLogInputDelete)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Left), &model),
+                Message::Ui(UiMessage::WorkLogCursorLeft)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Right), &model),
+                Message::Ui(UiMessage::WorkLogCursorRight)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Up), &model),
+                Message::Ui(UiMessage::WorkLogCursorUp)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Down), &model),
+                Message::Ui(UiMessage::WorkLogCursorDown)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Home), &model),
+                Message::Ui(UiMessage::WorkLogCursorHome)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::End), &model),
+                Message::Ui(UiMessage::WorkLogCursorEnd)
+            ));
+            assert!(matches!(
+                handle_work_log(key(KeyCode::Tab), &model),
+                Message::None
+            ));
+        }
+    }
+
+    #[test]
+    fn work_log_confirm_delete_mode() {
+        let mut model = Model::new();
+        model.work_log_editor.mode = WorkLogMode::ConfirmDelete;
+        for k in [ch('y'), ch('Y')] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogDelete)
+            ));
+        }
+        for k in [ch('n'), ch('N'), key(KeyCode::Esc)] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogCancel)
+            ));
+        }
+        assert!(matches!(handle_work_log(ch('j'), &model), Message::None));
+    }
+
+    #[test]
+    fn work_log_view_mode() {
+        let mut model = Model::new();
+        model.work_log_editor.mode = WorkLogMode::View;
+        for k in [key(KeyCode::Esc), key(KeyCode::Enter)] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogCancel)
+            ));
+        }
+        assert!(matches!(
+            handle_work_log(ch('e'), &model),
+            Message::Ui(UiMessage::WorkLogEdit)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('d'), &model),
+            Message::Ui(UiMessage::WorkLogConfirmDelete)
+        ));
+        assert!(matches!(handle_work_log(ch('j'), &model), Message::None));
+    }
+
+    #[test]
+    fn work_log_browse_mode() {
+        let mut model = Model::new();
+        assert!(matches!(model.work_log_editor.mode, WorkLogMode::Browse));
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::HideWorkLog)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogDown)
+            ));
+        }
+        assert!(matches!(
+            handle_work_log(key(KeyCode::Enter), &model),
+            Message::Ui(UiMessage::WorkLogView)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('a'), &model),
+            Message::Ui(UiMessage::WorkLogAdd)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('e'), &model),
+            Message::Ui(UiMessage::WorkLogEdit)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('d'), &model),
+            Message::Ui(UiMessage::WorkLogConfirmDelete)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('/'), &model),
+            Message::Ui(UiMessage::WorkLogSearchStart)
+        ));
+        assert!(matches!(handle_work_log(ch('x'), &model), Message::None));
+
+        // With an active search, Esc/q clear the search instead of closing
+        model.work_log_editor.search_query = "meeting".to_string();
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_work_log(k, &model),
+                Message::Ui(UiMessage::WorkLogSearchClear)
+            ));
+        }
+    }
+
+    #[test]
+    fn work_log_search_mode() {
+        let mut model = Model::new();
+        model.work_log_editor.mode = WorkLogMode::Search;
+        assert!(matches!(
+            handle_work_log(key(KeyCode::Esc), &model),
+            Message::Ui(UiMessage::WorkLogSearchCancel)
+        ));
+        assert!(matches!(
+            handle_work_log(key(KeyCode::Enter), &model),
+            Message::Ui(UiMessage::WorkLogSearchApply)
+        ));
+        assert!(matches!(
+            handle_work_log(key(KeyCode::Backspace), &model),
+            Message::Ui(UiMessage::WorkLogSearchBackspace)
+        ));
+        assert!(matches!(
+            handle_work_log(ch('m'), &model),
+            Message::Ui(UiMessage::WorkLogSearchChar('m'))
+        ));
+        assert!(matches!(
+            handle_work_log(key(KeyCode::Up), &model),
+            Message::None
+        ));
+    }
+
+    // ========================================================================
+    // Description editor
+    // ========================================================================
+
+    #[test]
+    fn description_editor_keys() {
+        assert!(matches!(
+            handle_description_editor(ctrl('s')),
+            Message::Ui(UiMessage::DescriptionSubmit)
+        ));
+        assert!(matches!(
+            handle_description_editor(ch('s')),
+            Message::Ui(UiMessage::DescriptionInputChar('s'))
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Esc)),
+            Message::Ui(UiMessage::HideDescriptionEditor)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Enter)),
+            Message::Ui(UiMessage::DescriptionNewline)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Backspace)),
+            Message::Ui(UiMessage::DescriptionInputBackspace)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Delete)),
+            Message::Ui(UiMessage::DescriptionInputDelete)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Left)),
+            Message::Ui(UiMessage::DescriptionCursorLeft)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Right)),
+            Message::Ui(UiMessage::DescriptionCursorRight)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Up)),
+            Message::Ui(UiMessage::DescriptionCursorUp)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Down)),
+            Message::Ui(UiMessage::DescriptionCursorDown)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Home)),
+            Message::Ui(UiMessage::DescriptionCursorHome)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::End)),
+            Message::Ui(UiMessage::DescriptionCursorEnd)
+        ));
+        assert!(matches!(
+            handle_description_editor(key(KeyCode::Tab)),
+            Message::None
+        ));
+    }
+
+    // ========================================================================
+    // Reviews
+    // ========================================================================
+
+    #[test]
+    fn daily_review_keys() {
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::HideDailyReview)
+            ));
+        }
+        for k in [key(KeyCode::Enter), key(KeyCode::Right), ch('l')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::DailyReviewNext)
+            ));
+        }
+        for k in [key(KeyCode::Left), ch('h')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::DailyReviewPrev)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::DailyReviewUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::DailyReviewDown)
+            ));
+        }
+        for k in [ch('x'), ch(' ')] {
+            assert!(matches!(
+                handle_daily_review(k),
+                Message::Ui(UiMessage::DailyReviewComplete)
+            ));
+        }
+        assert!(matches!(handle_daily_review(ch('r')), Message::None));
+    }
+
+    #[test]
+    fn weekly_review_keys() {
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_weekly_review(k),
+                Message::Ui(UiMessage::HideWeeklyReview)
+            ));
+        }
+        for k in [key(KeyCode::Enter), key(KeyCode::Right), ch('l')] {
+            assert!(matches!(
+                handle_weekly_review(k),
+                Message::Ui(UiMessage::WeeklyReviewNext)
+            ));
+        }
+        for k in [key(KeyCode::Left), ch('h')] {
+            assert!(matches!(
+                handle_weekly_review(k),
+                Message::Ui(UiMessage::WeeklyReviewPrev)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_weekly_review(k),
+                Message::Ui(UiMessage::WeeklyReviewUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_weekly_review(k),
+                Message::Ui(UiMessage::WeeklyReviewDown)
+            ));
+        }
+        // The weekly review has no complete/reschedule actions
+        assert!(matches!(handle_weekly_review(ch('x')), Message::None));
+    }
+
+    #[test]
+    fn evening_review_keys() {
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::HideEveningReview)
+            ));
+        }
+        for k in [key(KeyCode::Enter), key(KeyCode::Right), ch('l')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::EveningReviewNext)
+            ));
+        }
+        for k in [key(KeyCode::Left), ch('h')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::EveningReviewPrev)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::EveningReviewUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::EveningReviewDown)
+            ));
+        }
+        assert!(matches!(
+            handle_evening_review(ch('r')),
+            Message::Ui(UiMessage::EveningReviewReschedule)
+        ));
+        assert!(matches!(
+            handle_evening_review(ch('s')),
+            Message::Ui(UiMessage::EveningReviewSnooze)
+        ));
+        for k in [ch('x'), ch(' ')] {
+            assert!(matches!(
+                handle_evening_review(k),
+                Message::Ui(UiMessage::EveningReviewComplete)
+            ));
+        }
+        assert!(matches!(handle_evening_review(ch('z')), Message::None));
+    }
+
+    // ========================================================================
+    // Task detail
+    // ========================================================================
+
+    #[test]
+    fn task_detail_keys() {
+        for k in [key(KeyCode::Esc), ch('q')] {
+            assert!(matches!(
+                handle_task_detail(k),
+                Message::Ui(UiMessage::HideTaskDetail)
+            ));
+        }
+        for k in [key(KeyCode::Up), ch('k')] {
+            assert!(matches!(
+                handle_task_detail(k),
+                Message::Ui(UiMessage::TaskDetailScrollUp)
+            ));
+        }
+        for k in [key(KeyCode::Down), ch('j')] {
+            assert!(matches!(
+                handle_task_detail(k),
+                Message::Ui(UiMessage::TaskDetailScrollDown)
+            ));
+        }
+        assert!(matches!(
+            handle_task_detail(key(KeyCode::PageUp)),
+            Message::Ui(UiMessage::TaskDetailPageUp)
+        ));
+        assert!(matches!(
+            handle_task_detail(key(KeyCode::PageDown)),
+            Message::Ui(UiMessage::TaskDetailPageDown)
+        ));
+        for k in [ch('g'), key(KeyCode::Home)] {
+            assert!(matches!(
+                handle_task_detail(k),
+                Message::Ui(UiMessage::TaskDetailScrollTop)
+            ));
+        }
+        for k in [ch('G'), key(KeyCode::End)] {
+            assert!(matches!(
+                handle_task_detail(k),
+                Message::Ui(UiMessage::TaskDetailScrollBottom)
+            ));
+        }
+        assert!(matches!(handle_task_detail(ch('x')), Message::None));
+    }
+
+    // ========================================================================
+    // Macro slot
+    // ========================================================================
+
+    #[test]
+    fn macro_slot_digit_starts_recording_when_idle() {
+        let mut model = Model::new();
+        model.macro_state.pending_slot = Some(0);
+        assert!(!model.macro_state.is_recording());
+        assert!(matches!(
+            handle_macro_slot(ch('7'), &mut model),
+            Message::Ui(UiMessage::StartRecordMacro)
+        ));
+        assert_eq!(model.macro_state.pending_slot, Some(7));
+    }
+
+    #[test]
+    fn macro_slot_digit_stops_recording_when_recording() {
+        let mut model = Model::new();
+        model.macro_state.pending_slot = Some(0);
+        assert!(model.macro_state.start_recording(2));
+        assert!(model.macro_state.is_recording());
+        assert!(matches!(
+            handle_macro_slot(ch('2'), &mut model),
+            Message::Ui(UiMessage::StopRecordMacro)
+        ));
+        assert_eq!(model.macro_state.pending_slot, Some(2));
+    }
+
+    #[test]
+    fn macro_slot_esc_cancels_with_status_message() {
+        let mut model = Model::new();
+        model.macro_state.pending_slot = Some(4);
+        assert!(matches!(
+            handle_macro_slot(key(KeyCode::Esc), &mut model),
+            Message::None
+        ));
+        assert_eq!(model.macro_state.pending_slot, None);
+        assert_eq!(
+            model.alerts.status_message.as_deref(),
+            Some("Macro cancelled")
+        );
+    }
+
+    #[test]
+    fn macro_slot_other_keys_keep_waiting() {
+        let mut model = Model::new();
+        model.macro_state.pending_slot = Some(4);
+        assert!(matches!(
+            handle_macro_slot(ch('x'), &mut model),
+            Message::None
+        ));
+        assert!(matches!(
+            handle_macro_slot(key(KeyCode::Enter), &mut model),
+            Message::None
+        ));
+        assert_eq!(model.macro_state.pending_slot, Some(4));
+        assert!(model.alerts.status_message.is_none());
+    }
+}

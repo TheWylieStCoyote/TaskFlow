@@ -1,6 +1,6 @@
 //! Time log editor handlers
 
-use chrono::{NaiveTime, Utc};
+use chrono::{Local, NaiveTime, TimeZone, Utc};
 
 use crate::app::{Model, UiMessage, UndoAction};
 use crate::domain::LocalDate;
@@ -40,7 +40,11 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
             if let Some(task_id) = model.selected_task_id() {
                 let entries = model.time_entries_for_task(&task_id);
                 if let Some(entry) = entries.get(model.time_log.selected) {
-                    let start_time = entry.started_at.format("%H:%M").to_string();
+                    let start_time = entry
+                        .started_at
+                        .with_timezone(&Local)
+                        .format("%H:%M")
+                        .to_string();
                     model.time_log.mode = TimeLogMode::EditStart;
                     model.time_log.buffer = start_time;
                 }
@@ -58,7 +62,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                     }
                     let end_time = entry
                         .ended_at
-                        .map(|t| t.format("%H:%M").to_string())
+                        .map(|t| t.with_timezone(&Local).format("%H:%M").to_string())
                         .unwrap_or_default();
                     model.time_log.mode = TimeLogMode::EditEnd;
                     model.time_log.buffer = end_time;
@@ -85,11 +89,9 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
 
                             match model.time_log.mode {
                                 TimeLogMode::EditStart => {
-                                    // Update start time, keeping the same date
+                                    // Update start time (local clock), keeping the same local date
                                     let date = entry.started_at.local_date();
-                                    if let Some(new_dt) =
-                                        date.and_time(time).and_local_timezone(Utc).single()
-                                    {
+                                    if let Some(new_dt) = local_to_utc(date, time) {
                                         entry.started_at = new_dt;
                                         // Recalculate duration if entry is completed
                                         if let Some(ended_at) = entry.ended_at {
@@ -101,11 +103,16 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                                     }
                                 }
                                 TimeLogMode::EditEnd => {
-                                    // Update end time, keeping the same date
+                                    // Update end time (local clock) on the start's local date;
+                                    // an end before the start rolls over to the next day.
                                     let date = entry.started_at.local_date();
-                                    if let Some(new_dt) =
-                                        date.and_time(time).and_local_timezone(Utc).single()
-                                    {
+                                    if let Some(new_dt) = local_to_utc(date, time).map(|dt| {
+                                        if dt < entry.started_at {
+                                            dt + chrono::Duration::days(1)
+                                        } else {
+                                            dt
+                                        }
+                                    }) {
                                         entry.ended_at = Some(new_dt);
                                         let duration =
                                             new_dt.signed_duration_since(entry.started_at);
@@ -121,7 +128,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                                 before: Box::new(before),
                                 after: Box::new(after.clone()),
                             });
-                            model.sync_time_entry(&after);
+                            model.upsert_time_entry(after);
                             model.alerts.status_message = Some("Time entry updated".to_string());
                         }
                     } else {
@@ -148,8 +155,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                 model
                     .undo_stack
                     .push(UndoAction::TimeEntryStarted(Box::new(entry.clone())));
-                model.sync_time_entry(&entry);
-                model.time_entries.insert(entry.id, entry);
+                model.add_time_entry(entry);
                 model.time_log.selected = 0; // New entry will be at top (sorted by date)
                 model.alerts.status_message = Some("Added 30-minute time entry".to_string());
             }
@@ -168,7 +174,7 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
                         return;
                     }
 
-                    if let Some(removed) = model.time_entries.remove(&entry_id) {
+                    if let Some(removed) = model.time_entries.get(&entry_id).cloned() {
                         model
                             .undo_stack
                             .push(UndoAction::TimeEntryDeleted(Box::new(removed)));
@@ -187,4 +193,14 @@ pub fn handle_ui_time_log(model: &mut Model, msg: UiMessage) {
         }
         _ => {}
     }
+}
+
+/// Interpret a wall-clock time on a local calendar date and convert it to UTC.
+///
+/// Returns `None` for times that do not exist locally (DST gap).
+fn local_to_utc(date: chrono::NaiveDate, time: NaiveTime) -> Option<chrono::DateTime<Utc>> {
+    Local
+        .from_local_datetime(&date.and_time(time))
+        .single()
+        .map(|dt| dt.with_timezone(&Utc))
 }

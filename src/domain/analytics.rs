@@ -55,7 +55,7 @@
 //! - [`ProductivityInsights`] analyzes when you're most effective
 
 use chrono::{Datelike, NaiveDate, Weekday};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::{ProjectId, TaskId};
 use crate::domain::today;
@@ -185,17 +185,30 @@ impl BurnChart {
     }
 }
 
-/// Time analytics showing when tasks are completed.
+/// Time tracked within a reporting window, broken down several ways.
+///
+/// Every bucket is derived from time entries (bucketed by the entry's local
+/// start date and hour). Tasks that carry an `actual_minutes` total but have
+/// no entries at all (imported or legacy data) are counted once, at their
+/// completion date, so nothing is double counted.
 #[derive(Debug, Clone, Default)]
 pub struct TimeAnalytics {
-    /// Minutes tracked per project
+    /// Minutes tracked per project (`None` = no project)
     pub by_project: HashMap<Option<ProjectId>, u32>,
+    /// Minutes tracked per task
+    pub by_task: HashMap<TaskId, u32>,
+    /// Minutes tracked per tag (a multi-tagged entry counts toward each tag)
+    pub by_tag: HashMap<String, u32>,
+    /// Minutes tracked per calendar day, ordered oldest first
+    pub by_day: BTreeMap<NaiveDate, u32>,
     /// Minutes tracked per day of week (0 = Monday, 6 = Sunday)
     pub by_day_of_week: [u32; 7],
-    /// Minutes tracked per hour of day (0-23)
+    /// Minutes tracked per local hour of day (0-23)
     pub by_hour: [u32; 24],
     /// Total tracked time in minutes
     pub total_minutes: u32,
+    /// Number of time entries that fell inside the window
+    pub entry_count: usize,
 }
 
 /// Maps array index to weekday (0 = Monday, 6 = Sunday).
@@ -236,6 +249,65 @@ impl TimeAnalytics {
     #[must_use]
     pub fn total_hours(&self) -> f64 {
         f64::from(self.total_minutes) / 60.0
+    }
+
+    /// Number of distinct days with any tracked time.
+    #[must_use]
+    pub fn active_days(&self) -> usize {
+        self.by_day.values().filter(|&&m| m > 0).count()
+    }
+
+    /// Average minutes per day that had tracked time (0 when none).
+    #[must_use]
+    pub fn avg_minutes_per_active_day(&self) -> u32 {
+        let days = self.active_days();
+        if days == 0 {
+            0
+        } else {
+            self.total_minutes / days as u32
+        }
+    }
+
+    /// Projects sorted by minutes descending, then by key for stability.
+    #[must_use]
+    pub fn projects_by_minutes(&self) -> Vec<(Option<ProjectId>, u32)> {
+        let mut v: Vec<_> = self.by_project.iter().map(|(k, &m)| (*k, m)).collect();
+        v.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| a.0.map(|p| p.0).cmp(&b.0.map(|p| p.0)))
+        });
+        v
+    }
+
+    /// Tags sorted by minutes descending, then alphabetically.
+    #[must_use]
+    pub fn tags_by_minutes(&self) -> Vec<(String, u32)> {
+        let mut v: Vec<_> = self.by_tag.iter().map(|(k, &m)| (k.clone(), m)).collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        v
+    }
+
+    /// Tasks sorted by minutes descending.
+    #[must_use]
+    pub fn tasks_by_minutes(&self) -> Vec<(TaskId, u32)> {
+        let mut v: Vec<_> = self.by_task.iter().map(|(k, &m)| (*k, m)).collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0 .0.cmp(&b.0 .0)));
+        v
+    }
+
+    /// Minutes per day for every date in `start..=end`, zero-filled.
+    #[must_use]
+    pub fn daily_series(&self, start: NaiveDate, end: NaiveDate) -> Vec<(NaiveDate, u32)> {
+        let mut out = Vec::new();
+        let mut d = start;
+        while d <= end {
+            out.push((d, self.by_day.get(&d).copied().unwrap_or(0)));
+            d = match d.succ_opt() {
+                Some(n) => n,
+                None => break,
+            };
+        }
+        out
     }
 }
 

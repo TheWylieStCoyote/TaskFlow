@@ -82,11 +82,13 @@ impl Widget for TimeLogEditor<'_> {
                 let is_running = entry.is_running();
 
                 // Format: [date] [start] - [end] [duration] [status]
-                let date = entry.started_at.format("%Y-%m-%d").to_string();
-                let start_time = entry.started_at.format("%H:%M").to_string();
-                let end_time = entry
-                    .ended_at
-                    .map_or_else(|| "running".to_string(), |t| t.format("%H:%M").to_string());
+                let local_start = entry.started_at.with_timezone(&chrono::Local);
+                let date = local_start.format("%Y-%m-%d").to_string();
+                let start_time = local_start.format("%H:%M").to_string();
+                let end_time = entry.ended_at.map_or_else(
+                    || "running".to_string(),
+                    |t| t.with_timezone(&chrono::Local).format("%H:%M").to_string(),
+                );
                 let duration = entry.formatted_duration();
 
                 let status_indicator = if is_running { "●" } else { " " };

@@ -216,7 +216,7 @@ fn test_dashboard_status_counts() {
 #[test]
 fn test_dashboard_format_duration() {
     assert_eq!(format_duration(30), "30m");
-    assert_eq!(format_duration(60), "1h 0m");
+    assert_eq!(format_duration(60), "1h");
     assert_eq!(format_duration(90), "1h 30m");
     assert_eq!(format_duration(125), "2h 5m");
 }
@@ -571,8 +571,8 @@ fn test_dashboard_format_duration_zero() {
 
 #[test]
 fn test_dashboard_format_duration_hours_only() {
-    assert_eq!(format_duration(120), "2h 0m");
-    assert_eq!(format_duration(180), "3h 0m");
+    assert_eq!(format_duration(120), "2h");
+    assert_eq!(format_duration(180), "3h");
 }
 
 // =====================================================================

@@ -171,11 +171,5 @@ impl Widget for ReportsView<'_> {
 
 /// Format minutes as hours and minutes
 pub(crate) fn format_duration(minutes: u32) -> String {
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-    if hours > 0 {
-        format!("{hours}h {mins}m")
-    } else {
-        format!("{mins}m")
-    }
+    crate::domain::format_minutes(minutes)
 }

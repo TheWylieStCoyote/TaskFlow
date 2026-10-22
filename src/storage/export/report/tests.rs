@@ -56,6 +56,7 @@ fn sample_report() -> AnalyticsReport {
                 arr
             },
             total_minutes: 160,
+            ..Default::default()
         },
         insights: ProductivityInsights {
             best_day: Some(Weekday::Fri),

@@ -9,34 +9,27 @@ use super::FocusView;
 impl FocusView<'_> {
     /// Format a duration as HH:MM:SS
     pub(crate) fn format_duration(duration: Duration) -> String {
-        let total_secs = duration.as_secs();
-        let hours = total_secs / 3600;
-        let minutes = (total_secs % 3600) / 60;
-        let seconds = total_secs % 60;
-        format!("{hours:02}:{minutes:02}:{seconds:02}")
+        crate::domain::format_hms(duration.as_secs())
     }
 
     /// Get time tracked for a task including current session
     pub(crate) fn get_time_tracked(&self, task: &Task) -> Duration {
-        let mut total_minutes: u64 = 0;
-
-        // Sum completed time entries
-        for entry in self.model.time_entries.values() {
-            if entry.task_id == task.id {
-                total_minutes += u64::from(entry.calculated_duration_minutes());
-            }
-        }
-
-        // Add current active session if tracking this task
-        if let Some(active) = self.model.active_time_entry() {
-            if active.task_id == task.id {
-                let now = chrono::Utc::now();
-                let elapsed_secs = (now - active.started_at).num_seconds().max(0) as u64;
-                return Duration::from_secs(total_minutes * 60 + elapsed_secs);
-            }
-        }
-
-        Duration::from_secs(total_minutes * 60)
+        let now = chrono::Utc::now();
+        let total_secs: u64 = self
+            .model
+            .time_entries
+            .values()
+            .filter(|entry| entry.task_id == task.id)
+            .map(|entry| {
+                if entry.is_running() {
+                    // Live session: second precision, counted exactly once.
+                    (now - entry.started_at).num_seconds().max(0) as u64
+                } else {
+                    u64::from(entry.calculated_duration_minutes()) * 60
+                }
+            })
+            .sum();
+        Duration::from_secs(total_secs)
     }
 
     /// Get the previous task in a chain (the task that links to this one)

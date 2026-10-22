@@ -26,9 +26,55 @@ impl Model {
         self.time_entries.insert(entry_id, entry.clone());
         self.active_time_entry = Some(entry_id);
         self.sync_time_entry(&entry);
-        self.storage.dirty = true;
+        self.recompute_task_time(&task_id);
 
         (entry, stopped_entry)
+    }
+
+    /// Recompute a task's cached `actual_minutes` from its time entries and
+    /// refresh every derived cache.
+    ///
+    /// This is the single place that keeps `Task::actual_minutes`, the task
+    /// list's time sums and the report cache consistent with `time_entries`.
+    /// Call it after any insert, edit or delete of a time entry.
+    pub fn recompute_task_time(&mut self, task_id: &TaskId) {
+        let total = self.total_time_for_task(task_id);
+        let changed = match self.tasks.get_mut(task_id) {
+            Some(task) if task.actual_minutes != total => {
+                task.actual_minutes = total;
+                true
+            }
+            _ => false,
+        };
+        if changed {
+            self.sync_task_by_id(task_id);
+        }
+        self.task_cache.rebuild_time_sums(&self.time_entries);
+        self.invalidate_report_cache();
+        self.storage.dirty = true;
+    }
+
+    /// Add a new (or restored) time entry, persist it and recompute its task.
+    ///
+    /// A running entry becomes the active timer when its task exists and no
+    /// other timer is running.
+    pub fn add_time_entry(&mut self, entry: TimeEntry) {
+        self.restore_time_entry(entry);
+    }
+
+    /// Replace an existing entry with an edited copy, persist it and
+    /// recompute its task. Falls back to an insert if the id is unknown.
+    pub fn upsert_time_entry(&mut self, entry: TimeEntry) {
+        let task_id = entry.task_id;
+        let previous_task = self
+            .time_entries
+            .insert(entry.id, entry.clone())
+            .map(|old| old.task_id);
+        self.sync_time_entry(&entry);
+        if let Some(old_task) = previous_task.filter(|t| *t != task_id) {
+            self.recompute_task_time(&old_task);
+        }
+        self.recompute_task_time(&task_id);
     }
 
     /// Stops the currently active time tracking session.
@@ -61,17 +107,12 @@ impl Model {
                 self.sync_time_entry(entry);
             }
 
-            // Update task's actual_minutes with total tracked time
-            if let Some(ref task_id) = task_id {
-                let total_minutes = self.total_time_for_task(task_id);
-                if let Some(task) = self.tasks.get_mut(task_id) {
-                    task.actual_minutes = total_minutes;
-                }
-                self.sync_task_by_id(task_id);
-            }
-
             self.active_time_entry = None;
             self.storage.dirty = true;
+
+            if let Some(ref task_id) = task_id {
+                self.recompute_task_time(task_id);
+            }
 
             // Return before/after if we had an entry
             if let (Some(before), Some(after)) = (before, after) {
@@ -127,18 +168,22 @@ impl Model {
         entries
     }
 
-    /// Deletes a time entry by ID (used for undo).
+    /// Deletes a time entry by ID, persists the removal and recomputes the
+    /// owning task's total (also used by undo).
     pub fn delete_time_entry(&mut self, entry_id: &TimeEntryId) {
         // If this is the active entry, clear it
         if self.active_time_entry.as_ref() == Some(entry_id) {
             self.active_time_entry = None;
         }
-        self.time_entries.remove(entry_id);
+        let task_id = self.time_entries.remove(entry_id).map(|e| e.task_id);
         // Also delete from storage
         if let Some(ref mut backend) = self.storage.backend {
             let _ = backend.delete_time_entry(entry_id);
         }
         self.storage.dirty = true;
+        if let Some(task_id) = task_id {
+            self.recompute_task_time(&task_id);
+        }
     }
 
     /// Restores a time entry (used for undo).
@@ -161,7 +206,7 @@ impl Model {
         }
 
         self.sync_time_entry(&entry);
-        self.storage.dirty = true;
+        self.recompute_task_time(&entry.task_id);
     }
 }
 
@@ -360,5 +405,72 @@ mod tests {
 
         // entry2 should NOT become active (active entry already exists)
         assert_ne!(model.active_time_entry, Some(entry2_id));
+    }
+
+    #[test]
+    fn stop_recomputes_actual_minutes_and_cache() {
+        let mut model = make_model();
+        let task = Task::new("Track me");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let (entry, _) = model.start_time_tracking(task_id);
+        // Pretend the timer has been running for 40 minutes.
+        model.time_entries.get_mut(&entry.id).unwrap().started_at -= chrono::Duration::minutes(40);
+        model.stop_time_tracking();
+
+        assert_eq!(model.tasks[&task_id].actual_minutes, 40);
+        assert_eq!(model.task_cache.time_sums.get(&task_id), Some(&40));
+        assert_eq!(model.time_entries_for_task(&task_id).len(), 1);
+    }
+
+    #[test]
+    fn add_upsert_delete_keep_task_total_in_sync() {
+        let mut model = make_model();
+        let task = Task::new("Manual entries");
+        let task_id = task.id;
+        model.tasks.insert(task_id, task);
+
+        let mut entry = TimeEntry::start(task_id);
+        entry.started_at -= chrono::Duration::hours(2);
+        entry.ended_at = Some(entry.started_at + chrono::Duration::minutes(30));
+        entry.duration_minutes = Some(30);
+        let entry_id = entry.id;
+        model.add_time_entry(entry.clone());
+        assert_eq!(model.tasks[&task_id].actual_minutes, 30);
+        assert_eq!(model.task_cache.time_sums.get(&task_id), Some(&30));
+        assert!(
+            model.active_time_entry.is_none(),
+            "a stopped entry never becomes active"
+        );
+
+        entry.duration_minutes = Some(45);
+        model.upsert_time_entry(entry);
+        assert_eq!(model.tasks[&task_id].actual_minutes, 45);
+
+        model.delete_time_entry(&entry_id);
+        assert_eq!(model.tasks[&task_id].actual_minutes, 0);
+        assert!(model.time_entries_for_task(&task_id).is_empty());
+    }
+
+    #[test]
+    fn upsert_moving_entry_between_tasks_recomputes_both() {
+        let mut model = make_model();
+        let a = Task::new("A");
+        let b = Task::new("B");
+        let (a_id, b_id) = (a.id, b.id);
+        model.tasks.insert(a_id, a);
+        model.tasks.insert(b_id, b);
+
+        let mut entry = TimeEntry::start(a_id);
+        entry.ended_at = Some(entry.started_at);
+        entry.duration_minutes = Some(20);
+        model.add_time_entry(entry.clone());
+        assert_eq!(model.tasks[&a_id].actual_minutes, 20);
+
+        entry.task_id = b_id;
+        model.upsert_time_entry(entry);
+        assert_eq!(model.tasks[&a_id].actual_minutes, 0);
+        assert_eq!(model.tasks[&b_id].actual_minutes, 20);
     }
 }

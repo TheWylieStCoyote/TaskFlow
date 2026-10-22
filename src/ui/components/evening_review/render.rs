@@ -642,20 +642,7 @@ impl EveningReview<'_> {
 
 /// Format duration in minutes to human-readable string.
 fn format_duration(minutes: u32) -> String {
-    if minutes == 0 {
-        return "0m".to_string();
-    }
-
-    let hours = minutes / 60;
-    let mins = minutes % 60;
-
-    if hours > 0 && mins > 0 {
-        format!("{hours}h {mins}m")
-    } else if hours > 0 {
-        format!("{hours}h")
-    } else {
-        format!("{mins}m")
-    }
+    crate::domain::format_minutes(minutes)
 }
 
 #[cfg(test)]

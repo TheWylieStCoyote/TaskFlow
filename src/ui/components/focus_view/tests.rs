@@ -342,3 +342,35 @@ fn test_focus_view_time_tracked_from_entries() {
     let content = buffer_content(&buffer);
     assert!(content.contains(':'));
 }
+
+#[test]
+fn time_tracked_counts_the_live_session_once() {
+    use crate::domain::TimeEntry;
+    use std::time::Duration as StdDuration;
+
+    let mut model = Model::new();
+    let task = crate::domain::Task::new("Live");
+    let task_id = task.id;
+    model.tasks.insert(task_id, task);
+
+    // One stopped 30-minute entry, plus a timer running for 10 minutes.
+    let now = chrono::Utc::now();
+    let mut done = TimeEntry::start(task_id);
+    done.started_at = now - chrono::Duration::hours(2);
+    done.ended_at = Some(done.started_at + chrono::Duration::minutes(30));
+    done.duration_minutes = Some(30);
+    model.time_entries.insert(done.id, done);
+    let mut running = TimeEntry::start(task_id);
+    running.started_at = now - chrono::Duration::minutes(10);
+    let running_id = running.id;
+    model.time_entries.insert(running_id, running);
+    model.active_time_entry = Some(running_id);
+
+    let theme = Theme::default();
+    let view = FocusView::new(&model, &theme);
+    let tracked = view.get_time_tracked(&model.tasks[&task_id]);
+
+    // 30 min stopped + 10 min live = 40 min; the old code reported 50.
+    assert!(tracked >= StdDuration::from_secs(40 * 60));
+    assert!(tracked < StdDuration::from_secs(40 * 60 + 5));
+}

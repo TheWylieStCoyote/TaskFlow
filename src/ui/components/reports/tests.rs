@@ -50,7 +50,7 @@ fn test_format_duration_minutes_only() {
 #[test]
 fn test_format_duration_hours_minutes() {
     assert_eq!(format_duration(90), "1h 30m");
-    assert_eq!(format_duration(120), "2h 0m");
+    assert_eq!(format_duration(120), "2h");
     assert_eq!(format_duration(135), "2h 15m");
 }
 

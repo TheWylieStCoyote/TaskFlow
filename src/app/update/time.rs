@@ -6,76 +6,100 @@
 //! - Pomodoro configuration changes
 
 use crate::app::{Model, PomodoroMessage, TimeMessage, UndoAction};
-use crate::domain::{PomodoroPhase, PomodoroSession};
+use crate::domain::{PomodoroPhase, PomodoroSession, TaskId};
 
 /// Handle time tracking messages
 pub fn handle_time(model: &mut Model, msg: TimeMessage) {
     match msg {
         TimeMessage::StartTracking => {
             if let Some(task_id) = model.selected_task_id() {
-                let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
-
-                if let Some((before, after)) = stopped_entry {
-                    // Timer switch: use composite action for single undo
-                    model.undo_stack.push(UndoAction::TimerSwitched {
-                        stopped_entry_before: Box::new(before),
-                        stopped_entry_after: Box::new(after),
-                        started_entry: Box::new(new_entry),
-                    });
-                } else {
-                    // Fresh start: use simple action
-                    model
-                        .undo_stack
-                        .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
-                }
+                start_tracking_with_undo(model, task_id);
             }
         }
         TimeMessage::StopTracking => {
-            if let Some((before, after)) = model.stop_time_tracking() {
-                model.undo_stack.push(UndoAction::TimeEntryStopped {
-                    before: Box::new(before),
-                    after: Box::new(after),
-                });
-            }
+            stop_tracking_with_undo(model);
         }
         TimeMessage::ToggleTracking => {
             if let Some(task_id) = model.selected_task_id() {
                 if model.is_tracking_task(&task_id) {
-                    // Stop tracking current task
-                    if let Some((before, after)) = model.stop_time_tracking() {
-                        model.undo_stack.push(UndoAction::TimeEntryStopped {
-                            before: Box::new(before),
-                            after: Box::new(after),
-                        });
-                    }
+                    stop_tracking_with_undo(model);
                 } else {
-                    // Start tracking new task (may switch from another task)
-                    let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
-
-                    if let Some((before, after)) = stopped_entry {
-                        // Timer switch: use composite action for single undo
-                        model.undo_stack.push(UndoAction::TimerSwitched {
-                            stopped_entry_before: Box::new(before),
-                            stopped_entry_after: Box::new(after),
-                            started_entry: Box::new(new_entry),
-                        });
-                    } else {
-                        // Fresh start: use simple action
-                        model
-                            .undo_stack
-                            .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
-                    }
+                    start_tracking_with_undo(model, task_id);
                 }
             }
         }
     }
 
-    // Invalidate report cache since time tracking data has changed
     model.invalidate_report_cache();
 }
 
-/// Handle Pomodoro timer messages
+/// Start the timer on `task_id` and record an undo action.
+///
+/// Any running timer on another task is stopped first (recorded as a switch).
+pub(crate) fn start_tracking_with_undo(model: &mut Model, task_id: TaskId) {
+    let (new_entry, stopped_entry) = model.start_time_tracking(task_id);
+    if let Some((before, after)) = stopped_entry {
+        model.undo_stack.push(UndoAction::TimerSwitched {
+            stopped_entry_before: Box::new(before),
+            stopped_entry_after: Box::new(after),
+            started_entry: Box::new(new_entry),
+        });
+    } else {
+        model
+            .undo_stack
+            .push(UndoAction::TimeEntryStarted(Box::new(new_entry)));
+    }
+}
+
+/// Stop the running timer, if any, and record an undo action.
+pub(crate) fn stop_tracking_with_undo(model: &mut Model) {
+    if let Some((before, after)) = model.stop_time_tracking() {
+        model.undo_stack.push(UndoAction::TimeEntryStopped {
+            before: Box::new(before),
+            after: Box::new(after),
+        });
+    }
+}
+
+/// Keep the task timer in step with the Pomodoro session.
+///
+/// Work phases are real tracked time: while a work phase is running (not
+/// paused) the session's task has a timer going; during breaks, pauses and
+/// after the session ends, a timer that *this* session owns is stopped. A
+/// timer the user started manually on a different task is left alone.
+fn sync_timer_with_pomodoro(model: &mut Model) {
+    let Some((task_id, working)) = model
+        .pomodoro
+        .session
+        .as_ref()
+        .map(|s| (s.task_id, s.phase == PomodoroPhase::Work && !s.paused))
+    else {
+        // Session ended: stop the timer only if it is on the task we were timing.
+        if let Some(task_id) = model.pomodoro.timed_task.take() {
+            if model.is_tracking_task(&task_id) {
+                stop_tracking_with_undo(model);
+            }
+        }
+        return;
+    };
+
+    if working {
+        if !model.is_tracking_task(&task_id) {
+            start_tracking_with_undo(model, task_id);
+        }
+        model.pomodoro.timed_task = Some(task_id);
+    } else if model.pomodoro.timed_task.take().is_some() && model.is_tracking_task(&task_id) {
+        stop_tracking_with_undo(model);
+    }
+    model.invalidate_report_cache();
+}
+
 pub fn handle_pomodoro(model: &mut Model, msg: PomodoroMessage) {
+    handle_pomodoro_inner(model, msg);
+    sync_timer_with_pomodoro(model);
+}
+
+fn handle_pomodoro_inner(model: &mut Model, msg: PomodoroMessage) {
     match msg {
         PomodoroMessage::Start { goal_cycles } => {
             // Start a new session for the selected task
@@ -473,5 +497,88 @@ mod tests {
             model.pomodoro.session.as_ref().unwrap().phase,
             initial_phase
         );
+    }
+
+    fn selected_task(model: &Model) -> crate::domain::TaskId {
+        model.selected_task_id().unwrap()
+    }
+
+    #[test]
+    fn pomodoro_work_phase_runs_the_task_timer() {
+        let mut model = setup_model_with_task();
+        let task_id = selected_task(&model);
+
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 2 });
+        assert!(model.is_tracking_task(&task_id));
+        assert_eq!(model.pomodoro.timed_task, Some(task_id));
+        assert_eq!(model.time_entries.len(), 1);
+
+        // Pausing a work phase stops the timer; resuming starts a fresh entry.
+        handle_pomodoro(&mut model, PomodoroMessage::Pause);
+        assert!(!model.is_tracking_task(&task_id));
+        assert!(model.time_entries.values().all(|e| !e.is_running()));
+        handle_pomodoro(&mut model, PomodoroMessage::Resume);
+        assert!(model.is_tracking_task(&task_id));
+        assert_eq!(model.time_entries.len(), 2);
+
+        // Skipping into a break stops it; the break ending starts it again.
+        handle_pomodoro(&mut model, PomodoroMessage::Skip);
+        assert_eq!(
+            model.pomodoro.session.as_ref().unwrap().phase,
+            PomodoroPhase::ShortBreak
+        );
+        assert!(!model.is_tracking_task(&task_id));
+        handle_pomodoro(&mut model, PomodoroMessage::Skip);
+        assert_eq!(
+            model.pomodoro.session.as_ref().unwrap().phase,
+            PomodoroPhase::Work
+        );
+        assert!(model.is_tracking_task(&task_id));
+        assert_eq!(model.time_entries.len(), 3);
+
+        // Stopping the session stops the timer and forgets the owned task.
+        handle_pomodoro(&mut model, PomodoroMessage::Stop);
+        assert!(model.active_time_entry.is_none());
+        assert_eq!(model.pomodoro.timed_task, None);
+        assert_eq!(model.time_entries.len(), 3);
+        assert!(model.time_entries.values().all(|e| !e.is_running()));
+    }
+
+    #[test]
+    fn pomodoro_does_not_restart_a_timer_already_on_the_task() {
+        let mut model = setup_model_with_task();
+        handle_time(&mut model, TimeMessage::StartTracking);
+        let running = model.active_time_entry.unwrap();
+
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 1 });
+
+        assert_eq!(
+            model.active_time_entry,
+            Some(running),
+            "same entry keeps running"
+        );
+        assert_eq!(model.time_entries.len(), 1);
+    }
+
+    #[test]
+    fn pomodoro_break_leaves_a_manual_timer_on_another_task_alone() {
+        let mut model = setup_model_with_task();
+        let other = Task::new("Other");
+        let other_id = other.id;
+        model.tasks.insert(other_id, other);
+
+        handle_pomodoro(&mut model, PomodoroMessage::Start { goal_cycles: 1 });
+        // User manually switches the timer to a different task mid-phase.
+        start_tracking_with_undo(&mut model, other_id);
+        assert!(model.is_tracking_task(&other_id));
+
+        handle_pomodoro(&mut model, PomodoroMessage::Skip); // into a break
+        assert!(
+            model.is_tracking_task(&other_id),
+            "not our timer, not stopped"
+        );
+
+        handle_pomodoro(&mut model, PomodoroMessage::Stop);
+        assert!(model.is_tracking_task(&other_id));
     }
 }

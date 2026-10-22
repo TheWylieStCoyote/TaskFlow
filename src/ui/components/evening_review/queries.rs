@@ -107,7 +107,7 @@ impl EveningReview<'_> {
     pub(crate) fn total_time_today(&self) -> u32 {
         self.time_entries_today()
             .iter()
-            .filter_map(|e| e.duration_minutes)
+            .map(|e| e.calculated_duration_minutes())
             .sum()
     }
 

@@ -235,3 +235,73 @@ fn test_current_streak_calculation() {
     assert_eq!(insights.longest_streak, 3);
     assert_eq!(insights.total_completed, 3);
 }
+
+#[test]
+fn time_analytics_counts_task_time_once_when_entries_exist() {
+    use crate::domain::TimeEntry;
+
+    let mut model = Model::new();
+    let mut task = Task::new("Tracked");
+    task.tags = vec!["deep".to_string(), "work".to_string()];
+    task.actual_minutes = 60; // cached total, must not be added on top of the entry
+    let task_id = task.id;
+    model.tasks.insert(task_id, task);
+
+    let started = chrono::Utc::now() - chrono::Duration::hours(2);
+    let mut entry = TimeEntry::start(task_id);
+    entry.started_at = started;
+    entry.ended_at = Some(started + chrono::Duration::minutes(60));
+    entry.duration_minutes = Some(60);
+    model.time_entries.insert(entry.id, entry);
+
+    let engine = AnalyticsEngine::new(&model);
+    let analytics = engine.compute_time_analytics(today() - chrono::Duration::days(7), today());
+
+    assert_eq!(analytics.total_minutes, 60);
+    assert_eq!(analytics.entry_count, 1);
+    assert_eq!(analytics.by_task.get(&task_id), Some(&60));
+    assert_eq!(analytics.by_project.get(&None), Some(&60));
+    assert_eq!(analytics.by_tag.get("deep"), Some(&60));
+    assert_eq!(analytics.by_tag.get("work"), Some(&60));
+    let local_day = started.with_timezone(&chrono::Local).date_naive();
+    assert_eq!(analytics.by_day.get(&local_day), Some(&60));
+    let local_hour = chrono::Timelike::hour(&started.with_timezone(&chrono::Local)) as usize;
+    assert_eq!(analytics.by_hour[local_hour], 60);
+
+    let insights = engine.compute_insights();
+    assert_eq!(insights.total_time_tracked, 60);
+}
+
+#[test]
+fn time_analytics_counts_legacy_totals_without_entries_exactly_once() {
+    // The fixture has two completed tasks with actual_minutes (60 + 30) and no entries.
+    let model = create_test_model();
+    let engine = AnalyticsEngine::new(&model);
+
+    let analytics = engine.compute_time_analytics(today() - chrono::Duration::days(7), today());
+    assert_eq!(analytics.total_minutes, 90);
+    assert_eq!(analytics.entry_count, 0);
+    assert_eq!(analytics.active_days(), 2);
+    assert_eq!(analytics.avg_minutes_per_active_day(), 45);
+
+    assert_eq!(engine.compute_insights().total_time_tracked, 90);
+}
+
+#[test]
+fn time_analytics_daily_series_is_zero_filled_and_sorted() {
+    let model = create_test_model();
+    let engine = AnalyticsEngine::new(&model);
+    let start = today() - chrono::Duration::days(6);
+    let analytics = engine.compute_time_analytics(start, today());
+
+    let series = analytics.daily_series(start, today());
+    assert_eq!(series.len(), 7);
+    assert_eq!(series.first().map(|(d, _)| *d), Some(start));
+    assert_eq!(series.last().map(|(d, _)| *d), Some(today()));
+    assert_eq!(series.iter().map(|(_, m)| m).sum::<u32>(), 90);
+
+    let projects = analytics.projects_by_minutes();
+    assert_eq!(projects, vec![(None, 90)]);
+    let tags = analytics.tags_by_minutes();
+    assert_eq!(tags.first(), Some(&("work".to_string(), 90)));
+}

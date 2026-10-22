@@ -7,7 +7,7 @@
 //! - Average tasks per day
 //! - Total time tracked
 
-use chrono::{Datelike, NaiveDate, Timelike};
+use chrono::{Datelike, Local, NaiveDate, Timelike};
 use std::collections::HashSet;
 
 use crate::domain::analytics::ProductivityInsights;
@@ -45,17 +45,23 @@ impl AnalyticsEngine<'_> {
                     let dow = date.weekday().num_days_from_monday() as usize;
                     by_day[dow] += 1;
 
-                    let hour = completed_at.time().hour() as usize;
+                    let hour = completed_at.with_timezone(&Local).hour() as usize;
                     by_hour[hour] += 1;
                 }
             }
-
-            insights.total_time_tracked += task.actual_minutes;
         }
 
-        // Add time from time entries
+        // Tracked time: entries are the source of truth; a task total without
+        // any entries behind it (legacy/imported data) is counted once.
+        let mut tasks_with_entries = HashSet::new();
         for entry in self.model.time_entries.values() {
+            tasks_with_entries.insert(entry.task_id);
             insights.total_time_tracked += entry.calculated_duration_minutes();
+        }
+        for task in self.model.tasks.values() {
+            if task.actual_minutes > 0 && !tasks_with_entries.contains(&task.id) {
+                insights.total_time_tracked += task.actual_minutes;
+            }
         }
 
         // Find best day

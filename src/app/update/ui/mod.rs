@@ -547,13 +547,11 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             model.show_generate_config_prompt = true;
         }
         UiMessage::ConfirmGenerateConfig => {
-            if let Err(e) = Settings::default().save() {
+            let path = Settings::path_in(&model.config_dir);
+            if let Err(e) = Settings::default().save_to_path(path.clone()) {
                 model.alerts.error_message = Some(format!("Failed to create config: {e}"));
             } else {
-                model.alerts.status_message = Some(format!(
-                    "Config created: {}",
-                    Settings::config_path().display()
-                ));
+                model.alerts.status_message = Some(format!("Config created: {}", path.display()));
             }
             model.show_generate_config_prompt = false;
         }

@@ -11,7 +11,7 @@ pub use action::{Action, ActionCategory, ALL_ACTIONS};
 pub use key_binding::{KeyBinding, Modifier};
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -59,7 +59,19 @@ impl Keybindings {
     /// Get the default keybindings file path
     #[must_use]
     pub fn config_path() -> PathBuf {
-        Settings::config_dir().join("keybindings.toml")
+        Self::path_in(&Settings::config_dir())
+    }
+
+    /// The keybindings file path inside a given config directory.
+    ///
+    /// This is the single place that knows the file is called
+    /// `keybindings.toml`; [`Self::config_path`] uses it with the default
+    /// config directory and the TUI uses it with [`Model::config_dir`].
+    ///
+    /// [`Model::config_dir`]: crate::app::Model::config_dir
+    #[must_use]
+    pub fn path_in(dir: &Path) -> PathBuf {
+        dir.join("keybindings.toml")
     }
 
     /// Look up action for a key
@@ -157,13 +169,22 @@ impl Keybindings {
         groups.into_values().collect()
     }
 
-    /// Save keybindings to the config file
+    /// Save keybindings to the default config file
     ///
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
     pub fn save(&self) -> std::io::Result<()> {
-        let path = Self::config_path();
+        self.save_to_path(&Self::config_path())
+    }
+
+    /// Save keybindings to a specific path, creating parent directories.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parent directory cannot be created or the
+    /// file cannot be written.
+    pub fn save_to_path(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }

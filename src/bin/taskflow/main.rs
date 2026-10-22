@@ -7,9 +7,12 @@ mod tui;
 
 #[cfg(test)]
 mod commands_tests;
+#[cfg(test)]
+mod main_tests;
 
 use std::fs::File;
 use std::io;
+use std::path::PathBuf;
 
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
@@ -66,16 +69,26 @@ fn init_logging(debug: bool, log_level: &str) {
     // When debug is false, no logging subscriber is installed (silent operation)
 }
 
-/// Load model with storage for CLI commands.
-/// Returns an error with a descriptive message if storage cannot be loaded.
-pub fn load_model_for_cli(cli: &Cli) -> anyhow::Result<Model> {
-    let settings = Settings::load();
+/// Resolve the storage backend and data path from CLI arguments and settings.
+///
+/// The CLI backend defaults to JSON, so a JSON CLI backend is treated as
+/// "not specified" and defers to `settings.backend`; any other CLI backend
+/// wins. `--data` overrides the settings data path when given.
+#[must_use]
+pub fn resolve_storage(cli: &Cli, settings: &Settings) -> (BackendType, PathBuf) {
     let backend_type = if cli.backend == BackendType::Json {
         BackendType::parse(&settings.backend).unwrap_or_default()
     } else {
         cli.backend
     };
     let data_path = cli.data.clone().unwrap_or_else(|| settings.get_data_path());
+    (backend_type, data_path)
+}
+
+/// Load model with storage for CLI commands.
+/// Returns an error with a descriptive message if storage cannot be loaded.
+pub fn load_model_for_cli(cli: &Cli) -> anyhow::Result<Model> {
+    let (backend_type, data_path) = resolve_storage(cli, &Settings::load());
 
     Model::new()
         .with_storage(backend_type, data_path.clone())

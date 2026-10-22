@@ -1169,7 +1169,10 @@ Press `Ctrl+m` to export as Mermaid diagram syntax.
 
 ### Configuration File
 
-TaskFlow's configuration lives at `~/.config/taskflow/config.toml`:
+TaskFlow's configuration lives at `~/.config/taskflow/config.toml`. Set the
+`TASKFLOW_CONFIG_DIR` environment variable to read `config.toml` and
+`keybindings.toml` from a different directory instead (handy for portable
+or per-project setups):
 
 ```toml
 # Storage settings

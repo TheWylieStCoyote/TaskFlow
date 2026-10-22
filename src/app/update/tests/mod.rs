@@ -15,6 +15,7 @@
 //! - `bulk` - Bulk operations (multi-select, delete)
 //! - `recurrence` - Recurring tasks
 //! - `chains` - Task chains (blocking/linked tasks)
+//! - `config_files` - Writing `config.toml` / `keybindings.toml` to the config dir
 //! - `pomodoro` - Pomodoro timer
 //! - `keybindings` - Keybindings editor
 //! - `calendar` - Calendar view and focus
@@ -29,6 +30,7 @@ mod bulk;
 mod calendar;
 mod cascade;
 mod chains;
+mod config_files;
 mod editing;
 mod editors;
 mod filters;

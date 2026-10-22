@@ -6,8 +6,16 @@
 //!
 //! # Configuration File
 //!
-//! Settings are stored in `~/.config/taskflow/settings.toml` (or equivalent
-//! on other platforms). Missing settings use sensible defaults.
+//! Settings are stored in `config.toml` inside the config directory, which
+//! is `~/.config/taskflow/` on Linux (or the platform equivalent). Missing
+//! settings use sensible defaults.
+//!
+//! # `TASKFLOW_CONFIG_DIR`
+//!
+//! Setting the `TASKFLOW_CONFIG_DIR` environment variable overrides the
+//! config directory. Both `config.toml` and `keybindings.toml` are then read
+//! from and written to that directory instead of the platform default, which
+//! is useful for portable setups and for testing against a scratch directory.
 //!
 //! # Available Settings
 //!
@@ -18,7 +26,8 @@
 //! - Auto-save interval
 //! - Pomodoro timer durations
 
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -227,9 +236,28 @@ impl Settings {
         Ok(())
     }
 
-    /// Get the default config directory
+    /// Get the default config directory.
+    ///
+    /// Honours the `TASKFLOW_CONFIG_DIR` environment variable; otherwise
+    /// uses the platform config directory (see [`Self::config_dir_from`]).
     #[must_use]
     pub fn config_dir() -> PathBuf {
+        Self::config_dir_from(std::env::var_os("TASKFLOW_CONFIG_DIR").as_deref())
+    }
+
+    /// Resolve the config directory from an optional override.
+    ///
+    /// A non-empty `override_dir` (the value of `TASKFLOW_CONFIG_DIR`) is used
+    /// verbatim. Otherwise the platform project directory is used, falling
+    /// back to the current directory when no home directory can be found.
+    ///
+    /// This is the pure core of [`Self::config_dir`], kept free of
+    /// environment access so it can be unit-tested.
+    #[must_use]
+    pub fn config_dir_from(override_dir: Option<&OsStr>) -> PathBuf {
+        if let Some(dir) = override_dir.filter(|d| !d.is_empty()) {
+            return PathBuf::from(dir);
+        }
         directories::ProjectDirs::from("com", "taskflow", "taskflow").map_or_else(
             || PathBuf::from("."),
             |dirs| dirs.config_dir().to_path_buf(),
@@ -239,7 +267,15 @@ impl Settings {
     /// Get the default config file path
     #[must_use]
     pub fn config_path() -> PathBuf {
-        Self::config_dir().join("config.toml")
+        Self::path_in(&Self::config_dir())
+    }
+
+    /// The settings file path inside a given config directory.
+    ///
+    /// This is the single place that knows the file is called `config.toml`.
+    #[must_use]
+    pub fn path_in(dir: &Path) -> PathBuf {
+        dir.join("config.toml")
     }
 
     /// Get the backend type
@@ -271,6 +307,40 @@ impl Settings {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn config_dir_from_uses_override_verbatim() {
+        let dir = Settings::config_dir_from(Some(OsStr::new("/x/y")));
+        assert_eq!(dir, PathBuf::from("/x/y"));
+    }
+
+    #[test]
+    fn config_dir_from_ignores_empty_override() {
+        let empty = Settings::config_dir_from(Some(OsStr::new("")));
+        let none = Settings::config_dir_from(None);
+        assert_eq!(empty, none);
+    }
+
+    #[test]
+    fn config_dir_from_without_override_uses_platform_fallback() {
+        let dir = Settings::config_dir_from(None);
+        // Either the platform project dir (whose final component is the
+        // "taskflow" application name) or "." when no home dir is available.
+        let is_project_dir = dir.file_name().is_some_and(|name| name == "taskflow");
+        assert!(
+            is_project_dir || dir == Path::new("."),
+            "unexpected fallback config dir: {}",
+            dir.display()
+        );
+    }
+
+    #[test]
+    fn path_in_joins_config_file_name() {
+        assert_eq!(
+            Settings::path_in(Path::new("/cfg")),
+            PathBuf::from("/cfg/config.toml")
+        );
+    }
 
     #[test]
     fn test_settings_default() {

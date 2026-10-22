@@ -72,6 +72,7 @@ pub use types::{
 pub use view_queries::extract_git_location;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use chrono::NaiveDate;
 
@@ -279,6 +280,11 @@ pub struct Model {
     pub keybindings_editor: KeybindingsEditorState,
     /// Keybindings configuration (mutable for editing)
     pub keybindings: crate::config::Keybindings,
+    /// Directory that `config.toml` and `keybindings.toml` are written to.
+    ///
+    /// Defaults to [`crate::config::Settings::config_dir`]; tests point it at
+    /// a temporary directory via [`Model::with_config_dir`].
+    pub config_dir: PathBuf,
 
     // Reports state
     /// Selected panel in the reports view
@@ -454,6 +460,7 @@ impl Model {
             pomodoro: PomodoroState::default(),
             keybindings_editor: KeybindingsEditorState::default(),
             keybindings: crate::config::Keybindings::load(),
+            config_dir: crate::config::Settings::config_dir(),
             report_panel: crate::ui::ReportPanel::default(),
             reports_time_window: TimeWindow::default(),
             reports_tasks_selected: 0,
@@ -491,6 +498,23 @@ impl Model {
             task_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
             sidebar_list_state: std::cell::RefCell::new(ratatui::widgets::ListState::default()),
         }
+    }
+
+    /// Sets the directory that config files (`config.toml`, `keybindings.toml`)
+    /// are saved to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use taskflow::app::Model;
+    ///
+    /// let model = Model::new().with_config_dir("/tmp/taskflow-config");
+    /// assert_eq!(model.config_dir.to_str(), Some("/tmp/taskflow-config"));
+    /// ```
+    #[must_use]
+    pub fn with_config_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.config_dir = dir.into();
+        self
     }
 
     /// Returns all tasks as a vector for export.

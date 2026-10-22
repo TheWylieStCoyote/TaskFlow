@@ -1,6 +1,7 @@
 //! Keybindings editor handlers
 
 use crate::app::{Model, UiMessage};
+use crate::config::Keybindings;
 
 /// Handle keybindings editor messages
 pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
@@ -87,7 +88,10 @@ pub fn handle_ui_keybindings(model: &mut Model, msg: UiMessage) {
             model.keybindings = crate::config::Keybindings::default();
             model.alerts.status_message = Some("All keybindings reset to defaults".to_string());
         }
-        UiMessage::SaveKeybindings => match model.keybindings.save() {
+        UiMessage::SaveKeybindings => match model
+            .keybindings
+            .save_to_path(&Keybindings::path_in(&model.config_dir))
+        {
             Ok(()) => {
                 model.alerts.status_message = Some("Keybindings saved".to_string());
             }

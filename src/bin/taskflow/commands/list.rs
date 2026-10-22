@@ -37,7 +37,8 @@ pub fn list_tasks(
 
 /// Select, sort and limit the tasks matching `view` and `filters`.
 ///
-/// Returns an error when the DSL filter expression cannot be parsed.
+/// Returns an error when the DSL filter expression cannot be parsed or when
+/// `--project` names no project (or more than one).
 pub(crate) fn select_tasks<'a>(
     model: &'a Model,
     view: &str,
@@ -73,20 +74,11 @@ pub(crate) fn select_tasks<'a>(
         })
     };
 
-    // Helper: find project ID by name
-    let find_project_id = |name: &str| -> Option<taskflow::domain::ProjectId> {
-        let name_lower = name.to_lowercase();
-        model
-            .projects
-            .values()
-            .find(|p| p.name.to_lowercase().contains(&name_lower))
-            .map(|p| p.id)
+    // An unknown project is an error, not "no filter".
+    let project_id = match filters.project.as_deref() {
+        Some(name) => Some(find_project(model, name)?),
+        None => None,
     };
-
-    let project_id = filters
-        .project
-        .as_ref()
-        .and_then(|name| find_project_id(name));
 
     // Pre-compute lowercase filter tags ONCE (outside the filter closure)
     let filter_tags_lower: Option<HashSet<String>> = filters
@@ -256,6 +248,55 @@ pub(crate) fn select_tasks<'a>(
 
     // Limit output
     Ok(tasks.into_iter().take(limit).collect())
+}
+
+/// How many project names to list in the "no such project" error before
+/// falling back to a count.
+const MAX_LISTED_PROJECTS: usize = 10;
+
+/// Find the one project `name` refers to: an exact (case-insensitive) name
+/// wins, otherwise a unique substring match. Anything else is an error.
+fn find_project(model: &Model, name: &str) -> anyhow::Result<taskflow::domain::ProjectId> {
+    let wanted = name.trim().to_lowercase();
+    if let Some(project) = model
+        .projects
+        .values()
+        .find(|p| p.name.to_lowercase() == wanted)
+    {
+        return Ok(project.id);
+    }
+    let mut matches: Vec<_> = model
+        .projects
+        .values()
+        .filter(|p| !wanted.is_empty() && p.name.to_lowercase().contains(&wanted))
+        .collect();
+    matches.sort_by(|a, b| a.name.cmp(&b.name));
+    match matches.as_slice() {
+        [] => {
+            let mut names: Vec<_> = model.projects.values().map(|p| p.name.as_str()).collect();
+            names.sort_unstable();
+            if names.is_empty() {
+                anyhow::bail!("No project named '{name}' (there are no projects)");
+            } else if names.len() <= MAX_LISTED_PROJECTS {
+                anyhow::bail!(
+                    "No project named '{name}'. Available projects: {}",
+                    names.join(", ")
+                );
+            }
+            anyhow::bail!(
+                "No project named '{name}' ({} projects available)",
+                names.len()
+            );
+        }
+        [only] => Ok(only.id),
+        many => {
+            let names: Vec<_> = many.iter().map(|p| p.name.as_str()).collect();
+            anyhow::bail!(
+                "'{name}' matches several projects: {}. Give the full name.",
+                names.join(", ")
+            )
+        }
+    }
 }
 
 /// Render the task list exactly as `taskflow list` prints it.
@@ -598,6 +639,88 @@ mod tests {
             select(&model, "all", false, &filters),
             ["Alpha overdue", "Beta today", "Delta someday"]
         );
+    }
+
+    #[test]
+    fn project_filter_prefers_an_exact_name_over_a_substring_match() {
+        let mut model = Model::new();
+        let api = Project::new("API");
+        let api_v2 = Project::new("API v2");
+        let (api_id, api_v2_id) = (api.id, api_v2.id);
+        model.projects.insert(api_id, api);
+        model.projects.insert(api_v2_id, api_v2);
+        let old = Task::new("Old endpoint").with_project(api_id);
+        let new = Task::new("New endpoint").with_project(api_v2_id);
+        model.tasks.insert(old.id, old);
+        model.tasks.insert(new.id, new);
+
+        let filters = ListFilters {
+            project: Some("api".to_string()),
+            ..ListFilters::default()
+        };
+        assert_eq!(select(&model, "all", false, &filters), ["Old endpoint"]);
+
+        let filters = ListFilters {
+            project: Some("V2".to_string()),
+            ..ListFilters::default()
+        };
+        assert_eq!(select(&model, "all", false, &filters), ["New endpoint"]);
+    }
+
+    #[test]
+    fn unknown_project_is_an_error_listing_the_available_names() {
+        let model = fixture();
+        let filters = ListFilters {
+            project: Some("Nope".to_string()),
+            ..ListFilters::default()
+        };
+        let err = select_tasks(&model, "all", false, 100, &filters, TODAY)
+            .expect_err("unknown project must not silently list everything");
+        let msg = err.to_string();
+        assert!(msg.contains("No project named 'Nope'"), "{msg}");
+        assert!(msg.contains("Backend, Frontend"), "{msg}");
+
+        // With no projects at all the message says so instead of listing.
+        let empty = Model::new();
+        let err = select_tasks(&empty, "all", false, 100, &filters, TODAY).unwrap_err();
+        assert!(err.to_string().contains("there are no projects"), "{err}");
+
+        // Blank names never match by substring.
+        let filters = ListFilters {
+            project: Some("  ".to_string()),
+            ..ListFilters::default()
+        };
+        assert!(select_tasks(&model, "all", false, 100, &filters, TODAY).is_err());
+    }
+
+    #[test]
+    fn ambiguous_project_substring_is_an_error() {
+        let model = fixture();
+        let filters = ListFilters {
+            project: Some("end".to_string()),
+            ..ListFilters::default()
+        };
+        let err = select_tasks(&model, "all", false, 100, &filters, TODAY).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("matches several projects"), "{msg}");
+        assert!(msg.contains("Backend, Frontend"), "{msg}");
+    }
+
+    #[test]
+    fn many_projects_are_counted_not_listed_in_the_error() {
+        let mut model = Model::new();
+        for i in 0..12 {
+            let project = Project::new(format!("Project {i:02}"));
+            model.projects.insert(project.id, project);
+        }
+        let filters = ListFilters {
+            project: Some("zzz".to_string()),
+            ..ListFilters::default()
+        };
+        let err = select_tasks(&model, "all", false, 100, &filters, TODAY).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("12 projects available"), "{msg}");
+        assert!(!msg.contains("Project 00"), "{msg}");
     }
 
     #[test]

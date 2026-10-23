@@ -181,6 +181,9 @@ pub enum Action {
 
     // Command palette
     ShowCommandPalette,
+
+    // Quick-open fuzzy task picker
+    ShowQuickOpen,
 }
 
 /// Category for grouping actions in help display
@@ -421,6 +424,8 @@ impl Action {
             Self::ShowTaskDetail => "Show task details",
             // Command palette
             Self::ShowCommandPalette => "Open command palette",
+            // Quick-open
+            Self::ShowQuickOpen => "Open quick-open task picker",
         }
     }
 
@@ -565,6 +570,7 @@ impl Action {
 
             Self::ShowTaskDetail => ActionCategory::Tasks,
             Self::ShowCommandPalette => ActionCategory::ViewFilter,
+            Self::ShowQuickOpen => ActionCategory::ViewFilter,
         }
     }
 }
@@ -723,4 +729,6 @@ pub const ALL_ACTIONS: &[Action] = &[
     Action::ShowTaskDetail,
     // Command palette
     Action::ShowCommandPalette,
+    // Quick-open fuzzy task picker
+    Action::ShowQuickOpen,
 ];

@@ -32,6 +32,11 @@ pub fn handle_key_event(
     model: &mut Model,
     keybindings: &Keybindings,
 ) -> Message {
+    // Handle quick-open picker (before command palette so it gets full keyboard)
+    if model.quick_open.visible {
+        return handle_quick_open_input(key);
+    }
+
     // Handle command palette first (highest priority when visible)
     if model.command_palette.visible {
         return handle_command_palette_input(key, model as &mut Model);
@@ -314,6 +319,25 @@ pub fn handle_key_event(
     }
 
     Message::None
+}
+
+/// Handle input for the quick-open fuzzy task picker.
+fn handle_quick_open_input(key: event::KeyEvent) -> Message {
+    match key.code {
+        KeyCode::Esc => Message::Ui(UiMessage::HideQuickOpen),
+        KeyCode::Enter => Message::Ui(UiMessage::QuickOpenSelect),
+        KeyCode::Up => Message::Ui(UiMessage::QuickOpenUp),
+        KeyCode::Down => Message::Ui(UiMessage::QuickOpenDown),
+        KeyCode::Char('k') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::QuickOpenUp)
+        }
+        KeyCode::Char('j') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {
+            Message::Ui(UiMessage::QuickOpenDown)
+        }
+        KeyCode::Backspace => Message::Ui(UiMessage::QuickOpenBackspace),
+        KeyCode::Char(c) => Message::Ui(UiMessage::QuickOpenInput(c)),
+        _ => Message::None,
+    }
 }
 
 /// Handle input for the command palette.

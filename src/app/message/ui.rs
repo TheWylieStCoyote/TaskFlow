@@ -526,4 +526,20 @@ pub enum UiMessage {
     CommandPaletteDown,
     /// Execute the selected command
     CommandPaletteExecute,
+
+    // Quick-open fuzzy task picker
+    /// Show the quick-open picker
+    ShowQuickOpen,
+    /// Hide the quick-open picker
+    HideQuickOpen,
+    /// Insert character in quick-open search query
+    QuickOpenInput(char),
+    /// Delete character before cursor in quick-open query
+    QuickOpenBackspace,
+    /// Navigate up in quick-open result list
+    QuickOpenUp,
+    /// Navigate down in quick-open result list
+    QuickOpenDown,
+    /// Jump to the highlighted quick-open result and close the picker
+    QuickOpenSelect,
 }

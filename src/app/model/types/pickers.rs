@@ -44,3 +44,19 @@ pub struct CommandPaletteState {
     /// Index of selected command in filtered list
     pub selected: usize,
 }
+
+/// State for the fuzzy quick-open task picker popup.
+///
+/// Provides a Telescope-style overlay for fast fuzzy navigation
+/// across all tasks regardless of the current view or filter state.
+#[derive(Debug, Clone, Default)]
+pub struct QuickOpenState {
+    /// Whether the quick-open picker is visible
+    pub visible: bool,
+    /// Current search query typed by the user
+    pub query: String,
+    /// Cursor position in the query string (byte offset)
+    pub cursor: usize,
+    /// Index of the selected result in the filtered list
+    pub selected: usize,
+}

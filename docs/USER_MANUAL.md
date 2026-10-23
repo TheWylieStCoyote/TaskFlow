@@ -723,6 +723,15 @@ The task list filters to show matching tasks.
 #### Clear Search
 Press `Ctrl+l` to clear the search and show all tasks.
 
+#### Quick Open
+Search does not change which tasks you can jump to; Quick Open does. Press `Alt+Space` from any view to open a floating picker that fuzzy-matches every task (title first, then project name, with typo tolerance):
+
+1. Type a few letters; the list re-ranks as you type
+2. `↓`/`↑` (or `Ctrl+j`/`Ctrl+k`) move the highlight
+3. `Enter` jumps to the task, `Esc` closes the picker
+
+If the task is hidden by the current view, project or the completed-tasks toggle, TaskFlow switches to the task list (or the Snoozed view) and reveals completed tasks so the selection lands on it. Search, tag and priority filters are left as they are; a status message tells you when one of them still hides the task.
+
 ### Filtering by Tags
 
 #### Apply Tag Filter
@@ -1935,6 +1944,7 @@ echo '{"operation":"list","entity":"task"}' | taskflow pipe --format csv
 | `Enter` | Select/confirm |
 | `Esc` | Cancel/close; leave focus mode; back to sidebar in specialised views |
 | `:` / `Alt+p` | Command palette |
+| `Alt+Space` | Quick Open: fuzzy-find any task and jump to it |
 
 #### Task Operations
 | Key | Action |

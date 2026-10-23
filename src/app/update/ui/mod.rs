@@ -74,6 +74,7 @@ mod input;
 mod keybindings;
 mod macros;
 mod multi_select;
+mod quick_open;
 mod reschedule;
 mod reviews;
 mod task_detail;
@@ -100,6 +101,7 @@ use habits::handle_ui_habits;
 use input::{handle_submit_input, start_input};
 use keybindings::handle_ui_keybindings;
 use macros::handle_ui_macros;
+use quick_open::handle_ui_quick_open;
 use reschedule::handle_ui_reschedule;
 use reviews::{handle_ui_daily_review, handle_ui_evening_review, handle_ui_weekly_review};
 use task_detail::handle_ui_task_detail;
@@ -944,6 +946,17 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::CommandPaletteDown
         | UiMessage::CommandPaletteExecute => {
             handle_ui_command_palette(model, msg);
+        }
+
+        // Quick-open fuzzy task picker - delegated to helper
+        UiMessage::ShowQuickOpen
+        | UiMessage::HideQuickOpen
+        | UiMessage::QuickOpenInput(_)
+        | UiMessage::QuickOpenBackspace
+        | UiMessage::QuickOpenUp
+        | UiMessage::QuickOpenDown
+        | UiMessage::QuickOpenSelect => {
+            handle_ui_quick_open(model, msg);
         }
     }
 }

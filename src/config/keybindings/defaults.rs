@@ -164,6 +164,8 @@ pub(crate) const DEFAULT_BINDINGS: &[(&str, Action)] = &[
     // Command palette
     ("alt+p", Action::ShowCommandPalette),
     (":", Action::ShowCommandPalette),
+    // Quick-open fuzzy task picker
+    ("alt+space", Action::ShowQuickOpen),
 ];
 
 /// Create the default keybindings map.

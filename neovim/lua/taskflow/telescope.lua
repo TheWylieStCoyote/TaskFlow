@@ -44,8 +44,9 @@ function M.taskflow(opts)
         })[task.status] or '   '
         return {
           value   = task,
-          display = status_sym .. '  ' .. (task.title or task.id),
-          ordinal = task.title or task.id,
+          display = status_sym .. '  ' .. (task.title or task.id)
+            .. require('taskflow.ui').format_tags(task.tags),
+          ordinal = (task.title or task.id) .. ' ' .. table.concat(task.tags or {}, ' '),
         }
       end,
     }),

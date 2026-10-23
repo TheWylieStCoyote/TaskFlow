@@ -1925,7 +1925,8 @@ show a statusline component, without starting a new process per request.
 Unix only; on other platforms the server is compiled out.
 
 **Requirements.** TaskFlow must be running; it creates and owns the socket and
-removes it on exit. Neovim 0.10 or newer. Telescope is optional.
+removes it on exit. Neovim 0.10 or newer (tested on 0.12). Telescope is
+optional.
 
 **Commands** (after `require('taskflow').setup({})` in your Neovim config):
 

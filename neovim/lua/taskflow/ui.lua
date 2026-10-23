@@ -38,6 +38,16 @@ end
 --- Show a floating list of task summaries with keybindings.
 ---@param tasks  table[]  list of TaskSummary objects from the socket
 ---@param on_select function(task)  called when user presses <CR>
+--- Render a task's tags as ` #a #b`, or '' when there are none.
+---@param tags string[]|nil
+---@return string
+function M.format_tags(tags)
+  if type(tags) ~= 'table' or #tags == 0 then return '' end
+  local parts = {}
+  for i, tag in ipairs(tags) do parts[i] = '#' .. tag end
+  return '  ' .. table.concat(parts, ' ')
+end
+
 function M.open_task_list(tasks, on_select)
   if not tasks or #tasks == 0 then
     vim.notify('[TaskFlow] No tasks to display', vim.log.levels.INFO)
@@ -60,7 +70,7 @@ function M.open_task_list(tasks, on_select)
       low    = '.  ',
       none   = '   ',
     })[t.priority] or '   '
-    lines[i] = string.format('%s %s  %s', status_sym, priority_sym, t.title or '')
+    lines[i] = string.format('%s %s  %s%s', status_sym, priority_sym, t.title or '', M.format_tags(t.tags))
   end
 
   local cfg    = require('taskflow.config').get()

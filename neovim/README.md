@@ -2,7 +2,7 @@
 
 Neovim integration for [TaskFlow](https://github.com/TheWylieStCoyote/TaskFlow) via a persistent Unix Domain Socket. Create tasks from code comments, browse tasks in a floating window, and surface a statusline component — without spawning a new process on every request.
 
-**Requires:** TaskFlow TUI running (`cargo run`) — it creates and owns the socket.
+**Requires:** Neovim 0.10 or newer (tested on 0.12), and the TaskFlow TUI running (`cargo run`) — it creates and owns the socket.
 
 ---
 

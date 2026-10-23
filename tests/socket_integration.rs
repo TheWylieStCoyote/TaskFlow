@@ -124,6 +124,40 @@ mod tests {
     }
 
     #[test]
+    fn test_list_tasks_includes_sorted_tags() {
+        let dir = tempdir().unwrap();
+        let sock = dir.path().join("tags.sock");
+
+        let mut model = Model::new();
+        let mut tagged = taskflow::domain::Task::new("Tagged");
+        tagged.tags = vec!["zeta".to_string(), "alpha".to_string()];
+        let plain = taskflow::domain::Task::new("Plain");
+        model.tasks.insert(tagged.id, tagged);
+        model.tasks.insert(plain.id, plain);
+
+        let (_server, _rx, _snap) = start_server(&sock, &model);
+        let resp = send_request(
+            &sock,
+            r#"{"type":"pipe","operation":"list","entity":"task"}"#,
+        );
+        assert_eq!(resp["success"], true);
+        let data = resp["data"].as_array().unwrap();
+        let by_title = |title: &str| {
+            data.iter()
+                .find(|t| t["title"] == title)
+                .unwrap_or_else(|| panic!("{title} missing: {data:?}"))
+        };
+        assert_eq!(
+            by_title("Tagged")["tags"],
+            serde_json::json!(["alpha", "zeta"])
+        );
+        assert!(
+            by_title("Plain").get("tags").is_none(),
+            "empty tags are omitted"
+        );
+    }
+
+    #[test]
     fn test_create_task_via_socket() {
         let dir = tempdir().unwrap();
         let sock = dir.path().join("create.sock");

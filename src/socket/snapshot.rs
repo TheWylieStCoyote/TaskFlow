@@ -19,6 +19,11 @@ impl ModelSnapshot {
                 priority: t.priority,
                 project_id: t.project_id.map(|p| p.to_string()),
                 due_date: t.due_date.map(|d| d.to_string()),
+                tags: {
+                    let mut tags = t.tags.clone();
+                    tags.sort();
+                    tags
+                },
             })
             .collect();
 

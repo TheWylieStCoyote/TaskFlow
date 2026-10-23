@@ -101,6 +101,9 @@ pub struct TaskSummary {
     pub project_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub due_date: Option<String>,
+    /// Tag names, sorted; omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 /// A point-in-time snapshot of the Model, safe to read from the socket thread.

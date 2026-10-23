@@ -223,6 +223,7 @@ Each task shows:
 | `c` | Toggle showing completed tasks |
 | `?` | Show help popup (`j`/`k` scroll, any other key closes) |
 | `:` or `Alt+p` | Command palette: search every action by name and run it |
+| `Alt+Space` | Quick Open: fuzzy-find any task by title or project and jump to it |
 | `Alt+d` / `Alt+w` / `Alt+e` | Daily / Weekly / Evening review |
 | `Alt+g` | Git TODOs view (`r` rescans the repository) |
 | `Ctrl+k` | Keybindings editor |

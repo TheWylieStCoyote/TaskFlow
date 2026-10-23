@@ -34,6 +34,7 @@ const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
     ("Reports", "Tab/S-Tab panels, w window, j/k tasks"),
     ("Duplicats", "D dismiss, M merge, r refresh"),
     ("Macros", "ctrl+q N record/stop, @N play"),
+    ("QuickOpen", "alt+space fuzzy-find any task, Enter jumps"),
 ];
 
 /// Help popup widget that displays keybindings dynamically

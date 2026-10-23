@@ -6,9 +6,13 @@
 local root = vim.fn.fnamemodify(debug.getinfo(1).source:sub(2), ':p:h:h:h')
 vim.opt.rtp:prepend(root .. '/neovim')
 
--- Add plenary if installed (skip gracefully if not)
+-- Add plenary: $PLENARY_DIR first (CI checks it out there), then the usual
+-- plugin-manager locations.
+local plenary_env = vim.env.PLENARY_DIR
 local plenary_path = vim.fn.stdpath('data') .. '/lazy/plenary.nvim'
-if vim.fn.isdirectory(plenary_path) == 1 then
+if plenary_env and plenary_env ~= '' and vim.fn.isdirectory(plenary_env) == 1 then
+  vim.opt.rtp:prepend(plenary_env)
+elseif vim.fn.isdirectory(plenary_path) == 1 then
   vim.opt.rtp:prepend(plenary_path)
 else
   -- Try common plugin manager locations

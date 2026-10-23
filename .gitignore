@@ -5,3 +5,5 @@
 *.snap.new
 taskflow.log
 coverage/*
+# plenary.nvim checkout used by the Neovim plugin tests in CI
+.plenary/

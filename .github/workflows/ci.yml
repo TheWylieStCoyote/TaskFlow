@@ -20,6 +20,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-targets
 
+  lua-tests:
+    name: Neovim plugin tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: nvim-lua/plenary.nvim
+          path: .plenary
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - name: Run plenary specs
+        env:
+          PLENARY_DIR: ${{ github.workspace }}/.plenary
+        run: |
+          nvim --headless -u neovim/tests/minimal_init.lua \
+            -c "PlenaryBustedDirectory neovim/tests/ {minimal_init = 'neovim/tests/minimal_init.lua', sequential = true}"
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

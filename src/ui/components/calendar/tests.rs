@@ -4,8 +4,9 @@ use super::*;
 use crate::app::Model;
 use crate::config::Theme;
 use crate::domain::today;
-use crate::domain::Task;
+use crate::domain::{Task, TaskStatus};
 use crate::ui::test_utils::{buffer_content, render_widget};
+use chrono::NaiveDate;
 
 #[test]
 fn test_calendar_renders_month_name() {
@@ -210,4 +211,34 @@ fn test_calendar_days_in_month() {
     model.calendar_state.month = 4; // April
     let calendar = Calendar::new(&model, &theme);
     assert_eq!(calendar.days_in_month(), 30);
+}
+
+#[test]
+fn test_calendar_grid_marks_scheduled_days_with_diamond_and_due_days_with_dot() {
+    let mut model = Model::new();
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 3;
+    model.calendar_state.selected_day = Some(1);
+    model.current_view = crate::app::ViewId::Calendar;
+
+    let mut scheduled = Task::new("Blocked");
+    scheduled.scheduled_date = NaiveDate::from_ymd_opt(2024, 3, 14);
+    let due = Task::new("Due").with_due_date(NaiveDate::from_ymd_opt(2024, 3, 20).unwrap());
+    let mut done = Task::new("Done block").with_status(TaskStatus::Done);
+    done.scheduled_date = NaiveDate::from_ymd_opt(2024, 3, 27);
+    for t in [scheduled, due, done] {
+        model.tasks.insert(t.id, t);
+    }
+    model.filtering.show_completed = false;
+    model.refresh_visible_tasks();
+
+    let theme = Theme::default();
+    let content = buffer_content(&render_widget(Calendar::new(&model, &theme), 80, 20));
+
+    assert!(content.contains("14◆"), "scheduled day gets ◆: {content}");
+    assert!(content.contains("20·"), "due-only day keeps ·: {content}");
+    assert!(
+        !content.contains("27◆"),
+        "a completed block is hidden when completed tasks are hidden: {content}"
+    );
 }

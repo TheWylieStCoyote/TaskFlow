@@ -735,3 +735,158 @@ fn test_item_no_git_branch() {
 
     assert!(!text.contains('⎇'), "No git branch should not show ⎇ icon");
 }
+
+// ============================================================================
+// Subtask collapse indicator
+// ============================================================================
+
+#[test]
+fn test_item_collapse_indicator_follows_subtask_state() {
+    let theme = Theme::default();
+    let task = Task::new("Parent Task");
+
+    let mut ctx = default_context(&task, &theme);
+    ctx.subtask_progress = (1, 3);
+    let expanded = list_item_text(task_to_list_item(&ctx));
+    assert!(
+        expanded.contains("▼ "),
+        "expanded parent shows ▼: {expanded}"
+    );
+    assert!(!expanded.contains('▶'));
+
+    ctx.is_collapsed = true;
+    let collapsed = list_item_text(task_to_list_item(&ctx));
+    assert!(
+        collapsed.contains("▶ "),
+        "collapsed parent shows ▶: {collapsed}"
+    );
+    assert!(!collapsed.contains('▼'));
+
+    // A task without subtasks never shows an indicator, collapsed or not
+    ctx.subtask_progress = (0, 0);
+    let leaf = list_item_text(task_to_list_item(&ctx));
+    assert!(!leaf.contains('▶') && !leaf.contains('▼'));
+}
+
+#[test]
+fn test_task_list_marks_collapsed_parent_from_model_state() {
+    let mut model = Model::new();
+    let parent = Task::new("Parent Task");
+    let child = Task::new("Hidden Child").with_parent(parent.id);
+    let parent_id = parent.id;
+    model.tasks.insert(parent.id, parent);
+    model.tasks.insert(child.id, child);
+    model.collapsed_tasks.insert(parent_id);
+    model.refresh_visible_tasks();
+
+    let theme = Theme::default();
+    let content = buffer_content(&render_widget(TaskList::new(&model, &theme), 60, 10));
+
+    assert!(
+        content.contains("▶"),
+        "collapsed marker rendered: {content}"
+    );
+    assert!(content.contains("Parent Task"));
+    assert!(!content.contains("Hidden Child"));
+}
+
+// ============================================================================
+// Inline title editing
+// ============================================================================
+
+#[test]
+fn test_item_inline_edit_shows_buffer_with_cursor_instead_of_title() {
+    let theme = Theme::default();
+    let task = Task::new("Old title");
+    let mut ctx = default_context(&task, &theme);
+    ctx.is_editing = true;
+    ctx.edit_buffer = Some("New títle");
+    ctx.edit_cursor = 4; // on the 'í' (char index, not byte index)
+
+    let item = task_to_list_item(&ctx);
+    let text = list_item_text(item);
+
+    assert!(
+        text.contains("New títle"),
+        "buffer replaces the title: {text}"
+    );
+    assert!(!text.contains("Old title"));
+}
+
+/// Renders one item and returns the (symbol, background) of every cell in the row.
+fn item_cells(item: ratatui::widgets::ListItem<'_>) -> Vec<(String, ratatui::style::Color)> {
+    use ratatui::widgets::List;
+    let area = Rect::new(0, 0, 80, 1);
+    let mut buffer = Buffer::empty(area);
+    ratatui::prelude::Widget::render(List::new(vec![item]), area, &mut buffer);
+    (0..area.width)
+        .filter_map(|x| buffer.cell((x, 0)))
+        .map(|c| (c.symbol().to_string(), c.bg))
+        .collect()
+}
+
+#[test]
+fn test_item_inline_edit_block_cursor_highlights_the_cursor_cell() {
+    use ratatui::style::Color;
+    let theme = Theme::default();
+    let task = Task::new("Old title");
+    let mut ctx = default_context(&task, &theme);
+    ctx.is_editing = true;
+    ctx.edit_buffer = Some("abc");
+
+    // Cursor on 'b': only that cell carries the block background
+    ctx.edit_cursor = 1;
+    let cells = item_cells(task_to_list_item(&ctx));
+    let bg_of = |sym: &str| cells.iter().find(|(s, _)| s == sym).map(|(_, bg)| *bg);
+    assert_ne!(bg_of("b"), Some(Color::Reset), "cursor cell is a block");
+    assert_eq!(bg_of("a"), Some(Color::Reset));
+    assert_eq!(bg_of("c"), Some(Color::Reset));
+
+    // Cursor past the end: a highlighted blank follows the text
+    ctx.edit_cursor = 3;
+    let cells = item_cells(task_to_list_item(&ctx));
+    let c_pos = cells.iter().position(|(s, _)| s == "c").unwrap();
+    assert_eq!(cells[c_pos + 1].0, " ");
+    assert_ne!(cells[c_pos + 1].1, Color::Reset, "trailing block cursor");
+}
+
+#[test]
+fn test_item_editing_flag_without_buffer_falls_back_to_title() {
+    let theme = Theme::default();
+    let task = Task::new("Kept title");
+    let mut ctx = default_context(&task, &theme);
+    ctx.is_editing = true;
+    ctx.edit_buffer = None;
+
+    let text = list_item_text(task_to_list_item(&ctx));
+    assert!(text.contains("Kept title"));
+}
+
+#[test]
+fn test_task_list_renders_inline_edit_from_model_input() {
+    use crate::ui::components::{InputMode, InputTarget};
+
+    let mut model = Model::new();
+    let edited = Task::new("Original title");
+    let other = Task::new("Untouched task");
+    let edited_id = edited.id;
+    model.tasks.insert(edited.id, edited);
+    model.tasks.insert(other.id, other);
+    model.refresh_visible_tasks();
+    model.input.mode = InputMode::Editing;
+    model.input.target = InputTarget::EditTask(edited_id);
+    model.input.buffer = "Renamed inline".to_string();
+    model.input.cursor = model.input.buffer.chars().count();
+
+    let theme = Theme::default();
+    let content = buffer_content(&render_widget(TaskList::new(&model, &theme), 60, 10));
+
+    assert!(content.contains("Renamed inline"), "{content}");
+    assert!(!content.contains("Original title"));
+    assert!(content.contains("Untouched task"), "other rows unchanged");
+
+    // In a view without the task list the row is not edited inline
+    model.current_view = crate::app::ViewId::Kanban;
+    let content = buffer_content(&render_widget(TaskList::new(&model, &theme), 60, 10));
+    assert!(content.contains("Original title"));
+}

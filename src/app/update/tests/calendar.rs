@@ -1,12 +1,13 @@
 //! Calendar view and focus tests.
 
-use chrono::Datelike;
+use chrono::{Datelike, NaiveDate};
 
 use crate::app::{
-    update::update, Message, Model, NavigationMessage, TaskMessage, UiMessage, ViewId,
+    update::update, Message, Model, NavigationMessage, SystemMessage, TaskMessage, UiMessage,
+    ViewId,
 };
 use crate::domain::today;
-use crate::domain::{Task, TaskStatus};
+use crate::domain::{Task, TaskId, TaskStatus};
 
 #[test]
 fn test_calendar_focus_toggle() {
@@ -449,4 +450,152 @@ fn test_calendar_down_no_selected_day() {
     model.calendar_state.focus_task_list = false;
 
     update(&mut model, Message::Navigation(NavigationMessage::Down)); // Should not panic
+}
+
+// === ScheduleTaskToDay ===
+
+/// Calendar view pinned to Thursday 2024-03-14 with one task due that day
+/// and one task already time-blocked on it.
+fn schedule_model() -> (Model, NaiveDate, TaskId, TaskId) {
+    let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 3;
+    model.calendar_state.selected_day = Some(14);
+
+    let due = Task::new("Due only").with_due_date(date);
+    let mut blocked = Task::new("Already blocked");
+    blocked.scheduled_date = Some(date);
+    blocked.scheduled_start_time = chrono::NaiveTime::from_hms_opt(9, 0, 0);
+    let (due_id, blocked_id) = (due.id, blocked.id);
+    model.tasks.insert(due_id, due);
+    model.tasks.insert(blocked_id, blocked);
+    model.refresh_visible_tasks();
+    assert_eq!(model.visible_tasks, vec![blocked_id, due_id]);
+    (model, date, due_id, blocked_id)
+}
+
+#[test]
+fn test_schedule_task_to_day_sets_scheduled_date_with_undo() {
+    let (mut model, date, due_id, _) = schedule_model();
+    model.selected_index = 1; // "Due only"
+    let undo_len = model.undo_stack.len();
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    let task = &model.tasks[&due_id];
+    assert_eq!(task.scheduled_date, Some(date));
+    assert_eq!(task.due_date, Some(date), "due date is untouched");
+    assert_eq!(model.undo_stack.len(), undo_len + 1);
+    assert_eq!(
+        model.alerts.status_message.as_deref(),
+        Some("Scheduled to Thu 14 Mar")
+    );
+
+    update(&mut model, Message::System(SystemMessage::Undo));
+    assert_eq!(model.tasks[&due_id].scheduled_date, None);
+}
+
+#[test]
+fn test_schedule_task_to_day_moves_task_into_scheduled_section_and_keeps_selection() {
+    let (mut model, _, due_id, blocked_id) = schedule_model();
+    model.selected_index = 1;
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    // Untimed blocks sort after timed ones, so the task stays second
+    assert_eq!(model.visible_tasks, vec![blocked_id, due_id]);
+    assert_eq!(model.selected_task_id(), Some(due_id));
+
+    // Giving it an earlier time block moves it first; selection follows
+    model.tasks.get_mut(&due_id).unwrap().scheduled_start_time =
+        chrono::NaiveTime::from_hms_opt(7, 0, 0);
+    model.refresh_visible_tasks();
+    assert_eq!(model.visible_tasks, vec![due_id, blocked_id]);
+}
+
+#[test]
+fn test_schedule_task_to_day_works_from_the_task_list_focus_too() {
+    let (mut model, date, due_id, _) = schedule_model();
+    model.calendar_state.focus_task_list = true;
+    model.selected_index = 1;
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    assert_eq!(model.tasks[&due_id].scheduled_date, Some(date));
+}
+
+#[test]
+fn test_schedule_task_to_day_is_a_noop_when_already_scheduled_there() {
+    let (mut model, _, _, blocked_id) = schedule_model();
+    model.selected_index = 0; // "Already blocked"
+    let before = model.tasks[&blocked_id].clone();
+    let undo_len = model.undo_stack.len();
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    assert_eq!(model.tasks[&blocked_id].updated_at, before.updated_at);
+    assert_eq!(model.undo_stack.len(), undo_len, "no undo entry recorded");
+    assert!(model.alerts.status_message.is_none());
+}
+
+#[test]
+fn test_schedule_task_to_day_reschedules_from_another_day_keeping_time_block() {
+    let (mut model, date, _, blocked_id) = schedule_model();
+    let other = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+    {
+        let task = model.tasks.get_mut(&blocked_id).unwrap();
+        task.scheduled_date = Some(other);
+        task.due_date = Some(date); // keeps it in the day panel as due-only
+    }
+    model.refresh_visible_tasks();
+    model.selected_index = model
+        .visible_tasks
+        .iter()
+        .position(|id| *id == blocked_id)
+        .unwrap();
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    let task = &model.tasks[&blocked_id];
+    assert_eq!(task.scheduled_date, Some(date));
+    assert_eq!(
+        task.scheduled_start_time,
+        chrono::NaiveTime::from_hms_opt(9, 0, 0),
+        "time block survives the move"
+    );
+}
+
+#[test]
+fn test_schedule_task_to_day_ignored_outside_calendar_view() {
+    let (mut model, _, due_id, _) = schedule_model();
+    model.current_view = ViewId::TaskList;
+    model.refresh_visible_tasks();
+    model.selected_index = model
+        .visible_tasks
+        .iter()
+        .position(|id| *id == due_id)
+        .unwrap();
+
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+
+    assert_eq!(model.tasks[&due_id].scheduled_date, None);
+    assert!(model.undo_stack.is_empty());
+}
+
+#[test]
+fn test_schedule_task_to_day_without_selected_day_or_task_does_nothing() {
+    let (mut model, _, due_id, _) = schedule_model();
+    model.calendar_state.selected_day = None;
+    model.refresh_visible_tasks();
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+    assert_eq!(model.tasks[&due_id].scheduled_date, None);
+
+    // Day selected but nothing listed on it
+    model.calendar_state.selected_day = Some(1);
+    model.refresh_visible_tasks();
+    assert!(model.visible_tasks.is_empty());
+    update(&mut model, Message::Ui(UiMessage::ScheduleTaskToDay));
+    assert!(model.undo_stack.is_empty());
 }

@@ -2,8 +2,8 @@
 
 use crate::app::model::Model;
 use crate::domain::today;
-use crate::domain::{Habit, Task};
-use chrono::NaiveDate;
+use crate::domain::{Habit, Task, TaskStatus};
+use chrono::{NaiveDate, NaiveTime};
 
 fn date(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -136,6 +136,62 @@ fn test_tasks_for_day_no_match() {
     // A different day — no tasks
     let tasks = model.tasks_for_day(date(2024, 6, 16));
     assert!(tasks.is_empty());
+}
+
+#[test]
+fn test_tasks_for_day_lists_scheduled_by_time_before_due_only() {
+    let mut model = Model::new();
+    let d = date(2024, 6, 15);
+    let mut late = Task::new("Late block");
+    late.scheduled_date = Some(d);
+    late.scheduled_start_time = NaiveTime::from_hms_opt(16, 0, 0);
+    let mut early = Task::new("Early block");
+    early.scheduled_date = Some(d);
+    early.scheduled_start_time = NaiveTime::from_hms_opt(9, 0, 0);
+    let mut due = Task::new("Due only");
+    due.due_date = Some(d);
+    let mut both = Task::new("Due and scheduled");
+    both.due_date = Some(d);
+    both.scheduled_date = Some(d);
+    for t in [late, early, due, both] {
+        model.tasks.insert(t.id, t);
+    }
+    model.rebuild_caches();
+
+    let titles: Vec<_> = model
+        .tasks_for_day(d)
+        .iter()
+        .map(|t| t.title.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        ["Early block", "Late block", "Due and scheduled", "Due only"]
+    );
+}
+
+// ── scheduled_task_count_for_day ──────────────────────────────────────────────
+
+#[test]
+fn test_scheduled_task_count_for_day_respects_show_completed() {
+    let mut model = Model::new();
+    let d = date(2024, 3, 10);
+    let mut open = Task::new("Open");
+    open.scheduled_date = Some(d);
+    let mut done = Task::new("Done");
+    done.scheduled_date = Some(d);
+    done.status = TaskStatus::Done;
+    let mut due_only = Task::new("Due only");
+    due_only.due_date = Some(d);
+    for t in [open, done, due_only] {
+        model.tasks.insert(t.id, t);
+    }
+    model.rebuild_caches();
+
+    model.filtering.show_completed = false;
+    assert_eq!(model.scheduled_task_count_for_day(d), 1);
+    model.filtering.show_completed = true;
+    assert_eq!(model.scheduled_task_count_for_day(d), 2);
+    assert_eq!(model.scheduled_task_count_for_day(date(2024, 3, 11)), 0);
 }
 
 // ── task_count_for_day ────────────────────────────────────────────────────────

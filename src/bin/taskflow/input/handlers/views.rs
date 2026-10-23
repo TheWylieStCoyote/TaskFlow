@@ -453,6 +453,32 @@ mod tests {
         assert!(handle_duplicates_view(key(KeyCode::Esc)).is_none());
     }
 
+    #[test]
+    fn calendar_s_schedules_the_selected_task_in_both_focus_modes() {
+        let mut model = calendar_model(true);
+        assert!(matches!(
+            handle_calendar_view(ch('s'), &mut model),
+            Some(Message::Ui(UiMessage::ScheduleTaskToDay))
+        ));
+        model.calendar_state.focus_task_list = true;
+        assert!(matches!(
+            handle_calendar_view(ch('s'), &mut model),
+            Some(Message::Ui(UiMessage::ScheduleTaskToDay))
+        ));
+    }
+
+    #[test]
+    fn calendar_only_claims_plain_s() {
+        let mut model = calendar_model(true);
+        // Alt+s (time block) and S (scheduled date) keep their global bindings
+        let alt_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::ALT);
+        assert!(handle_calendar_view(alt_s, &mut model).is_none());
+        assert!(handle_calendar_view(ch('S'), &mut model).is_none());
+        model.calendar_state.focus_task_list = true;
+        assert!(handle_calendar_view(alt_s, &mut model).is_none());
+        assert!(handle_calendar_view(ch('S'), &mut model).is_none());
+    }
+
     // ========================================================================
     // Habits
     // ========================================================================

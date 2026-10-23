@@ -757,6 +757,50 @@ fn default_keybindings_are_looked_up() {
 }
 
 #[test]
+fn calendar_s_schedules_to_day_while_alt_s_and_capital_s_stay_global() {
+    let mut model = model_in_view(ViewId::Calendar);
+    for focus_task_list in [false, true] {
+        model.calendar_state.focus_task_list = focus_task_list;
+        assert!(matches!(
+            dispatch(&mut model, ch('s')),
+            Message::Ui(UiMessage::ScheduleTaskToDay)
+        ));
+        assert!(matches!(
+            dispatch(&mut model, alt('s')),
+            Message::Ui(UiMessage::StartEditScheduledTime)
+        ));
+        assert!(matches!(
+            dispatch(&mut model, ch('S')),
+            Message::Ui(UiMessage::StartEditScheduledDate)
+        ));
+    }
+
+    // Outside the calendar, s is still the sort-field cycle
+    let mut model = model_in_view(ViewId::TaskList);
+    assert!(matches!(
+        dispatch(&mut model, ch('s')),
+        Message::Ui(UiMessage::CycleSortField)
+    ));
+}
+
+#[test]
+fn alt_z_toggles_subtask_collapse_and_z_still_snoozes() {
+    let mut model = model_in_view(ViewId::TaskList);
+    assert!(matches!(
+        dispatch(&mut model, alt('z')),
+        Message::Ui(UiMessage::ToggleSubtaskCollapse)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('z')),
+        Message::Ui(UiMessage::StartSnoozeTask)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('Z')),
+        Message::Ui(UiMessage::ClearSnooze)
+    ));
+}
+
+#[test]
 fn unbound_keys_yield_none() {
     let mut model = Model::new();
     assert!(matches!(

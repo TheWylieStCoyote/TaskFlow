@@ -1,7 +1,7 @@
 //! Subtask creation tests.
 
 use crate::app::{update::update, Message, Model, SystemMessage, UiMessage};
-use crate::domain::Priority;
+use crate::domain::{Priority, Task};
 use crate::ui::{InputMode, InputTarget};
 
 use super::create_test_model_with_tasks;
@@ -134,4 +134,49 @@ fn test_subtask_undo() {
 
     assert_eq!(model.tasks.len(), initial_count);
     assert!(!model.tasks.values().any(|t| t.title == "Subtask to undo"));
+}
+
+// === Subtask collapse (alt+z) ===
+
+#[test]
+fn test_toggle_subtask_collapse_hides_and_restores_children() {
+    let mut model = Model::new();
+    let parent = Task::new("Parent");
+    let child = Task::new("Child").with_parent(parent.id);
+    let grandchild = Task::new("Grandchild").with_parent(child.id);
+    let parent_id = parent.id;
+    for t in [parent, child, grandchild] {
+        model.tasks.insert(t.id, t);
+    }
+    model.refresh_visible_tasks();
+    model.selected_index = 0;
+    assert_eq!(model.selected_task_id(), Some(parent_id));
+    assert_eq!(model.visible_tasks.len(), 3);
+
+    update(&mut model, Message::Ui(UiMessage::ToggleSubtaskCollapse));
+    assert!(model.collapsed_tasks.contains(&parent_id));
+    assert_eq!(model.visible_tasks, vec![parent_id]);
+
+    update(&mut model, Message::Ui(UiMessage::ToggleSubtaskCollapse));
+    assert!(model.collapsed_tasks.is_empty());
+    assert_eq!(model.visible_tasks.len(), 3);
+}
+
+#[test]
+fn test_toggle_subtask_collapse_ignores_tasks_without_subtasks() {
+    let mut model = create_test_model_with_tasks();
+    let leaf_id = model.visible_tasks[0];
+    let before = model.visible_tasks.clone();
+
+    update(&mut model, Message::Ui(UiMessage::ToggleSubtaskCollapse));
+
+    assert!(!model.collapsed_tasks.contains(&leaf_id));
+    assert_eq!(model.visible_tasks, before);
+}
+
+#[test]
+fn test_toggle_subtask_collapse_without_selection_is_a_noop() {
+    let mut model = Model::new();
+    update(&mut model, Message::Ui(UiMessage::ToggleSubtaskCollapse));
+    assert!(model.collapsed_tasks.is_empty());
 }

@@ -729,4 +729,103 @@ mod tests {
         let (_, total) = cache.get_subtask_progress(root_id);
         assert_eq!(total, 3);
     }
+
+    fn scheduled(title: &str, date: NaiveDate, start: Option<(u32, u32)>) -> Task {
+        let mut task = Task::new(title);
+        task.scheduled_date = Some(date);
+        task.scheduled_start_time =
+            start.and_then(|(h, m)| chrono::NaiveTime::from_hms_opt(h, m, 0));
+        task
+    }
+
+    #[test]
+    fn test_scheduled_date_index_orders_by_start_time_with_untimed_last() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let mut tasks = HashMap::new();
+        let untimed = scheduled("Untimed", date, None);
+        let late = scheduled("Late", date, Some((15, 0)));
+        let early = scheduled("Early", date, Some((8, 30)));
+        let other_day = scheduled("Other day", date.succ_opt().unwrap(), Some((7, 0)));
+        let unscheduled = Task::new("Unscheduled");
+        let (untimed_id, late_id, early_id) = (untimed.id, late.id, early.id);
+        for t in [untimed, late, early, other_day, unscheduled] {
+            tasks.insert(t.id, t);
+        }
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_scheduled_date_index(&tasks);
+
+        assert_eq!(
+            cache.tasks_by_scheduled_date.get(&date).cloned(),
+            Some(vec![early_id, late_id, untimed_id])
+        );
+        assert_eq!(
+            cache.tasks_by_scheduled_date.len(),
+            2,
+            "one entry per scheduled day"
+        );
+        assert!(
+            !cache
+                .tasks_by_scheduled_date
+                .values()
+                .flatten()
+                .any(|id| { tasks[id].scheduled_date.is_none() }),
+            "tasks without a scheduled date are not indexed"
+        );
+    }
+
+    #[test]
+    fn test_scheduled_date_index_ties_are_stable_across_rebuilds() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let mut tasks = HashMap::new();
+        for i in 0..8 {
+            let mut task = scheduled(&format!("Block {i}"), date, Some((9, 0)));
+            task.created_at = chrono::Utc::now() + chrono::Duration::seconds(i);
+            tasks.insert(task.id, task);
+        }
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_scheduled_date_index(&tasks);
+        let first = cache.tasks_by_scheduled_date[&date].clone();
+        let titles: Vec<_> = first.iter().map(|id| tasks[id].title.clone()).collect();
+        assert_eq!(
+            titles,
+            (0..8).map(|i| format!("Block {i}")).collect::<Vec<_>>(),
+            "same start time falls back to creation order"
+        );
+        for _ in 0..5 {
+            cache.rebuild_scheduled_date_index(&tasks);
+            assert_eq!(cache.tasks_by_scheduled_date[&date], first);
+        }
+    }
+
+    #[test]
+    fn test_scheduled_date_index_follows_mutations_and_clear() {
+        let day_a = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let day_b = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let mut tasks = HashMap::new();
+        let task = scheduled("Movable", day_a, Some((10, 0)));
+        let id = task.id;
+        tasks.insert(id, task);
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_secondary_indexes(&tasks);
+        assert_eq!(cache.tasks_by_scheduled_date.get(&day_a), Some(&vec![id]));
+
+        // Rescheduling moves the id to the new day
+        tasks.get_mut(&id).unwrap().scheduled_date = Some(day_b);
+        cache.rebuild_secondary_indexes(&tasks);
+        assert!(!cache.tasks_by_scheduled_date.contains_key(&day_a));
+        assert_eq!(cache.tasks_by_scheduled_date.get(&day_b), Some(&vec![id]));
+
+        // Unscheduling drops it
+        tasks.get_mut(&id).unwrap().scheduled_date = None;
+        cache.rebuild_secondary_indexes(&tasks);
+        assert!(cache.tasks_by_scheduled_date.is_empty());
+
+        tasks.get_mut(&id).unwrap().scheduled_date = Some(day_a);
+        cache.rebuild_secondary_indexes(&tasks);
+        cache.clear();
+        assert!(cache.tasks_by_scheduled_date.is_empty());
+    }
 }

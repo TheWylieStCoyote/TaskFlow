@@ -1,8 +1,8 @@
 //! Tests for filtering module.
 
-use chrono::{Datelike, Duration};
+use chrono::{Datelike, Duration, NaiveDate, NaiveTime};
 
-use crate::app::Model;
+use crate::app::{Model, ViewId};
 use crate::domain::today;
 use crate::domain::{Priority, Project, SortField, SortOrder, Task, TaskStatus};
 
@@ -384,4 +384,213 @@ fn test_refresh_visible_tasks_by_due_date_sort() {
         model.tasks.get(&model.visible_tasks[2]).unwrap().title,
         "No due date"
     );
+}
+
+// ========================================================================
+// Subtask Collapse Tests
+// ========================================================================
+
+/// Parent → child → grandchild, plus an unrelated sibling root task.
+fn family_model() -> (
+    Model,
+    crate::domain::TaskId,
+    crate::domain::TaskId,
+    crate::domain::TaskId,
+) {
+    let mut model = Model::new();
+    let parent = Task::new("Parent");
+    let child = Task::new("Child").with_parent(parent.id);
+    let grandchild = Task::new("Grandchild").with_parent(child.id);
+    let other = Task::new("Other root");
+    let (parent_id, child_id, grandchild_id) = (parent.id, child.id, grandchild.id);
+    for t in [parent, child, grandchild, other] {
+        model.tasks.insert(t.id, t);
+    }
+    model.refresh_visible_tasks();
+    assert_eq!(model.visible_tasks.len(), 4);
+    (model, parent_id, child_id, grandchild_id)
+}
+
+#[test]
+fn test_collapsed_parent_hides_children_and_grandchildren() {
+    let (mut model, parent_id, child_id, grandchild_id) = family_model();
+
+    model.collapsed_tasks.insert(parent_id);
+    model.refresh_visible_tasks();
+
+    assert!(
+        model.visible_tasks.contains(&parent_id),
+        "collapsed parent stays visible"
+    );
+    assert!(!model.visible_tasks.contains(&child_id));
+    assert!(!model.visible_tasks.contains(&grandchild_id));
+    assert_eq!(
+        model.visible_tasks.len(),
+        2,
+        "parent and the unrelated root"
+    );
+}
+
+#[test]
+fn test_collapsing_middle_task_hides_only_its_subtree() {
+    let (mut model, parent_id, child_id, grandchild_id) = family_model();
+
+    model.collapsed_tasks.insert(child_id);
+    model.refresh_visible_tasks();
+
+    assert!(model.visible_tasks.contains(&parent_id));
+    assert!(model.visible_tasks.contains(&child_id));
+    assert!(!model.visible_tasks.contains(&grandchild_id));
+}
+
+#[test]
+fn test_expanding_collapsed_parent_restores_subtree_order() {
+    let (mut model, parent_id, child_id, grandchild_id) = family_model();
+    let expanded = model.visible_tasks.clone();
+
+    model.collapsed_tasks.insert(parent_id);
+    model.refresh_visible_tasks();
+    model.collapsed_tasks.remove(&parent_id);
+    model.refresh_visible_tasks();
+
+    assert_eq!(model.visible_tasks, expanded);
+    let pos = |id| model.visible_tasks.iter().position(|t| *t == id).unwrap();
+    assert!(pos(parent_id) < pos(child_id) && pos(child_id) < pos(grandchild_id));
+}
+
+#[test]
+fn test_collapse_state_is_forgotten_when_the_task_is_deleted() {
+    let (mut model, parent_id, child_id, _) = family_model();
+    model.collapsed_tasks.insert(parent_id);
+    model.refresh_visible_tasks();
+
+    model.tasks.remove(&parent_id);
+    model.refresh_visible_tasks();
+
+    assert!(
+        !model.collapsed_tasks.contains(&parent_id),
+        "stale id pruned"
+    );
+    // The orphaned child becomes visible again
+    assert!(model.visible_tasks.contains(&child_id));
+}
+
+#[test]
+fn test_collapsed_selection_is_clamped_to_shorter_list() {
+    let (mut model, parent_id, _, _) = family_model();
+    model.selected_index = model.visible_tasks.len() - 1;
+
+    model.collapsed_tasks.insert(parent_id);
+    model.refresh_visible_tasks();
+
+    assert!(model.selected_index < model.visible_tasks.len());
+}
+
+// ========================================================================
+// Calendar Day Ordering Tests
+// ========================================================================
+
+fn time(h: u32, m: u32) -> NaiveTime {
+    NaiveTime::from_hms_opt(h, m, 0).unwrap()
+}
+
+/// Calendar view pinned to 2024-03-14 with scheduled, due-only and
+/// unrelated tasks.
+fn calendar_day_model() -> (Model, NaiveDate) {
+    let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+    let mut model = Model::new();
+    model.current_view = ViewId::Calendar;
+    model.calendar_state.year = 2024;
+    model.calendar_state.month = 3;
+    model.calendar_state.selected_day = Some(14);
+    (model, date)
+}
+
+#[test]
+fn test_calendar_day_lists_scheduled_by_start_time_then_due_only() {
+    let (mut model, date) = calendar_day_model();
+    // Priority sort would put "Urgent due" first; the day panel ignores it
+    model.filtering.sort.field = SortField::Priority;
+
+    let mut late = Task::new("Late");
+    late.scheduled_date = Some(date);
+    late.scheduled_start_time = Some(time(15, 0));
+    let mut early = Task::new("Early");
+    early.scheduled_date = Some(date);
+    early.scheduled_start_time = Some(time(8, 0));
+    let mut untimed = Task::new("Untimed");
+    untimed.scheduled_date = Some(date);
+    let mut due = Task::new("Urgent due").with_priority(Priority::Urgent);
+    due.due_date = Some(date);
+    let mut both = Task::new("Due and scheduled");
+    both.due_date = Some(date);
+    both.scheduled_date = Some(date);
+    both.scheduled_start_time = Some(time(12, 0));
+    let mut elsewhere = Task::new("Scheduled tomorrow");
+    elsewhere.scheduled_date = date.succ_opt();
+    let mut due_elsewhere = Task::new("Due tomorrow");
+    due_elsewhere.due_date = date.succ_opt();
+    for t in [late, early, untimed, due, both, elsewhere, due_elsewhere] {
+        model.tasks.insert(t.id, t);
+    }
+
+    model.refresh_visible_tasks();
+
+    let titles: Vec<_> = model
+        .visible_tasks
+        .iter()
+        .map(|id| model.tasks[id].title.as_str())
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            "Early",
+            "Due and scheduled",
+            "Late",
+            "Untimed",
+            "Urgent due"
+        ]
+    );
+}
+
+#[test]
+fn test_calendar_day_respects_show_completed_filter() {
+    let (mut model, date) = calendar_day_model();
+    let mut done = Task::new("Done block").with_status(TaskStatus::Done);
+    done.scheduled_date = Some(date);
+    let mut open = Task::new("Open block");
+    open.scheduled_date = Some(date);
+    let open_id = open.id;
+    model.tasks.insert(done.id, done);
+    model.tasks.insert(open_id, open);
+
+    model.filtering.show_completed = false;
+    model.refresh_visible_tasks();
+    assert_eq!(model.visible_tasks, vec![open_id]);
+
+    model.filtering.show_completed = true;
+    model.refresh_visible_tasks();
+    assert_eq!(model.visible_tasks.len(), 2);
+}
+
+#[test]
+fn test_calendar_month_view_includes_scheduled_tasks() {
+    let (mut model, date) = calendar_day_model();
+    model.calendar_state.selected_day = None;
+    let mut scheduled = Task::new("Scheduled in March");
+    scheduled.scheduled_date = Some(date);
+    let mut due = Task::new("Due in March");
+    due.due_date = Some(date);
+    let mut april = Task::new("Scheduled in April");
+    april.scheduled_date = NaiveDate::from_ymd_opt(2024, 4, 2);
+    let (scheduled_id, due_id) = (scheduled.id, due.id);
+    for t in [scheduled, due, april] {
+        model.tasks.insert(t.id, t);
+    }
+
+    model.refresh_visible_tasks();
+
+    assert_eq!(model.visible_tasks.len(), 2);
+    assert!(model.visible_tasks.contains(&scheduled_id));
+    assert!(model.visible_tasks.contains(&due_id));
 }

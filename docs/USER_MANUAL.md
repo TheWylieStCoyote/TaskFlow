@@ -1193,6 +1193,11 @@ theme = "default"                   # Theme name
 # What to show when the database is empty on first run: "empty" or "demo"
 first_run_mode = "empty"
 
+# Desktop notifications (overdue / due today / due soon / snooze expired at
+# startup, Pomodoro phase changes, new recurring occurrences)
+notifications_enabled = true        # false silences every desktop notification
+due_soon_days = 1                   # Warn about tasks due within N days (0 = off, 1 = tomorrow)
+
 # Extra entries for the template picker (Ctrl+n)
 [[custom_templates]]
 name = "Incident"                   # shown in the picker

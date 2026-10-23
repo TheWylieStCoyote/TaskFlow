@@ -454,7 +454,16 @@ auto_save_interval = 300
 
 # Theme name
 theme = "default"
+
+# Desktop notifications (on by default)
+notifications_enabled = true   # false silences every desktop notification
+due_soon_days = 1              # warn about tasks due within N days (0 = off)
 ```
+
+Desktop notifications use the system notification service (D-Bus on Linux and
+BSD, Notification Center on macOS, toasts on Windows). They are compiled in by
+default; `cargo build --release --no-default-features` builds a binary without
+the notification backend.
 
 ### Pomodoro Configuration
 

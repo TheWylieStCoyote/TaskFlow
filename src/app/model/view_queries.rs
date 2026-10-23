@@ -16,8 +16,59 @@ use crate::domain::{Priority, ProjectId, Task, TaskId, TaskStatus};
 
 use super::Model;
 use crate::domain::today;
+use chrono::{Days, NaiveDate};
 
 impl Model {
+    // ── Notification queries ─────────────────────────────────────────────────
+
+    /// Count incomplete tasks due after `today` and no later than `today + days`.
+    ///
+    /// Tasks due on `today` itself are excluded: the due-today notification
+    /// already reports them. `days == 0` therefore always yields zero.
+    #[must_use]
+    pub fn count_due_soon_from(&self, today: NaiveDate, days: u32) -> usize {
+        let cutoff = today
+            .checked_add_days(Days::new(u64::from(days)))
+            .unwrap_or(NaiveDate::MAX);
+        self.tasks
+            .values()
+            .filter(|t| {
+                !t.status.is_complete() && t.due_date.is_some_and(|d| d > today && d <= cutoff)
+            })
+            .count()
+    }
+
+    /// Count incomplete tasks due within the next `days` days (after today).
+    ///
+    /// Drives the "due soon" desktop notification; see [`Self::count_due_soon_from`].
+    #[must_use]
+    pub fn count_due_soon(&self, days: u32) -> usize {
+        self.count_due_soon_from(today(), days)
+    }
+
+    /// Count incomplete tasks whose snooze ended on `date` (`snooze_until == date`).
+    ///
+    /// A task is snoozed while `snooze_until` is after today, so on the day it
+    /// equals the task becomes visible again; the user may not notice without
+    /// a notification. Tasks snoozed into the future or whose snooze ended
+    /// earlier are not counted.
+    #[must_use]
+    pub fn count_snooze_expired_on(&self, date: NaiveDate) -> usize {
+        self.tasks
+            .values()
+            .filter(|t| !t.status.is_complete() && t.snooze_until == Some(date))
+            .count()
+    }
+
+    /// Count incomplete tasks whose snooze ended today.
+    ///
+    /// Drives the "snooze expired" desktop notification; see
+    /// [`Self::count_snooze_expired_on`].
+    #[must_use]
+    pub fn count_snooze_expired_today(&self) -> usize {
+        self.count_snooze_expired_on(today())
+    }
+
     /// Returns task IDs for a specific Kanban column (by status).
     ///
     /// Column indices: 0=Todo, 1=InProgress, 2=Blocked, 3=Done

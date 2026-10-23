@@ -118,25 +118,21 @@ pub struct Settings {
     /// What to show when database is empty on first run
     pub first_run_mode: FirstRunMode,
 
-    /// Master on/off switch for desktop notifications (default: true)
-    #[serde(default = "default_true")]
+    /// Master on/off switch for desktop notifications (default: true).
+    ///
+    /// Applied once at startup through `notifications::set_enabled`; when
+    /// false no notification fires even if the binary was built with the
+    /// `desktop-notifications` feature.
     pub notifications_enabled: bool,
 
-    /// Days ahead to warn about upcoming due dates (0 = disabled, default: 1)
-    #[serde(default = "default_due_soon_days")]
+    /// Days ahead to warn about upcoming due dates at startup
+    /// (0 = disabled, default: 1 = tomorrow). Tasks due today are reported
+    /// separately by the due-today notification.
     pub due_soon_days: u32,
 
     /// User-defined task templates loaded from config
     #[serde(default)]
     pub custom_templates: Vec<TemplateConfig>,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_due_soon_days() -> u32 {
-    1
 }
 
 impl Default for Settings {
@@ -150,8 +146,8 @@ impl Default for Settings {
             auto_save_interval: 300, // 5 minutes
             default_priority: "none".to_string(),
             first_run_mode: FirstRunMode::default(),
-            notifications_enabled: default_true(),
-            due_soon_days: default_due_soon_days(),
+            notifications_enabled: true,
+            due_soon_days: 1,
             custom_templates: Vec::new(),
         }
     }

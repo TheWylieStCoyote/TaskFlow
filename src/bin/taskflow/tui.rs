@@ -15,7 +15,7 @@ use taskflow::app::{
     update, Message, Model, PomodoroMessage, RunningState, SystemMessage, TaskTemplate,
 };
 use taskflow::config::{FirstRunMode, Keybindings, Settings, Theme};
-use taskflow::domain::Priority;
+use taskflow::domain::{today, Priority};
 use taskflow::storage::BackendType;
 use taskflow::ui::view;
 
@@ -203,7 +203,7 @@ fn run_app(
     let mut last_pomodoro_tick = Instant::now();
     let mut last_git_check = Instant::now();
     let git_check_interval = Duration::from_secs(60); // Check every 60 seconds
-    let mut last_snooze_check_date = chrono::Utc::now().date_naive();
+    let mut last_snooze_check_date = today();
 
     loop {
         // Draw UI. This runs on every pass, and `event::poll` below returns
@@ -248,12 +248,12 @@ fn run_app(
             last_git_check = Instant::now();
         }
 
-        // Notify when the date rolls over (overnight usage) and snoozed tasks become active
-        let today = chrono::Utc::now().date_naive();
-        if today != last_snooze_check_date {
+        // Notify when the local date rolls over (overnight usage) and snoozed tasks become active
+        let current_date = today();
+        if current_date != last_snooze_check_date {
             let count = model.count_snooze_expired_today();
             taskflow::notifications::notify_snooze_expired(count);
-            last_snooze_check_date = today;
+            last_snooze_check_date = current_date;
         }
 
         // Handle events with timeout for potential async operations

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`saved_filter` entity in the pipe interface**: `list` (sorted by name, `search`, paging), `get`, `create`, `update` and `delete`, using the same `filter`/`sort` JSON shape as `export`; a partial `filter` object fills missing fields with defaults
+- **`task_id` filter for `time_entry` and `work_log`** in the pipe interface; `project_id` is still accepted as the task UUID for existing scripts
 - **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)
 - **`audit_log` entity in the pipe interface** (`list`/`get`, read-only): filter by `task_id`, action and date, page from the newest entry, CSV output flattens field changes
 - **`TASKFLOW_CONFIG_DIR`** overrides where `config.toml` and `keybindings.toml` live

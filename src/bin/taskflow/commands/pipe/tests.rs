@@ -973,13 +973,343 @@ mod pipe_interface_tests {
         assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
     }
 
+    // ========================================================================
+    // SavedFilter Handler Tests
+    // ========================================================================
+
+    fn create_saved_filter_resp(
+        model: &mut Model,
+        data: serde_json::Value,
+    ) -> super::super::types::PipeResponse<serde_json::Value> {
+        super::super::process_request(
+            model,
+            make_request_with_data(Operation::Create, EntityType::SavedFilter, data),
+        )
+    }
+
+    fn saved_filter_names(
+        resp: &super::super::types::PipeResponse<serde_json::Value>,
+    ) -> Vec<String> {
+        resp.data.as_ref().unwrap()["saved_filters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
     #[test]
-    fn test_saved_filter_not_implemented() {
+    fn test_saved_filter_list_empty() {
         let mut model = Model::new();
         let req = make_request(Operation::List, EntityType::SavedFilter);
         let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success, "{:?}", resp.error);
+        let data = resp.data.unwrap();
+        assert_eq!(data["total"], 0);
+        assert_eq!(data["saved_filters"], json!([]));
+    }
+
+    #[test]
+    fn test_saved_filter_create_and_get() {
+        let mut model = Model::new();
+        let resp = create_saved_filter_resp(
+            &mut model,
+            json!({
+                "name": "Urgent",
+                "icon": "!",
+                "filter": {"priority": ["urgent"], "include_completed": false},
+                "sort": {"field": "duedate", "order": "ascending"}
+            }),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let created = resp.data.unwrap();
+        assert_eq!(created["name"], "Urgent");
+        assert_eq!(created["icon"], "!");
+        assert_eq!(created["sort"]["field"], "duedate");
+        let id = created["id"].as_str().unwrap().to_string();
+
+        // Stored in the model with the parsed filter, and persisted via sync.
+        let stored = &model.saved_filters[&taskflow::domain::SavedFilterId(id.clone())];
+        assert_eq!(stored.filter.priority, Some(vec![Priority::Urgent]));
+        assert!(!stored.filter.include_completed);
+        assert!(matches!(
+            stored.sort.field,
+            taskflow::domain::SortField::DueDate
+        ));
+
+        let req = make_request_with_id(Operation::Get, EntityType::SavedFilter, &id);
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["name"], "Urgent");
+    }
+
+    #[test]
+    fn test_saved_filter_create_defaults_filter_and_sort() {
+        let mut model = Model::new();
+        let resp = create_saved_filter_resp(&mut model, json!({"name": "Everything"}));
+        assert!(resp.success, "{:?}", resp.error);
+        let created = resp.data.unwrap();
+        assert!(created["icon"].is_null());
+        assert_eq!(created["sort"]["field"], "createdat");
+        assert_eq!(created["sort"]["order"], "descending");
+        assert!(created["filter"]["status"].is_null());
+    }
+
+    #[test]
+    fn test_saved_filter_create_rejects_missing_or_blank_name_and_bad_filter() {
+        let mut model = Model::new();
+        for data in [json!({}), json!({"name": "   "})] {
+            let resp = create_saved_filter_resp(&mut model, data);
+            assert!(!resp.success);
+            assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+        }
+
+        let resp = create_saved_filter_resp(
+            &mut model,
+            json!({"name": "Bad", "filter": {"priority": ["sky-high"]}}),
+        );
         assert!(!resp.success);
-        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_IMPLEMENTED");
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_DATA");
+
+        let resp = create_saved_filter_resp(
+            &mut model,
+            json!({"name": "Bad", "sort": {"field": "nope", "order": "ascending"}}),
+        );
+        assert!(!resp.success);
+        assert_eq!(resp.error.as_ref().unwrap().code, "INVALID_DATA");
+
+        let req = make_request(Operation::Create, EntityType::SavedFilter);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+        assert!(model.saved_filters.is_empty());
+    }
+
+    #[test]
+    fn test_saved_filter_list_sorted_by_name_with_search_and_paging() {
+        let mut model = Model::new();
+        for name in ["zebra", "Apple", "mango"] {
+            assert!(create_saved_filter_resp(&mut model, json!({"name": name})).success);
+        }
+
+        let req = make_request(Operation::List, EntityType::SavedFilter);
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(saved_filter_names(&resp), ["Apple", "mango", "zebra"]);
+        assert_eq!(resp.data.as_ref().unwrap()["total"], 3);
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::SavedFilter,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                search: Some("AN".to_string()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(saved_filter_names(&resp), ["mango"]);
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::SavedFilter,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                offset: Some(1),
+                limit: Some(1),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert_eq!(saved_filter_names(&resp), ["mango"]);
+        let data = resp.data.unwrap();
+        assert_eq!(data["total"], 3);
+        assert_eq!(data["offset"], 1);
+        assert_eq!(data["limit"], 1);
+    }
+
+    #[test]
+    fn test_saved_filter_update_patches_fields() {
+        let mut model = Model::new();
+        let created = create_saved_filter_resp(
+            &mut model,
+            json!({"name": "Old", "icon": "*", "filter": {"tags": ["home"]}}),
+        )
+        .data
+        .unwrap();
+        let id = created["id"].as_str().unwrap().to_string();
+
+        // Rename and change the sort; the filter is untouched.
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::SavedFilter,
+                &id,
+                json!({"name": "New", "sort": {"field": "title", "order": "ascending"}}),
+            ),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let updated = resp.data.unwrap();
+        assert_eq!(updated["name"], "New");
+        assert_eq!(updated["sort"]["field"], "title");
+        assert_eq!(updated["filter"]["tags"], json!(["home"]));
+        assert_eq!(updated["icon"], "*");
+
+        // A filter object replaces the stored one whole; null clears the icon.
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::SavedFilter,
+                &id,
+                json!({"filter": {"status": ["todo"]}, "icon": null}),
+            ),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        let updated = resp.data.unwrap();
+        assert!(updated["filter"]["tags"].is_null());
+        assert_eq!(updated["filter"]["status"], json!(["todo"]));
+        assert!(updated["icon"].is_null());
+
+        let stored = &model.saved_filters[&taskflow::domain::SavedFilterId(id)];
+        assert_eq!(stored.name, "New");
+        assert!(stored.icon.is_none());
+    }
+
+    #[test]
+    fn test_saved_filter_update_rejects_bad_input() {
+        let mut model = Model::new();
+        let id = create_saved_filter_resp(&mut model, json!({"name": "Keep"}))
+            .data
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        for (data, code) in [
+            (json!({"name": ""}), "INVALID_DATA"),
+            (json!({"icon": 7}), "INVALID_DATA"),
+            (json!({"filter": "not an object"}), "INVALID_DATA"),
+        ] {
+            let resp = super::super::process_request(
+                &mut model,
+                make_request_with_id_and_data(
+                    Operation::Update,
+                    EntityType::SavedFilter,
+                    &id,
+                    data,
+                ),
+            );
+            assert!(!resp.success);
+            assert_eq!(resp.error.as_ref().unwrap().code, code);
+        }
+        assert_eq!(
+            model.saved_filters[&taskflow::domain::SavedFilterId(id.clone())].name,
+            "Keep",
+            "a rejected update changes nothing"
+        );
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id_and_data(
+                Operation::Update,
+                EntityType::SavedFilter,
+                "missing-id",
+                json!({"name": "X"}),
+            ),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_data(
+                Operation::Update,
+                EntityType::SavedFilter,
+                json!({"name": "X"}),
+            ),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id(Operation::Update, EntityType::SavedFilter, &id),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_DATA");
+    }
+
+    #[test]
+    fn test_saved_filter_delete() {
+        let mut model = Model::new();
+        let id = create_saved_filter_resp(&mut model, json!({"name": "Gone"}))
+            .data
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id(Operation::Delete, EntityType::SavedFilter, &id),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["deleted"], id);
+        assert!(model.saved_filters.is_empty());
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id(Operation::Get, EntityType::SavedFilter, &id),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request_with_id(Operation::Delete, EntityType::SavedFilter, &id),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "NOT_FOUND");
+
+        let resp = super::super::process_request(
+            &mut model,
+            make_request(Operation::Delete, EntityType::SavedFilter),
+        );
+        assert_eq!(resp.error.as_ref().unwrap().code, "MISSING_ID");
+    }
+
+    #[test]
+    fn test_saved_filter_export_import_route_to_top_level() {
+        let mut model = Model::new();
+        // `export` with this entity still runs the top-level export.
+        let resp = super::super::process_request(
+            &mut model,
+            make_request(Operation::Export, EntityType::SavedFilter),
+        );
+        assert!(resp.success, "{:?}", resp.error);
+        assert_eq!(resp.data.unwrap()["saved_filters"], json!([]));
+    }
+
+    #[test]
+    fn test_saved_filter_csv_output() {
+        let mut model = Model::new();
+        assert!(create_saved_filter_resp(
+            &mut model,
+            json!({"name": "Home, sweet", "icon": "h", "sort": {"field": "title", "order": "ascending"}}),
+        )
+        .success);
+        let id = model.saved_filters.keys().next().unwrap().0.clone();
+
+        let req = make_request(Operation::List, EntityType::SavedFilter);
+        let resp = super::super::process_request(&mut model, req);
+        let out = format::serialize_response(&resp, OutputFormat::Csv).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 2, "{out}");
+        assert_eq!(lines[0], "id,name,icon,sort,filter");
+        assert!(
+            lines[1].starts_with(&format!(
+                "{id},\"Home, sweet\",h,\"{{\"\"field\"\":\"\"title\"\",\"\"order\"\":\"\"ascending\"\"}}\","
+            )),
+            "{}",
+            lines[1]
+        );
     }
 
     #[test]
@@ -2087,6 +2417,72 @@ mod pipe_interface_tests {
         assert_eq!(resp.data.unwrap()["total"], 1);
     }
 
+    #[test]
+    fn test_time_entry_list_filter_by_task_id_field() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        let task_id2 = create_task_in_model(&mut model);
+        for (task, start) in [
+            (&task_id, "10:00"),
+            (&task_id2, "11:00"),
+            (&task_id2, "12:00"),
+        ] {
+            super::super::process_request(
+                &mut model,
+                make_request_with_data(
+                    Operation::Create,
+                    EntityType::TimeEntry,
+                    json!({"task_id": task, "started_at": format!("2025-01-15T{start}:00Z")}),
+                ),
+            );
+        }
+
+        let list = |model: &mut Model, filters: FilterParams| {
+            let req = PipeRequest {
+                operation: Operation::List,
+                entity: EntityType::TimeEntry,
+                id: None,
+                data: None,
+                filters: Some(filters),
+            };
+            super::super::process_request(model, req).data.unwrap()["total"].clone()
+        };
+
+        assert_eq!(
+            list(
+                &mut model,
+                FilterParams {
+                    task_id: Some(task_id2.clone()),
+                    ..Default::default()
+                }
+            ),
+            2
+        );
+        // `task_id` wins when both are given.
+        assert_eq!(
+            list(
+                &mut model,
+                FilterParams {
+                    task_id: Some(task_id.clone()),
+                    project_id: Some(task_id2.clone()),
+                    ..Default::default()
+                }
+            ),
+            1
+        );
+        // An unknown task matches nothing rather than everything.
+        assert_eq!(
+            list(
+                &mut model,
+                FilterParams {
+                    task_id: Some(Uuid::new_v4().to_string()),
+                    ..Default::default()
+                }
+            ),
+            0
+        );
+    }
+
     // ========================================================================
     // WorkLog Handler Tests
     // ========================================================================
@@ -2347,6 +2743,52 @@ mod pipe_interface_tests {
         };
         let resp = super::super::process_request(&mut model, req);
         assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 1);
+    }
+
+    #[test]
+    fn test_work_log_list_filter_by_task_id_field() {
+        let mut model = Model::new();
+        let task_id = create_task_in_model(&mut model);
+        let task_id2 = create_task_in_model(&mut model);
+        for (task, content) in [(&task_id, "one"), (&task_id2, "two"), (&task_id2, "three")] {
+            super::super::process_request(
+                &mut model,
+                make_request_with_data(
+                    Operation::Create,
+                    EntityType::WorkLog,
+                    json!({"task_id": task, "content": content}),
+                ),
+            );
+        }
+
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::WorkLog,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                task_id: Some(task_id2.clone()),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap()["total"], 2);
+
+        // `task_id` wins when both are given.
+        let req = PipeRequest {
+            operation: Operation::List,
+            entity: EntityType::WorkLog,
+            id: None,
+            data: None,
+            filters: Some(FilterParams {
+                task_id: Some(task_id.clone()),
+                project_id: Some(task_id2),
+                ..Default::default()
+            }),
+        };
+        let resp = super::super::process_request(&mut model, req);
         assert_eq!(resp.data.unwrap()["total"], 1);
     }
 

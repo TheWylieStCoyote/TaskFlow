@@ -8,6 +8,7 @@ pub mod goal;
 pub mod habit;
 pub mod import;
 pub mod project;
+pub mod saved_filter;
 pub mod tag;
 pub mod task;
 pub mod time_entry;
@@ -40,9 +41,6 @@ pub fn dispatch(model: &mut Model, request: &PipeRequest) -> HandlerResult {
         EntityType::KeyResult => goal::handle_key_result(model, request),
         EntityType::Tag => tag::handle(model, request),
         EntityType::AuditLog => audit_log::handle(model, request),
-        EntityType::SavedFilter => Err(PipeError::new(
-            "NOT_IMPLEMENTED",
-            "SavedFilter operations are not yet implemented",
-        )),
+        EntityType::SavedFilter => saved_filter::handle(model, request),
     }
 }

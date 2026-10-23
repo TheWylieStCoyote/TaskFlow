@@ -31,8 +31,9 @@ fn list_time_entries(model: &Model, filters: &Option<FilterParams>) -> HandlerRe
 
     // Apply filters
     if let Some(ref f) = filters {
-        // Filter by task (using project_id field as task filter)
-        if let Some(ref task_id_str) = f.project_id {
+        // Filter by task; `project_id` is accepted as the task UUID for
+        // scripts written before `task_id` existed.
+        if let Some(task_id_str) = f.task_id.as_ref().or(f.project_id.as_ref()) {
             if let Ok(uuid) = Uuid::parse_str(task_id_str) {
                 let task_id = TaskId(uuid);
                 entries.retain(|e| e.task_id == task_id);

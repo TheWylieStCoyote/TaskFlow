@@ -77,7 +77,9 @@ pub struct PipeRequest {
 pub struct FilterParams {
     /// Filter by project ID.
     pub project_id: Option<String>,
-    /// Filter by task ID (`audit_log`).
+    /// Filter by task ID (`time_entry`, `work_log`, `audit_log`). The
+    /// per-task entities also accept the task UUID in `project_id` for
+    /// scripts written before this field existed.
     pub task_id: Option<String>,
     /// Filter by tags.
     pub tags: Option<Vec<String>>,
@@ -271,6 +273,22 @@ pub struct TaskInput {
     /// Task dependencies (task IDs).
     #[serde(default)]
     pub dependencies: Option<Vec<String>>,
+}
+
+/// Input for creating a saved filter.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SavedFilterInput {
+    /// Display name (required for create).
+    pub name: Option<String>,
+    /// Filter criteria, in the shape `export` writes; defaults to "all tasks".
+    #[serde(default)]
+    pub filter: Option<taskflow::domain::Filter>,
+    /// Sort specification (`field`, `order`); defaults to newest first.
+    #[serde(default)]
+    pub sort: Option<taskflow::domain::SortSpec>,
+    /// Optional icon or emoji shown in the sidebar.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// Input for creating/updating a project.

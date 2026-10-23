@@ -51,6 +51,7 @@ fn serialize_csv<T: Serialize>(response: &PipeResponse<T>) -> Result<String, Pip
             "key_results",
             "tags",
             "audit_logs",
+            "saved_filters",
         ];
 
         for field in list_fields {
@@ -125,6 +126,7 @@ fn array_to_csv(array: &[serde_json::Value], entity_type: &str) -> Result<String
         ],
         "tags" => vec!["name", "task_count", "habit_count", "total_count"],
         "audit_logs" => vec!["id", "task_id", "changed_at", "action", "changes"],
+        "saved_filters" => vec!["id", "name", "icon", "sort", "filter"],
         _ => {
             // Auto-detect columns from first object
             if let Some(first) = array.first().and_then(|v| v.as_object()) {

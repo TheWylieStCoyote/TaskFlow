@@ -34,7 +34,7 @@ pub fn handle_key_event(
 ) -> Message {
     // Handle quick-open picker (before command palette so it gets full keyboard)
     if model.quick_open.visible {
-        return handle_quick_open_input(key, model);
+        return handle_quick_open_input(key);
     }
 
     // Handle command palette first (highest priority when visible)
@@ -322,19 +322,10 @@ pub fn handle_key_event(
 }
 
 /// Handle input for the quick-open fuzzy task picker.
-fn handle_quick_open_input(key: event::KeyEvent, model: &mut Model) -> Message {
+fn handle_quick_open_input(key: event::KeyEvent) -> Message {
     match key.code {
         KeyCode::Esc => Message::Ui(UiMessage::HideQuickOpen),
-        KeyCode::Enter => {
-            // Resolve the selected task and jump to it in visible_tasks.
-            if let Some(task_id) = taskflow::app::get_quick_open_task_id(model) {
-                model.quick_open.visible = false;
-                if let Some(pos) = model.visible_tasks.iter().position(|id| *id == task_id) {
-                    model.selected_index = pos;
-                }
-            }
-            Message::Ui(UiMessage::HideQuickOpen)
-        }
+        KeyCode::Enter => Message::Ui(UiMessage::QuickOpenSelect),
         KeyCode::Up => Message::Ui(UiMessage::QuickOpenUp),
         KeyCode::Down => Message::Ui(UiMessage::QuickOpenDown),
         KeyCode::Char('k') if key.modifiers.contains(event::KeyModifiers::CONTROL) => {

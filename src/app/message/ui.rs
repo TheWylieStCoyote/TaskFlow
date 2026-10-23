@@ -540,4 +540,6 @@ pub enum UiMessage {
     QuickOpenUp,
     /// Navigate down in quick-open result list
     QuickOpenDown,
+    /// Jump to the highlighted quick-open result and close the picker
+    QuickOpenSelect,
 }

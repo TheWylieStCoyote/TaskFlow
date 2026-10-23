@@ -111,7 +111,6 @@ use time_tracking::handle_ui_time_log;
 use views::handle_ui_views;
 
 // Re-export for external use
-pub use crate::ui::get_quick_open_task_id;
 pub use command_palette::get_palette_action;
 pub use input::create_task_from_quick_add;
 
@@ -955,7 +954,8 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
         | UiMessage::QuickOpenInput(_)
         | UiMessage::QuickOpenBackspace
         | UiMessage::QuickOpenUp
-        | UiMessage::QuickOpenDown => {
+        | UiMessage::QuickOpenDown
+        | UiMessage::QuickOpenSelect => {
             handle_ui_quick_open(model, msg);
         }
     }

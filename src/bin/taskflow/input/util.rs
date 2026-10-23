@@ -575,6 +575,7 @@ mod tests {
             Action::ShowCommandPalette,
             Message::Ui(UiMessage::ShowCommandPalette)
         );
+        assert_maps!(Action::ShowQuickOpen, Message::Ui(UiMessage::ShowQuickOpen));
     }
 
     #[test]

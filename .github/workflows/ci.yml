@@ -29,10 +29,15 @@ jobs:
         with:
           repository: nvim-lua/plenary.nvim
           path: .plenary
-      - uses: rhysd/action-setup-vim@v1
-        with:
-          neovim: true
-          version: stable
+      - name: Install Neovim
+        # Plain download instead of a setup action: the runner's /tmp is on a
+        # different filesystem from $HOME, which broke the action's rename.
+        run: |
+          curl -fsSL https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz -o "$RUNNER_TEMP/nvim.tar.gz"
+          mkdir -p "$HOME/nvim"
+          tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$HOME/nvim" --strip-components=1
+          echo "$HOME/nvim/bin" >> "$GITHUB_PATH"
+          "$HOME/nvim/bin/nvim" --version | head -1
       - name: Run plenary specs
         env:
           PLENARY_DIR: ${{ github.workspace }}/.plenary

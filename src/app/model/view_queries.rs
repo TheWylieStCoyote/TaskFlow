@@ -319,6 +319,136 @@ mod tests {
         id
     }
 
+    fn date(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn add_task_due(model: &mut Model, title: &str, due: Option<NaiveDate>) -> TaskId {
+        let mut task = Task::new(title);
+        task.due_date = due;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        id
+    }
+
+    fn add_task_snoozed(model: &mut Model, title: &str, until: Option<NaiveDate>) -> TaskId {
+        let mut task = Task::new(title);
+        task.snooze_until = until;
+        let id = task.id;
+        model.tasks.insert(id, task);
+        id
+    }
+
+    // ── count_due_soon ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_count_due_soon_from_window_is_exclusive_of_today_inclusive_of_cutoff() {
+        let mut model = make_model();
+        let today = date(2026, 3, 10);
+        add_task_due(&mut model, "Yesterday", Some(date(2026, 3, 9)));
+        add_task_due(&mut model, "Today", Some(today));
+        add_task_due(&mut model, "Tomorrow", Some(date(2026, 3, 11)));
+        add_task_due(&mut model, "In three days", Some(date(2026, 3, 13)));
+        add_task_due(&mut model, "In four days", Some(date(2026, 3, 14)));
+        add_task_due(&mut model, "No due date", None);
+
+        assert_eq!(model.count_due_soon_from(today, 0), 0);
+        assert_eq!(model.count_due_soon_from(today, 1), 1);
+        assert_eq!(model.count_due_soon_from(today, 2), 1);
+        assert_eq!(model.count_due_soon_from(today, 3), 2);
+        assert_eq!(model.count_due_soon_from(today, 4), 3);
+        assert_eq!(model.count_due_soon_from(today, 30), 3);
+    }
+
+    #[test]
+    fn test_count_due_soon_from_ignores_completed_tasks() {
+        let mut model = make_model();
+        let today = date(2026, 3, 10);
+        let done = add_task_due(&mut model, "Done tomorrow", Some(date(2026, 3, 11)));
+        model.tasks.get_mut(&done).unwrap().status = TaskStatus::Done;
+        add_task_due(&mut model, "Open tomorrow", Some(date(2026, 3, 11)));
+
+        assert_eq!(model.count_due_soon_from(today, 1), 1);
+    }
+
+    #[test]
+    fn test_count_due_soon_from_crosses_month_and_year_boundaries() {
+        let mut model = make_model();
+        add_task_due(&mut model, "New year", Some(date(2027, 1, 1)));
+        add_task_due(&mut model, "Early Jan", Some(date(2027, 1, 3)));
+
+        assert_eq!(model.count_due_soon_from(date(2026, 12, 31), 1), 1);
+        assert_eq!(model.count_due_soon_from(date(2026, 12, 31), 3), 2);
+    }
+
+    #[test]
+    fn test_count_due_soon_from_huge_window_does_not_overflow() {
+        let mut model = make_model();
+        add_task_due(&mut model, "Far away", Some(date(2099, 1, 1)));
+        assert_eq!(model.count_due_soon_from(date(2026, 3, 10), u32::MAX), 1);
+    }
+
+    #[test]
+    fn test_count_due_soon_is_relative_to_local_today() {
+        let mut model = make_model();
+        let tomorrow = today().succ_opt().unwrap();
+        add_task_due(&mut model, "Today", Some(today()));
+        add_task_due(&mut model, "Tomorrow", Some(tomorrow));
+
+        assert_eq!(model.count_due_soon(1), 1);
+        assert_eq!(model.count_due_soon(0), 0);
+    }
+
+    #[test]
+    fn test_count_due_soon_empty_model() {
+        let model = make_model();
+        assert_eq!(model.count_due_soon(7), 0);
+        assert_eq!(model.count_due_soon_from(date(2026, 3, 10), 7), 0);
+    }
+
+    // ── count_snooze_expired ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_count_snooze_expired_on_matches_only_that_date() {
+        let mut model = make_model();
+        let day = date(2026, 3, 10);
+        add_task_snoozed(&mut model, "Expired yesterday", Some(date(2026, 3, 9)));
+        add_task_snoozed(&mut model, "Expires today", Some(day));
+        add_task_snoozed(&mut model, "Also today", Some(day));
+        add_task_snoozed(&mut model, "Still snoozed", Some(date(2026, 3, 11)));
+        add_task_snoozed(&mut model, "Never snoozed", None);
+
+        assert_eq!(model.count_snooze_expired_on(day), 2);
+        assert_eq!(model.count_snooze_expired_on(date(2026, 3, 11)), 1);
+        assert_eq!(model.count_snooze_expired_on(date(2026, 3, 12)), 0);
+    }
+
+    #[test]
+    fn test_count_snooze_expired_on_ignores_completed_tasks() {
+        let mut model = make_model();
+        let day = date(2026, 3, 10);
+        let done = add_task_snoozed(&mut model, "Done", Some(day));
+        model.tasks.get_mut(&done).unwrap().status = TaskStatus::Done;
+        add_task_snoozed(&mut model, "Open", Some(day));
+
+        assert_eq!(model.count_snooze_expired_on(day), 1);
+    }
+
+    #[test]
+    fn test_count_snooze_expired_today_uses_local_today() {
+        let mut model = make_model();
+        add_task_snoozed(&mut model, "Expires today", Some(today()));
+        add_task_snoozed(&mut model, "Tomorrow", today().succ_opt());
+
+        assert_eq!(model.count_snooze_expired_today(), 1);
+    }
+
+    #[test]
+    fn test_count_snooze_expired_empty_model() {
+        let model = make_model();
+        assert_eq!(model.count_snooze_expired_today(), 0);
+    }
+
     // ── kanban_column_tasks ──────────────────────────────────────────────────
 
     #[test]

@@ -373,6 +373,69 @@ mod tests {
     }
 
     #[test]
+    fn test_settings_notification_keys_default_when_missing() {
+        // A config.toml written before the notification settings existed.
+        let legacy = r#"
+backend = "yaml"
+theme = "dark"
+show_sidebar = false
+auto_save_interval = 60
+"#;
+        let settings: Settings = toml::from_str(legacy).unwrap();
+        assert_eq!(settings.backend, "yaml");
+        assert!(!settings.show_sidebar);
+        assert!(settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 1);
+
+        // An entirely empty file also loads with the defaults.
+        let empty: Settings = toml::from_str("").unwrap();
+        assert!(empty.notifications_enabled);
+        assert_eq!(empty.due_soon_days, 1);
+    }
+
+    #[test]
+    fn test_settings_notification_keys_parse() {
+        let toml_str = r"
+notifications_enabled = false
+due_soon_days = 3
+";
+        let settings: Settings = toml::from_str(toml_str).unwrap();
+        assert!(!settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 3);
+
+        let disabled_due_soon: Settings = toml::from_str("due_soon_days = 0").unwrap();
+        assert!(disabled_due_soon.notifications_enabled);
+        assert_eq!(disabled_due_soon.due_soon_days, 0);
+    }
+
+    #[test]
+    fn test_settings_notification_keys_reject_invalid_values() {
+        assert!(toml::from_str::<Settings>("due_soon_days = -1").is_err());
+        assert!(toml::from_str::<Settings>(r#"notifications_enabled = "yes""#).is_err());
+    }
+
+    #[test]
+    fn test_settings_notification_keys_roundtrip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let settings = Settings {
+            notifications_enabled: false,
+            due_soon_days: 5,
+            ..Settings::default()
+        };
+        settings.save_to_path(path.clone()).unwrap();
+
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("notifications_enabled = false"));
+        assert!(saved.contains("due_soon_days = 5"));
+
+        let loaded = Settings::load_from_path(path);
+        assert!(!loaded.notifications_enabled);
+        assert_eq!(loaded.due_soon_days, 5);
+    }
+
+    #[test]
     fn test_first_run_mode_parse() {
         assert_eq!(FirstRunMode::parse("demo"), Some(FirstRunMode::Demo));
         assert_eq!(FirstRunMode::parse("sample"), Some(FirstRunMode::Demo));

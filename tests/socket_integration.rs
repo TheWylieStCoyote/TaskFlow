@@ -171,7 +171,7 @@ mod tests {
 
         let mut model = Model::new();
         for i in 0..3usize {
-            let task = taskflow::domain::Task::new(&format!("Task {i}"));
+            let task = taskflow::domain::Task::new(format!("Task {i}"));
             model.tasks.insert(task.id, task);
         }
 

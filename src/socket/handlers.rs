@@ -29,10 +29,7 @@ fn snapshot_age_ms(snap: &ModelSnapshot) -> u64 {
 }
 
 fn handle_ping(snapshot_arc: &Arc<Mutex<ModelSnapshot>>) -> serde_json::Value {
-    let age_ms = snapshot_arc
-        .lock()
-        .map(|s| snapshot_age_ms(&s))
-        .unwrap_or(0);
+    let age_ms = snapshot_arc.lock().map_or(0, |s| snapshot_age_ms(&s));
     json!({
         "success": true,
         "data": {

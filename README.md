@@ -32,6 +32,7 @@ TaskFlow provides a fast, keyboard-driven interface for managing tasks, projects
 - **Review Modes**: Daily, Weekly, and Evening review workflows for task planning and reflection
 - **Focus Mode**: Distraction-free single-task view with full-screen option and focus queue
 - **Pipe Interface**: `taskflow pipe` reads JSON requests on stdin and answers in JSON, YAML or CSV for scripting and external tool integration (see the [User Manual](docs/USER_MANUAL.md#pipe-interface))
+- **Neovim Integration**: the running TUI serves a Unix domain socket; the bundled plugin creates tasks from `TODO`/`FIXME` comments, browses and focuses tasks, and adds a statusline component (see [neovim/README.md](neovim/README.md) and the [User Manual](docs/USER_MANUAL.md#neovim-integration))
 - **Undo Support**: Undo task, project, and time tracking operations with `u` or `Ctrl+Z`
 - **Vim-style Navigation**: Fast keyboard-driven interface
 - **Multiple Storage Backends**: Save data as JSON, YAML, SQLite, or Markdown
@@ -455,6 +456,11 @@ auto_save_interval = 300
 
 # Theme name
 theme = "default"
+
+# Editor/Neovim socket (Unix only); see docs/USER_MANUAL.md#neovim-integration
+[editor]
+enabled = true
+socket_path = ""   # "" = $XDG_DATA_HOME/taskflow/taskflow.sock
 ```
 
 ### Pomodoro Configuration

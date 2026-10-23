@@ -1915,6 +1915,74 @@ echo '{"operation":"list","entity":"task"}' | taskflow pipe --format csv
 # 3635e628-...,Buy milk,todo,high,,2026-10-25,,shopping,15,2026-10-22T10:00:30Z,
 ```
 
+### Neovim Integration
+
+While the TUI is running it serves a Unix domain socket that editors can
+talk to. The bundled Neovim plugin (in the repository's `neovim/` directory,
+with its own [README](../neovim/README.md) covering installation) uses it to
+create tasks from code comments, browse tasks, focus a task in the TUI and
+show a statusline component, without starting a new process per request.
+Unix only; on other platforms the server is compiled out.
+
+**Requirements.** TaskFlow must be running; it creates and owns the socket and
+removes it on exit. Neovim 0.10 or newer. Telescope is optional.
+
+**Commands** (after `require('taskflow').setup({})` in your Neovim config):
+
+| Command | What it does |
+|---------|--------------|
+| `:TaskFlowAdd [title]` | Create a task. With no title, a visual selection becomes the title; otherwise you are prompted |
+| `:TaskFlowList` | Floating task browser; `Enter` focuses the task in the running TUI, `q`/`Esc` closes |
+| `:TaskFlowCapture` | Create one task per `TODO`, `FIXME`, `HACK` or `NOTE` comment in the current buffer, tagged `captured` and with the keyword |
+| `:TaskFlowStatus` | Show the focused task and incomplete count via `vim.notify` |
+| `:TaskFlowOpen` | Open the TUI in a floating terminal |
+| `:Telescope taskflow` | Picker with `Enter` focus, `Ctrl-d` delete and `Ctrl-c` create (when Telescope is installed) |
+
+**Statusline.** `require('taskflow').statusline()` returns a cached string such
+as ` 12 tasks`, refreshed on a timer (30 s by default) so it never blocks a
+render:
+
+```lua
+vim.o.statusline = '%<%f %h%m%r%=%{%v:lua.require("taskflow").statusline()%} %-14.(%l,%c%V%) %P'
+```
+
+**Configuration.** The socket is controlled from the `[editor]` table in
+`config.toml`; the plugin's `setup()` takes the matching `socket_path` and a
+few UI options (see its README).
+
+```toml
+[editor]
+enabled            = true   # set false to run without the socket
+socket_path        = ""     # "" = $XDG_DATA_HOME/taskflow/taskflow.sock
+socket_permissions = 384    # 0o600: only your user may connect
+query_timeout_ms   = 5000   # how long a write request waits for the TUI
+auto_open_tui      = false
+```
+
+**Protocol.** One newline-terminated JSON request per connection, one JSON
+response, then the server closes. `{"type":"ping"}`, `{"type":"status"}` and
+`{"type":"focus_task","task_id":"…"}` are native; `{"type":"pipe", …}` wraps
+a [pipe interface](#pipe-interface) request (`operation`, `entity`, `id`,
+`data`, `filters`) so anything the pipe can do, an editor can do too. Reads
+are answered from a snapshot refreshed each event-loop tick; writes are
+applied by the TUI itself, so the two never fight over the data. The plugin's
+README documents the full message set.
+
+**Troubleshooting.**
+
+- *"Editor socket disabled: …"* in the TUI's status area means the socket
+  could not be created and TaskFlow is running without it. The message names
+  the path and the cause. The most common one is a path longer than 107
+  bytes, which the kernel refuses; set a shorter `socket_path`.
+- Check the connection by hand with `socat`:
+
+  ```bash
+  echo '{"type":"ping"}' | socat - UNIX-CONNECT:"$XDG_DATA_HOME/taskflow/taskflow.sock"
+  # {"success":true,"data":{"pong":true,"protocol_version":"1", ...}}
+  ```
+
+- Plugin errors are reported through `vim.notify`; `:messages` shows them.
+
 ---
 
 ## Appendices

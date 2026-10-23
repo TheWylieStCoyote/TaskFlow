@@ -80,7 +80,12 @@ impl SavedFilter {
 }
 
 /// Filter criteria for querying tasks
+///
+/// Every field has a default, so a partial JSON/YAML object (as the pipe
+/// interface or a hand-edited `saved_filters.yaml` may supply) deserializes
+/// with the missing fields at their defaults.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Filter {
     pub status: Option<Vec<TaskStatus>>,
     pub priority: Option<Vec<Priority>>,

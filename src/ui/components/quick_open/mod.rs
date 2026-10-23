@@ -42,24 +42,11 @@ impl<'a> QuickOpen<'a> {
     /// `result_count()` and `selected_task_id()` are available before render.
     #[must_use]
     pub fn new(model: &'a Model, theme: &'a Theme) -> Self {
-        let query = &model.quick_open.query;
-        let project_name_fn = |task: &crate::domain::Task| {
-            task.project_id
-                .as_ref()
-                .and_then(|id| model.projects.get(id))
-                .map(|p| p.name.clone())
-        };
-        let threshold = if query.is_empty() {
-            0.0
-        } else {
-            QUICK_OPEN_THRESHOLD
-        };
-        let results = filter_tasks(query, model.tasks.values(), project_name_fn, threshold);
         Self {
-            query,
+            query: &model.quick_open.query,
             cursor: model.quick_open.cursor,
             selected: model.quick_open.selected,
-            results,
+            results: ranked_entries(model),
             theme,
         }
     }
@@ -171,14 +158,10 @@ impl Widget for QuickOpen<'_> {
 
                 // Right-align project name; truncate title to fill remaining width.
                 let proj_str = entry.project_name.as_deref().unwrap_or("");
-                let proj_display_width = proj_str.len().min(20);
+                let proj_display_width = proj_str.chars().count().min(20);
                 let title_max = available_width.saturating_sub(proj_display_width + 4);
 
-                let title_display = if entry.title.len() > title_max {
-                    format!("{}…", &entry.title[..title_max.saturating_sub(1)])
-                } else {
-                    entry.title.clone()
-                };
+                let title_display = truncate_chars(&entry.title, title_max);
 
                 let line = Line::from(vec![
                     Span::styled(
@@ -207,32 +190,24 @@ impl Widget for QuickOpen<'_> {
     }
 }
 
-/// Count filtered results for a given query without constructing the full widget.
+/// Shorten `text` to at most `max_chars` characters, ending in an ellipsis.
 ///
-/// Used by the update handler to clamp `selected` on Down.
-#[must_use]
-pub fn get_quick_open_result_count(model: &Model) -> usize {
-    let query = &model.quick_open.query;
-    let project_name_fn = |task: &crate::domain::Task| {
-        task.project_id
-            .as_ref()
-            .and_then(|id| model.projects.get(id))
-            .map(|p| p.name.clone())
-    };
-    let threshold = if query.is_empty() {
-        0.0
-    } else {
-        QUICK_OPEN_THRESHOLD
-    };
-    filter_tasks(query, model.tasks.values(), project_name_fn, threshold).len()
+/// Counts characters rather than bytes so multi-byte titles never split
+/// inside a code point.
+fn truncate_chars(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(max_chars.saturating_sub(1)).collect();
+    out.push('\u{2026}');
+    out
 }
 
-/// Resolve the task ID currently highlighted in the quick-open picker.
+/// Rank every task against the picker's current query.
 ///
-/// Called by the input handler before closing the picker so it can
-/// navigate to the correct task.
-#[must_use]
-pub fn get_quick_open_task_id(model: &Model) -> Option<crate::domain::TaskId> {
+/// An empty query lists all tasks (threshold `0.0`); otherwise tasks below
+/// [`QUICK_OPEN_THRESHOLD`] are dropped.
+fn ranked_entries(model: &Model) -> Vec<QuickOpenEntry> {
     let query = &model.quick_open.query;
     let project_name_fn = |task: &crate::domain::Task| {
         task.project_id
@@ -246,6 +221,149 @@ pub fn get_quick_open_task_id(model: &Model) -> Option<crate::domain::TaskId> {
         QUICK_OPEN_THRESHOLD
     };
     filter_tasks(query, model.tasks.values(), project_name_fn, threshold)
+}
+
+/// Count filtered results for a given query without constructing the full widget.
+///
+/// Used by the update handler to clamp `selected` on Down.
+#[must_use]
+pub fn get_quick_open_result_count(model: &Model) -> usize {
+    ranked_entries(model).len()
+}
+
+/// Resolve the task ID currently highlighted in the quick-open picker.
+///
+/// Called by the update handler on Enter so it can navigate to the task
+/// before closing the picker.
+#[must_use]
+pub fn get_quick_open_task_id(model: &Model) -> Option<crate::domain::TaskId> {
+    ranked_entries(model)
         .get(model.quick_open.selected)
         .map(|e| e.task_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Project, Task};
+
+    fn render_to_text(model: &Model, width: u16, height: u16) -> String {
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, width, height);
+        let mut buf = Buffer::empty(area);
+        QuickOpen::new(model, &theme).render(area, &mut buf);
+        let mut text = String::new();
+        for y in 0..height {
+            for x in 0..width {
+                text.push_str(buf[(x, y)].symbol());
+            }
+            text.push('\n');
+        }
+        text
+    }
+
+    fn model_with(titles: &[&str]) -> Model {
+        let mut model = Model::new();
+        for title in titles {
+            let task = Task::new(*title);
+            model.tasks.insert(task.id, task);
+        }
+        model.quick_open.visible = true;
+        model
+    }
+
+    #[test]
+    fn truncate_chars_cuts_on_char_boundaries() {
+        assert_eq!(truncate_chars("short", 10), "short");
+        assert_eq!(truncate_chars("exact", 5), "exact");
+        let cut = truncate_chars("Café au lait très long", 6);
+        assert_eq!(cut, "Café \u{2026}");
+        assert_eq!(cut.chars().count(), 6);
+        assert_eq!(truncate_chars("abc", 0), "\u{2026}");
+    }
+
+    #[test]
+    fn renders_title_query_cursor_and_results() {
+        let mut model = model_with(&["Alpha", "Beta"]);
+        let project = Project::new("Work");
+        let project_id = project.id;
+        model.projects.insert(project_id, project);
+        let beta = model
+            .tasks
+            .values_mut()
+            .find(|t| t.title == "Beta")
+            .unwrap();
+        beta.project_id = Some(project_id);
+
+        let text = render_to_text(&model, 60, 17);
+        assert!(text.contains("Quick Open"), "{text}");
+        assert!(text.contains("> |"), "{text}");
+        assert!(text.contains("Alpha"), "{text}");
+        assert!(text.contains("Beta"), "{text}");
+        assert!(text.contains("Work"), "{text}");
+    }
+
+    #[test]
+    fn renders_cursor_inside_query() {
+        let mut model = model_with(&["Alpha"]);
+        model.quick_open.query = "alp".to_string();
+        model.quick_open.cursor = 1;
+        let text = render_to_text(&model, 60, 17);
+        assert!(text.contains("> a|lp"), "{text}");
+    }
+
+    #[test]
+    fn renders_empty_states() {
+        let model = model_with(&[]);
+        assert!(render_to_text(&model, 60, 17).contains("No tasks"));
+
+        let mut model = model_with(&["Alpha"]);
+        model.quick_open.query = "zzqx".to_string();
+        model.quick_open.cursor = 4;
+        assert!(render_to_text(&model, 60, 17).contains("No matching tasks"));
+    }
+
+    #[test]
+    fn long_multibyte_title_is_truncated_without_panicking() {
+        let title: String = "é".repeat(80);
+        let model = model_with(&[title.as_str()]);
+        let text = render_to_text(&model, 40, 17);
+        assert!(text.contains('\u{2026}'), "{text}");
+    }
+
+    #[test]
+    fn new_exposes_result_count_and_selected_task_id() {
+        let mut model = model_with(&["Beta", "Alpha"]);
+        let theme = Theme::default();
+        let widget = QuickOpen::new(&model, &theme);
+        assert_eq!(widget.result_count(), 2);
+        let alpha = model
+            .tasks
+            .values()
+            .find(|t| t.title == "Alpha")
+            .unwrap()
+            .id;
+        assert_eq!(widget.selected_task_id(), Some(alpha));
+
+        model.quick_open.selected = 5;
+        assert_eq!(QuickOpen::new(&model, &theme).selected_task_id(), None);
+    }
+
+    #[test]
+    fn scrolls_to_keep_selection_visible() {
+        let titles: Vec<String> = (0..20).map(|i| format!("Task {i:02}")).collect();
+        let refs: Vec<&str> = titles.iter().map(String::as_str).collect();
+        let mut model = model_with(&refs);
+        model.quick_open.selected = 19;
+        let text = render_to_text(&model, 60, 17);
+        assert!(text.contains("Task 19"), "{text}");
+        assert!(!text.contains("Task 00"), "{text}");
+    }
+
+    #[test]
+    fn tiny_area_renders_only_the_frame() {
+        let model = model_with(&["Alpha"]);
+        let text = render_to_text(&model, 12, 3);
+        assert!(!text.contains("Alpha"));
+    }
 }

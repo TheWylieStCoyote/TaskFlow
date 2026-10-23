@@ -135,6 +135,104 @@ fn palette_takes_priority_over_other_dialogs() {
 }
 
 // ============================================================================
+// Quick-open picker
+// ============================================================================
+
+#[test]
+fn quick_open_esc_hides() {
+    let mut model = Model::new();
+    model.quick_open.visible = true;
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Esc)),
+        Message::Ui(UiMessage::HideQuickOpen)
+    ));
+}
+
+#[test]
+fn quick_open_enter_selects() {
+    let mut model = Model::new();
+    model.quick_open.visible = true;
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Enter)),
+        Message::Ui(UiMessage::QuickOpenSelect)
+    ));
+}
+
+#[test]
+fn quick_open_typing_goes_to_query() {
+    let mut model = Model::new();
+    model.quick_open.visible = true;
+    // Letters that are bound globally (q quits, j/k move) are typed, not run.
+    assert!(matches!(
+        dispatch(&mut model, ch('q')),
+        Message::Ui(UiMessage::QuickOpenInput('q'))
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch('j')),
+        Message::Ui(UiMessage::QuickOpenInput('j'))
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ch(' ')),
+        Message::Ui(UiMessage::QuickOpenInput(' '))
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Backspace)),
+        Message::Ui(UiMessage::QuickOpenBackspace)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Up)),
+        Message::Ui(UiMessage::QuickOpenUp)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ctrl('k')),
+        Message::Ui(UiMessage::QuickOpenUp)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Down)),
+        Message::Ui(UiMessage::QuickOpenDown)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, ctrl('j')),
+        Message::Ui(UiMessage::QuickOpenDown)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Tab)),
+        Message::None
+    ));
+}
+
+#[test]
+fn quick_open_takes_priority_over_palette_dialogs_and_view() {
+    let mut model = model_in_view(ViewId::Kanban);
+    model.quick_open.visible = true;
+    model.command_palette.visible = true;
+    model.show_confirm_delete = true;
+    model.show_help = true;
+    assert!(matches!(
+        dispatch(&mut model, ch('h')),
+        Message::Ui(UiMessage::QuickOpenInput('h'))
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Esc)),
+        Message::Ui(UiMessage::HideQuickOpen)
+    ));
+}
+
+#[test]
+fn alt_space_opens_quick_open_from_the_task_list() {
+    let mut model = model_in_view(ViewId::TaskList);
+    assert!(matches!(
+        dispatch(&mut model, alt(' ')),
+        Message::Ui(UiMessage::ShowQuickOpen)
+    ));
+    // Plain space keeps its own binding.
+    assert!(!matches!(
+        dispatch(&mut model, ch(' ')),
+        Message::Ui(UiMessage::ShowQuickOpen)
+    ));
+}
+
+// ============================================================================
 // Confirmation dialogs
 // ============================================================================
 

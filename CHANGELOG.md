@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Calendar time blocking**: the day panel lists tasks scheduled on the selected day first, in start-time order with their `HH:MM–HH:MM` block, then tasks only due that day under a `── Due ──` separator; `◆` marks days with scheduled tasks in the grid; `s` schedules the selected task on the focused day (undoable, keeps the time block)
+- **Subtask collapse**: `Alt+z` hides or shows the selected task's subtree; `▼`/`▶` before the title show the state, and the whole subtree stays hidden until expanded
+- **Inline title editing**: `e` edits the title in the task row itself with a block cursor instead of a dialog (the dialog remains in views without the task list)
 - **`saved_filter` entity in the pipe interface**: `list` (sorted by name, `search`, paging), `get`, `create`, `update` and `delete`, using the same `filter`/`sort` JSON shape as `export`; a partial `filter` object fills missing fields with defaults
 - **`task_id` filter for `time_entry` and `work_log`** in the pipe interface; `project_id` is still accepted as the task UUID for existing scripts
 - **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)

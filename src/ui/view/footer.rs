@@ -266,7 +266,7 @@ pub(super) fn get_view_hint(model: &Model) -> Option<&'static str> {
         ViewId::Network => Some("h/l/j/k: navigate"),
         ViewId::Habits => Some("n: new | Space: check-in"),
         ViewId::Goals => Some("n: new goal | N: new KR | Enter: expand"),
-        ViewId::Calendar => Some("h/l: months | Enter: day tasks"),
+        ViewId::Calendar => Some("h/l: days | s: schedule | Enter: day tasks"),
         ViewId::Duplicates => Some("j/k: navigate | D: dismiss | M: merge"),
         ViewId::Heatmap | ViewId::Forecast | ViewId::Burndown => None, // View-only
         _ => None, // Task list and others use default controls

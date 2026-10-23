@@ -24,6 +24,7 @@ use crate::config::{Keybindings, Theme};
 /// View-specific navigation hints (key, description)
 const SPECIALIZED_VIEW_HINTS: &[(&str, &str)] = &[
     ("Views", "h sidebar, j/k pick, Enter open"),
+    ("Calendar", "h/l days, j/k weeks, s schedule, Tab list"),
     ("Kanban", "h/l columns, j/k tasks"),
     ("Eisenhwr", "h/l/j/k quadrants"),
     ("Weekly", "h/l days, j/k tasks"),

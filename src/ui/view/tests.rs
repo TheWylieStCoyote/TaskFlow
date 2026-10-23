@@ -104,7 +104,7 @@ fn test_get_view_hint_calendar() {
     model.current_view = ViewId::Calendar;
 
     let hint = footer::get_view_hint(&model);
-    assert_eq!(hint, Some("h/l: months | Enter: day tasks"));
+    assert_eq!(hint, Some("h/l: days | s: schedule | Enter: day tasks"));
 }
 
 #[test]

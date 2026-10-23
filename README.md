@@ -173,7 +173,8 @@ Each task shows:
 | `a` | Add new task |
 | `Alt+a` | Quick capture (quick-add syntax with inline hints) |
 | `A` | Add subtask under selected task |
-| `e` | Edit task title |
+| `Alt+z` | Collapse / expand the selected task's subtasks (`▶`/`▼`) |
+| `e` | Edit task title (inline, in the row) |
 | `i` | View task details |
 | `Enter` | View task details (task list) / Select (sidebar) |
 | `d` | Delete task (with confirmation) |
@@ -264,11 +265,13 @@ When you complete a recurring task, a new task is automatically created with the
 | `←`/`→` or `h`/`l` | Navigate days |
 | `↑`/`↓` or `j`/`k` | Navigate weeks |
 | `<`/`>` | Previous/Next month |
+| `s` | Schedule the selected task on the focused day (keeps its time block; undoable) |
+| `Alt+s` | Edit the selected task's time block (`9:00-10:30`) |
 | `Tab` | Switch focus between the calendar grid and the selected day's task list |
 | `Enter` | Open the day's task list (on the grid) / open focus mode on the task (in the list) |
 | `Esc` | Return focus to the sidebar |
 
-The Calendar view shows a monthly grid with tasks displayed for each day. Days with tasks show a dot indicator, and the selected day's tasks are listed in a panel on the right.
+The Calendar view shows a monthly grid with tasks displayed for each day. Days with due tasks show a `·` indicator and days with scheduled (time-blocked) tasks a `◆`. The selected day's tasks are listed in a panel on the right: time-blocked tasks first with their `HH:MM–HH:MM` label, then tasks that are only due that day.
 
 #### Export
 

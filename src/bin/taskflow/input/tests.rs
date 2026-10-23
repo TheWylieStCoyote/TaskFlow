@@ -815,3 +815,162 @@ fn focus_mode_plus_minus_adjust_pomodoro_goal_only_during_a_session() {
         Message::Pomodoro(PomodoroMessage::DecrementGoal)
     ));
 }
+
+// ============================================================================
+// Sidebar focus is reachable and usable from every view
+// ============================================================================
+
+const ALL_VIEWS: [ViewId; 26] = [
+    ViewId::TaskList,
+    ViewId::Today,
+    ViewId::Upcoming,
+    ViewId::Overdue,
+    ViewId::Scheduled,
+    ViewId::Calendar,
+    ViewId::Dashboard,
+    ViewId::Projects,
+    ViewId::Blocked,
+    ViewId::Untagged,
+    ViewId::NoProject,
+    ViewId::RecentlyModified,
+    ViewId::Reports,
+    ViewId::Kanban,
+    ViewId::Eisenhower,
+    ViewId::WeeklyPlanner,
+    ViewId::Timeline,
+    ViewId::Snoozed,
+    ViewId::Habits,
+    ViewId::Goals,
+    ViewId::Heatmap,
+    ViewId::Forecast,
+    ViewId::Network,
+    ViewId::Burndown,
+    ViewId::Duplicates,
+    ViewId::GitTodos,
+];
+
+#[test]
+fn esc_returns_focus_to_the_sidebar_from_every_view() {
+    for view in ALL_VIEWS {
+        let mut model = model_in_view(view);
+        assert!(
+            matches!(
+                dispatch(&mut model, key(KeyCode::Esc)),
+                Message::Navigation(NavigationMessage::FocusSidebar)
+            ),
+            "Esc in {view:?} should focus the sidebar"
+        );
+    }
+
+    // The calendar's inner task list is still the main pane
+    let mut model = model_in_view(ViewId::Calendar);
+    model.calendar_state.focus_task_list = true;
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Esc)),
+        Message::Navigation(NavigationMessage::FocusSidebar)
+    ));
+}
+
+#[test]
+fn esc_on_the_sidebar_is_a_no_op_and_never_quits() {
+    for view in ALL_VIEWS {
+        let mut model = model_in_view(view);
+        model.focus_pane = FocusPane::Sidebar;
+        assert!(
+            matches!(dispatch(&mut model, key(KeyCode::Esc)), Message::None),
+            "Esc on the sidebar in {view:?} should do nothing"
+        );
+    }
+}
+
+#[test]
+fn sidebar_navigation_keys_win_over_view_keys_when_sidebar_is_focused() {
+    for view in ALL_VIEWS {
+        let mut model = model_in_view(view);
+        model.focus_pane = FocusPane::Sidebar;
+        for k in [ch('j'), key(KeyCode::Down)] {
+            assert!(
+                matches!(
+                    dispatch(&mut model, k),
+                    Message::Navigation(NavigationMessage::Down)
+                ),
+                "{k:?} on the sidebar in {view:?} should move the sidebar down"
+            );
+        }
+        for k in [ch('k'), key(KeyCode::Up)] {
+            assert!(
+                matches!(
+                    dispatch(&mut model, k),
+                    Message::Navigation(NavigationMessage::Up)
+                ),
+                "{k:?} on the sidebar in {view:?} should move the sidebar up"
+            );
+        }
+        assert!(
+            matches!(
+                dispatch(&mut model, key(KeyCode::Enter)),
+                Message::Navigation(NavigationMessage::SelectSidebarItem)
+            ),
+            "Enter on the sidebar in {view:?} should select the item"
+        );
+        for k in [ch('l'), key(KeyCode::Right)] {
+            assert!(
+                matches!(
+                    dispatch(&mut model, k),
+                    Message::Navigation(NavigationMessage::FocusTaskList)
+                ),
+                "{k:?} on the sidebar in {view:?} should return to the view"
+            );
+        }
+    }
+}
+
+#[test]
+fn view_keys_still_apply_when_the_main_pane_is_focused() {
+    let mut model = model_in_view(ViewId::Kanban);
+    assert!(matches!(
+        dispatch(&mut model, ch('j')),
+        Message::Navigation(NavigationMessage::KanbanDown)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Enter)),
+        Message::Ui(UiMessage::KanbanViewSelected)
+    ));
+
+    let mut model = model_in_view(ViewId::Reports);
+    assert!(matches!(
+        dispatch(&mut model, ch('j')),
+        Message::Ui(UiMessage::ReportsTasksMove(1))
+    ));
+
+    let mut model = model_in_view(ViewId::GitTodos);
+    assert!(matches!(
+        dispatch(&mut model, ch('r')),
+        Message::System(SystemMessage::ScanGitTodos)
+    ));
+    model.focus_pane = FocusPane::Sidebar;
+    assert!(matches!(dispatch(&mut model, ch('r')), Message::None));
+}
+
+#[test]
+fn popups_take_keys_before_the_view_does() {
+    // Task detail opened with `i` inside a board view: j scrolls the popup
+    // and Esc closes it, instead of moving the board or changing focus.
+    let mut model = model_in_view(ViewId::Kanban);
+    model.task_detail.visible = true;
+    assert!(matches!(
+        dispatch(&mut model, ch('j')),
+        Message::Ui(UiMessage::TaskDetailScrollDown)
+    ));
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Esc)),
+        Message::Ui(UiMessage::HideTaskDetail)
+    ));
+
+    let mut model = model_in_view(ViewId::Habits);
+    model.habit_view.show_analytics = true;
+    assert!(matches!(
+        dispatch(&mut model, key(KeyCode::Esc)),
+        Message::Ui(UiMessage::HideHabitAnalytics)
+    ));
+}

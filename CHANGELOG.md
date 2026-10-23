@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The sidebar is reachable from every view**: `Esc` always returns focus to the sidebar (it did nothing in the task list, Dashboard, Heatmap, Forecast, Burndown, Duplicates and Git TODOs views), and with the sidebar focused `j`/`k`/`Enter`/`l` always drive the sidebar. Previously the Kanban, Eisenhower, Weekly Planner, Timeline, Network and Goals views kept those keys for themselves, so after `Esc` the highlighted sidebar could not be moved or used to switch views; Habits and Reports swallowed `j`/`k` the same way. Popups (task detail, reviews, habit analytics) now take keys before the view underneath them
+
 - **Timeline selection stops at the last drawn row** instead of the last visible task, and Enter opens the highlighted row (it could open a different task when the list order differed from the timeline order)
 - **Unparsable SQLite rows are reported, not dropped**: every skipped row is logged with table, id and the failing column; a bad timestamp is a row error instead of becoming "now"; single-row lookups on such a row return an error
 - **Markdown backend no longer overwrites corrupt data files**: a `*.yaml` aux file that does not parse makes startup fail with `CorruptFile` naming the file, leaving it untouched

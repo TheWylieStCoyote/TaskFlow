@@ -12,7 +12,9 @@ mod tests;
 
 use crossterm::event::{self, KeyCode};
 
-use taskflow::app::{Message, Model, SystemMessage, UiMessage};
+use taskflow::app::{
+    FocusPane, Message, Model, NavigationMessage, SystemMessage, UiMessage, ViewId,
+};
 use taskflow::config::Keybindings;
 use taskflow::ui::InputMode;
 
@@ -174,84 +176,7 @@ pub fn handle_key_event(
         }
     }
 
-    // In calendar view, handle focus switching and navigation
-    if model.current_view == taskflow::app::ViewId::Calendar
-        && model.focus_pane == taskflow::app::FocusPane::TaskList
-    {
-        if let Some(msg) = handle_calendar_view(key, model) {
-            return msg;
-        }
-    }
-
-    // In Habits view, handle habit-specific actions
-    if model.current_view == taskflow::app::ViewId::Habits {
-        if let Some(msg) = handle_habits_view(key, model) {
-            return msg;
-        }
-    }
-
-    // In Timeline view, handle timeline-specific actions
-    if model.current_view == taskflow::app::ViewId::Timeline {
-        if let Some(msg) = handle_timeline_view(key) {
-            return msg;
-        }
-    }
-
-    // In Kanban view, handle column navigation
-    if model.current_view == taskflow::app::ViewId::Kanban {
-        if let Some(msg) = handle_kanban_view(key) {
-            return msg;
-        }
-    }
-
-    // In Eisenhower view, handle quadrant navigation
-    if model.current_view == taskflow::app::ViewId::Eisenhower {
-        if let Some(msg) = handle_eisenhower_view(key) {
-            return msg;
-        }
-    }
-
-    // In WeeklyPlanner view, handle day navigation
-    if model.current_view == taskflow::app::ViewId::WeeklyPlanner {
-        if let Some(msg) = handle_weekly_planner_view(key) {
-            return msg;
-        }
-    }
-
-    // In Reports view, handle exit
-    if model.current_view == taskflow::app::ViewId::Reports {
-        if let Some(msg) = handle_reports_view(key) {
-            return msg;
-        }
-    }
-
-    // In GitTodos view, r triggers an in-app rescan
-    if model.current_view == taskflow::app::ViewId::GitTodos && key.code == KeyCode::Char('r') {
-        return Message::System(SystemMessage::ScanGitTodos);
-    }
-
-    // In Duplicates view, D/M/r act on duplicate pairs
-    if model.current_view == taskflow::app::ViewId::Duplicates {
-        if let Some(msg) = handle_duplicates_view(key) {
-            return msg;
-        }
-    }
-
-    // In Network view, handle task navigation
-    if model.current_view == taskflow::app::ViewId::Network {
-        if let Some(msg) = handle_network_view(key) {
-            return msg;
-        }
-    }
-
-    // In Goals view, handle goal-specific actions
-    if model.current_view == taskflow::app::ViewId::Goals {
-        if let Some(msg) = handle_goals_view(key, model) {
-            return msg;
-        }
-    }
-
-    // If habit analytics is showing, handle it
+    // Popups drawn over the current view take every key before the view does.
     if model.habit_view.show_analytics {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('a') => {
@@ -260,25 +185,33 @@ pub fn handle_key_event(
             _ => Message::None,
         };
     }
-
-    // If daily review is showing, handle navigation
     if model.daily_review.visible {
         return handle_daily_review(key);
     }
-
-    // If weekly review is showing, handle navigation
     if model.weekly_review.visible {
         return handle_weekly_review(key);
     }
-
-    // If evening review is showing, handle navigation
     if model.evening_review.visible {
         return handle_evening_review(key);
     }
-
-    // If task detail is showing, handle navigation
     if model.task_detail.visible {
         return handle_task_detail(key);
+    }
+
+    // Esc is the one way back to the sidebar from every view. With the
+    // sidebar already focused it falls through to the keymap, where it is
+    // unbound, so it never quits.
+    if key.code == KeyCode::Esc && model.focus_pane == FocusPane::TaskList {
+        return Message::Navigation(NavigationMessage::FocusSidebar);
+    }
+
+    // View-specific keys apply only while the main pane has focus. With the
+    // sidebar focused, j/k/Enter/l fall through to the sidebar bindings so
+    // the user can pick another view from any view.
+    if model.focus_pane == FocusPane::TaskList {
+        if let Some(msg) = handle_view_keys(key, model) {
+            return msg;
+        }
     }
 
     // Handle macro slot selection if pending
@@ -314,6 +247,30 @@ pub fn handle_key_event(
     }
 
     Message::None
+}
+
+/// Keys that belong to the view in the main pane.
+///
+/// Returns `None` when the view does not claim the key, so it falls through
+/// to the global keymap.
+fn handle_view_keys(key: event::KeyEvent, model: &mut Model) -> Option<Message> {
+    match model.current_view {
+        ViewId::Calendar => handle_calendar_view(key, model),
+        ViewId::Habits => handle_habits_view(key, model),
+        ViewId::Goals => handle_goals_view(key, model),
+        ViewId::Timeline => handle_timeline_view(key),
+        ViewId::Kanban => handle_kanban_view(key),
+        ViewId::Eisenhower => handle_eisenhower_view(key),
+        ViewId::WeeklyPlanner => handle_weekly_planner_view(key),
+        ViewId::Reports => handle_reports_view(key),
+        ViewId::Network => handle_network_view(key),
+        ViewId::Duplicates => handle_duplicates_view(key),
+        // r triggers an in-app rescan
+        ViewId::GitTodos if key.code == KeyCode::Char('r') => {
+            Some(Message::System(SystemMessage::ScanGitTodos))
+        }
+        _ => None,
+    }
 }
 
 /// Handle input for the command palette.

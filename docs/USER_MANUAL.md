@@ -304,7 +304,7 @@ TaskFlow uses popups for:
 - **Template picker** - Quick task creation
 - **Time log editor** - Managing time entries
 
-Press `Esc` to close any dialog without saving. `Esc` also leaves focus mode and, in the specialised views, returns focus to the sidebar; it never quits TaskFlow (use `q`).
+Press `Esc` to close any dialog without saving. `Esc` also leaves focus mode and, in every view, returns focus to the sidebar so you can pick another view with `j`/`k` and `Enter`; `l` or `→` goes back into the view. `Esc` never quits TaskFlow (use `q`).
 
 ---
 
@@ -669,7 +669,7 @@ Access views from the sidebar (`h` to focus, `j`/`k` to navigate, `Enter` to sel
 | Duplicates | Likely duplicate pairs (`D` dismiss, `M` merge, `r` refresh) |
 | Git TODOs | Tasks extracted from code comments (`r` rescans) |
 
-In every specialised view `Esc` returns focus to the sidebar and `Enter` opens the selected task.
+In every view `Esc` returns focus to the sidebar, where `j`/`k` and `Enter` pick another view and `l` or `→` returns to the main pane. While the main pane has focus, `Enter` opens the selected task; in the Kanban, Eisenhower, Weekly Planner, Timeline, Network and Goals views `h`/`l` navigate inside the view, so `Esc` is the way back to the sidebar there.
 
 ### Calendar View
 

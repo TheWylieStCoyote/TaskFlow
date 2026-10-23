@@ -162,7 +162,8 @@ Each task shows:
 | `G` | Go to last task |
 | `Ctrl+u` or `Page Up` | Page up (10 items) |
 | `Ctrl+d` or `Page Down` | Page down (10 items) |
-| `h` or `←` | Focus sidebar |
+| `Esc` | Focus sidebar (from any view) |
+| `h` or `←` | Focus sidebar (task list views) |
 | `l` or `→` | Focus task list |
 | `Enter` | Select sidebar item |
 

@@ -6,11 +6,6 @@ use taskflow::app::{Message, Model, NavigationMessage, UiMessage};
 
 /// Handle calendar view input
 pub fn handle_calendar_view(key: event::KeyEvent, model: &mut Model) -> Option<Message> {
-    // Esc returns focus to sidebar
-    if key.code == KeyCode::Esc {
-        return Some(Message::Navigation(NavigationMessage::FocusSidebar));
-    }
-
     // Tab toggles focus between calendar grid and task list
     if key.code == KeyCode::Tab {
         return Some(if model.calendar_state.focus_task_list {
@@ -74,8 +69,6 @@ pub fn handle_duplicates_view(key: event::KeyEvent) -> Option<Message> {
 
 pub fn handle_habits_view(key: event::KeyEvent, model: &Model) -> Option<Message> {
     match key.code {
-        // Return focus to sidebar
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => Some(Message::Ui(UiMessage::HabitUp)),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::Ui(UiMessage::HabitDown)),
@@ -108,8 +101,6 @@ pub fn handle_goals_view(key: event::KeyEvent, model: &Model) -> Option<Message>
     use taskflow::app::GoalMessage;
 
     match key.code {
-        // Return focus to sidebar
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Navigation
         KeyCode::Up | KeyCode::Char('k') => Some(Message::Goal(GoalMessage::NavigateUp)),
         KeyCode::Down | KeyCode::Char('j') => Some(Message::Goal(GoalMessage::NavigateDown)),
@@ -146,8 +137,6 @@ pub fn handle_goals_view(key: event::KeyEvent, model: &Model) -> Option<Message>
 /// Handle timeline view input
 pub fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        // Exit timeline view
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // Scroll time axis
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::TimelineScrollLeft))
@@ -182,7 +171,6 @@ pub fn handle_timeline_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle kanban view input
 pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::KanbanLeft))
         }
@@ -201,7 +189,6 @@ pub fn handle_kanban_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle eisenhower view input
 pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::EisenhowerLeft))
         }
@@ -222,7 +209,6 @@ pub fn handle_eisenhower_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle weekly planner view input
 pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::WeeklyPlannerLeft))
         }
@@ -243,7 +229,6 @@ pub fn handle_weekly_planner_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle reports view input
 pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         KeyCode::Tab => Some(Message::Navigation(NavigationMessage::ReportsNextPanel)),
         KeyCode::BackTab => Some(Message::Navigation(NavigationMessage::ReportsPrevPanel)),
         KeyCode::Char('w') => Some(Message::Ui(UiMessage::ReportsCycleTimeWindow)),
@@ -267,7 +252,6 @@ pub fn handle_reports_view(key: event::KeyEvent) -> Option<Message> {
 /// Handle network view input
 pub fn handle_network_view(key: event::KeyEvent) -> Option<Message> {
     match key.code {
-        KeyCode::Esc => Some(Message::Navigation(NavigationMessage::FocusSidebar)),
         // h/l as aliases for k/j to match other views
         KeyCode::Char('k') | KeyCode::Up | KeyCode::Char('h') | KeyCode::Left => {
             Some(Message::Navigation(NavigationMessage::NetworkUp))
@@ -339,12 +323,10 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn calendar_esc_returns_focus_to_sidebar() {
+    fn calendar_leaves_esc_to_the_dispatcher() {
         let mut model = calendar_model(false);
-        assert!(matches!(
-            handle_calendar_view(key(KeyCode::Esc), &mut model),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_calendar_view(key(KeyCode::Esc), &mut model).is_none());
     }
 
     #[test]
@@ -454,10 +436,8 @@ mod tests {
     #[test]
     fn habits_view_navigation_and_actions() {
         let (model, _) = habits_model();
-        assert!(matches!(
-            handle_habits_view(key(KeyCode::Esc), &model),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_habits_view(key(KeyCode::Esc), &model).is_none());
         for k in [key(KeyCode::Up), ch('k')] {
             assert!(matches!(
                 handle_habits_view(k, &model),
@@ -523,10 +503,8 @@ mod tests {
     #[test]
     fn goals_view_navigation_and_actions() {
         let (model, _) = goals_model();
-        assert!(matches!(
-            handle_goals_view(key(KeyCode::Esc), &model),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_goals_view(key(KeyCode::Esc), &model).is_none());
         for k in [key(KeyCode::Up), ch('k')] {
             assert!(matches!(
                 handle_goals_view(k, &model),
@@ -592,10 +570,8 @@ mod tests {
 
     #[test]
     fn timeline_view_keys() {
-        assert!(matches!(
-            handle_timeline_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_timeline_view(key(KeyCode::Esc)).is_none());
         for k in [ch('h'), key(KeyCode::Left)] {
             assert!(matches!(
                 handle_timeline_view(k),
@@ -654,10 +630,8 @@ mod tests {
 
     #[test]
     fn kanban_view_keys() {
-        assert!(matches!(
-            handle_kanban_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_kanban_view(key(KeyCode::Esc)).is_none());
         for k in [ch('h'), key(KeyCode::Left)] {
             assert!(matches!(
                 handle_kanban_view(k),
@@ -691,10 +665,8 @@ mod tests {
 
     #[test]
     fn eisenhower_view_keys() {
-        assert!(matches!(
-            handle_eisenhower_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_eisenhower_view(key(KeyCode::Esc)).is_none());
         for k in [ch('h'), key(KeyCode::Left)] {
             assert!(matches!(
                 handle_eisenhower_view(k),
@@ -728,10 +700,8 @@ mod tests {
 
     #[test]
     fn weekly_planner_view_keys() {
-        assert!(matches!(
-            handle_weekly_planner_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_weekly_planner_view(key(KeyCode::Esc)).is_none());
         for k in [ch('h'), key(KeyCode::Left)] {
             assert!(matches!(
                 handle_weekly_planner_view(k),
@@ -769,10 +739,8 @@ mod tests {
 
     #[test]
     fn reports_view_keys() {
-        assert!(matches!(
-            handle_reports_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_reports_view(key(KeyCode::Esc)).is_none());
         assert!(matches!(
             handle_reports_view(key(KeyCode::Tab)),
             Some(Message::Navigation(NavigationMessage::ReportsNextPanel))
@@ -795,10 +763,8 @@ mod tests {
 
     #[test]
     fn network_view_keys() {
-        assert!(matches!(
-            handle_network_view(key(KeyCode::Esc)),
-            Some(Message::Navigation(NavigationMessage::FocusSidebar))
-        ));
+        // Esc is handled by the dispatcher, not the view
+        assert!(handle_network_view(key(KeyCode::Esc)).is_none());
         for k in [ch('k'), key(KeyCode::Up), ch('h'), key(KeyCode::Left)] {
             assert!(matches!(
                 handle_network_view(k),

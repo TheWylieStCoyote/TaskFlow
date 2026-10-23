@@ -111,7 +111,7 @@ function M.status(_opts)
     '[TaskFlow] %d incomplete tasks',
     d.incomplete_count or 0
   )
-  if d.focus_task then
+  if d.focus_task and d.focus_task ~= vim.NIL then
     msg = msg .. '  |  Focus: ' .. (d.focus_task.title or d.focus_task.id)
   end
   vim.notify(msg, vim.log.levels.INFO)

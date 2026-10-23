@@ -1,5 +1,10 @@
 --- Unix Domain Socket I/O for the TaskFlow Neovim plugin.
 -- Uses vim.uv (Neovim 0.10+) or vim.loop (older) for non-blocking I/O.
+--
+-- libuv callbacks run in a "fast event" context where `vim.fn.*` and most
+-- editor APIs are forbidden (E5560). JSON goes through `vim.json`, which is
+-- safe there, and the caller's callback is always delivered on the main loop
+-- via `vim.schedule`.
 local M = {}
 
 local uv = vim.uv or vim.loop
@@ -15,9 +20,24 @@ local uv = vim.uv or vim.loop
 ---@param req_table   table   request object (will be JSON-encoded)
 ---@param callback    function
 function M.request(socket_path, req_table, callback)
+  local finished = false
+  -- Deliver exactly one result, on the main loop.
+  local function finish(ok, resp, err)
+    if finished then return end
+    finished = true
+    vim.schedule(function() callback(ok, resp, err) end)
+  end
+
+  local encoded_ok, payload = pcall(vim.json.encode, req_table)
+  if not encoded_ok then
+    finish(false, nil, 'json_encode: ' .. tostring(payload))
+    return
+  end
+  payload = payload .. '\n'
+
   local pipe = uv.new_pipe(false)
   if not pipe then
-    callback(false, nil, 'Failed to create pipe')
+    finish(false, nil, 'Failed to create pipe')
     return
   end
 
@@ -26,7 +46,7 @@ function M.request(socket_path, req_table, callback)
   pipe:connect(socket_path, function(err)
     if err then
       pipe:close()
-      callback(false, nil, 'connect: ' .. err)
+      finish(false, nil, 'connect: ' .. err)
       return
     end
 
@@ -34,7 +54,7 @@ function M.request(socket_path, req_table, callback)
     pipe:read_start(function(read_err, data)
       if read_err then
         pipe:close()
-        callback(false, nil, 'read: ' .. read_err)
+        finish(false, nil, 'read: ' .. read_err)
         return
       end
       if data then
@@ -44,25 +64,25 @@ function M.request(socket_path, req_table, callback)
         pipe:close()
         local line = buf:match('^([^\n]*)')
         if not line or line == '' then
-          callback(false, nil, 'empty response')
+          finish(false, nil, 'empty response')
           return
         end
-        local ok, decoded = pcall(vim.fn.json_decode, line)
+        -- JSON null becomes Lua nil (not vim.NIL) so callers can test
+        -- optional fields with a plain `if`.
+        local ok, decoded = pcall(vim.json.decode, line, { luanil = { object = true, array = true } })
         if ok then
-          callback(true, decoded, nil)
+          finish(true, decoded, nil)
         else
-          callback(false, nil, 'json_decode: ' .. tostring(decoded))
+          finish(false, nil, 'json_decode: ' .. tostring(decoded))
         end
       end
     end)
 
-    -- Write the request
-    local payload = vim.fn.json_encode(req_table) .. '\n'
+    -- Write the request (encoded above, outside the fast context)
     pipe:write(payload, function(write_err)
       if write_err then
-        -- Attempt graceful shutdown; read_start callback will fire with error
         pipe:close()
-        callback(false, nil, 'write: ' .. write_err)
+        finish(false, nil, 'write: ' .. write_err)
       end
     end)
   end)

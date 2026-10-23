@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Desktop notifications on by default**: the `desktop-notifications` feature is part of the default build; startup also reports tasks due soon and snoozes that ended today, the date rollover re-checks snoozes during overnight sessions, and `notifications_enabled` / `due_soon_days` in `config.toml` control it
 - **`saved_filter` entity in the pipe interface**: `list` (sorted by name, `search`, paging), `get`, `create`, `update` and `delete`, using the same `filter`/`sort` JSON shape as `export`; a partial `filter` object fills missing fields with defaults
 - **`task_id` filter for `time_entry` and `work_log`** in the pipe interface; `project_id` is still accepted as the task UUID for existing scripts
 - **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)

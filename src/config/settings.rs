@@ -118,6 +118,18 @@ pub struct Settings {
     /// What to show when database is empty on first run
     pub first_run_mode: FirstRunMode,
 
+    /// Master on/off switch for desktop notifications (default: true).
+    ///
+    /// Applied once at startup through `notifications::set_enabled`; when
+    /// false no notification fires even if the binary was built with the
+    /// `desktop-notifications` feature.
+    pub notifications_enabled: bool,
+
+    /// Days ahead to warn about upcoming due dates at startup
+    /// (0 = disabled, default: 1 = tomorrow). Tasks due today are reported
+    /// separately by the due-today notification.
+    pub due_soon_days: u32,
+
     /// User-defined task templates loaded from config
     #[serde(default)]
     pub custom_templates: Vec<TemplateConfig>,
@@ -134,6 +146,8 @@ impl Default for Settings {
             auto_save_interval: 300, // 5 minutes
             default_priority: "none".to_string(),
             first_run_mode: FirstRunMode::default(),
+            notifications_enabled: true,
+            due_soon_days: 1,
             custom_templates: Vec::new(),
         }
     }
@@ -354,6 +368,71 @@ mod tests {
         assert_eq!(settings.auto_save_interval, 300);
         assert_eq!(settings.default_priority, "none");
         assert_eq!(settings.first_run_mode, FirstRunMode::Empty);
+        assert!(settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 1);
+    }
+
+    #[test]
+    fn test_settings_notification_keys_default_when_missing() {
+        // A config.toml written before the notification settings existed.
+        let legacy = r#"
+backend = "yaml"
+theme = "dark"
+show_sidebar = false
+auto_save_interval = 60
+"#;
+        let settings: Settings = toml::from_str(legacy).unwrap();
+        assert_eq!(settings.backend, "yaml");
+        assert!(!settings.show_sidebar);
+        assert!(settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 1);
+
+        // An entirely empty file also loads with the defaults.
+        let empty: Settings = toml::from_str("").unwrap();
+        assert!(empty.notifications_enabled);
+        assert_eq!(empty.due_soon_days, 1);
+    }
+
+    #[test]
+    fn test_settings_notification_keys_parse() {
+        let toml_str = r"
+notifications_enabled = false
+due_soon_days = 3
+";
+        let settings: Settings = toml::from_str(toml_str).unwrap();
+        assert!(!settings.notifications_enabled);
+        assert_eq!(settings.due_soon_days, 3);
+
+        let disabled_due_soon: Settings = toml::from_str("due_soon_days = 0").unwrap();
+        assert!(disabled_due_soon.notifications_enabled);
+        assert_eq!(disabled_due_soon.due_soon_days, 0);
+    }
+
+    #[test]
+    fn test_settings_notification_keys_reject_invalid_values() {
+        assert!(toml::from_str::<Settings>("due_soon_days = -1").is_err());
+        assert!(toml::from_str::<Settings>(r#"notifications_enabled = "yes""#).is_err());
+    }
+
+    #[test]
+    fn test_settings_notification_keys_roundtrip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        let settings = Settings {
+            notifications_enabled: false,
+            due_soon_days: 5,
+            ..Settings::default()
+        };
+        settings.save_to_path(path.clone()).unwrap();
+
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("notifications_enabled = false"));
+        assert!(saved.contains("due_soon_days = 5"));
+
+        let loaded = Settings::load_from_path(path);
+        assert!(!loaded.notifications_enabled);
+        assert_eq!(loaded.due_soon_days, 5);
     }
 
     #[test]

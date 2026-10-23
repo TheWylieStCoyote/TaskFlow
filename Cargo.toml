@@ -59,6 +59,7 @@ reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin)"] }
 
 [features]
+default = ["desktop-notifications"]
 desktop-notifications = ["notify-rust"]
 caldav-sync = ["reqwest"]
 

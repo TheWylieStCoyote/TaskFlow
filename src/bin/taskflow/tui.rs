@@ -15,7 +15,7 @@ use taskflow::app::{
     update, Message, Model, PomodoroMessage, RunningState, SystemMessage, TaskTemplate,
 };
 use taskflow::config::{FirstRunMode, Keybindings, Settings, Theme};
-use taskflow::domain::Priority;
+use taskflow::domain::{today, Priority};
 use taskflow::storage::BackendType;
 use taskflow::ui::view;
 
@@ -94,6 +94,9 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
         }
     };
 
+    // Apply notification preferences before any notifications fire
+    taskflow::notifications::set_enabled(settings.notifications_enabled);
+
     // Apply settings to model
     model.show_sidebar = settings.show_sidebar;
     model.filtering.show_completed = settings.show_completed;
@@ -118,12 +121,18 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
     // Check for overdue tasks and show alert at startup
     model.check_overdue_alert();
 
-    // Desktop notifications for overdue and due-today tasks at startup
+    // Desktop notifications for overdue, due-today, due-soon, and snooze-expiry at startup
     {
         let (overdue_count, _) = model.overdue_summary();
         taskflow::notifications::notify_overdue_tasks(overdue_count);
         let due_today = model.footer_stats.due_today_count;
         taskflow::notifications::notify_due_today(due_today);
+        if settings.due_soon_days > 0 {
+            let due_soon = model.count_due_soon(settings.due_soon_days);
+            taskflow::notifications::notify_due_soon(due_soon, settings.due_soon_days);
+        }
+        let snooze_expired = model.count_snooze_expired_today();
+        taskflow::notifications::notify_snooze_expired(snooze_expired);
     }
 
     // Prompt to generate config file if it didn't exist at startup
@@ -194,6 +203,7 @@ fn run_app(
     let mut last_pomodoro_tick = Instant::now();
     let mut last_git_check = Instant::now();
     let git_check_interval = Duration::from_secs(60); // Check every 60 seconds
+    let mut last_snooze_check_date = today();
 
     loop {
         // Draw UI. This runs on every pass, and `event::poll` below returns
@@ -236,6 +246,14 @@ fn run_app(
         if last_git_check.elapsed() >= git_check_interval {
             update(model, Message::System(SystemMessage::CheckMergedBranches));
             last_git_check = Instant::now();
+        }
+
+        // Notify when the local date rolls over (overnight usage) and snoozed tasks become active
+        let current_date = today();
+        if current_date != last_snooze_check_date {
+            let count = model.count_snooze_expired_today();
+            taskflow::notifications::notify_snooze_expired(count);
+            last_snooze_check_date = current_date;
         }
 
         // Handle events with timeout for potential async operations

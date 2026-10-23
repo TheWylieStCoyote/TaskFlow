@@ -283,7 +283,7 @@ Priority  Status  Title                      Tags         Due Date
 **Additional Indicators**:
 - `↻` - Recurring task
 - `[B]` - Has blocking dependencies
-- `▶` - Has subtasks
+- `▼` / `▶` - Has subtasks (expanded / collapsed with `Alt+z`)
 - `●` (red) - Time is being tracked; the footer shows the running `⏱` timer
 
 ### Footer / Status Bar
@@ -361,7 +361,7 @@ Review PR #code-review !high due:in 2 days
 #### Edit Title
 1. Select a task
 2. Press `e`
-3. Modify the title
+3. Modify the title — it is edited in place in the task row, with a block cursor
 4. Press `Enter` to save or `Esc` to cancel
 
 #### Edit Due Date
@@ -569,12 +569,19 @@ Break complex tasks into smaller pieces:
 
 The subtask appears indented under its parent.
 
+#### Collapse and Expand
+Press `Alt+z` on a task that has subtasks to hide its whole subtree; press
+it again to show them. A `▼` before the title marks an expanded parent and
+`▶` a collapsed one. Collapse state is kept while the app runs and is
+cleared when the task is deleted.
+
 #### Hierarchy Display
 ```
-▶ [ ] Main project task
+▼ [ ] Main project task
     [ ] Subtask 1
     [ ] Subtask 2
         [ ] Sub-subtask
+▶ [ ] Collapsed task (subtasks hidden)
 ```
 
 #### Completing Parent Tasks
@@ -689,9 +696,16 @@ The calendar provides a monthly overview:
 └─────┴─────┴─────┴─────┴─────┴─────┴─────┘
 ```
 
-- `•` indicates days with tasks
+- `•` indicates days with tasks due
+- `◆` indicates days with scheduled (time-blocked) tasks
 - `[16]` is the selected day
 - Overdue days are highlighted in red
+
+The day panel on the right lists the selected day's tasks: tasks scheduled
+on that day come first, in start-time order, each with its time block
+(`09:00–10:30`, set with `Alt+s` or the `time:` quick-add hint); tasks that
+are only *due* that day follow under a `── Due ──` separator, then the day's
+calendar events.
 
 #### Calendar Navigation
 | Key | Action |
@@ -699,6 +713,8 @@ The calendar provides a monthly overview:
 | `h`/`l` or `←`/`→` | Previous/next day (`l` on a day with tasks opens its task list instead) |
 | `j`/`k` or `↓`/`↑` | Previous/next week |
 | `<`/`>` | Previous/next month |
+| `s` | Schedule the selected task on the focused day (sets its scheduled date, keeps its time block; undoable) |
+| `Alt+s` | Edit the selected task's time block (`9:00-10:30`) |
 | `Tab` | Switch focus between the grid and the day's task list |
 | `Enter` | Open the task list for the selected day (grid) / open focus mode on the task (list) |
 | `h` or `←` (in the task list) | Back to the calendar grid |
@@ -1941,7 +1957,8 @@ echo '{"operation":"list","entity":"task"}' | taskflow pipe --format csv
 |-----|--------|
 | `a` | Add new task |
 | `A` | Add subtask |
-| `e` | Edit task title |
+| `Alt+z` | Collapse / expand the selected task's subtasks |
+| `e` | Edit task title (inline, in the row) |
 | `i` | View task details |
 | `Enter` | View task details / Select |
 | `d` | Delete task |

@@ -2,7 +2,7 @@
 
 use crate::domain::text::truncate_chars;
 use ratatui::{
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::ListItem,
 };
@@ -24,7 +24,11 @@ pub struct TaskItemContext<'a> {
     pub has_chain: bool,                  // Task is linked to another task
     pub subtask_progress: (usize, usize), // (completed, total)
     pub theme: &'a Theme,
-    pub git_branch: Option<&'a str>, // Linked git branch name
+    pub git_branch: Option<&'a str>,  // Linked git branch name
+    pub is_collapsed: bool,           // Subtree is collapsed (children hidden)
+    pub is_editing: bool,             // Title is being edited inline
+    pub edit_buffer: Option<&'a str>, // Current edit buffer content (when is_editing)
+    pub edit_cursor: usize,           // Cursor position in edit buffer (when is_editing)
 }
 
 /// Render a project header as a list item
@@ -70,6 +74,17 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
         let spaces = "  ".repeat(ctx.nesting_depth.saturating_sub(1));
         let indent = format!("{spaces}└─ ");
         Span::styled(indent, Style::default().fg(theme.colors.muted.to_color()))
+    } else {
+        Span::raw("")
+    };
+
+    // Collapse indicator for tasks that have subtasks
+    let collapse_span = if ctx.subtask_progress.1 > 0 {
+        if ctx.is_collapsed {
+            Span::styled("▶ ", Style::default().fg(theme.colors.accent.to_color()))
+        } else {
+            Span::styled("▼ ", Style::default().fg(theme.colors.muted.to_color()))
+        }
     } else {
         Span::raw("")
     };
@@ -153,7 +168,53 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
         (Style::default(), Span::raw(""))
     };
 
-    let title_span = Span::styled(task.title.clone(), title_style);
+    // When editing inline, render the buffer with a block cursor instead of the task title.
+    // `cursor` is a char index; split the buffer into before/at/after for rendering.
+    let (title_span, inline_cursor_span, inline_suffix_span) = if ctx.is_editing {
+        if let Some(buffer) = ctx.edit_buffer {
+            let edit_style = Style::default()
+                .fg(theme.colors.foreground.to_color())
+                .add_modifier(Modifier::BOLD);
+            let cursor_style = Style::default()
+                .fg(Color::Black)
+                .bg(theme.colors.foreground.to_color());
+
+            // Convert char index to byte indices
+            let mut char_iter = buffer.char_indices();
+            let before_end = char_iter
+                .nth(ctx.edit_cursor)
+                .map_or(buffer.len(), |(i, _)| i);
+            let cursor_char_and_next: Option<(usize, char)> = buffer[before_end..]
+                .char_indices()
+                .next()
+                .map(|(i, c)| (before_end + i, c));
+
+            let before = Span::styled(buffer[..before_end].to_string(), edit_style);
+            let (at_cursor, after_start) = if let Some((_, ch)) = cursor_char_and_next {
+                let ch_len = ch.len_utf8();
+                (
+                    Span::styled(ch.to_string(), cursor_style),
+                    before_end + ch_len,
+                )
+            } else {
+                (Span::styled(" ".to_string(), cursor_style), before_end)
+            };
+            let after = Span::styled(buffer[after_start..].to_string(), edit_style);
+            (before, at_cursor, after)
+        } else {
+            (
+                Span::styled(task.title.clone(), title_style),
+                Span::raw(""),
+                Span::raw(""),
+            )
+        }
+    } else {
+        (
+            Span::styled(task.title.clone(), title_style),
+            Span::raw(""),
+            Span::raw(""),
+        )
+    };
 
     // Add due date if present
     let due_span = if let Some(due) = task.due_date {
@@ -294,11 +355,14 @@ pub fn task_to_list_item(ctx: &TaskItemContext<'_>) -> ListItem<'static> {
     let line = Line::from(vec![
         select_span,
         indent_span,
+        collapse_span,
         tracking_span,
         priority_span,
         status_span,
         urgency_prefix,
         title_span,
+        inline_cursor_span,
+        inline_suffix_span,
         progress_span,
         desc_span,
         dep_span,

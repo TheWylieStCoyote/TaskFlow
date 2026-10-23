@@ -87,6 +87,7 @@ pub enum Action {
     CalendarNextMonth,
     CalendarPrevDay,
     CalendarNextDay,
+    ScheduleTaskToDay,
 
     // Reports navigation
     ReportsNextPanel,
@@ -181,6 +182,9 @@ pub enum Action {
 
     // Command palette
     ShowCommandPalette,
+
+    // Subtask tree
+    ToggleSubtaskCollapse,
 }
 
 /// Category for grouping actions in help display
@@ -342,6 +346,7 @@ impl Action {
             Self::CalendarNextMonth => "Next month",
             Self::CalendarPrevDay => "Previous day",
             Self::CalendarNextDay => "Next day",
+            Self::ScheduleTaskToDay => "Schedule selected task to focused calendar day",
             // Reports
             Self::ReportsNextPanel => "Next panel",
             Self::ReportsPrevPanel => "Previous panel",
@@ -421,6 +426,8 @@ impl Action {
             Self::ShowTaskDetail => "Show task details",
             // Command palette
             Self::ShowCommandPalette => "Open command palette",
+            // Subtask tree
+            Self::ToggleSubtaskCollapse => "Toggle subtask tree collapse",
         }
     }
 
@@ -500,7 +507,8 @@ impl Action {
             Self::CalendarPrevMonth
             | Self::CalendarNextMonth
             | Self::CalendarPrevDay
-            | Self::CalendarNextDay => ActionCategory::Calendar,
+            | Self::CalendarNextDay
+            | Self::ScheduleTaskToDay => ActionCategory::Calendar,
 
             Self::ReportsNextPanel | Self::ReportsPrevPanel => ActionCategory::Reports,
 
@@ -565,6 +573,7 @@ impl Action {
 
             Self::ShowTaskDetail => ActionCategory::Tasks,
             Self::ShowCommandPalette => ActionCategory::ViewFilter,
+            Self::ToggleSubtaskCollapse => ActionCategory::Tasks,
         }
     }
 }
@@ -645,6 +654,7 @@ pub const ALL_ACTIONS: &[Action] = &[
     Action::CalendarNextMonth,
     Action::CalendarPrevDay,
     Action::CalendarNextDay,
+    Action::ScheduleTaskToDay,
     // Reports navigation
     Action::ReportsNextPanel,
     Action::ReportsPrevPanel,
@@ -723,4 +733,6 @@ pub const ALL_ACTIONS: &[Action] = &[
     Action::ShowTaskDetail,
     // Command palette
     Action::ShowCommandPalette,
+    // Subtask tree
+    Action::ToggleSubtaskCollapse,
 ];

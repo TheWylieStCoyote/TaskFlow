@@ -183,3 +183,31 @@ pub enum ViewId {
     /// Git TODOs view (tasks extracted from code comments)
     GitTodos,
 }
+
+impl ViewId {
+    /// Whether the main content area draws the generic task list for this view.
+    ///
+    /// The specialised views (calendar, kanban, reports, ...) have their own
+    /// renderer, so a task title cannot be edited inline there.
+    #[must_use]
+    pub const fn renders_task_list(self) -> bool {
+        !matches!(
+            self,
+            Self::Calendar
+                | Self::Dashboard
+                | Self::Reports
+                | Self::Habits
+                | Self::Goals
+                | Self::Kanban
+                | Self::Eisenhower
+                | Self::WeeklyPlanner
+                | Self::Timeline
+                | Self::Heatmap
+                | Self::Forecast
+                | Self::Network
+                | Self::Burndown
+                | Self::Duplicates
+                | Self::GitTodos
+        )
+    }
+}

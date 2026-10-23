@@ -236,6 +236,20 @@ pub fn parse_time_range(input: &str) -> Option<(chrono::NaiveTime, chrono::Naive
 #[allow(clippy::too_many_lines)]
 pub fn handle_ui(model: &mut Model, msg: UiMessage) {
     match msg {
+        // Subtask tree collapse/expand (no-op on tasks without subtasks)
+        UiMessage::ToggleSubtaskCollapse => {
+            if let Some(task_id) = model.selected_task_id() {
+                let has_children = model
+                    .task_cache
+                    .children
+                    .get(&task_id)
+                    .is_some_and(|c| !c.is_empty());
+                if has_children && !model.collapsed_tasks.remove(&task_id) {
+                    model.collapsed_tasks.insert(task_id);
+                }
+                model.refresh_visible_tasks();
+            }
+        }
         // View state toggles - delegated to helper
         UiMessage::ToggleShowCompleted => view_state::toggle_show_completed(model),
         UiMessage::ToggleSidebar => view_state::toggle_sidebar(model),
@@ -685,7 +699,7 @@ pub fn handle_ui(model: &mut Model, msg: UiMessage) {
             }
         }
         // Calendar navigation - delegated to helper
-        UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay => {
+        UiMessage::CalendarPrevDay | UiMessage::CalendarNextDay | UiMessage::ScheduleTaskToDay => {
             handle_ui_calendar(model, msg);
         }
         // Macro recording/playback - delegated to helper

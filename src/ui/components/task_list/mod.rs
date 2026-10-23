@@ -18,6 +18,7 @@ use ratatui::{
 use crate::app::{Model, ViewId};
 use crate::config::Theme;
 use crate::domain::{Task, TaskId};
+use crate::ui::components::InputTarget;
 use crate::ui::primitives::panel_block;
 
 pub use item::{project_header_to_list_item, task_to_list_item, TaskItemContext};
@@ -34,6 +35,8 @@ pub enum ListEntry<'a> {
         is_recurring: bool,
         has_chain: bool, // Task is linked to another task (has next_task_id)
         subtask_progress: (usize, usize), // (completed, total) - only shown if total > 0
+        is_collapsed: bool, // Subtree is collapsed
+        is_editing: bool, // Title is being edited inline
     },
     ProjectHeader {
         name: String,
@@ -50,6 +53,10 @@ pub struct TaskList<'a> {
     active_tracking: Option<&'a TaskId>,
     theme: &'a Theme,
     is_grouped: bool,
+    /// Current content of the edit buffer (if inline editing)
+    edit_buffer: Option<&'a str>,
+    /// Cursor position in edit buffer
+    edit_cursor: usize,
 }
 
 impl<'a> TaskList<'a> {
@@ -58,14 +65,43 @@ impl<'a> TaskList<'a> {
         let active_tracking = model.active_time_entry().map(|e| &e.task_id);
         let is_grouped = model.current_view == ViewId::Projects;
 
+        // Inline title editing: the row shows the edit buffer instead of the title
+        let editing_task_id = match model.input.target {
+            InputTarget::EditTask(id) if model.is_inline_title_edit() => Some(id),
+            _ => None,
+        };
+        let edit_buffer = editing_task_id.map(|_| model.input.buffer.as_str());
+        let edit_cursor = model.input.cursor;
+
         if is_grouped {
-            Self::new_grouped(model, theme, active_tracking)
+            Self::new_grouped(
+                model,
+                theme,
+                active_tracking,
+                editing_task_id,
+                edit_buffer,
+                edit_cursor,
+            )
         } else {
-            Self::new_flat(model, theme, active_tracking)
+            Self::new_flat(
+                model,
+                theme,
+                active_tracking,
+                editing_task_id,
+                edit_buffer,
+                edit_cursor,
+            )
         }
     }
 
-    fn new_flat(model: &'a Model, theme: &'a Theme, active_tracking: Option<&'a TaskId>) -> Self {
+    fn new_flat(
+        model: &'a Model,
+        theme: &'a Theme,
+        active_tracking: Option<&'a TaskId>,
+        editing_task_id: Option<TaskId>,
+        edit_buffer: Option<&'a str>,
+        edit_cursor: usize,
+    ) -> Self {
         let mut entries = Vec::new();
         let mut row_to_task_index = Vec::new();
 
@@ -79,6 +115,8 @@ impl<'a> TaskList<'a> {
                 let is_recurring = task.recurrence.is_some();
                 let has_chain = task.next_task_id.is_some();
                 let subtask_progress = model.task_cache.get_subtask_progress(*task_id);
+                let is_collapsed = model.collapsed_tasks.contains(task_id);
+                let is_editing = editing_task_id == Some(*task_id);
                 entries.push(ListEntry::Task {
                     task,
                     index: idx,
@@ -89,6 +127,8 @@ impl<'a> TaskList<'a> {
                     is_recurring,
                     has_chain,
                     subtask_progress,
+                    is_collapsed,
+                    is_editing,
                 });
                 row_to_task_index.push(Some(idx));
             }
@@ -101,6 +141,8 @@ impl<'a> TaskList<'a> {
             active_tracking,
             theme,
             is_grouped: false,
+            edit_buffer,
+            edit_cursor,
         }
     }
 
@@ -108,6 +150,9 @@ impl<'a> TaskList<'a> {
         model: &'a Model,
         theme: &'a Theme,
         active_tracking: Option<&'a TaskId>,
+        editing_task_id: Option<TaskId>,
+        edit_buffer: Option<&'a str>,
+        edit_cursor: usize,
     ) -> Self {
         let grouped = model.get_tasks_grouped_by_project();
         let mut entries = Vec::new();
@@ -138,6 +183,8 @@ impl<'a> TaskList<'a> {
                     let is_recurring = task.recurrence.is_some();
                     let has_chain = task.next_task_id.is_some();
                     let subtask_progress = model.task_cache.get_subtask_progress(task_id);
+                    let is_collapsed = model.collapsed_tasks.contains(&task_id);
+                    let is_editing = editing_task_id == Some(task_id);
                     entries.push(ListEntry::Task {
                         task,
                         index: idx,
@@ -148,6 +195,8 @@ impl<'a> TaskList<'a> {
                         is_recurring,
                         has_chain,
                         subtask_progress,
+                        is_collapsed,
+                        is_editing,
                     });
                     row_to_task_index.push(Some(idx));
                 }
@@ -161,6 +210,8 @@ impl<'a> TaskList<'a> {
             active_tracking,
             theme,
             is_grouped: true,
+            edit_buffer,
+            edit_cursor,
         }
     }
 
@@ -193,6 +244,8 @@ impl StatefulWidget for TaskList<'_> {
                     is_recurring,
                     has_chain,
                     subtask_progress,
+                    is_collapsed,
+                    is_editing,
                 } => {
                     let ctx = TaskItemContext {
                         task,
@@ -207,6 +260,10 @@ impl StatefulWidget for TaskList<'_> {
                         subtask_progress: *subtask_progress,
                         theme,
                         git_branch: task.git_ref.as_ref().map(|r| r.branch.as_str()),
+                        is_collapsed: *is_collapsed,
+                        is_editing: *is_editing,
+                        edit_buffer: if *is_editing { self.edit_buffer } else { None },
+                        edit_cursor: self.edit_cursor,
                     };
                     task_to_list_item(&ctx)
                 }

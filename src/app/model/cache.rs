@@ -103,6 +103,8 @@ pub struct TaskCache {
     pub tasks_by_project: HashMap<Option<ProjectId>, Vec<TaskId>>,
     /// Task IDs grouped by due date (None key for tasks without a due date)
     pub tasks_by_due_date: HashMap<Option<NaiveDate>, Vec<TaskId>>,
+    /// Task IDs grouped by scheduled date (only tasks with a scheduled_date)
+    pub tasks_by_scheduled_date: HashMap<NaiveDate, Vec<TaskId>>,
     /// Pre-computed set of context tags (tags starting with @)
     pub contexts: HashSet<String>,
 }
@@ -124,6 +126,7 @@ impl TaskCache {
         self.work_logs_by_task.clear();
         self.tasks_by_project.clear();
         self.tasks_by_due_date.clear();
+        self.tasks_by_scheduled_date.clear();
         self.contexts.clear();
     }
 
@@ -290,6 +293,35 @@ impl TaskCache {
         }
     }
 
+    /// Rebuild the scheduled date index from tasks.
+    ///
+    /// Groups task IDs by their `scheduled_date` for O(1) date-based lookups.
+    /// Each day's tasks are sorted by `scheduled_start_time` with untimed tasks
+    /// last; ties fall back to creation time so the order is stable across
+    /// rebuilds (the source map iterates in arbitrary order).
+    pub fn rebuild_scheduled_date_index(&mut self, tasks: &HashMap<TaskId, Task>) {
+        self.tasks_by_scheduled_date.clear();
+        for (id, task) in tasks {
+            if let Some(date) = task.scheduled_date {
+                self.tasks_by_scheduled_date
+                    .entry(date)
+                    .or_default()
+                    .push(*id);
+            }
+        }
+        for ids in self.tasks_by_scheduled_date.values_mut() {
+            ids.sort_by_key(|id| {
+                tasks.get(id).map(|t| {
+                    (
+                        t.scheduled_start_time.is_none(),
+                        t.scheduled_start_time,
+                        t.created_at,
+                    )
+                })
+            });
+        }
+    }
+
     /// Rebuild the context tags set from tasks.
     ///
     /// Extracts all unique @-prefixed tags for O(1) context listing.
@@ -311,6 +343,7 @@ impl TaskCache {
     pub fn rebuild_secondary_indexes(&mut self, tasks: &HashMap<TaskId, Task>) {
         self.rebuild_project_index(tasks);
         self.rebuild_due_date_index(tasks);
+        self.rebuild_scheduled_date_index(tasks);
         self.rebuild_contexts(tasks);
     }
 }
@@ -695,5 +728,104 @@ mod tests {
         // Root should have 3 descendants
         let (_, total) = cache.get_subtask_progress(root_id);
         assert_eq!(total, 3);
+    }
+
+    fn scheduled(title: &str, date: NaiveDate, start: Option<(u32, u32)>) -> Task {
+        let mut task = Task::new(title);
+        task.scheduled_date = Some(date);
+        task.scheduled_start_time =
+            start.and_then(|(h, m)| chrono::NaiveTime::from_hms_opt(h, m, 0));
+        task
+    }
+
+    #[test]
+    fn test_scheduled_date_index_orders_by_start_time_with_untimed_last() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let mut tasks = HashMap::new();
+        let untimed = scheduled("Untimed", date, None);
+        let late = scheduled("Late", date, Some((15, 0)));
+        let early = scheduled("Early", date, Some((8, 30)));
+        let other_day = scheduled("Other day", date.succ_opt().unwrap(), Some((7, 0)));
+        let unscheduled = Task::new("Unscheduled");
+        let (untimed_id, late_id, early_id) = (untimed.id, late.id, early.id);
+        for t in [untimed, late, early, other_day, unscheduled] {
+            tasks.insert(t.id, t);
+        }
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_scheduled_date_index(&tasks);
+
+        assert_eq!(
+            cache.tasks_by_scheduled_date.get(&date).cloned(),
+            Some(vec![early_id, late_id, untimed_id])
+        );
+        assert_eq!(
+            cache.tasks_by_scheduled_date.len(),
+            2,
+            "one entry per scheduled day"
+        );
+        assert!(
+            !cache
+                .tasks_by_scheduled_date
+                .values()
+                .flatten()
+                .any(|id| { tasks[id].scheduled_date.is_none() }),
+            "tasks without a scheduled date are not indexed"
+        );
+    }
+
+    #[test]
+    fn test_scheduled_date_index_ties_are_stable_across_rebuilds() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let mut tasks = HashMap::new();
+        for i in 0..8 {
+            let mut task = scheduled(&format!("Block {i}"), date, Some((9, 0)));
+            task.created_at = chrono::Utc::now() + chrono::Duration::seconds(i);
+            tasks.insert(task.id, task);
+        }
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_scheduled_date_index(&tasks);
+        let first = cache.tasks_by_scheduled_date[&date].clone();
+        let titles: Vec<_> = first.iter().map(|id| tasks[id].title.clone()).collect();
+        assert_eq!(
+            titles,
+            (0..8).map(|i| format!("Block {i}")).collect::<Vec<_>>(),
+            "same start time falls back to creation order"
+        );
+        for _ in 0..5 {
+            cache.rebuild_scheduled_date_index(&tasks);
+            assert_eq!(cache.tasks_by_scheduled_date[&date], first);
+        }
+    }
+
+    #[test]
+    fn test_scheduled_date_index_follows_mutations_and_clear() {
+        let day_a = NaiveDate::from_ymd_opt(2024, 3, 14).unwrap();
+        let day_b = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let mut tasks = HashMap::new();
+        let task = scheduled("Movable", day_a, Some((10, 0)));
+        let id = task.id;
+        tasks.insert(id, task);
+
+        let mut cache = TaskCache::new();
+        cache.rebuild_secondary_indexes(&tasks);
+        assert_eq!(cache.tasks_by_scheduled_date.get(&day_a), Some(&vec![id]));
+
+        // Rescheduling moves the id to the new day
+        tasks.get_mut(&id).unwrap().scheduled_date = Some(day_b);
+        cache.rebuild_secondary_indexes(&tasks);
+        assert!(!cache.tasks_by_scheduled_date.contains_key(&day_a));
+        assert_eq!(cache.tasks_by_scheduled_date.get(&day_b), Some(&vec![id]));
+
+        // Unscheduling drops it
+        tasks.get_mut(&id).unwrap().scheduled_date = None;
+        cache.rebuild_secondary_indexes(&tasks);
+        assert!(cache.tasks_by_scheduled_date.is_empty());
+
+        tasks.get_mut(&id).unwrap().scheduled_date = Some(day_a);
+        cache.rebuild_secondary_indexes(&tasks);
+        cache.clear();
+        assert!(cache.tasks_by_scheduled_date.is_empty());
     }
 }

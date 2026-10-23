@@ -164,6 +164,8 @@ pub(crate) const DEFAULT_BINDINGS: &[(&str, Action)] = &[
     // Command palette
     ("alt+p", Action::ShowCommandPalette),
     (":", Action::ShowCommandPalette),
+    // Subtask tree collapse/expand
+    ("alt+z", Action::ToggleSubtaskCollapse),
 ];
 
 /// Create the default keybindings map.

@@ -298,4 +298,11 @@ fn documented_keys_resolve_to_documented_actions() {
     assert!(kb.key_for_action(&Action::RefreshStorage).is_some());
     assert!(kb.key_for_action(&Action::ToggleSortOrder).is_some());
     assert!(kb.key_for_action(&Action::QuickCapture).is_some());
+    // Subtask collapse lives on alt+z; z/Z stay snooze / clear snooze
+    assert_eq!(kb.get_action("alt+z"), Some(&Action::ToggleSubtaskCollapse));
+    assert_eq!(kb.get_action("z"), Some(&Action::SnoozeTask));
+    assert_eq!(kb.get_action("Z"), Some(&Action::ClearSnooze));
+    // The calendar's `s` (schedule to day) is view-scoped, not a global binding
+    assert_eq!(kb.get_action("s"), Some(&Action::CycleSortField));
+    assert!(kb.key_for_action(&Action::ScheduleTaskToDay).is_none());
 }

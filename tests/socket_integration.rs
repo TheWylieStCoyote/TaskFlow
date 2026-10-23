@@ -41,7 +41,7 @@ mod tests {
         let snap = Arc::new(Mutex::new(ModelSnapshot::from_model(model)));
         let (write_tx, write_rx) = mpsc::sync_channel(64);
         let settings = make_settings_with_socket(socket_path);
-        let server = socket::start(&settings, write_tx, Arc::clone(&snap));
+        let server = socket::start(&settings, write_tx, Arc::clone(&snap)).expect("bind socket");
         (server, write_rx, snap)
     }
 
@@ -291,5 +291,37 @@ mod tests {
             "socket path should contain 'taskflow.sock', got: {}",
             path.display()
         );
+    }
+
+    #[test]
+    fn test_start_rejects_over_long_socket_path() {
+        let dir = tempdir().unwrap();
+        let long_name = "x".repeat(socket::MAX_SOCKET_PATH_BYTES);
+        let sock = dir.path().join(format!("{long_name}.sock"));
+        let settings = make_settings_with_socket(&sock);
+        let snap = Arc::new(Mutex::new(ModelSnapshot::from_model(&Model::new())));
+        let (write_tx, _write_rx) = mpsc::sync_channel(1);
+
+        let err = socket::start(&settings, write_tx, snap).expect_err("path too long");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        let msg = err.to_string();
+        assert!(msg.contains("bytes"), "{msg}");
+        assert!(msg.contains("socket_path"), "{msg}");
+        assert!(!sock.exists());
+    }
+
+    #[test]
+    fn test_start_reports_unbindable_path() {
+        let dir = tempdir().unwrap();
+        // The parent "directory" is a regular file, so bind cannot succeed.
+        let blocker = dir.path().join("not-a-dir");
+        std::fs::write(&blocker, b"").unwrap();
+        let sock = blocker.join("tf.sock");
+        let settings = make_settings_with_socket(&sock);
+        let snap = Arc::new(Mutex::new(ModelSnapshot::from_model(&Model::new())));
+        let (write_tx, _write_rx) = mpsc::sync_channel(1);
+
+        let err = socket::start(&settings, write_tx, snap).expect_err("cannot bind");
+        assert!(err.to_string().contains("not-a-dir"), "{err}");
     }
 }

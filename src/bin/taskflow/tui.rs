@@ -145,8 +145,15 @@ pub fn run_tui(cli: Cli) -> anyhow::Result<()> {
         if settings.editor.enabled {
             let snapshot_arc = Arc::new(Mutex::new(ModelSnapshot::from_model(&model)));
             let (write_tx, write_rx) = mpsc::sync_channel::<EditorWriteRequest>(64);
-            let server = socket::start(&settings, write_tx, Arc::clone(&snapshot_arc));
-            (Some(server), Some((write_rx, snapshot_arc)))
+            match socket::start(&settings, write_tx, Arc::clone(&snapshot_arc)) {
+                Ok(server) => (Some(server), Some((write_rx, snapshot_arc))),
+                Err(e) => {
+                    // Keep running without the editor socket, but say so where
+                    // the user will see it instead of only in the debug log.
+                    model.alerts.error_message = Some(format!("Editor socket disabled: {e}"));
+                    (None, None)
+                }
+            }
         } else {
             (None, None)
         }
@@ -273,13 +280,12 @@ fn run_app(
             use crate::commands::pipe::handlers::dispatch;
             use taskflow::socket::types::ModelSnapshot;
 
-            // Refresh snapshot so socket thread has an up-to-date view
-            if let Ok(mut snap) = snapshot_arc.lock() {
-                *snap = ModelSnapshot::from_model(model);
-            }
-
-            // Drain pending write requests from the socket thread
+            // Drain pending write requests from the socket thread first, so
+            // the snapshot refreshed below already reflects them and a read
+            // that follows a write response sees the new state.
+            let mut applied_write = false;
             while let Ok(req) = write_rx.try_recv() {
+                applied_write = true;
                 if let Some(task_id) = req.focus_task_id {
                     // Navigate TUI to the specified task
                     update(
@@ -327,6 +333,18 @@ fn run_app(
                         }
                     }
                 }
+            }
+
+            // Pipe handlers mutate the model directly; the view lists are
+            // derived, so rebuild them or an editor-created task stays
+            // invisible until the next view change.
+            if applied_write {
+                model.refresh_visible_tasks();
+            }
+
+            // Refresh snapshot so the socket thread has an up-to-date view
+            if let Ok(mut snap) = snapshot_arc.lock() {
+                *snap = ModelSnapshot::from_model(model);
             }
         }
 

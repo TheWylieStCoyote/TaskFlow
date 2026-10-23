@@ -12,7 +12,7 @@
 //! let snap  = Arc::new(Mutex::new(ModelSnapshot::from_model(&model)));
 //! let (write_tx, write_rx) = mpsc::sync_channel::<EditorWriteRequest>(64);
 //! let settings = Settings::default();
-//! let _server = start(&settings, write_tx, snap);
+//! let _server = start(&settings, write_tx, snap).expect("socket bound");
 //! // `_server` keeps the socket alive; drop it to remove the socket file.
 //! ```
 
@@ -40,6 +40,7 @@ mod server {
     use super::types::{EditorRequest, EditorWriteRequest, ModelSnapshot};
 
     /// RAII guard that removes the socket file on `Drop`.
+    #[derive(Debug)]
     pub struct SocketGuard(pub PathBuf);
 
     impl Drop for SocketGuard {
@@ -52,57 +53,68 @@ mod server {
     }
 
     /// Handle returned from [`start`]; keeps the server running.
+    #[derive(Debug)]
     pub struct EditorServer {
         #[allow(dead_code)]
         _guard: SocketGuard,
     }
 
+    /// Longest socket path the kernel accepts (`sun_path` is 108 bytes
+    /// including the terminating NUL).
+    pub const MAX_SOCKET_PATH_BYTES: usize = 107;
+
     /// Start the editor socket server.
+    ///
+    /// The socket is bound before this returns, so a failure is reported to
+    /// the caller instead of dying quietly on the accept thread. The error
+    /// message names the path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the path is longer than
+    /// [`MAX_SOCKET_PATH_BYTES`], its directory cannot be created, or the
+    /// socket cannot be bound.
     pub fn start(
         settings: &Settings,
         write_tx: SyncSender<EditorWriteRequest>,
         snapshot_arc: Arc<Mutex<ModelSnapshot>>,
-    ) -> EditorServer {
+    ) -> std::io::Result<EditorServer> {
         let socket_path = settings.socket_path();
         let permissions = settings.editor.socket_permissions;
         let timeout = Duration::from_millis(settings.editor.query_timeout_ms);
+
+        let path_len = socket_path.as_os_str().len();
+        if path_len > MAX_SOCKET_PATH_BYTES {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "socket path {} is {path_len} bytes; Unix sockets allow at most {MAX_SOCKET_PATH_BYTES} (set a shorter [editor] socket_path)",
+                    socket_path.display()
+                ),
+            ));
+        }
 
         // Remove stale socket file from a previous run
         let _ = std::fs::remove_file(&socket_path);
 
         // Ensure parent directory exists
         if let Some(parent) = socket_path.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                warn!(error = %e, path = %parent.display(), "Failed to create socket directory");
-            }
+            std::fs::create_dir_all(parent).map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!("cannot create socket directory {}: {e}", parent.display()),
+                )
+            })?;
         }
 
+        let listener = UnixListener::bind(&socket_path).map_err(|e| {
+            error!(error = %e, path = %socket_path.display(), "Failed to bind Unix socket");
+            std::io::Error::new(
+                e.kind(),
+                format!("cannot bind {}: {e}", socket_path.display()),
+            )
+        })?;
         let guard = SocketGuard(socket_path.clone());
-
-        std::thread::Builder::new()
-            .name("taskflow-socket".to_string())
-            .spawn(move || {
-                accept_loop(socket_path, permissions, snapshot_arc, write_tx, timeout);
-            })
-            .expect("failed to spawn socket thread");
-
-        EditorServer { _guard: guard }
-    }
-
-    fn accept_loop(
-        socket_path: PathBuf,
-        permissions: u32,
-        snapshot_arc: Arc<Mutex<ModelSnapshot>>,
-        write_tx: SyncSender<EditorWriteRequest>,
-        timeout: Duration,
-    ) {
-        let listener = match UnixListener::bind(&socket_path) {
-            Ok(l) => l,
-            Err(e) => {
-                error!(error = %e, path = %socket_path.display(), "Failed to bind Unix socket");
-                return;
-            }
-        };
 
         if let Err(e) =
             std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(permissions))
@@ -112,6 +124,21 @@ mod server {
 
         info!(path = %socket_path.display(), "Editor socket listening");
 
+        std::thread::Builder::new()
+            .name("taskflow-socket".to_string())
+            .spawn(move || {
+                accept_loop(listener, snapshot_arc, write_tx, timeout);
+            })?;
+
+        Ok(EditorServer { _guard: guard })
+    }
+
+    fn accept_loop(
+        listener: UnixListener,
+        snapshot_arc: Arc<Mutex<ModelSnapshot>>,
+        write_tx: SyncSender<EditorWriteRequest>,
+        timeout: Duration,
+    ) {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
@@ -196,4 +223,4 @@ mod server {
 }
 
 #[cfg(unix)]
-pub use server::{start, EditorServer};
+pub use server::{start, EditorServer, MAX_SOCKET_PATH_BYTES};

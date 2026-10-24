@@ -170,6 +170,14 @@ Or from Neovim:
 :TaskFlowStatus
 ```
 
+### Closing the editor
+
+Writes made from the editor (creating, updating or completing tasks) are saved
+to disk as soon as the TUI applies them, not at the next auto-save. On Unix the
+TUI also handles SIGHUP, SIGTERM and SIGINT by saving, removing its socket file
+and restoring the terminal before it exits, so quitting Neovim with TaskFlow
+running in a `:terminal` (or a floating terminal) is safe.
+
 ---
 
 ## Protocol

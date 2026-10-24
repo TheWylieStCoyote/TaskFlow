@@ -1985,6 +1985,10 @@ README documents the full message set.
   ```
 
 - Plugin errors are reported through `vim.notify`; `:messages` shows them.
+- Closing the editor terminal is safe. Editor writes are saved to disk as
+  soon as the TUI applies them, and on SIGHUP (sent when Neovim quits),
+  SIGTERM or SIGINT the TUI saves, removes its socket file, restores the
+  terminal and exits cleanly.
 
 ---
 

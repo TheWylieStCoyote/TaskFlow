@@ -7,9 +7,9 @@ A collection of proposed features, enhancements, and integrations for future dev
 | Status | Items |
 |--------|-------|
 | ✅ Done | 2.2, 3.9 |
-| 🔶 Partial | 1.3, 1.9, 1.10, 2.4, 2.7, 2.8, 2.10, 3.10 |
+| 🔶 Partial | 1.3, 1.9, 1.10, 2.4, 2.7, 2.8, 2.10, 3.10, 4.3, 4.10 |
 | 🚧 On an unmerged branch | 1.2, 1.8 (plus the missing halves of 1.3, 1.9, 3.10) |
-| ⬜ Not started | 1.1, 1.4–1.7, 2.1, 2.3, 2.5, 2.6, 2.9, 3.1–3.8 |
+| ⬜ Not started | 1.1, 1.4–1.7, 2.1, 2.3, 2.5, 2.6, 2.9, 3.1–3.8, 4.1, 4.2, 4.4–4.9, 4.11–4.19 |
 
 Three branches from March 2026 hold finished work that was never merged or pushed (they exist only in the local checkout): `feature/fuzzy_search` (1.8), `feature/desktop_notifications` (3.10) and `feature/timeblocking` (1.2, calendar half of 1.9, collapse half of 1.3). Each needs the same rebase-and-lint pass the Neovim branch got in PR #27.
 
@@ -208,6 +208,126 @@ Fully activate the existing `desktop-notifications` optional Cargo feature: due-
 
 ---
 
+## Category 4: Editor Integration Follow-ups
+
+Findings from wiring the 3.9 socket and `neovim/` plugin into a real LazyVim setup (Oct 2026). Ordered by how much each improves the editor workflow.
+
+### 4.1 Graceful Signal Handling
+The crate has no signal handling. Neovim sends SIGHUP on quit, so a TUI hidden in an editor terminal dies without saving dirty state, without removing the socket file and without restoring the terminal. Install SIGHUP/SIGTERM/SIGINT handlers that set the quit flag so the normal shutdown path (save, `SocketGuard` drop, terminal restore) runs.
+- **Affected:** `src/bin/taskflow/tui.rs`, `Cargo.toml` (`signal-hook` or `ctrlc`)
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.2 Save Promptly After Editor Writes
+Socket writes set `storage.dirty` but persistence waits for `auto_save_interval` (default 300 s); a task created over the socket was lost when the TUI was killed. Save after draining the write channel, or debounce to a second or two.
+- **Affected:** `src/bin/taskflow/tui.rs` (write drain loop)
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.3 Socket Ownership: Refuse Live Sockets, Remove Only Our Own File
+`start()` unconditionally unlinked any existing socket file, so a second instance silently cut the first off from its editors (`connect: ENOENT`) and then removed the file again on exit. Probe the existing socket: a live one fails with `AddrInUse` (shown as "Editor socket disabled"); only a refused connection is treated as stale. The guard remembers the inode and leaves a file another process has replaced.
+- **Affected:** `src/socket/mod.rs` (+ tests)
+- **Complexity:** Low
+- **Status:** 🔶 Partial — implemented and tested in the working tree; needs commit.
+
+### 4.4 Headless Server Mode (`taskflow serve`)
+Editor commands only work while a TUI is open, which forces users to keep a floating terminal alive and makes `q` (quit) versus hide a constant trap. A `serve` subcommand that owns the socket and the data, with the TUI becoming a client of it, removes the problem entirely. Smaller first step: let the plugin spawn the server.
+- **Affected:** `src/bin/taskflow/` (new subcommand), `src/socket/`, `neovim/lua/taskflow/`
+- **Complexity:** High
+- **Status:** ⬜ Not started — overlaps with 3.3.
+
+### 4.5 Time Tracking Over the Socket
+The socket exposes no time tracking. Add the active timer (task, elapsed seconds) to `status`, plus `start_tracking` / `stop_tracking` requests, so the editor statusline can show the running timer.
+- **Affected:** `src/socket/handlers.rs`, `src/socket/types.rs`, `neovim/lua/taskflow/init.lua`
+- **Complexity:** Medium
+- **Status:** ⬜ Not started.
+
+### 4.6 First-Class `focus_task` Write
+`focus_task` rides the write channel wrapped in a fake `get` pipe envelope. Give `EditorWriteRequest` a proper variant and dispatch it directly in the TUI loop.
+- **Affected:** `src/socket/types.rs`, `src/socket/handlers.rs`, `src/bin/taskflow/tui.rs`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.7 Filters and Limits for Socket `list`
+The picker fetches every task and filters client-side. Forward `filters` (view, project, status, tag) and a `limit` through the pipe wrapper so "today" / "next" pickers are cheap on large lists.
+- **Affected:** `src/socket/handlers.rs`, `neovim/lua/taskflow/telescope.lua`, `neovim/lua/taskflow/commands.lua`
+- **Complexity:** Medium
+- **Status:** ⬜ Not started.
+
+### 4.8 Richer `TaskSummary`
+Add project name, scheduled date, tracked total and an `is_focus` flag so pickers and the list float can render them without a second request.
+- **Affected:** `src/socket/types.rs`, `src/socket/snapshot.rs`, `neovim/lua/taskflow/ui.lua`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.9 Change-Event Subscription
+One request per connection means the statusline polls every 30 s. A long-lived `subscribe` connection that pushes a line per model change lets the plugin refresh the statusline and open pickers instantly.
+- **Affected:** `src/socket/mod.rs` (accept loop), `src/socket/handlers.rs`, `neovim/lua/taskflow/socket.lua`
+- **Complexity:** Medium
+- **Status:** ⬜ Not started — the natural base for 3.2.
+
+### 4.10 Telescope Extension Entry Point and Picker Fallback
+`load_extension('taskflow')` failed silently and `:Telescope taskflow` did not exist because `neovim/lua/telescope/_extensions/taskflow.lua` was missing. Also add a `vim.ui.select` (or snacks.picker) fallback for users without Telescope.
+- **Affected:** `neovim/lua/telescope/_extensions/taskflow.lua`, `neovim/lua/taskflow/commands.lua`
+- **Complexity:** Low
+- **Status:** 🔶 Partial — the extension file exists in the working tree (needs commit); fallback not started.
+
+### 4.11 Capture: Source Location, Dedupe, Back-Links
+`:TaskFlowCapture` records only the comment text. Store file path and line (and the git branch, pairing with `git-todos`), skip comments already captured, and optionally rewrite the comment to `TODO(tf:<id>)` so the link survives edits.
+- **Affected:** `neovim/lua/taskflow/capture.lua`, `neovim/lua/taskflow/commands.lua`, `src/domain/git/`
+- **Complexity:** Medium
+- **Status:** ⬜ Not started.
+
+### 4.12 Replace Deprecated Neovim APIs
+`ui.lua` uses `nvim_buf_set_option` and `vim.fn.termopen`, both deprecated and slated for removal. Use `vim.bo[buf]` and `vim.fn.jobstart(cmd, { term = true })`.
+- **Affected:** `neovim/lua/taskflow/ui.lua`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.13 Asynchronous Statusline Refresh
+The timer calls `request_sync`, which spins `vim.wait` for up to 500 ms every 30 s when the server is slow. Use the async `request` and update the cache in the callback; fire a `User TaskFlowStatus` autocmd for other consumers.
+- **Affected:** `neovim/lua/taskflow/init.lua`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.14 `:TaskFlowOpen` Reuses a Running Instance
+It spawns a new TUI every time; with 4.3 the second instance now reports "Editor socket disabled". Check the socket first and reuse the existing terminal buffer, or hand off to the user's terminal integration.
+- **Affected:** `neovim/lua/taskflow/commands.lua`, `neovim/lua/taskflow/ui.lua`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.15 Actions in the Task List Float
+`Enter` only focuses the task in the TUI. Add toggle complete, start/stop tracking and delete, and show project and due date per row (needs 4.5, 4.8).
+- **Affected:** `neovim/lua/taskflow/ui.lua`, `neovim/lua/taskflow/commands.lua`
+- **Complexity:** Medium
+- **Status:** ⬜ Not started.
+
+### 4.16 `:checkhealth taskflow`
+Report the resolved socket path, whether it answers `ping`, the server's `protocol_version` and `server_pid`, the `taskflow` binary on PATH and its version. Most of the Oct 2026 debugging would have been one command.
+- **Affected:** `neovim/lua/taskflow/health.lua` (new)
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.17 Idempotent `setup()`
+Calling `setup()` twice creates a second statusline timer and re-registers commands. Guard both.
+- **Affected:** `neovim/lua/taskflow/init.lua`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.18 One Install Path
+`install.sh` installs to `~/.local/bin` while `cargo install` targets `~/.cargo/bin`; both are commonly on PATH, so a stale copy can shadow the fresh one. Document one path, or have `install.sh` detect and remove the other.
+- **Affected:** `install.sh`, `README.md`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+### 4.19 Document the Single-Instance Rule and Hide vs. Quit
+The README only says the TUI must be running. Spell out that one TaskFlow owns the socket, what "Editor socket disabled" means, that `q` quits while the editor should hide its window, and the auto-save implications of 4.1/4.2.
+- **Affected:** `README.md`, `neovim/README.md`, `docs/USER_MANUAL.md`
+- **Complexity:** Low
+- **Status:** ⬜ Not started.
+
+---
+
 ## Suggested Priority Tiers
 
 | Tier | Items | Rationale |
@@ -216,3 +336,4 @@ Fully activate the existing `desktop-notifications` optional Cargo feature: due-
 | **Core UX** | 1.1, 1.2, 1.3, 1.5, 1.8, 2.7, 2.8 | Reduces daily friction |
 | **Power** | 1.4, 1.10, 2.1, 2.3, 2.4, 2.9, 2.10 | Differentiates from simpler tools |
 | **Integrations** | 3.1–3.9 | Expands ecosystem reach |
+| **Editor follow-ups** | 4.1–4.3, 4.12–4.14, 4.17 first (reliability, low effort); then 4.5, 4.7–4.9, 4.11, 4.15, 4.16; 4.4 last | Makes the 3.9 integration dependable before extending it |

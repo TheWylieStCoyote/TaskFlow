@@ -58,6 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Closing the editor no longer loses work**: the TUI handles SIGHUP, SIGTERM and SIGINT by running its normal shutdown (save, remove the editor socket, restore the terminal), and a hung-up terminal ends the event loop instead of spinning at full CPU (crossterm's read loop never returns once the tty is gone)
+- **Tasks created or changed from the editor are saved to disk immediately** instead of waiting for `auto_save_interval` (default five minutes)
+- **A second TaskFlow no longer steals the editor socket**: a live socket makes the newcomer report "Editor socket disabled: another TaskFlow instance is already serving …" instead of silently cutting the first instance off; only a leftover file from a crashed run is reclaimed, and on exit each instance removes only the socket file it created
+- **`:TaskFlowOpen` toggles one TUI instead of spawning another**: it hides the floating terminal while the TUI keeps running, re-shows it on the next call, and when a TaskFlow is already running outside Neovim it says so instead of starting a second one
+- **Neovim statusline refresh is asynchronous**: the 30-second status poll no longer blocks the editor for up to 500 ms when the server is slow; a `User TaskFlowStatus` autocmd fires with the new counts for other consumers
+- **Calling `setup()` twice** in the Neovim plugin no longer creates a second refresh timer
+- **Neovim plugin uses current APIs**: `vim.bo` and `jobstart(term = true)` replace the deprecated `nvim_buf_set_option` and `termopen` (the latter kept as the 0.10 fallback)
+- **`:Telescope taskflow` works** (the extension entry point was missing), and without Telescope the picker falls back to `vim.ui.select`
+
 - **The sidebar is reachable from every view**: `Esc` always returns focus to the sidebar (it did nothing in the task list, Dashboard, Heatmap, Forecast, Burndown, Duplicates and Git TODOs views), and with the sidebar focused `j`/`k`/`Enter`/`l` always drive the sidebar. Previously the Kanban, Eisenhower, Weekly Planner, Timeline, Network and Goals views kept those keys for themselves, so after `Esc` the highlighted sidebar could not be moved or used to switch views; Habits and Reports swallowed `j`/`k` the same way. Popups (task detail, reviews, habit analytics) now take keys before the view underneath them
 
 - **Editor socket failures are visible**: the socket is bound before the TUI starts and a failure (most often a path over the 107-byte Unix limit) shows as "Editor socket disabled: …" in the TUI instead of only in the debug log; tasks created from an editor appear in the task list at once, and a read right after a write sees the write

@@ -322,7 +322,18 @@ mod server {
             let listener = UnixListener::bind(&path).unwrap();
             drop(listener);
             assert!(path.exists());
-            assert!(!socket_is_live(&path));
+            // Closing the fd normally kills the listener at once, but a child
+            // process forked by a concurrent test (git helpers, editors) holds
+            // an inherited copy until it execs, so the socket can stay
+            // connectable for a moment. Wait for it to die before asserting.
+            let dead_by = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while socket_is_live(&path) && std::time::Instant::now() < dead_by {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            assert!(
+                !socket_is_live(&path),
+                "dropped listener still accepts connections"
+            );
 
             let settings = test_settings(&path);
             let (tx, _rx) = std::sync::mpsc::sync_channel(1);

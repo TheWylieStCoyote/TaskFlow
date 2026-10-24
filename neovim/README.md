@@ -68,7 +68,9 @@ require('taskflow').setup({})
 | `:TaskFlowList` | Normal | Floating task browser; `<CR>` focuses task in TUI |
 | `:TaskFlowCapture` | Normal | Batch-create tasks from TODO/FIXME in current buffer |
 | `:TaskFlowStatus` | Normal | Show focus task + incomplete count via `vim.notify` |
-| `:TaskFlowOpen` | Normal | Open TUI in a floating terminal |
+| `:TaskFlowOpen` | Normal | Toggle the TUI in a floating terminal: open, hide (keeps running) or re-show; reports an instance already running outside Neovim |
+
+**One instance owns the socket.** Only one TaskFlow serves the socket at a time. A second instance shows "Editor socket disabled: another TaskFlow instance is already serving ..." and runs without it. `q` quits the TUI (and closes the float), while `:TaskFlowOpen` again hides or re-shows the float without stopping it. The plugin's commands work against whichever instance owns the socket.
 
 ---
 

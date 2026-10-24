@@ -1928,6 +1928,8 @@ Unix only; on other platforms the server is compiled out.
 removes it on exit. Neovim 0.10 or newer (tested on 0.12). Telescope is
 optional.
 
+**One instance owns the socket.** Only one TaskFlow serves the socket at a time. A second instance shows "Editor socket disabled: another TaskFlow instance is already serving ..." and runs without it. `q` quits the TUI (and closes the float), while `:TaskFlowOpen` again hides or re-shows the float without stopping it. The plugin's commands work against whichever instance owns the socket.
+
 **Commands** (after `require('taskflow').setup({})` in your Neovim config):
 
 | Command | What it does |
@@ -1936,7 +1938,7 @@ optional.
 | `:TaskFlowList` | Floating task browser; `Enter` focuses the task in the running TUI, `q`/`Esc` closes |
 | `:TaskFlowCapture` | Create one task per `TODO`, `FIXME`, `HACK` or `NOTE` comment in the current buffer, tagged `captured` and with the keyword |
 | `:TaskFlowStatus` | Show the focused task and incomplete count via `vim.notify` |
-| `:TaskFlowOpen` | Open the TUI in a floating terminal |
+| `:TaskFlowOpen` | Toggle the TUI in a floating terminal: open, hide (keeps running) or re-show; reports an instance already running outside Neovim |
 | `:Telescope taskflow` | Picker with `Enter` focus, `Ctrl-d` delete and `Ctrl-c` create (when Telescope is installed) |
 
 **Statusline.** `require('taskflow').statusline()` returns a cached string such

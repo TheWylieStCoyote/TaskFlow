@@ -118,9 +118,29 @@ function M.status(_opts)
 end
 
 --- :TaskFlowOpen
--- Opens the TaskFlow TUI in a floating terminal window.
+-- Toggle semantics: hide the float if shown; re-show a hidden one; if a
+-- TaskFlow instance is already running outside Neovim, say so instead of
+-- spawning a second one; otherwise spawn the TUI in a floating terminal.
 function M.open(_opts)
-  require('taskflow.ui').open_float_terminal('taskflow')
+  local ui = require('taskflow.ui')
+  if ui.float_is_open() then
+    ui.hide_float()
+    return
+  end
+  if ui.float_is_hidden() then
+    ui.show_float()
+    return
+  end
+  local path = require('taskflow.config').default_socket_path()
+  local ok, resp = require('taskflow.socket').request_sync(path, { type = 'ping' }, 300)
+  if ok and resp then
+    vim.notify(
+      '[TaskFlow] A TaskFlow instance is already running outside Neovim; '
+        .. ':TaskFlowList / :TaskFlowAdd talk to it.',
+      vim.log.levels.INFO)
+    return
+  end
+  ui.open_float_terminal('taskflow')
 end
 
 return M

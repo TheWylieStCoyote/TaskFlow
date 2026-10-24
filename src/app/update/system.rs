@@ -5,6 +5,7 @@
 //! - Undo/redo operations
 //! - Import/export operations
 
+use crate::app::message::ViewId;
 use crate::app::{Model, RunningState, SystemMessage, UndoAction};
 use crate::domain::plural_s;
 use crate::ui::{InputMode, InputTarget};
@@ -94,6 +95,9 @@ pub fn handle_system(model: &mut Model, msg: SystemMessage) {
         }
         SystemMessage::ScanGitTodos => {
             handle_scan_git_todos(model);
+        }
+        SystemMessage::FocusTaskById(id) => {
+            handle_focus_task_by_id(model, &id);
         }
     }
 }
@@ -634,6 +638,36 @@ fn handle_scan_git_todos(model: &mut Model) {
         "Git TODOs: {created} created, {skipped} already tracked"
     ));
     model.alerts.status_message_set_at = Some(std::time::Instant::now());
+}
+
+/// Navigate the TUI to a specific task by its string ID (editor integration).
+fn handle_focus_task_by_id(model: &mut Model, id: &str) {
+    // Find the task in visible_tasks first; fall back to all tasks
+    let task_id = model
+        .visible_tasks
+        .iter()
+        .find(|tid| tid.to_string() == id)
+        .copied()
+        .or_else(|| {
+            model
+                .tasks
+                .keys()
+                .find(|tid| tid.to_string() == id)
+                .copied()
+        });
+
+    if let Some(tid) = task_id {
+        // Switch to TaskList view so the task is visible
+        model.current_view = ViewId::TaskList;
+        model.focus_mode = false;
+        model.show_help = false;
+        // Refresh so visible_tasks is up-to-date for the TaskList view
+        model.refresh_visible_tasks();
+        // Find the index of the task in the refreshed visible_tasks
+        if let Some(idx) = model.visible_tasks.iter().position(|t| *t == tid) {
+            model.selected_index = idx;
+        }
+    }
 }
 
 /// Check for merged branches and auto-complete linked tasks.

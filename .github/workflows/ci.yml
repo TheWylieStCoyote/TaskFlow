@@ -20,6 +20,31 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-targets
 
+  lua-tests:
+    name: Neovim plugin tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: nvim-lua/plenary.nvim
+          path: .plenary
+      - name: Install Neovim
+        # Plain download instead of a setup action: the runner's /tmp is on a
+        # different filesystem from $HOME, which broke the action's rename.
+        run: |
+          curl -fsSL https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz -o "$RUNNER_TEMP/nvim.tar.gz"
+          mkdir -p "$HOME/nvim"
+          tar -xzf "$RUNNER_TEMP/nvim.tar.gz" -C "$HOME/nvim" --strip-components=1
+          echo "$HOME/nvim/bin" >> "$GITHUB_PATH"
+          "$HOME/nvim/bin/nvim" --version | head -1
+      - name: Run plenary specs
+        env:
+          PLENARY_DIR: ${{ github.workspace }}/.plenary
+        run: |
+          nvim --headless -u neovim/tests/minimal_init.lua \
+            -c "PlenaryBustedDirectory neovim/tests/ {minimal_init = 'neovim/tests/minimal_init.lua', sequential = true}"
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

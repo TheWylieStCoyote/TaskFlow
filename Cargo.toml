@@ -54,6 +54,13 @@ notify-rust = { version = "4", optional = true }
 # HTTP client for CalDAV sync (optional)
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 
+[target.'cfg(unix)'.dependencies]
+# Save and exit cleanly on SIGHUP/SIGTERM/SIGINT (an editor closing its terminal)
+signal-hook = { version = "0.3", default-features = false }
+# Poll the terminal for hangup before crossterm reads it (crossterm spins on a
+# hung-up tty); same version crossterm already uses
+rustix = { version = "0.38", default-features = false, features = ["std", "event", "termios"] }
+
 [lints.rust]
 # cargo-tarpaulin passes --cfg=tarpaulin; timing-sensitive tests key off it.
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin)"] }

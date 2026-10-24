@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Neovim integration**: the TUI serves a Unix domain socket (`$XDG_DATA_HOME/taskflow/taskflow.sock`, configurable under `[editor]`); the `neovim/` Lua plugin adds `:TaskFlowAdd`, `:TaskFlowList`, `:TaskFlowCapture` (tasks from TODO/FIXME comments), `:TaskFlowStatus`, `:TaskFlowOpen`, a statusline component and a Telescope picker
 - **`saved_filter` entity in the pipe interface**: `list` (sorted by name, `search`, paging), `get`, `create`, `update` and `delete`, using the same `filter`/`sort` JSON shape as `export`; a partial `filter` object fills missing fields with defaults
 - **`task_id` filter for `time_entry` and `work_log`** in the pipe interface; `project_id` is still accepted as the task UUID for existing scripts
 - **CalDAV works offline**: the sidecar caches the server's tasks and queues pushes and deletes that have not reached the server; a task created or edited offline survives a restart and is pushed by the first flush that succeeds (local edits win until pushed, queued deletes are never resurrected)
@@ -57,8 +58,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Closing the editor no longer loses work**: the TUI handles SIGHUP, SIGTERM and SIGINT by running its normal shutdown (save, remove the editor socket, restore the terminal), and a hung-up terminal ends the event loop instead of spinning at full CPU (crossterm's read loop never returns once the tty is gone)
+- **Tasks created or changed from the editor are saved to disk immediately** instead of waiting for `auto_save_interval` (default five minutes)
+- **A second TaskFlow no longer steals the editor socket**: a live socket makes the newcomer report "Editor socket disabled: another TaskFlow instance is already serving …" instead of silently cutting the first instance off; only a leftover file from a crashed run is reclaimed, and on exit each instance removes only the socket file it created
+- **`:TaskFlowOpen` toggles one TUI instead of spawning another**: it hides the floating terminal while the TUI keeps running, re-shows it on the next call, and when a TaskFlow is already running outside Neovim it says so instead of starting a second one
+- **Neovim statusline refresh is asynchronous**: the 30-second status poll no longer blocks the editor for up to 500 ms when the server is slow; a `User TaskFlowStatus` autocmd fires with the new counts for other consumers
+- **Calling `setup()` twice** in the Neovim plugin no longer creates a second refresh timer
+- **Neovim plugin uses current APIs**: `vim.bo` and `jobstart(term = true)` replace the deprecated `nvim_buf_set_option` and `termopen` (the latter kept as the 0.10 fallback)
+- **`:Telescope taskflow` works** (the extension entry point was missing), and without Telescope the picker falls back to `vim.ui.select`
+
 - **The sidebar is reachable from every view**: `Esc` always returns focus to the sidebar (it did nothing in the task list, Dashboard, Heatmap, Forecast, Burndown, Duplicates and Git TODOs views), and with the sidebar focused `j`/`k`/`Enter`/`l` always drive the sidebar. Previously the Kanban, Eisenhower, Weekly Planner, Timeline, Network and Goals views kept those keys for themselves, so after `Esc` the highlighted sidebar could not be moved or used to switch views; Habits and Reports swallowed `j`/`k` the same way. Popups (task detail, reviews, habit analytics) now take keys before the view underneath them
 
+- **Editor socket failures are visible**: the socket is bound before the TUI starts and a failure (most often a path over the 107-byte Unix limit) shows as "Editor socket disabled: …" in the TUI instead of only in the debug log; tasks created from an editor appear in the task list at once, and a read right after a write sees the write
+- **Neovim plugin works on Neovim 0.10+**: JSON is encoded and decoded with `vim.json` (the `vim.fn` versions are forbidden inside libuv callbacks), results are delivered on the main loop, `:TaskFlowStatus` no longer errors when no task is focused, and the task list and Telescope picker show each task's tags
 - **Timeline selection stops at the last drawn row** instead of the last visible task, and Enter opens the highlighted row (it could open a different task when the list order differed from the timeline order)
 - **Unparsable SQLite rows are reported, not dropped**: every skipped row is logged with table, id and the failing column; a bad timestamp is a row error instead of becoming "now"; single-row lookups on such a row return an error
 - **Markdown backend no longer overwrites corrupt data files**: a `*.yaml` aux file that does not parse makes startup fail with `CorruptFile` naming the file, leaving it untouched

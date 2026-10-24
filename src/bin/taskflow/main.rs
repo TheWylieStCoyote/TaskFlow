@@ -9,6 +9,8 @@ mod tui;
 mod commands_tests;
 #[cfg(test)]
 mod main_tests;
+#[cfg(all(test, unix))]
+mod tui_tests;
 
 use std::fs::File;
 use std::io;

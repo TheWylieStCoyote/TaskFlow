@@ -274,72 +274,18 @@ fn run_app(
             last_git_check = Instant::now();
         }
 
-        // Editor socket: refresh snapshot and drain write requests (Unix only)
+        // Editor socket: drain write requests, then refresh the snapshot (Unix only)
         #[cfg(unix)]
         if let Some((write_rx, snapshot_arc)) = socket_state {
-            use crate::commands::pipe::handlers::dispatch;
             use taskflow::socket::types::ModelSnapshot;
 
             // Drain pending write requests from the socket thread first, so
             // the snapshot refreshed below already reflects them and a read
             // that follows a write response sees the new state.
-            let mut applied_write = false;
-            while let Ok(req) = write_rx.try_recv() {
-                applied_write = true;
-                if let Some(task_id) = req.focus_task_id {
-                    // Navigate TUI to the specified task
-                    update(
-                        model,
-                        Message::System(SystemMessage::FocusTaskById(task_id)),
-                    );
-                    let _ = req
-                        .respond_to
-                        .send(taskflow::socket::types::SocketResponse::ok(
-                            serde_json::Value::Null,
-                        ));
-                } else {
-                    // Standard pipe operation — convert PipeEnvelope → PipeRequest via JSON
-                    use crate::commands::pipe::types::PipeRequest;
-                    let pipe_json = match serde_json::to_value(&req.pipe_envelope) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            let _ =
-                                req.respond_to
-                                    .send(taskflow::socket::types::SocketResponse::err(
-                                        "SERIALIZATION_ERROR",
-                                        e.to_string(),
-                                    ));
-                            continue;
-                        }
-                    };
-                    match serde_json::from_value::<PipeRequest>(pipe_json) {
-                        Ok(pipe_req) => {
-                            let result = dispatch(model, &pipe_req);
-                            let response = match result {
-                                Ok(data) => taskflow::socket::types::SocketResponse::ok(data),
-                                Err(e) => taskflow::socket::types::SocketResponse::err(
-                                    &e.code, &e.message,
-                                ),
-                            };
-                            let _ = req.respond_to.send(response);
-                        }
-                        Err(e) => {
-                            let _ =
-                                req.respond_to
-                                    .send(taskflow::socket::types::SocketResponse::err(
-                                        "INVALID_REQUEST",
-                                        e.to_string(),
-                                    ));
-                        }
-                    }
-                }
-            }
-
-            // Pipe handlers mutate the model directly; the view lists are
-            // derived, so rebuild them or an editor-created task stays
-            // invisible until the next view change.
-            if applied_write {
-                model.refresh_visible_tasks();
+            if drain_editor_writes(model, write_rx) {
+                // The drain saved any dirty state, so the auto-save timer
+                // starts over.
+                last_save = Instant::now();
             }
 
             // Refresh snapshot so the socket thread has an up-to-date view
@@ -381,4 +327,67 @@ fn run_app(
     }
 
     Ok(())
+}
+
+/// Apply every editor write request waiting on `write_rx` to `model`.
+///
+/// Each request gets its response on its `respond_to` channel. When at least
+/// one request was applied, the derived view lists are rebuilt (pipe handlers
+/// mutate the model directly) and dirty storage is saved right away instead
+/// of waiting for the auto-save interval, so an editor write survives the TUI
+/// being killed. A failed save is shown in `model.alerts.error_message`.
+///
+/// Returns `true` when at least one request was applied.
+#[cfg(unix)]
+pub(crate) fn drain_editor_writes(
+    model: &mut Model,
+    write_rx: &std::sync::mpsc::Receiver<taskflow::socket::types::EditorWriteRequest>,
+) -> bool {
+    use crate::commands::pipe::handlers::dispatch;
+    use crate::commands::pipe::types::PipeRequest;
+    use taskflow::socket::types::SocketResponse;
+
+    let mut applied_write = false;
+    while let Ok(req) = write_rx.try_recv() {
+        applied_write = true;
+        let response = if let Some(task_id) = req.focus_task_id {
+            // Navigate TUI to the specified task
+            update(
+                model,
+                Message::System(SystemMessage::FocusTaskById(task_id)),
+            );
+            SocketResponse::ok(serde_json::Value::Null)
+        } else {
+            // Standard pipe operation: convert PipeEnvelope -> PipeRequest via JSON
+            match serde_json::to_value(&req.pipe_envelope) {
+                Err(e) => SocketResponse::err("SERIALIZATION_ERROR", e.to_string()),
+                Ok(pipe_json) => match serde_json::from_value::<PipeRequest>(pipe_json) {
+                    Ok(pipe_req) => match dispatch(model, &pipe_req) {
+                        Ok(data) => SocketResponse::ok(data),
+                        Err(e) => SocketResponse::err(&e.code, &e.message),
+                    },
+                    Err(e) => SocketResponse::err("INVALID_REQUEST", e.to_string()),
+                },
+            }
+        };
+        let _ = req.respond_to.send(response);
+    }
+
+    if applied_write {
+        // Pipe handlers mutate the model directly; the view lists are
+        // derived, so rebuild them or an editor-created task stays
+        // invisible until the next view change.
+        model.refresh_visible_tasks();
+
+        // Persist now rather than at the next auto-save: the TUI often runs
+        // hidden in an editor terminal and may be killed with it.
+        if model.has_storage() && !model.storage.sample_data_mode && model.storage.dirty {
+            if let Err(e) = model.save() {
+                warn!(error = %e, "Saving after editor write failed");
+                model.alerts.error_message = Some(format!("Save after editor write failed: {e}"));
+            }
+        }
+    }
+
+    applied_write
 }
